@@ -50,6 +50,23 @@ SOCK="/var/run/wireguard/${IFACE}.sock"
 
 mkdir -p "$(dirname "$KEY_FILE")" /var/run/wireguard
 
+# The socket directory is a VOLUME, so it survives this container. A socket
+# file left by a killed predecessor makes the next wireguard-go exit with
+# "UAPI listen error: unix socket in use", which turns any ungraceful stop
+# into a permanent restart loop that the logs blame on the kernel module.
+# This container is the only thing that ever owns this interface, so a
+# leftover file is by definition stale. Removed only when nothing is
+# listening on it, so a second copy started by mistake fails loudly instead
+# of silently stealing a live tunnel's socket.
+if [ -S "$SOCK" ]; then
+  if wg show "$IFACE" >/dev/null 2>&1; then
+    echo "!! $SOCK is live: another wireguard-go already owns $IFACE" >&2
+    exit 1
+  fi
+  echo ">> removing a stale $SOCK left by a previous container"
+  rm -f "$SOCK"
+fi
+
 # Generated once and kept on a volume. Regenerating it on every start would
 # invalidate every peer config ever issued, silently: the devices would still
 # look configured and would simply never complete a handshake again.
