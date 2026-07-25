@@ -57,6 +57,11 @@ RELAY="${WG_CONSOLE_SOCKET:-/var/run/wireguard/console.sock}"
 TUNNEL_IP="${WG_TUNNEL_IP:-10.9.0.1}"
 CONSOLE_HOST="${WG_CONSOLE_HOST:-console}"
 CONSOLE_PORT="${WG_CONSOLE_PORT:-7420}"
+# Issued peers, kept beside the server key. Without this every restart of this
+# container silently revokes every device ever issued: the configs on those
+# phones stay valid-looking and simply never complete a handshake again.
+PEERS_FILE="${WG_PEERS_FILE:-/var/lib/wireguard/peers.conf}"
+PEERS_SAVE_SECONDS="${WG_PEERS_SAVE_SECONDS:-10}"
 
 mkdir -p "$(dirname "$KEY_FILE")" /var/run/wireguard
 
@@ -195,6 +200,36 @@ if [ -z "$SERVER_PUB" ]; then
   kill "$WG_PID" 2>/dev/null || true
   exit 1
 fi
+# Restore the devices this box had authorized before it restarted. `addconf`
+# rather than `setconf`: it ADDS the saved peers and leaves the interface's own
+# key and port alone, where `setconf` would rewrite the whole interface from a
+# file that deliberately carries no private key.
+if [ -s "$PEERS_FILE" ]; then
+  if wg addconf "$IFACE" "$PEERS_FILE"; then
+    echo ">> restored $(grep -c '^\[Peer\]' "$PEERS_FILE") previously issued device(s)"
+  else
+    echo "!! could not restore $PEERS_FILE; issued devices will not reconnect" >&2
+  fi
+fi
+
+# Peers are changed by the CONSOLE, over the UAPI, so this container never sees
+# an event to save on. It snapshots instead: cheap, and the worst case is
+# losing the last few seconds of changes, where the alternative is losing all
+# of them on every restart. The peer list carries public keys and allowed IPs
+# only - no private key of any kind is written here.
+save_peers() {
+  wg showconf "$IFACE" 2>/dev/null \
+    | awk '/^\[Peer\]/{p=1} p' > "${PEERS_FILE}.tmp" 2>/dev/null \
+    && mv "${PEERS_FILE}.tmp" "$PEERS_FILE"
+}
+while sleep "$PEERS_SAVE_SECONDS"; do save_peers; done &
+SAVER_PID=$!
+# A clean stop saves immediately, so a planned restart loses nothing at all.
+# `:-` on every pid: this trap is armed before the forwarder below exists, and
+# under `set -u` an unset variable in the handler would turn a clean shutdown
+# into an error that skips the save.
+trap 'save_peers; kill "${WG_PID:-}" "${RELAY_PID:-}" "${CONSOLE_FWD_PID:-}" "${SAVER_PID:-}" 2>/dev/null; exit 0' TERM INT
+
 # The tunnel has to LEAD somewhere. The interface address lives in this
 # container's network namespace and the console runs in another, so a client
 # that completes a handshake and dials the console still gets "connection
