@@ -1174,3 +1174,66 @@ aws ec2 describe-instances --query 'Reservations[].Instances[].[PrivateIpAddress
 cluster hides this: EKS with the VPC CNI gives pods real VPC addresses, so
 there is no foreign source address and the check never fires. It returns the
 moment you run your own CNI, which is the shape this repo deliberately tests.
+
+## 45. A healthy load balancer carrying no traffic at all
+
+> **Platform.** AWS does this to everyone using an NLB with instance targets.
+
+**Symptom:** `kubectl get svc` shows an address. AWS shows the balancer
+`active`. Target health shows exactly what it should for
+`externalTrafficPolicy: Local`: one healthy target on the node running the pod,
+the rest unhealthy. Every request from outside times out. Nothing appears in
+any log, on either side.
+
+**Why:** an AWS Network Load Balancer with **instance** targets preserves the
+CLIENT address by default, and the health check does not go where the traffic
+goes.
+
+| | Health check | Real traffic |
+|---|---|---|
+| Destination port | `healthCheckNodePort` (its own port) | the Service `nodePort` |
+| Answered by | kube-proxy, on the host | the pod, through Calico |
+| Source address | the balancer's own interfaces, inside the subnet | **the browser's public address** |
+
+So the check exercises a path that touches neither the pod nor any rule keyed
+on source address, and passes. The traffic is then dropped **twice**, by two
+independent default-deny layers that both key on exactly what the check never
+tested:
+
+- the security group admits the NodePort range from the subnet, and the packet
+  now carries a public source
+- `console-ingress-lb` admits `ipBlock: 10.10.0.0/16`, which is right on
+  Hetzner because the hcloud balancer is told `use-private-ip`, and wrong here
+  for the same reason
+
+This is item 11 re-derived for AWS, exactly as `PORTABILITY.md` predicted the
+rule would have to be. What it did not predict is that the check would go on
+passing while both layers dropped everything.
+
+**The obvious fix is not one.** Setting
+`service.beta.kubernetes.io/aws-load-balancer-preserve-client-ip: "false"`
+looks like the answer and does nothing: that annotation belongs to the separate
+AWS Load Balancer Controller, and the **in-tree** service controller used here
+ignores it. Verified on 2026-07-25 by deleting the Service and recreating it
+with the annotation present from the start; the target group came up with
+`preserve_client_ip.enabled = true` regardless.
+
+**Fixed here:** `cloud/aws/loadbalancer.sh` sets the target-group attribute
+directly after the controller creates it, then proves the result with a request
+rather than with a status field.
+
+The alternative is to open both layers to `0.0.0.0/0`, which also works and
+costs the cluster its default-deny posture on the one port facing the internet.
+Turning off client-IP preservation instead makes traffic arrive from inside the
+subnet, exactly as it does on Hetzner, so the security group and the
+NetworkPolicy stay as written and both clouds keep the same posture. The price
+is that the console sees the balancer rather than the client, which is also
+true on Hetzner, so the comparison stays honest.
+
+**Timing, for the record:** `kubectl apply` to a request returning 200 took
+**3 min 34 s** on AWS. The equivalent on Hetzner was about 20 s to create and
+attach the balancer plus 15-45 s for the first health check to flip.
+
+**The rule worth carrying:** a load balancer reporting healthy targets has told
+you that its health check works. It has told you nothing about whether traffic
+arrives. Prove the second thing with a request.

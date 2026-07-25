@@ -1,0 +1,73 @@
+# The AWS counterpart of ../../manifests/50-loadbalancer.yaml.
+#
+# This file exists because that one is the single genuinely NON-portable piece
+# of the whole deployment. Everything else in manifests/ applied to AWS
+# unchanged: the pod specs, the NetworkPolicies, the RWX claim by class name,
+# the CronJobs, the environment descriptor. This object shares its `spec` with
+# the Hetzner version almost exactly and shares NOT ONE of its annotations.
+#
+#   Hetzner                                         AWS
+#   load-balancer.hetzner.cloud/name                (from the Service name)
+#   load-balancer.hetzner.cloud/location            (from the subnet)
+#   load-balancer.hetzner.cloud/type: lb11          nlb-target-type + the NLB has no "size"
+#   load-balancer.hetzner.cloud/use-private-ip      (implicit: targets are instances in the VPC)
+#   load-balancer.hetzner.cloud/health-check-*      aws-load-balancer-healthcheck-*
+#   load-balancer.hetzner.cloud/uses-proxyprotocol  aws-load-balancer-proxy-protocol
+#
+# That is the honest shape of "portable": the workload moved for free, and the
+# one object that talks to the cloud had to be rewritten line by line.
+#
+# METERED. A Network Load Balancer in eu-central-1 is USD 0.027/hour plus USD
+# 0.006 per LCU-hour, so about USD 19.71/month before traffic, against EUR 7.49
+# for the Hetzner lb11 this replaces. Deleting this object deletes the balancer,
+# which is the point: nothing is left hand-made in a console for someone to
+# forget. `../teardown.sh` deletes it first for exactly that reason.
+apiVersion: v1
+kind: Service
+metadata:
+  name: genaryx-console-lb
+  namespace: agent-stack
+  annotations:
+    # Without this you get a Classic Load Balancer, which is a different
+    # product at a different price with a different health check model.
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    # Internet-facing is the default and is stated anyway: the whole reason
+    # this file is opt-in is that it creates a public surface.
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "http"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/healthz"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-interval: "10"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-healthy-threshold: "2"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-unhealthy-threshold: "2"
+    # Off, for the same reason as on Hetzner: the console reads its own client
+    # addresses, and a mismatched proxy protocol is a silent connection reset
+    # rather than an error anyone can see.
+    service.beta.kubernetes.io/aws-load-balancer-proxy-protocol: ""
+    # NOT set: aws-load-balancer-preserve-client-ip. It looks like the fix and
+    # it is not one. That annotation belongs to the separate AWS Load Balancer
+    # Controller; the in-tree service controller this deployment uses ignores
+    # it. Verified on 2026-07-25 by creating the Service with the annotation
+    # present from the start: the target group came up with
+    # preserve_client_ip.enabled = true regardless. See the NetworkPolicy
+    # below, which is the actual answer, and GOTCHAS.md item 45.
+spec:
+  type: LoadBalancer
+  # Local, matching Hetzner, so the console sees real client addresses. It also
+  # changes where the health check lands: with Local, kube-proxy opens a
+  # separate healthCheckNodePort and only nodes actually running the pod answer
+  # it. The NLB's health checks arrive from ITS OWN interfaces inside this
+  # subnet, which is why the security group in main.tf admits the subnet CIDR
+  # on the whole NodePort range rather than a single address. That rule is
+  # GOTCHAS.md item 11 re-derived for AWS, and it had to be re-derived: on
+  # Hetzner the check came from one balancer address, here it comes from
+  # several ENIs that do not exist until the balancer does.
+  externalTrafficPolicy: Local
+  selector:
+    app: genaryx-console
+  ports:
+    - name: https
+      port: 443
+      targetPort: http
+    - name: http
+      port: 80
+      targetPort: http

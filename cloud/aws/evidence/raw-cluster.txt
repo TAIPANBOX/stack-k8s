@@ -1,0 +1,41 @@
+### nodes
+NAME             STATUS   PROVIDER                                   IP
+ip-10-10-0-142   Ready    aws:///eu-central-1a/i-0890b72e94fc1b9c9   10.10.0.142
+ip-10-10-0-169   Ready    aws:///eu-central-1a/i-029bc36bb443ff2e4   10.10.0.169
+ip-10-10-0-231   Ready    aws:///eu-central-1a/i-0a5995f06812e5d51   10.10.0.231
+ip-10-10-0-51    Ready    aws:///eu-central-1a/i-0114284e6d3a2e185   10.10.0.51
+ip-10-10-0-95    Ready    aws:///eu-central-1a/i-00c39386d5ec00c29   10.10.0.95
+
+### pods, spread
+POD                                  NODE             STATUS
+genaryx-console-6c77f4c47f-7g2fx     ip-10-10-0-51    Running
+idryx-fbf7dfd98-nlxws                ip-10-10-0-142   Running
+policy-db-0                          ip-10-10-0-51    Running
+tokenfuse-cloud-8479cf64b9-sf2mp     ip-10-10-0-95    Running
+tokenfuse-gateway-77f79b6cff-pwxwq   ip-10-10-0-231   Running
+wardryx-f8f44f555-4hcqr              ip-10-10-0-169   Running
+
+### storage
+CLAIM              MODE              CLASS       STATUS   SIZE
+cloud-state        [ReadWriteOnce]   longhorn    Bound    2Gi
+console-state      [ReadWriteOnce]   longhorn    Bound    2Gi
+data-policy-db-0   [ReadWriteOnce]   longhorn    Bound    5Gi
+stack-events       [ReadWriteMany]   stack-rwx   Bound    5Gi
+
+### storage classes
+NAME                 PROVISIONER          RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+longhorn (default)   driver.longhorn.io   Delete          Immediate           true                   63m
+longhorn-static      driver.longhorn.io   Delete          Immediate           true                   63m
+stack-rwx            driver.longhorn.io   Retain          Immediate           true                   63m
+
+### cloud controller
+POD                                  READY   RESTARTS
+aws-cloud-controller-manager-458b7   true    0
+aws-cloud-controller-manager-rwsxw   true    0
+aws-cloud-controller-manager-w7jgr   true    0
+
+### secrets encryption at rest
+Encryption Status: Enabled
+Current Rotation Stage: start
+Server Encryption Hashes: All hashes match
+

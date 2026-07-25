@@ -119,42 +119,116 @@ mode and its environment descriptor).
 
 ---
 
-## 3. The comparison sheet to fill in tomorrow
+## 3. The comparison sheet, AWS column filled in
 
-Same workload, same proofs, three clouds. For each of AWS and GCP, in both
-shapes worth testing (self-managed k3s on VMs, and the managed service):
+Run on 2026-07-25, self-managed k3s on EC2. Evidence in
+`cloud/aws/evidence/aws-run-verified.md`. GCP is still open.
 
 **Bring-up**
-- [ ] wall-clock from zero to "every plane answers"
-- [ ] how many steps needed a cloud-specific decision rather than a manifest
-- [ ] does `providerID` come out right without being told (managed) or not (k3s)
-- [ ] is NetworkPolicy actually enforced, and what had to be turned on
+
+| | Hetzner | AWS | GCP |
+|---|---|---|---|
+| wall-clock, zero to "every plane answers" | about 25 min | **about 24 min** (33:47 the first time, three blocking bugs) | |
+| steps needing a cloud-specific decision | baseline | **6** (see below) | |
+| does `providerID` come out right unasked | no, set at install | **no, set at install**, and it carries the zone | |
+| is NetworkPolicy actually enforced | yes, Calico | **yes, Calico, unchanged** | |
+| infrastructure created by one command | no, servers by hand | **yes, 28 s for 3 nodes, 12 s for 2 more** | |
 
 **Storage**
-- [ ] does an RWX claim bind, with which driver, and how long does it take
-- [ ] minimum billable capacity for RWX (this is where Filestore may hurt)
-- [ ] RWO detach/reattach time when a pod moves node
+
+| | Hetzner | AWS | GCP |
+|---|---|---|---|
+| does an RWX claim bind, which driver | yes, Longhorn | **yes, Longhorn, unchanged** | |
+| minimum billable capacity for RWX | none | **none** (EFS has no minimum; not needed, Longhorn sufficed) | Filestore minimum is the number to check |
+| RWO detach/reattach when a pod moves | 30-60 s | not re-measured | |
+| node disk | included in the server | **billed separately, USD 0.0952/GB-month** | |
 
 **Load balancer**
-- [ ] does a `type=LoadBalancer` Service get targets automatically
-- [ ] what source address does its health check arrive with (rewrite GOTCHAS 11)
-- [ ] hourly + per-capacity price, and what it costs to delete
 
-**Cost, like for like**
-- [ ] 5 x (8 vCPU / 16 GB) on-demand, monthly
-- [ ] the same with 1-year commitment / savings plan, monthly
-- [ ] RWX storage, monthly, at 5 Gi and at the minimum billable size
-- [ ] load balancer, monthly
-- [ ] egress for a demo's worth of traffic
-- [ ] TOTAL vs **EUR 137/month + EUR 7.49 load balancer** measured here
+| | Hetzner | AWS | GCP |
+|---|---|---|---|
+| does `type=LoadBalancer` get targets automatically | yes | **yes, all 5 instances** | |
+| what source does the health check arrive with | the balancer's private address | **its own ENIs in the subnet, on a SEPARATE port kube-proxy answers** | |
+| does a healthy target mean traffic flows | yes | **NO. Healthy and silent for six minutes (item 45)** | |
+| apply to a request returning 200 | about 1 min | **3 min 34 s** | |
+| hourly price | EUR 7.49/month | **USD 0.027/hour + LCU, about USD 19.71/month** | |
+
+**Cost, like for like, measured from each provider's own price list**
+
+| | Hetzner | AWS | GCP |
+|---|---|---|---|
+| 5 x (8 vCPU / 16 GB) on demand, monthly | EUR 137 | **USD 1,710** (`c7a.2xlarge`) | |
+| node disks, 5 x 240 GB, monthly | included | **USD 114.24** | |
+| public IPv4, 5 addresses, monthly | included | **USD 18.25** | |
+| private network | EUR 0 | **USD 0** (VPC), but cross-AZ traffic is USD 0.01/GB each way | |
+| load balancer, monthly | EUR 7.49 | **USD 19.71** | |
+| egress | 20 TB per node included | 100 GB free, then about USD 0.09/GB | |
+| **burn while running** | **about EUR 0.20/hour** | **USD 2.52/hour** | |
 
 **The same three proofs**
-- [ ] `evidence/cluster-verified.md` reproduced
-- [ ] `evidence/loadbalancer-verified.md` reproduced
-- [ ] `evidence/freeze-test-verified.md` reproduced, including that the freeze
-      survives a restart of the policy plane
+
+| | Hetzner | AWS |
+|---|---|---|
+| `cluster-verified` | 10 passed, 0 failed | **10 passed, 0 failed** |
+| `loadbalancer-verified` | reproduced | **reproduced, after item 45** |
+| `freeze-test-verified` | reproduced | **reproduced, survives a policy-plane restart** |
+| `security-tests` | 23 passed, 1 noted | **22 passed, 0 failed, 2 noted** (the extra note is a missing `etcdctl`, encryption verified separately) |
 
 **Teardown**
-- [ ] one command, or a hunt for orphaned resources (load balancers, volumes,
-      snapshots, NAT gateways, and any IP that keeps billing after the cluster
-      is gone)
+
+One command on AWS, `cloud/aws/teardown.sh`, but only because the hunt was done
+first: the cloud controller creates the load balancer, so Terraform has never
+heard of it, `destroy` fails on a DependencyViolation, and an orphaned NLB bills
+USD 0.027/hour attached to nothing.
+
+---
+
+## 4. What the AWS run actually decided
+
+**Six things needed a cloud-specific decision.** Five were predicted in section
+2; the sixth was not, and it was the expensive one.
+
+1. The metadata service needs a PUT for a token first.
+2. `providerID` carries the zone: `aws:///<az>/<instance-id>`.
+3. The firewall is a security group attached at launch, so the window in
+   GOTCHAS item 19 never opens.
+4. The cloud controller authenticates as the instance (better) and discovers
+   nothing, so it must be told VPC, subnet, zone and cluster id (worse).
+5. The load balancer object shares its `spec` with the Hetzner one and **not
+   one of its annotations**.
+6. **Unpredicted: EC2 discards pod traffic.** `SourceDestCheck` drops any
+   packet whose source is not the interface's own, which is every pod packet
+   once Calico decides not to encapsulate. And Calico decides that precisely
+   because all five nodes share one subnet, which they do to avoid cross-AZ
+   charges. The cost optimisation caused the outage. GOTCHAS item 44.
+
+**One prediction in section 2 was wrong.** RWX storage was expected to be the
+biggest cost difference. On AWS it is not: EFS has no minimum capacity, and
+Longhorn worked unchanged so EFS was not needed at all. Whether it holds for
+GCP Filestore, which does have a minimum, is the first thing to check there.
+
+**The honest summary of portability.** Everything in `manifests/` applied to
+AWS unchanged except `50-loadbalancer.yaml`, and `install-aws.sh` differs from
+`install.sh` in five marked places out of about five hundred lines. The
+workload is portable. The three things that touch the cloud (metadata,
+load balancer, node networking) are not, and one of them fails in a way that
+reports success.
+
+**The cost headline.** Same machines, same workload, same proofs: **EUR 144.49
+a month on Hetzner against about USD 1,862 a month on AWS**, roughly twelve
+times, and that is before egress. Nothing in the run suggests AWS is worse
+engineering; it suggests the two are priced for different questions.
+
+---
+
+## 5. Still open
+
+- GCP, both shapes, entire column above.
+- Filestore minimum billable capacity: the one number most likely to decide the
+  storage section.
+- Whether EKS removes items 2, 4 and 6 (it should remove all three) and what
+  the USD 0.10/hour control plane fee is actually buying.
+- RWO detach/reattach timing, not re-measured on AWS.
+- The `tokenfuse` build being 73% slower on AWS while the console build is 32%
+  faster, on identical vCPU and RAM. Worth one controlled measurement rather
+  than the two guesses currently attached to it.
