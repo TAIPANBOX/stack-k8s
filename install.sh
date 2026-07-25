@@ -98,18 +98,35 @@ server_id_of() {
 # installed, because a half-installed cluster is harder to reason about than
 # one that refused to start.
 say "preflight on ${#ALL_NODES[@]} node(s)"
-declare -A PRIV SID
+
+# Two facts per node, kept in parallel INDEXED arrays rather than one
+# associative array. `declare -A` needs bash 4, and macOS still ships bash
+# 3.2.57 as /bin/bash, so an operator driving this from a stock Mac gets
+# "declare: -A: invalid option" on the first line of the preflight, with
+# servers already created and already billing (GOTCHAS.md item 41).
+NODE_PRIV=(); NODE_SID=()
+node_index() {
+  local i=0 x
+  for x in "${ALL_NODES[@]}"; do
+    [ "$x" = "$1" ] && { printf '%s' "$i"; return 0; }
+    i=$((i + 1))
+  done
+  return 1
+}
+priv_of() { printf '%s' "${NODE_PRIV[$(node_index "$1")]}"; }
+sid_of() { printf '%s' "${NODE_SID[$(node_index "$1")]}"; }
 for n in "${ALL_NODES[@]}"; do
   sh_ "$n" true 2>/dev/null || die "cannot ssh to root@$n"
   p="$(priv_ip_of "$n" || true)"
   [ -n "$p" ] || die "$n has no Hetzner private network attached (or no metadata service): attach every node to one private network first"
   s="$(server_id_of "$n" || true)"
   [ -n "$s" ] || die "$n did not return an instance-id from the metadata service"
-  PRIV["$n"]="$p"; SID["$n"]="$s"
+  ni="$(node_index "$n")"
+  NODE_PRIV[$ni]="$p"; NODE_SID[$ni]="$s"
   printf '   %-16s private %-12s server-id %s\n' "$n" "$p" "$s"
   sh_ "$n" "test ! -x /usr/local/bin/k3s" || echo "     (k3s already present on $n: this script is idempotent, it will re-run the installer)"
 done
-FIRST_PRIV="${PRIV[$FIRST]}"
+FIRST_PRIV="$(priv_of "$FIRST")"
 
 if [ -z "$HCLOUD_TOKEN" ]; then
   echo "   no --token given: the cloud-controller-manager will be SKIPPED."
@@ -257,7 +274,7 @@ sh_ "$FIRST" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh
     --disable=servicelb --disable=traefik \
     --disable=local-storage \
     --secrets-encryption \
-    --kubelet-arg=provider-id=hcloud://${SID[$FIRST]} \
+    --kubelet-arg=provider-id=hcloud://$(sid_of "$FIRST") \
     --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
 
 say "waiting for the API server"
@@ -272,16 +289,16 @@ done
 # existing quorum before the next one arrives, and a parallel join is how a
 # three-member cluster ends up with two half-joined members.
 for n in "${SERVER_LIST[@]:1}"; do
-  say "k3s server joining: $n (${PRIV[$n]})"
+  say "k3s server joining: $n ($(priv_of "$n"))"
   sh_ "$n" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - server \
       --server 'https://$FIRST_PRIV:6443' \
-      --node-ip '${PRIV[$n]}' --advertise-address '${PRIV[$n]}' \
-      --tls-san '${PRIV[$n]}' --tls-san '$n' \
+      --node-ip '$(priv_of "$n")' --advertise-address '$(priv_of "$n")' \
+      --tls-san '$(priv_of "$n")' --tls-san '$n' \
       --flannel-backend=none --disable-network-policy \
       --disable=servicelb --disable=traefik \
       --disable=local-storage \
       --secrets-encryption \
-      --kubelet-arg=provider-id=hcloud://${SID[$n]} \
+      --kubelet-arg=provider-id=hcloud://$(sid_of "$n") \
       --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
   for i in $(seq 1 40); do
     k_ "get node $(sh_ "$n" hostname) -o name" >/dev/null 2>&1 && break
@@ -290,10 +307,10 @@ for n in "${SERVER_LIST[@]:1}"; do
 done
 
 for n in ${AGENT_LIST[@]+"${AGENT_LIST[@]}"}; do
-  say "k3s agent: $n (${PRIV[$n]})"
+  say "k3s agent: $n ($(priv_of "$n"))"
   sh_ "$n" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_URL='https://$FIRST_PRIV:6443' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - agent \
-      --node-ip '${PRIV[$n]}' \
-      --kubelet-arg=provider-id=hcloud://${SID[$n]}" < <(curl -sfL https://get.k3s.io)
+      --node-ip '$(priv_of "$n")' \
+      --kubelet-arg=provider-id=hcloud://$(sid_of "$n")" < <(curl -sfL https://get.k3s.io)
 done
 
 say "nodes"

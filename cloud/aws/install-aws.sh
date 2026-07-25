@@ -100,7 +100,26 @@ imds() {
 
 # ---- 0. preflight ----------------------------------------------------------
 say "preflight on ${#ALL_NODES[@]} node(s)"
-declare -A PRIV IID AZ
+
+# Three facts per node, kept in parallel INDEXED arrays rather than one
+# associative array. `declare -A` needs bash 4, and macOS still ships bash
+# 3.2.57 as /bin/bash with no newer one in PATH by default, so an operator
+# driving this from a stock Mac gets "declare: -A: invalid option" on line one
+# of the preflight and a cluster that is already billing. Measured here on
+# 2026-07-25 (GOTCHAS.md item 41).
+NODE_PRIV=(); NODE_IID=(); NODE_AZ=()
+node_index() {
+  local i=0 x
+  for x in "${ALL_NODES[@]}"; do
+    [ "$x" = "$1" ] && { printf '%s' "$i"; return 0; }
+    i=$((i + 1))
+  done
+  return 1
+}
+priv_of() { printf '%s' "${NODE_PRIV[$(node_index "$1")]}"; }
+iid_of() { printf '%s' "${NODE_IID[$(node_index "$1")]}"; }
+az_of() { printf '%s' "${NODE_AZ[$(node_index "$1")]}"; }
+
 for n in "${ALL_NODES[@]}"; do
   sh_ "$n" true 2>/dev/null || die "cannot ssh to $SSH_USER@$n (key: $SSH_KEY)"
   su_ "$n" true 2>/dev/null || die "$SSH_USER@$n cannot sudo"
@@ -109,18 +128,19 @@ for n in "${ALL_NODES[@]}"; do
   i="$(imds "$n" "instance-id" || true)"
   z="$(imds "$n" "placement/availability-zone" || true)"
   [ -n "$i" ] && [ -n "$z" ] || die "$n did not return an instance-id and availability zone"
-  PRIV["$n"]="$p"; IID["$n"]="$i"; AZ["$n"]="$z"
+  ni="$(node_index "$n")"
+  NODE_PRIV[$ni]="$p"; NODE_IID[$ni]="$i"; NODE_AZ[$ni]="$z"
   printf '   %-16s private %-12s %s  %s\n' "$n" "$p" "$i" "$z"
   su_ "$n" "test ! -x /usr/local/bin/k3s" || echo "     (k3s already present on $n: this script is idempotent, it will re-run the installer)"
 done
-FIRST_PRIV="${PRIV[$FIRST]}"
+FIRST_PRIV="$(priv_of "$FIRST")"
 
 # [AWS] 2: provider-id. Hetzner used hcloud://<server-id>, a single opaque
 # number. AWS wants the zone as well, because an instance id is only unique
 # within a region. Set at INSTALL time for the same reason as on Hetzner:
 # providerID is immutable, and retrofitting it means deleting the Node object,
 # which on a server also removes its etcd member (GOTCHAS.md item 10).
-provider_id_of() { printf 'aws:///%s/%s' "${AZ[$1]}" "${IID[$1]}"; }
+provider_id_of() { printf 'aws:///%s/%s' "$(az_of "$1")" "$(iid_of "$1")"; }
 
 # ---- [AWS] 3: the firewall is already there --------------------------------
 # On Hetzner install.sh calls the provider API to build a cloud firewall,
@@ -176,7 +196,7 @@ su_ "$FIRST" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh
     --disable=local-storage \
     --secrets-encryption \
     --kubelet-arg=provider-id=$(provider_id_of "$FIRST") \
-    --node-label 'topology.kubernetes.io/zone=${AZ[$FIRST]}' \
+    --node-label 'topology.kubernetes.io/zone=$(az_of "$FIRST")' \
     --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
 
 say "waiting for the API server"
@@ -188,17 +208,17 @@ done
 
 # ---- 3. the other servers, then the agents ---------------------------------
 for n in "${SERVER_LIST[@]:1}"; do
-  say "k3s server joining: $n (${PRIV[$n]})"
+  say "k3s server joining: $n ($(priv_of "$n"))"
   su_ "$n" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - server \
       --server 'https://$FIRST_PRIV:6443' \
-      --node-ip '${PRIV[$n]}' --advertise-address '${PRIV[$n]}' \
-      --tls-san '${PRIV[$n]}' --tls-san '$n' \
+      --node-ip '$(priv_of "$n")' --advertise-address '$(priv_of "$n")' \
+      --tls-san '$(priv_of "$n")' --tls-san '$n' \
       --flannel-backend=none --disable-network-policy \
       --disable=servicelb --disable=traefik \
       --disable=local-storage \
       --secrets-encryption \
       --kubelet-arg=provider-id=$(provider_id_of "$n") \
-      --node-label 'topology.kubernetes.io/zone=${AZ[$n]}' \
+      --node-label 'topology.kubernetes.io/zone=$(az_of "$n")' \
       --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
   for i in $(seq 1 40); do
     k_ "get node $(sh_ "$n" hostname) -o name" >/dev/null 2>&1 && break
@@ -207,11 +227,11 @@ for n in "${SERVER_LIST[@]:1}"; do
 done
 
 for n in ${AGENT_LIST[@]+"${AGENT_LIST[@]}"}; do
-  say "k3s agent: $n (${PRIV[$n]})"
+  say "k3s agent: $n ($(priv_of "$n"))"
   su_ "$n" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_URL='https://$FIRST_PRIV:6443' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - agent \
-      --node-ip '${PRIV[$n]}' \
+      --node-ip '$(priv_of "$n")' \
       --kubelet-arg=provider-id=$(provider_id_of "$n") \
-      --node-label 'topology.kubernetes.io/zone=${AZ[$n]}'" < <(curl -sfL https://get.k3s.io)
+      --node-label 'topology.kubernetes.io/zone=$(az_of "$n")'" < <(curl -sfL https://get.k3s.io)
 done
 
 say "nodes"
@@ -313,7 +333,7 @@ if [ "$SKIP_CCM" = 0 ]; then
   VPC_ID="$(imds "$FIRST" "network/interfaces/macs/$(imds "$FIRST" "mac")/vpc-id" || true)"
   SUBNET_ID="$(imds "$FIRST" "network/interfaces/macs/$(imds "$FIRST" "mac")/subnet-id" || true)"
   [ -n "$VPC_ID" ] && [ -n "$SUBNET_ID" ] || die "could not read the VPC and subnet from the metadata service"
-  echo "   vpc $VPC_ID  subnet $SUBNET_ID  zone ${AZ[$FIRST]}  cluster $CLUSTER_NAME"
+  echo "   vpc $VPC_ID  subnet $SUBNET_ID  zone $(az_of "$FIRST")  cluster $CLUSTER_NAME"
 
   su_ "$FIRST" "tee /tmp/aws-ccm.yaml >/dev/null" <<YAML
 apiVersion: v1
@@ -324,7 +344,7 @@ metadata:
 data:
   cloud.conf: |
     [Global]
-    Zone=${AZ[$FIRST]}
+    Zone=$(az_of "$FIRST")
     VPC=$VPC_ID
     SubnetID=$SUBNET_ID
     KubernetesClusterID=$CLUSTER_NAME

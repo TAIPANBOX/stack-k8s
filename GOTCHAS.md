@@ -964,3 +964,41 @@ had gone nowhere was discarded with it.
 **Fixed here** (genaryx): the bootstrap carries both directories, the handle
 takes both, and every journal failure is logged as well as returned - so a
 broken audit trail cannot be silent whether or not the command succeeded.
+
+## 41. `declare -A` needs bash 4, and macOS ships 3.2
+
+> **Ours, and fixed.** We wrote this wrong in this repository.
+
+**Symptom:** on the first line of the preflight, against servers that were
+created seconds ago and are already billing:
+
+```
+install.sh: line 101: declare: -A: invalid option
+declare: usage: declare [-afFirtx] [-p] [name[=value] ...]
+!! install.sh stopped at line 102 (exit 2)
+```
+
+**Why:** associative arrays arrived in bash 4.0 in 2009. Apple has shipped
+bash **3.2.57** as `/bin/bash` ever since, because 4.0 changed licence to
+GPLv3, and a stock Mac has no newer bash anywhere in `PATH`. Both install
+scripts kept their per-node facts (private address, instance or server id,
+availability zone) in `declare -A`, so both died immediately when driven from
+the machine most operators actually use.
+
+It stayed hidden because the failure needs two things at once: a macOS
+operator AND a real run. `bash -n` parses the file happily, shellcheck says
+nothing, and every CI runner is Linux with bash 5.
+
+**Cost:** measured on 2026-07-25 during the first AWS run. Five instances were
+up and metering at USD 2.52/hour while the script that was supposed to
+configure them had already exited. Nothing was damaged, but the cluster billed
+for the whole diagnosis.
+
+**Fixed here:** parallel INDEXED arrays plus a `node_index` lookup, in both
+`install.sh` and `cloud/aws/install-aws.sh`. Indexed arrays work in bash 3.2,
+so the scripts now need no bash newer than what the operator already has.
+
+The wider lesson for anything in this repo that runs on an operator's own
+machine rather than on a node: the nodes are a distribution we choose, and the
+laptop is not. Test the operator side on macOS, or do not claim it works
+there.
