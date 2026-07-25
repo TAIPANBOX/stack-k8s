@@ -48,8 +48,8 @@ locals {
   ami          = var.ami_id != "" ? var.ami_id : data.aws_ssm_parameter.ubuntu[0].value
   az           = "${var.region}${var.az_suffix}"
   cluster_tag  = "kubernetes.io/cluster/${var.cluster_name}"
-  server_count = 3
-  agent_count  = 2
+  server_count = var.server_count
+  agent_count  = var.agent_count
   node_count   = local.server_count + local.agent_count
   node_names   = [for i in range(local.node_count) : i < local.server_count ? "server-${i + 1}" : "agent-${i - local.server_count + 1}"]
 }

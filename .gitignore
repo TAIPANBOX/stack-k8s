@@ -8,3 +8,4 @@ cloud/**/terraform.tfstate
 cloud/**/terraform.tfstate.*
 cloud/**/*.tfvars
 cloud/**/kubeconfig.yaml
+cloud/**/tfplan

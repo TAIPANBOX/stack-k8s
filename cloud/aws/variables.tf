@@ -90,3 +90,27 @@ variable "enable_efs" {
   type        = bool
   default     = false
 }
+
+variable "server_count" {
+  description = <<-EOT
+    etcd members. Three matches the Hetzner run. etcd needs an ODD number or it
+    cannot hold quorum, so 1, 3 or 5 and nothing else.
+
+    Note the AWS-specific constraint that has no Hetzner counterpart: a new
+    account's default quota is 32 on-demand vCPUs per region, and five
+    8-vCPU nodes need 40. Either raise the quota or drop a node.
+  EOT
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = contains([1, 3, 5], var.server_count)
+    error_message = "etcd wants an odd number of members: 1, 3 or 5."
+  }
+}
+
+variable "agent_count" {
+  description = "Workers. Two matches the Hetzner run. Zero gives a 3-node cluster that still holds quorum and still satisfies Longhorn's 3 replicas, at 24 vCPU instead of 40."
+  type        = number
+  default     = 2
+}

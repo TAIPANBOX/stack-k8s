@@ -105,11 +105,37 @@ else
       && echo "   $r ok"
   done
 
+  # The console is the one closed repo, so it is the one clone that needs a
+  # credential. It is fetched HERE, on the operator's machine, and shipped to
+  # the builder as source. The token never reaches the cluster.
+  #
+  # The obvious alternative, handing the token to the node and letting it clone,
+  # is what ../../deploy.sh does and it is worse in a way that is easy to miss:
+  # the token ends up in the node's process list, in its shell history, and in
+  # .git/config, on a machine that is often in someone else's cloud account. A
+  # token with access to every private repository an account owns should not be
+  # somewhere its owner is not.
+  #
+  # --depth 1, and the remote is rewritten before the tarball is made, so the
+  # credential is in no file that leaves this machine.
   WITH_CONSOLE=0
   if [ -n "$CONSOLE_TOKEN" ]; then
-    if su_ "$BUILDER" "sh -c \"cd /root/src && if [ -d genaryx-a360 ]; then git -C genaryx-a360 pull -q --ff-only || true; else git clone -q --depth 1 https://x-access-token:$CONSOLE_TOKEN@github.com/TAIPANBOX/genaryx.git genaryx-a360; fi && git -C genaryx-a360 remote set-url origin https://github.com/TAIPANBOX/genaryx.git\""; then
-      WITH_CONSOLE=1; echo "   genaryx (console) ok"
+    say "fetching the console source here, so the token stays on this machine"
+    TMP="$(mktemp -d)"
+    if git -c credential.helper= clone -q --depth 1 \
+         "https://x-access-token:$CONSOLE_TOKEN@github.com/TAIPANBOX/genaryx.git" \
+         "$TMP/genaryx-a360" 2>/dev/null; then
+      git -C "$TMP/genaryx-a360" remote set-url origin https://github.com/TAIPANBOX/genaryx.git
+      BUILT_FROM="$(git -C "$TMP/genaryx-a360" rev-parse --short HEAD)"
+      grep -rl 'x-access-token' "$TMP/genaryx-a360/.git" >/dev/null 2>&1 \
+        && { rm -rf "$TMP"; die "the token is still in .git after rewriting the remote; refusing to ship it"; }
+      echo "   console source at $BUILT_FROM, uploading to the builder"
+      tar -cz -C "$TMP" genaryx-a360 | su_ "$BUILDER" 'tar -xz -C /root/src'
+      rm -rf "$TMP"
+      WITH_CONSOLE=1
+      echo "   genaryx (console) staged, no credential on any node"
     else
+      rm -rf "$TMP"
       echo "   could not clone the console with that token: continuing WITHOUT it"
     fi
   else
