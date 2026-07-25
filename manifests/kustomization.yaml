@@ -1,0 +1,66 @@
+# Plain kustomize, which kubectl already has built in: no Helm, no tiller-era
+# ceremony, one command to stand the stack up.
+#
+#   kubectl apply -k manifests/
+#
+# Two files are deliberately NOT in resources:
+#
+# secrets.example.yaml holds placeholders, and applying placeholders is how a
+# cluster ends up authenticating with the word REPLACE_ME.
+#
+# 50-loadbalancer.yaml publishes the console on a public address AND starts a
+# meter (a Hetzner lb11 is EUR 7.49/month net, billed hourly). Neither belongs
+# in a default `apply -k`: the console's own posture is that an operator
+# reaches it through their tunnel (see 20-console.yaml), and nothing should
+# begin billing because someone ran the standard install command. Apply it
+# explicitly when a public entry point is genuinely what you want:
+#
+#   kubectl apply -f manifests/50-loadbalancer.yaml
+#
+# and read the header of that file first: over plain HTTP it publishes a
+# sign-in page to the whole internet, so it wants TLS in front of it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: agent-stack
+resources:
+  - 00-base.yaml
+  - 15-policy-store.yaml
+  - 10-planes.yaml
+  - 20-console.yaml
+  - 30-network-policy.yaml
+  - 40-routines-and-secrets.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: agent-stack
+
+# Spread the planes over the nodes.
+#
+# Every Deployment here is a single replica, so a topology-spread constraint
+# would do nothing (it spreads replicas of ONE workload, and there is only
+# ever one). What matters instead is not co-locating DIFFERENT planes, and
+# left alone the scheduler happily puts all of them on whichever node looks
+# cheapest that minute - which is exactly what happened on the first live
+# cluster: five pods, five nodes, and all five pods on node 5. A cluster built
+# for HA where one node outage takes the whole stack with it is a cluster
+# telling itself a story.
+#
+# `preferred`, not `required`: a two-node cluster, or one node under
+# maintenance, must still be able to run the stack. This is a preference the
+# scheduler weighs, not a rule that leaves pods Pending.
+patches:
+  - target:
+      kind: Deployment
+    patch: |
+      - op: add
+        path: /spec/template/spec/affinity
+        value:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  topologyKey: kubernetes.io/hostname
+                  labelSelector:
+                    matchExpressions:
+                      - key: plane
+                        operator: Exists

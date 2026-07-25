@@ -1,0 +1,43 @@
+# The one entry point into the cluster, provisioned by Kubernetes itself.
+#
+# `hcloud-cloud-controller-manager` watches for Services of type LoadBalancer
+# and creates a real Hetzner load balancer for them, with the cluster's nodes
+# as targets and a health check that follows the pods. That is the difference
+# between a cluster that HAS a load balancer and a cluster that MANAGES one:
+# delete this object and the balancer goes away with it, so there is no
+# hand-made thing in a web console for someone to forget about later.
+#
+# METERED: each LoadBalancer object here bills as a Hetzner load balancer
+# (roughly EUR 5.39 a month, hourly). One is deliberate. Adding a second
+# type=LoadBalancer Service anywhere in this namespace silently adds a second
+# bill, which is why the console is fronted here and every other service
+# stays ClusterIP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: genaryx-console-lb
+  namespace: agent-stack
+  annotations:
+    load-balancer.hetzner.cloud/name: "agent-stack"
+    load-balancer.hetzner.cloud/location: "fsn1"
+    load-balancer.hetzner.cloud/type: "lb11"
+    # Targets are addressed over the private network, so cluster traffic never
+    # leaves it, and the balancer is the only public surface.
+    load-balancer.hetzner.cloud/use-private-ip: "true"
+    load-balancer.hetzner.cloud/health-check-protocol: "http"
+    load-balancer.hetzner.cloud/health-check-http-path: "/healthz"
+    # The proxy protocol is off: the console reads its own client addresses and
+    # a mismatched proxy protocol is a silent connection reset, not an error.
+    load-balancer.hetzner.cloud/uses-proxyprotocol: "false"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app: genaryx-console
+  ports:
+    - name: https
+      port: 443
+      targetPort: http
+    - name: http
+      port: 80
+      targetPort: http

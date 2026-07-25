@@ -1,0 +1,112 @@
+# The Genaryx console. One pod, because the four tools it spawns
+# (qryx, mockryx, verdryx, engram-mcp) live in its image rather than beside it
+# (README, "Fact 2"). Exposed inside the cluster only: the operator reaches it
+# over their own WireGuard tunnel, which is the same posture as the box.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: genaryx-console
+  namespace: agent-stack
+  labels: { app: genaryx-console, plane: console }
+spec:
+  replicas: 1
+  strategy: { type: Recreate } # one RWO state volume, so never two at once.
+  selector: { matchLabels: { app: genaryx-console } }
+  template:
+    metadata:
+      labels: { app: genaryx-console, plane: console }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001 # so the state volume is writable by the stack user
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: console
+          image: stack/genaryx-console:dev
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: { name: stack-wiring }
+          env:
+            - { name: HOME, value: "/var/lib/stack" }
+            # Without an admin bearer per plane the console resolves NO
+            # environment and every tab is empty: the URLs in `stack-wiring`
+            # say where the planes are, these say who the console is when it
+            # talks to them. The key is what gates discovery (a URL alone
+            # never invents a plane), which is why both halves are here.
+            #
+            # These two are the same throwaway-cluster devkey 10-planes.yaml
+            # spells out, and they are written in plain sight for the same
+            # reason: so nobody mistakes them for a real credential. On a real
+            # cluster create the Secret in secrets.example.yaml and swap both
+            # for a reference the image never contains:
+            #
+            #   - name: TOKENFUSE_CLOUD_ADMIN_KEY
+            #     valueFrom: { secretKeyRef: { name: stack-keys, key: cloud_admin } }
+            #   - name: WARDRYX_ADMIN_KEY
+            #     valueFrom: { secretKeyRef: { name: stack-keys, key: wardryx_admin } }
+            - { name: TOKENFUSE_CLOUD_ADMIN_KEY, value: "devkey" }
+            - { name: WARDRYX_ADMIN_KEY, value: "devkey" }
+            # Where the console looks for environment descriptors. Pointed off
+            # the state volume on purpose: which planes exist is CLUSTER
+            # configuration, not console state, so it is mounted read-only
+            # from a ConfigMap (00-base.yaml) and nothing the console writes
+            # can change what it believes it is governing.
+            - { name: TAIPAN_HOME, value: "/etc/genaryx/taipan" }
+            # Scan the checked-out stack, not $HOME: pointing qryx at a home
+            # directory is what made the Evidence tab hang on the box.
+            - { name: GENARYX_SCAN_TARGET, value: "/srv/ui" }
+            # Felyx stays local-first here. A cluster that wants a cloud model
+            # sets these from a Secret it created itself; nothing is baked in.
+            - { name: GENARYX_COPILOT_PROVIDER, value: "ollama" }
+          ports: [{ name: http, containerPort: 7420 }]
+          volumeMounts:
+            - { name: state, mountPath: /var/lib/stack }
+            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: environment, mountPath: /etc/genaryx/taipan/environments, readOnly: true }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            # NOT read-only: this container legitimately writes its operator
+            # record, passkey store, and the verdryx/engram databases the tools
+            # it spawns keep. Everything it writes is on the state volume.
+            readOnlyRootFilesystem: false
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+      volumes:
+        - name: state
+          persistentVolumeClaim: { claimName: console-state }
+        - name: events
+          persistentVolumeClaim: { claimName: stack-events }
+        # The descriptor, plus - when the operator has created it - the sibling
+        # keyfile it references, projected into ONE directory because that is
+        # how the console reads them: `<name>.json` and `<name>.keys.json` side
+        # by side. The Secret is optional so a cluster without real credentials
+        # still starts and still resolves its bus, identity graph and Service
+        # URLs; only the admin bearers then come from the env vars above.
+        - name: environment
+          projected:
+            sources:
+              - configMap:
+                  name: stack-environment
+                  items: [{ key: k8s.json, path: k8s.json }]
+              - secret:
+                  name: stack-keys
+                  optional: true
+                  items: [{ key: k8s.keys.json, path: k8s.keys.json }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: genaryx-console, namespace: agent-stack }
+spec:
+  selector: { app: genaryx-console }
+  ports: [{ name: http, port: 7420, targetPort: http }]

@@ -1,0 +1,101 @@
+# The policy plane's durable store, and the one component here that is not
+# part of the stack.
+#
+# Why it exists: `wardryx serve` without `-db` keeps policies and approvals in
+# MEMORY. It says so on startup ("no -db given; using an in-memory approval
+# store (state is lost on restart)"), and on one long-lived box that warning is
+# easy to live with. On Kubernetes it is not, because of what the console
+# writes there: freezing an agent means the console PUTs deny-all policies
+# named `console-block:<kind>:<key>` into wardryx, and reads them back to know
+# what is frozen. An in-memory wardryx therefore turns every ordinary pod
+# event - a rollout, an eviction, a drained node - into a silent mass
+# UNFREEZE: the console rehydrates from wardryx, finds no blocks, and shows a
+# fleet that is running when an operator believes it is stopped. An
+# enforcement control that forgets is worse than no control, because it is
+# still on the screen. See ../GOTCHAS.md, item 14.
+#
+# Postgres is what wardryx itself asks for (`-db`/`WARDRYX_DB`, pgx DSN), and
+# it applies its own schema on connect, so there is no migration step to run
+# and nothing to keep in sync here.
+#
+# The credentials are NOT in this file and are not in the repo: `install.sh`
+# generates them into the `stack-policy-db` Secret on your cluster. If you
+# stood the cluster up some other way, create it yourself before applying:
+#
+#   PW=$(openssl rand -hex 24)
+#   kubectl -n agent-stack create secret generic stack-policy-db \
+#     --from-literal=password="$PW" \
+#     --from-literal=dsn="postgres://wardryx:$PW@policy-db:5432/wardryx?sslmode=disable" \
+#     --from-literal=approval_secret="$(openssl rand -hex 32)"
+#
+# sslmode=disable is honest rather than lax: this connection never leaves the
+# pod network, the NetworkPolicy below admits exactly one client pod, and a
+# self-signed in-cluster TLS pair would add a certificate to rotate without
+# adding a party who could read the traffic.
+apiVersion: v1
+kind: Service
+metadata:
+  name: policy-db
+  namespace: agent-stack
+  labels: { app: policy-db, plane: store }
+spec:
+  selector: { app: policy-db }
+  ports: [{ name: postgres, port: 5432, targetPort: postgres }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: policy-db
+  namespace: agent-stack
+  labels: { app: policy-db, plane: store }
+spec:
+  serviceName: policy-db
+  replicas: 1
+  selector: { matchLabels: { app: policy-db } }
+  template:
+    metadata:
+      labels: { app: policy-db, plane: store }
+    spec:
+      securityContext:
+        # 70 is the postgres uid/gid in the alpine image. Numeric, for the same
+        # reason every image here ends with a numeric USER: a kubelet with
+        # runAsNonRoot cannot verify a name (GOTCHAS 8). fsGroup so the fresh
+        # volume is writable by that uid.
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - { name: POSTGRES_DB, value: "wardryx" }
+            - { name: POSTGRES_USER, value: "wardryx" }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: stack-policy-db, key: password } }
+            # A subdirectory, not the mount point itself: initdb refuses a
+            # directory that already contains anything, and a freshly
+            # provisioned volume contains `lost+found`.
+            - { name: PGDATA, value: "/var/lib/postgresql/data/pgdata" }
+          ports: [{ name: postgres, containerPort: 5432 }]
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "wardryx", "-d", "wardryx"] }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

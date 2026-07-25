@@ -1,0 +1,265 @@
+# The three long-running planes plus the enforcing proxy. Flags and env are
+# copied from `stack-up/up.sh`'s real invocations, not invented: wardryx takes
+# single-dash flags, idryx takes double-dash, and both tokenfuse binaries are
+# configured entirely through env.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tokenfuse-cloud
+  namespace: agent-stack
+  labels: { app: tokenfuse-cloud, plane: money }
+spec:
+  replicas: 1
+  # One RWO state volume, so never two pods at once: a rolling update would
+  # wait for a second pod that cannot attach the same disk, and sit there.
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: tokenfuse-cloud } }
+  template:
+    metadata:
+      labels: { app: tokenfuse-cloud, plane: money }
+    spec:
+      # fsGroup so uid 10001 can write the snapshot: a freshly provisioned
+      # block volume comes up owned by root, and this container is not root.
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: cloud
+          image: stack/tokenfuse:dev
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/tokenfuse-cloud"]
+          env:
+            - { name: PORT, value: "8080" }
+            # tokenfuse-cloud binds 127.0.0.1 by DEFAULT, on purpose: a naive
+            # local run must never publish the money-plane API. In a pod that
+            # default is wrong in a way that looks like a broken app: the
+            # container runs, the log says "listening", and the readiness probe
+            # fails forever, because kubelet probes the pod IP and the Service
+            # has no endpoint to send to.
+            #
+            # So this opts in through the escape hatch the code documents, and
+            # opts in as narrowly as the code allows: the POD'S OWN address,
+            # not `0.0.0.0`. The wildcard would also work and is what most
+            # charts write, but it means "every interface this container ever
+            # gets", which stops being loopback-equivalent the day something
+            # adds hostNetwork or a second interface. The pod IP cannot drift
+            # that way.
+            #
+            # What replaces loopback as the boundary is not politeness: the
+            # default-deny NetworkPolicy in 30-network-policy.yaml admits port
+            # 8080 only from `plane: console` and `plane: money`, the Service
+            # is ClusterIP, and there is no host port and no NodePort. That is
+            # a strictly smaller reachable set than loopback on a shared box,
+            # where every local process of every local user can connect.
+            # See ../GOTCHAS.md, item 9.
+            - name: TOKENFUSE_CLOUD_HOST
+              valueFrom: { fieldRef: { fieldPath: status.podIP } }
+            # A real cluster mounts real keys (see 40-secrets.example.yaml).
+            # This pair is the throwaway-cluster credential `up.sh` uses, and it
+            # is spelled out rather than hidden so nobody mistakes it for one.
+            - { name: TOKENFUSE_CLOUD_KEYS, value: "" }
+            - { name: TOKENFUSE_CLOUD_ALLOW_DEVKEY, value: "1" }
+            # Durable state, autosaved every 2s and reloaded on startup.
+            # Without it every restart is a factory reset of the money plane
+            # (see the cloud-state claim in 00-base.yaml).
+            - { name: TOKENFUSE_CLOUD_DATA, value: "/var/lib/stack/cloud/state.json" }
+          ports: [{ name: http, containerPort: 8080 }]
+          volumeMounts:
+            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: state, mountPath: /var/lib/stack/cloud }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { memory: 512Mi }
+      volumes:
+        - name: events
+          persistentVolumeClaim: { claimName: stack-events }
+        - name: state
+          persistentVolumeClaim: { claimName: cloud-state }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: tokenfuse-cloud, namespace: agent-stack }
+spec:
+  selector: { app: tokenfuse-cloud }
+  ports: [{ name: http, port: 8080, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tokenfuse-gateway
+  namespace: agent-stack
+  labels: { app: tokenfuse-gateway, plane: money }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: tokenfuse-gateway } }
+  template:
+    metadata:
+      labels: { app: tokenfuse-gateway, plane: money }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: gateway
+          image: stack/tokenfuse:dev
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/tokenfuse-gateway"]
+          env:
+            - { name: TOKENFUSE_ADDR, value: "0.0.0.0:4100" }
+            # enforce, not observe: an over-budget call gets a hard 402 rather
+            # than a log line. This is the whole point of the gateway.
+            - { name: TOKENFUSE_MODE, value: "enforce" }
+            - { name: TOKENFUSE_DATA_DIR, value: "/var/lib/stack/traces/gateway" }
+          envFrom:
+            - configMapRef: { name: stack-wiring }
+          ports: [{ name: http, containerPort: 4100 }]
+          volumeMounts:
+            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: traces, mountPath: /var/lib/stack/traces }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { memory: 512Mi }
+      volumes:
+        - name: events
+          persistentVolumeClaim: { claimName: stack-events }
+        - name: traces
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata: { name: tokenfuse-gateway, namespace: agent-stack }
+spec:
+  selector: { app: tokenfuse-gateway }
+  ports: [{ name: http, port: 4100, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wardryx
+  namespace: agent-stack
+  labels: { app: wardryx, plane: policy }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: wardryx } }
+  template:
+    metadata:
+      labels: { app: wardryx, plane: policy }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: wardryx
+          image: stack/wardryx:dev
+          imagePullPolicy: IfNotPresent
+          # Single-dash flags, exactly as up.sh calls it.
+          args:
+            - "serve"
+            - "-addr"
+            - "0.0.0.0:8090"
+            - "-events"
+            - "/var/lib/stack/events/wardryx.ndjson"
+            - "-policy"
+            - "/etc/wardryx/policy.yaml"
+          env:
+            # Durable policy + approval store (15-policy-store.yaml). Without
+            # it wardryx keeps both in MEMORY, so a pod restart silently drops
+            # every `console-block:*` policy the console wrote and UNFREEZES
+            # the fleet while the console still shows it stopped. Serve flags
+            # fall back to their WARDRYX_* variable, so this is `-db` by
+            # another name. See ../GOTCHAS.md, item 14.
+            - name: WARDRYX_DB
+              valueFrom: { secretKeyRef: { name: stack-policy-db, key: dsn } }
+            # A policy can say "hold anything above $25 for a human". Without
+            # this secret wardryx accepts such a policy and can then never
+            # GRANT the hold - it says so in one startup line and nowhere the
+            # operator will look.
+            - name: WARDRYX_APPROVAL_SECRET
+              valueFrom: { secretKeyRef: { name: stack-policy-db, key: approval_secret } }
+          ports: [{ name: http, containerPort: 8090 }]
+          volumeMounts:
+            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: policy, mountPath: /etc/wardryx, readOnly: true }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+      volumes:
+        - name: events
+          persistentVolumeClaim: { claimName: stack-events }
+        - name: policy
+          configMap: { name: wardryx-policy }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: wardryx, namespace: agent-stack }
+spec:
+  selector: { app: wardryx }
+  ports: [{ name: http, port: 8090, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: idryx
+  namespace: agent-stack
+  labels: { app: idryx, plane: identity }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: idryx } }
+  template:
+    metadata:
+      labels: { app: idryx, plane: identity }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: idryx
+          image: stack/idryx:dev
+          imagePullPolicy: IfNotPresent
+          # Double-dash flags here, and :8081 because idryx's own default 8080
+          # collides with the cloud plane. Both quirks are up.sh's, kept so the
+          # cluster and the one-command local run behave identically.
+          args:
+            - "serve"
+            - "--addr"
+            - "0.0.0.0:8081"
+            - "--load"
+            - "tokenfuse:/var/lib/stack/events/tokenfuse.ndjson"
+          ports: [{ name: http, containerPort: 8081 }]
+          volumeMounts:
+            # Read-only: idryx builds its graph FROM the log and never writes
+            # to it, and the mount should say so.
+            - { name: events, mountPath: /var/lib/stack/events, readOnly: true }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { memory: 512Mi }
+      volumes:
+        - name: events
+          persistentVolumeClaim: { claimName: stack-events }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: idryx, namespace: agent-stack }
+spec:
+  selector: { app: idryx }
+  ports: [{ name: http, port: 8081, targetPort: http }]

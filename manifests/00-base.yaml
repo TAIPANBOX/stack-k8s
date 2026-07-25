@@ -1,0 +1,143 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-stack
+  labels:
+    # The whole namespace runs unprivileged, non-root, no host access. Declared
+    # here so the API server enforces it rather than each pod promising it.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+# The shared event log the planes couple through (README, "Fact 1").
+# ReadWriteMany because four components need it at once and they are spread
+# across nodes: the gateway and wardryx append, idryx loads from it, the
+# console's bus tails it. On k3s the default `local-path` class is RWO, so this
+# claim needs an RWX class (nfs-server-provisioner or Longhorn) - named
+# explicitly so a cluster without one fails loudly at apply time instead of
+# scheduling every pod onto one node by accident.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: stack-events
+  namespace: agent-stack
+spec:
+  accessModes: ["ReadWriteMany"]
+  storageClassName: stack-rwx
+  resources:
+    requests:
+      storage: 5Gi
+---
+# The money plane's own state. `tokenfuse-cloud` keeps runs, budgets, incidents
+# and the savings ledger in memory and snapshots them to `TOKENFUSE_CLOUD_DATA`
+# every two seconds; with that variable unset it keeps NOTHING, which on one
+# long-lived box looks survivable and on Kubernetes is not: a rollout, an
+# eviction or a drained node is an ordinary Tuesday, and each one silently
+# resets the fleet's whole spend history to zero. A plane that governs money
+# gets a volume. See ../GOTCHAS.md, item 12.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cloud-state
+  namespace: agent-stack
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+# The console's own state: operator record, enrolled passkeys, the verdryx and
+# engram stores it writes as it runs. One writer, so ordinary RWO.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: console-state
+  namespace: agent-stack
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stack-wiring
+  namespace: agent-stack
+data:
+  # Service DNS, not localhost: the one substantive change from `up.sh`, which
+  # wires everything to 127.0.0.1 because there it genuinely is one host.
+  TOKENFUSE_CLOUD_URL: "http://tokenfuse-cloud:8080"
+  WARDRYX_URL: "http://wardryx:8090"
+  IDRYX_URL: "http://idryx:8081"
+  EVENTS_DIR: "/var/lib/stack/events"
+  TOKENFUSE_EVENTS_PATH: "/var/lib/stack/events/tokenfuse.ndjson"
+  WARDRYX_EVENTS_PATH: "/var/lib/stack/events/wardryx.ndjson"
+---
+# The environment descriptor, which is the piece a Kubernetes deployment has
+# no other way to produce.
+#
+# On a customer box `taipan up` writes `~/.taipan/environments/<name>.json`,
+# and the console treats that file as the answer to "what am I looking at".
+# Two of its panels resolve from NOTHING ELSE: the Bus (and therefore the
+# delegation Graph built from it) and the Identity plane read the descriptor
+# only - there is no environment variable that can tell them. Here that has a
+# consequence worth being blunt about: with no descriptor, the console's bus
+# does not report an empty cluster, it starts its DEMO feeder, writes fixture
+# events into a scratch directory, and the Graph tab then draws a fleet of
+# `agent://taipanbox.dev/demo/*` identities that do not exist. A governance
+# console showing invented agents as real is the worst failure mode available
+# to it, and on a cluster it was the DEFAULT. See ../GOTCHAS.md, item 16.
+#
+# So the manifests write the descriptor themselves. It holds no secret: URLs
+# the cluster already publishes as Services, the shared event directory, and
+# REFERENCES to key labels. The keys those labels point at live in a sibling
+# `<name>.keys.json` that this repo does not ship (see secrets.example.yaml);
+# without it the money and policy planes fall back to their env vars, which is
+# why the console still works on a throwaway cluster and why a real one can
+# hand it real credentials without editing any of this.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stack-environment
+  namespace: agent-stack
+data:
+  k8s.json: |
+    {
+      "name": "k8s",
+      "created_at": "2026-07-25T00:00:00Z",
+      "host": "agent-stack.svc.cluster.local",
+      "services": {
+        "cloud":   { "url": "http://tokenfuse-cloud:8080" },
+        "gateway": { "url": "http://tokenfuse-gateway:4100", "mode": "enforce" },
+        "wardryx": { "url": "http://wardryx:8090" },
+        "idryx":   { "url": "http://idryx:8081" }
+      },
+      "events": {
+        "dir": "/var/lib/stack/events",
+        "files": {
+          "tokenfuse": "/var/lib/stack/events/tokenfuse.ndjson",
+          "wardryx": "/var/lib/stack/events/wardryx.ndjson"
+        }
+      },
+      "keys": {
+        "cloud_admin_ref": "taipan/k8s/cloud_admin",
+        "wardryx_admin_ref": "taipan/k8s/wardryx_admin"
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wardryx-policy
+  namespace: agent-stack
+data:
+  # The same starter policy `up.sh` seeds, scoped to fire-drill identities only
+  # so a fresh cluster denies something real without touching a live fleet.
+  policy.yaml: |
+    - name: stack-up-demo-require-human-approval
+      target: agent://drill.local/*
+      require_human_above_usd: 1
+    - name: stack-up-demo-deny-shell-exec
+      target: agent://drill.local/*
+      deny_tool:
+        - shell_exec

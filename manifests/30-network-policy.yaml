@@ -1,0 +1,167 @@
+# Default-deny, then exactly the paths the stack actually uses. This is the
+# governance story told at the network layer: the same "an agent may do only
+# what it was granted" rule the PDP enforces per call, enforced per packet.
+#
+# Requires a CNI that implements NetworkPolicy. k3s ships Flannel, which does
+# NOT, so a k3s cluster needs `--flannel-backend=none` with Calico or Cilium,
+# or these objects are accepted by the API server and quietly enforce nothing.
+# Said out loud because a policy that silently does nothing is worse than no
+# policy at all.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: agent-stack
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+# DNS is the one egress every pod needs before it can reach anything by name.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: agent-stack
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+# The console is the only client of the three planes, and the gateway is the
+# only other thing that talks to cloud and wardryx.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: planes-ingress
+  namespace: agent-stack
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: plane, operator: In, values: ["money", "policy", "identity"] }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { plane: console } }
+        - podSelector: { matchLabels: { plane: money } }
+      ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 8090 }
+        - { protocol: TCP, port: 8081 }
+        - { protocol: TCP, port: 4100 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: console-egress
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { plane: console } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchExpressions:
+              - { key: plane, operator: In, values: ["money", "policy", "identity"] }
+      ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 8090 }
+        - { protocol: TCP, port: 8081 }
+        - { protocol: TCP, port: 4100 }
+---
+# The policy plane's store: exactly one client, one port, one direction.
+# Postgres holds the enforcement state (every `console-block:*` policy and the
+# whole approval trail), so anything that can reach 5432 can rewrite what the
+# fleet is allowed to do without going through the PDP at all. wardryx is the
+# only pod with a reason to connect, so it is the only pod that can.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: policy-store
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: policy-db } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: wardryx } }
+      ports:
+        - { protocol: TCP, port: 5432 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wardryx-egress-store
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: wardryx } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: policy-db } }
+      ports:
+        - { protocol: TCP, port: 5432 }
+---
+# The load balancer has to be let in explicitly, and this is the rule people
+# forget. `externalTrafficPolicy: Local` deliberately does NOT masquerade, so
+# the packet reaching the console pod still carries the BALANCER's private
+# address as its source, not the node's. Under default-deny that is an
+# unmatched source and Calico drops it, including the balancer's own health
+# check: the pod is Ready, the Service has an endpoint, and the cloud console
+# still shows the target as unhealthy with no log line anywhere to say why.
+#
+# The CIDR is the Hetzner private network the nodes and the balancer share
+# (`--node-ip` addresses plus the balancer's), so the only hosts this admits
+# are the cluster's own. Narrow it to the balancer's /32 if you want it
+# tighter; do not widen it to 0.0.0.0/0, which would publish the console to
+# anything that can route to a node port. See ../GOTCHAS.md, item 11.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: console-ingress-lb
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { plane: console } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - ipBlock: { cidr: 10.10.0.0/16 }
+      ports:
+        - { protocol: TCP, port: 7420 }
+---
+# The gateway is the ONLY pod allowed out of the cluster, and only on 443:
+# it is the metered path to the model provider. Everything else is sealed in,
+# which is what makes "no prompt leaves without being metered" a property of
+# the deployment rather than a promise in a README.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-egress-internet
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-gateway } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { plane: money } }
+        - podSelector: { matchLabels: { plane: policy } }
+      ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 8090 }
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              # Never back into the cluster or any private range: an egress
+              # rule that allows 0.0.0.0/0 without these is a hole, not a rule.
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - { protocol: TCP, port: 443 }
