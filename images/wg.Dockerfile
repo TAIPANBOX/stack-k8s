@@ -26,9 +26,10 @@ RUN apk add --no-cache git
 RUN go install golang.zx2c4.com/wireguard@v0.0.0-20260522210424-ecfc5a8d5446
 
 FROM alpine:3.20
-# `wireguard-tools` for `wg`, which talks the same UAPI this image serves, and
-# `iproute2` to give the interface its address.
-RUN apk add --no-cache wireguard-tools iproute2
+# `wireguard-tools` for `wg`, which talks the same UAPI this image serves,
+# `iproute2` to give the interface its address, and `socat` for the console
+# relay (see the entrypoint: the real UAPI socket must stay 0700).
+RUN apk add --no-cache wireguard-tools iproute2 socat
 
 # The binary takes its name from the module, so it installs as `wireguard`.
 # Renamed here to the name every piece of WireGuard documentation uses.
@@ -47,6 +48,9 @@ ADDR="${WG_SERVER_ADDR:-10.9.0.1/24}"
 KEY_FILE="${WG_KEY_FILE:-/var/lib/wireguard/server.key}"
 SOCK_GID="${WG_SOCKET_GID:-10001}"
 SOCK="/var/run/wireguard/${IFACE}.sock"
+# What the console connects to. A separate path so the real socket keeps the
+# 0700 wireguard-go requires; see the relay below.
+RELAY="${WG_CONSOLE_SOCKET:-/var/run/wireguard/console.sock}"
 
 mkdir -p "$(dirname "$KEY_FILE")" /var/run/wireguard
 
@@ -85,18 +89,14 @@ chmod 600 "$KEY_FILE"
 # code 0, a UAPI socket that appears and vanishes, and `wg set` failing with
 # "Unable to access interface: Protocol error" against a daemon that just
 # died. The flag is what makes the container's lifecycle the tunnel's.
-# The socket must be reachable by the console's uid, and the only reliable way
-# to arrange that is BEFORE it exists. Fixing up the socket afterwards is a
-# race against the daemon that created it: chgrp/chmod land microseconds after
-# a check that saw the file, and fail with "No such file or directory" on a
-# socket the daemon is still recreating. So the DIRECTORY carries the
-# permission instead - setgid, so anything created inside inherits the group -
-# and umask gives the socket group access at creation. Nothing to fix up, and
-# nothing to race.
+# The directory, not the socket. It is setgid and owned by the console's
+# group so the relay created inside it below inherits that group without a
+# fix-up afterwards. The real UAPI socket is deliberately left exactly as
+# wireguard-go makes it (0700, root): loosening THAT is what breaks the
+# daemon, which is why the relay exists at all.
 chgrp "$SOCK_GID" /var/run/wireguard 2>/dev/null \
   || echo ">> could not chgrp the socket directory to $SOCK_GID"
 chmod 2770 /var/run/wireguard
-umask 007
 #
 # The second variable is not optional here either, despite how it is spelled.
 # wireguard-go REFUSES to start on a kernel that has WireGuard built in, and
@@ -153,19 +153,28 @@ if [ ! -S "$SOCK" ]; then
   exit 1
 fi
 
-# The setgid directory gives the socket the right GROUP, but wireguard-go
-# chmods its own socket to 0700 after creating it, so group access has to be
-# granted afterwards no matter what umask says. Retried briefly rather than
-# attempted once: this is the same window that made the old fix-up flaky, and
-# the difference now is that a failure is fatal instead of ignored. A tunnel
-# the console cannot manage is not a working tunnel, and it must not report
-# itself as one.
-j=0
-until chmod 0770 "$SOCK" 2>/dev/null; do
-  j=$((j + 1))
-  if [ "$j" -gt 50 ]; then
-    echo "!! could not make $SOCK group-accessible; the console cannot manage peers" >&2
-    kill "$WG_PID" 2>/dev/null || true
+# The console reaches the UAPI through a RELAY, not through the real socket.
+#
+# The real socket cannot be shared by loosening it: wireguard-go requires its
+# own socket to stay 0700 and starts answering "Unable to access interface:
+# Protocol error" the moment the mode changes, so `chmod 0770` on it does not
+# grant access, it breaks the tunnel. Verified directly: the interface reports
+# its public key before the chmod and errors immediately after.
+#
+# So the permission lives on a second socket that forwards to the first. The
+# console gets exactly the access it needs, the daemon keeps the posture it
+# insists on, and the forwarder is a place a future version can log or
+# restrict what crosses it.
+socat "UNIX-LISTEN:$RELAY,fork,unlink-early,mode=0660,group=$SOCK_GID" \
+      "UNIX-CONNECT:$SOCK" &
+RELAY_PID=$!
+
+k=0
+while [ ! -S "$RELAY" ]; do
+  k=$((k + 1))
+  if [ "$k" -gt 50 ]; then
+    echo "!! the console relay socket never appeared at $RELAY" >&2
+    kill "$WG_PID" "$RELAY_PID" 2>/dev/null || true
     exit 1
   fi
   sleep 0.1
@@ -181,11 +190,11 @@ if [ -z "$SERVER_PUB" ]; then
   exit 1
 fi
 echo ">> $IFACE up on :$PORT, server public key: $SERVER_PUB"
-echo ">> UAPI socket $SOCK is group $SOCK_GID, the console can manage peers"
+echo ">> console relay $RELAY is group $SOCK_GID mode 0660; $SOCK stays 0700"
 
 # Do not exec-replace: the socket permissions above must be in place first,
 # and this process is what notices the tunnel dying.
-wait "$WG_PID"
+wait "$WG_PID" "$RELAY_PID"
 ENTRY
 
 ENTRYPOINT ["/usr/local/bin/wg-entrypoint.sh"]
