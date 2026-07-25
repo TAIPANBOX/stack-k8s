@@ -126,6 +126,20 @@ ip link set "$IFACE" up
 # The console runs as a different, non-root uid and must be able to manage
 # peers through this socket. Group access rather than world: everything else
 # sharing this volume gets nothing.
+#
+# State is printed before touching it because everything above can succeed
+# while the socket is gone: that combination is what a dead daemon looks like
+# from here, and without this line it surfaces only as a bare `chmod: No such
+# file or directory` with nothing to attribute it to.
+if ! kill -0 "$WG_PID" 2>/dev/null; then
+  echo "!! wireguard-go (pid $WG_PID) died during bring-up" >&2
+  exit 1
+fi
+if [ ! -S "$SOCK" ]; then
+  echo "!! $SOCK vanished after bring-up while the daemon is still alive" >&2
+  echo "   directory now holds: $(ls -a /var/run/wireguard 2>&1 | tr '\n' ' ')" >&2
+  exit 1
+fi
 chgrp "$SOCK_GID" "$SOCK" 2>/dev/null || echo ">> could not chgrp $SOCK to $SOCK_GID"
 chmod 660 "$SOCK"
 
