@@ -14,16 +14,25 @@
 # Nothing about the agents' own path goes through here.
 
 FROM golang:1.23-alpine AS build
-# Pinned rather than @latest: an installer that silently changes what it
-# installs between two runs of the same script is not reproducible.
-RUN go install golang.zx2c4.com/wireguard/cmd/wireguard-go@v0.0.20230223
+# `git` first: `go install` fetches this module over git and fails with a bare
+# exit 1 without it.
+RUN apk add --no-cache git
+# The module's main package is at its ROOT, not under `cmd/`, and its release
+# tags (`v0.0.20230223`-style) do not resolve through the Go module proxy at
+# all: only the pseudo-version does. Both of those cost a failed build to
+# learn, so the working form is written down here rather than rediscovered.
+# Pinned rather than @latest, because an installer that silently installs
+# something different between two runs of the same script is not reproducible.
+RUN go install golang.zx2c4.com/wireguard@v0.0.0-20260522210424-ecfc5a8d5446
 
 FROM alpine:3.20
 # `wireguard-tools` for `wg`, which talks the same UAPI this image serves, and
 # `iproute2` to give the interface its address.
 RUN apk add --no-cache wireguard-tools iproute2
 
-COPY --from=build /go/bin/wireguard-go /usr/local/bin/wireguard-go
+# The binary takes its name from the module, so it installs as `wireguard`.
+# Renamed here to the name every piece of WireGuard documentation uses.
+COPY --from=build /go/bin/wireguard /usr/local/bin/wireguard-go
 
 # Written here rather than shipped as a separate file so the image is one
 # self-contained artifact, the same way the other images in this directory are.
