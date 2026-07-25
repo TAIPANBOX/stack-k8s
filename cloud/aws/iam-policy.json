@@ -1,0 +1,137 @@
+{
+  "Version": "2012-10-17",
+  "Comment": [
+    "Permissions for the user that runs terraform, install-aws.sh, cost-live.sh",
+    "and teardown.sh in this directory. Attach it to a dedicated user, not to",
+    "anything that already exists.",
+    "",
+    "Scoped two ways: everything that supports it is pinned to eu-central-1, and",
+    "iam:PassRole is pinned to the one role the nodes use, so this user cannot",
+    "hand an instance a more privileged role than the cluster needs.",
+    "",
+    "Not included on purpose: nothing that can read data (no s3:*), nothing that",
+    "can create users or keys, and no billing writes. Cost Explorer is read-only",
+    "and optional.",
+    "",
+    "AWS ignores this Comment key; it is here because a policy nobody can read",
+    "is a policy nobody will narrow later."
+  ],
+  "Statement": [
+    {
+      "Sid": "NetworkAndCompute",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:*"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    },
+    {
+      "Sid": "LoadBalancersForTheTeardownSweep",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:Describe*",
+        "elasticloadbalancing:DeleteLoadBalancer",
+        "elasticloadbalancing:DeleteTargetGroup"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    },
+    {
+      "Sid": "EfsForTheRwxComparison",
+      "Effect": "Allow",
+      "Action": [
+        "elasticfilesystem:CreateFileSystem",
+        "elasticfilesystem:DeleteFileSystem",
+        "elasticfilesystem:CreateMountTarget",
+        "elasticfilesystem:DeleteMountTarget",
+        "elasticfilesystem:Describe*",
+        "elasticfilesystem:TagResource",
+        "elasticfilesystem:UntagResource",
+        "elasticfilesystem:ListTagsForResource",
+        "elasticfilesystem:PutLifecycleConfiguration"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    },
+    {
+      "Sid": "TheNodeRoleAndNothingElse",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListRoleTags",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:CreateInstanceProfile",
+        "iam:DeleteInstanceProfile",
+        "iam:GetInstanceProfile",
+        "iam:AddRoleToInstanceProfile",
+        "iam:RemoveRoleFromInstanceProfile",
+        "iam:ListInstanceProfilesForRole",
+        "iam:TagInstanceProfile"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/stack-k8s-node",
+        "arn:aws:iam::*:instance-profile/stack-k8s-node"
+      ]
+    },
+    {
+      "Sid": "HandTheNodeRoleToAnInstance",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::*:role/stack-k8s-node",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "ec2.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "ResolveTheUbuntuAmi",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ],
+      "Resource": "arn:aws:ssm:*::parameter/aws/service/canonical/*"
+    },
+    {
+      "Sid": "KnowWhichAccountThisIs",
+      "Effect": "Allow",
+      "Action": [
+        "sts:GetCallerIdentity",
+        "iam:GetUser"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadTheBill",
+      "Effect": "Allow",
+      "Action": [
+        "ce:GetCostAndUsage",
+        "budgets:ViewBudget",
+        "budgets:DescribeBudgets"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

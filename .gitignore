@@ -1,3 +1,10 @@
 kubeconfig.yaml
 kubeconfig-*.yaml
 .DS_Store
+
+# terraform: state holds resource ids and can hold sensitive values
+cloud/**/.terraform/
+cloud/**/terraform.tfstate
+cloud/**/terraform.tfstate.*
+cloud/**/*.tfvars
+cloud/**/kubeconfig.yaml
