@@ -60,9 +60,15 @@ if [ ! -s "$KEY_FILE" ]; then
 fi
 chmod 600 "$KEY_FILE"
 
-# Foreground, so this container's lifecycle IS the tunnel's: no daemon that
-# outlives a `docker compose down` and no tunnel that survives its own crash.
-WG_PROCESS_FOREGROUND=1 wireguard-go "$IFACE" &
+# `-f`, not the WG_PROCESS_FOREGROUND environment variable. Without it
+# wireguard-go DAEMONISES: the process this script starts forks and exits
+# immediately, so `$!` names a parent that is already gone, `wait` returns at
+# once, this script ends, and the container restarts - taking the tunnel and
+# its socket with it. The symptom is a container in a restart loop with exit
+# code 0, a UAPI socket that appears and vanishes, and `wg set` failing with
+# "Unable to access interface: Protocol error" against a daemon that just
+# died. The flag is what makes the container's lifecycle the tunnel's.
+wireguard-go -f "$IFACE" &
 WG_PID=$!
 
 # The socket appears asynchronously. Waiting for it is what makes the rest of
@@ -90,7 +96,16 @@ ip link set "$IFACE" up
 chgrp "$SOCK_GID" "$SOCK" 2>/dev/null || echo ">> could not chgrp $SOCK to $SOCK_GID"
 chmod 660 "$SOCK"
 
-echo ">> $IFACE up on :$PORT, server public key: $(wg show "$IFACE" public-key)"
+# Assert rather than announce. The previous version printed "up" with an empty
+# key while the daemon was already dead, which is the worst possible output: a
+# healthy-looking line for a tunnel nobody can reach.
+SERVER_PUB="$(wg show "$IFACE" public-key 2>/dev/null || true)"
+if [ -z "$SERVER_PUB" ]; then
+  echo "!! $IFACE reports no public key: the tunnel is not actually up" >&2
+  kill "$WG_PID" 2>/dev/null || true
+  exit 1
+fi
+echo ">> $IFACE up on :$PORT, server public key: $SERVER_PUB"
 echo ">> UAPI socket $SOCK is group $SOCK_GID, the console can manage peers"
 
 # Do not exec-replace: the socket permissions above must be in place first,
