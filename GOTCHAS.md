@@ -39,13 +39,23 @@ API server picks, and you find out later when a volume is on the wrong class.
 **Why:** k3s ships `local-path` marked default; Longhorn also installs itself
 as default.
 
-**Fixed here:** the install marks `local-path` non-default and leaves Longhorn
-as the single default:
+**Fixed here:** the servers are installed with `--disable=local-storage`, so
+k3s never ships the provisioner or its class and Longhorn is the only default.
+
+The patch everyone reaches for first does work, and does not LAST:
 
 ```bash
 kubectl patch storageclass local-path \
   -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'
 ```
+
+k3s re-applies its bundled manifests from
+`/var/lib/rancher/k3s/server/manifests/` on every server restart, which
+rewrites that annotation back to `true`. Measured on 2026-07-25: the patch was
+applied at bring-up, a restart for `--secrets-encryption` at 02:56 silently
+restored the second default, and `verify.sh` caught it hours later. That is the
+whole argument for a standing check rather than a one-off fix: this repaired
+itself into being broken again with nobody touching storage at all.
 
 ## 4. The hcloud cloud-controller-manager fights k3s and Calico
 
@@ -345,10 +355,50 @@ therefore the entire credential set.
 **Fixed here:** `install.sh` starts every server with `--secrets-encryption`,
 so an aescbc provider is active from the first boot and no Secret is ever
 written in the clear. `security-tests.sh` writes a canary Secret and greps it
-out of etcd to prove it. Retrofitting a running cluster is the hard path
-(hand-written encryption config, rolling restart, and a rewrite of every
-existing Secret with `kubectl get secret -A -o json | kubectl replace -f -`);
-at install time it is one flag.
+out of etcd to prove it.
+
+**And this is where the honesty has to be uncomfortable: do NOT retrofit this
+onto a running cluster. We did, and it cost us the cluster's secrets.**
+
+The retrofit looks like it works. Write your own
+`/var/lib/rancher/k3s/server/cred/encryption-config.json` with an aescbc key,
+and the API server hot-reloads it (`--encryption-provider-config-automatic-reload`
+is on), new Secrets get written encrypted, a canary in etcd shows `k8s:enc:`,
+and everything reads back correctly for hours. What none of that tells you is
+that k3s keeps its own copy of that file in the DATASTORE, and the datastore is
+authoritative. Measured, in this order:
+
+1. hand-written config installed, hot-reloaded, all 20 Secrets rewritten
+   encrypted, verified in etcd. Cluster healthy for two hours.
+2. the next k3s restart (for an unrelated flag) refused to start at all:
+   `encryption-config.json newer than datastore and could cause a cluster
+   outage. Remove the file(s) from disk and restart to be recreated from
+   datastore.`
+3. making the file not-newer let k3s start - and k3s then OVERWROTE it with the
+   datastore's copy, which was the identity-only config from before the
+   retrofit. The key was gone; 18 Secrets were now ciphertext nobody could read.
+4. making the file immutable so it could not be overwritten produced
+   `failed to reconcile with local datastore: ... operation not permitted` and a
+   refusal to start. There is no third option: the datastore wins.
+5. the supported command, `k3s secrets-encrypt enable`, returned
+   `Put "https://127.0.0.1:6443/v1-k3s/encrypt/config": EOF` with nothing in the
+   server log, on v1.36.2+k3s1, both before and after the flag was present.
+
+What was actually lost: `kube-system/k3s-serving`, all five
+`*.node-password.k3s`, Calico's `tigera-ca-private`/`typha-certs`/`node-certs`,
+Longhorn's webhook certs, and our own two. The control plane then would not
+become Ready at all, because k3s cannot read its own serving secret.
+
+**Recovery, if you are reading this too late:** delete the undecryptable Secrets
+straight out of etcd with `etcdctl` (the API server cannot, and etcd keeps
+running while the API server fails), restart the servers, and let each owner
+regenerate its own - k3s recreates `k3s-serving` and the node passwords, the
+tigera operator recreates Calico's CA and certs, Longhorn recreates its webhook
+pair. Recreate your own Secrets from your own copies; if you do not have copies,
+you do not have those secrets any more.
+
+The one-line version: **encryption at rest is an install-time decision on k3s.**
+Before this cluster, that sentence was a preference. Now it is a scar.
 
 ## 19. The kubelet API is on the public internet by default
 
@@ -428,10 +478,23 @@ warn. It answers from `StubProvider`: a canned body and a fixed 1000 input /
 full of fabricated money and answers that never came from a model, all of it
 looking exactly like the real thing.
 
-**Fixed here:** the manifest pins `TOKENFUSE_UPSTREAM` to the FULL provider
-endpoint (`https://api.anthropic.com/v1/messages` - a base URL alone answers
-404, the gateway POSTs to exactly this path). A cluster meant for a different
-provider changes this one line.
+**Fixed here, and then fixed properly in the code.** The manifest pins
+`TOKENFUSE_UPSTREAM` to the FULL provider endpoint
+(`https://api.anthropic.com/v1/messages` - a base URL alone answers 404, the
+gateway POSTs to exactly this path). But a manifest value only protects the
+deployment that has it, so the gateway itself now REFUSES TO START with no
+upstream, printing what it would otherwise have invented and how to opt in:
+
+    tokenfuse: refusing to start: TOKENFUSE_UPSTREAM is not set.
+    Without it this gateway would answer every request from a built-in stub and
+    meter a fixed 1000 input / 500 output tokens as real spend, so both the model
+    answers and the money would be invented.
+
+`TOKENFUSE_ALLOW_STUB=1` keeps the offline dev loop, and logs a warning that says
+every figure from then on is fictional. Verified on the cluster: removing the
+variable puts the new pod in `CrashLoopBackOff` with that message while the old
+pod keeps serving, so a forgotten variable can never replace a working gateway
+with one that fabricates spend.
 
 ## 23. The neighbouring namespace is the platform's job, not the manifests'
 

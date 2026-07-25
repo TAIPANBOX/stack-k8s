@@ -35,8 +35,12 @@ notready="$($KUBECTL get nodes --no-headers 2>/dev/null | grep -cv ' Ready ')"
 
 head_ "pods"
 kc get pods -o custom-columns=POD:.metadata.name,NODE:.spec.nodeName,READY:.status.containerStatuses[0].ready,STATUS:.status.phase
-notrunning="$(kc get pods --no-headers 2>/dev/null | grep -cv ' Running ')"
-[ "${notrunning:-1}" = 0 ] && ok "every pod Running" || bad "$notrunning pod(s) not Running"
+# `Completed` is not a failure: the CronJobs leave finished pods behind, and so
+# does any probe pod a test left. Only count pods that are neither Running nor
+# Succeeded.
+notrunning="$(kc get pods --no-headers 2>/dev/null | awk '$3 != "Running" && $3 != "Completed" { n++ } END { print n+0 }')"
+[ "${notrunning:-1}" = 0 ] && ok "every pod Running (finished Job pods ignored)" \
+  || bad "$notrunning pod(s) neither Running nor Completed"
 
 # One node holding every pod is a five-node cluster with one node's worth of
 # resilience (GOTCHAS 17), so this is a check, not a cosmetic note.

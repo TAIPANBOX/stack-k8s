@@ -81,10 +81,28 @@ Budget enforcement, same path: a per-run budget below the call's cost returns
       dsn      postgres://wardryx:fb288c5a...@policy-db:5432/wardryx?sslmode=disable
       password fb288c5a4c2ee533954f9a0ff3b0d1372112266d550d8213
 
-Read with `etcdctl get`, as ordinary text. After enabling encryption and
-rewriting all 20 Secrets, the same query returns `k8s:enc:` and a canary Secret
-is unfindable in the clear. `install.sh` now passes `--secrets-encryption` from
-the first boot, which makes the whole retrofit unnecessary.
+Read with `etcdctl get`, as ordinary text. Enabling encryption and rewriting all
+20 Secrets made the same query return `k8s:enc:`, and a canary Secret was
+unfindable in the clear.
+
+**Then the retrofit destroyed those Secrets, and that is the more useful
+result.** k3s keeps its own copy of the encryption config in the datastore and
+treats it as authoritative: the next k3s restart refused to start, then
+overwrote the hand-written config with the pre-retrofit identity-only version,
+leaving 18 Secrets as ciphertext with no key - including `kube-system/k3s-serving`
+and the node passwords, which is why the control plane then would not become
+Ready. Recovery was to delete those Secrets directly from etcd and let each
+owner regenerate: k3s its serving cert and node passwords, the tigera operator
+Calico's CA and certs, Longhorn its webhook pair, and us our two from copies we
+had kept. The full sequence, including the two dead ends (mtime, immutable
+file), is GOTCHAS 18.
+
+So the honest state of this control: `install.sh` sets `--secrets-encryption` at
+install time, which is the only path k3s supports, and that path is NOT verified
+live on this cluster - the retrofit is what we verified, and what we verified is
+that it must not be attempted. `security-tests.sh` therefore reports one failure
+here on purpose: this cluster no longer encrypts Secrets at rest, and the suite
+says so rather than remembering that it once did.
 
 ## 4. What the internet could reach (GOTCHAS 19)
 

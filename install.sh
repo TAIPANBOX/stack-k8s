@@ -206,6 +206,14 @@ echo "   done"
 #   --disable=servicelb       klipper would answer type=LoadBalancer itself and
 #                             the hcloud controller would never see it
 #   --disable=traefik         nothing here is exposed over an Ingress
+#   --disable=local-storage   k3s's own local-path provisioner, and with it the
+#                             SECOND default StorageClass. Patching that class
+#                             to non-default is not durable: k3s rewrites its
+#                             bundled manifests on every server restart and the
+#                             annotation comes back. Measured here on 2026-07-25:
+#                             a restart for --secrets-encryption silently
+#                             restored it, and `verify.sh` caught two defaults
+#                             again hours later (GOTCHAS 3)
 #   --kubelet-arg=provider-id the kubelet registers as hcloud://<server-id>, so
 #                             the cloud controller can map a Node to a Hetzner
 #                             server. Set at INSTALL time on purpose: providerID
@@ -237,6 +245,7 @@ sh_ "$FIRST" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh
     --tls-san '$FIRST_PRIV' --tls-san '$FIRST' \
     --flannel-backend=none --disable-network-policy \
     --disable=servicelb --disable=traefik \
+    --disable=local-storage \
     --secrets-encryption \
     --kubelet-arg=provider-id=hcloud://${SID[$FIRST]} \
     --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
@@ -260,6 +269,7 @@ for n in "${SERVER_LIST[@]:1}"; do
       --tls-san '${PRIV[$n]}' --tls-san '$n' \
       --flannel-backend=none --disable-network-policy \
       --disable=servicelb --disable=traefik \
+      --disable=local-storage \
       --secrets-encryption \
       --kubelet-arg=provider-id=hcloud://${SID[$n]} \
       --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
@@ -331,11 +341,17 @@ for i in $(seq 1 90); do
   sleep 10
 done
 
-# k3s ships local-path as default and Longhorn installs itself as default too.
-# Two defaults mean a PVC without a class name binds to whichever the API
-# server picks that day (GOTCHAS 3).
+# The servers are installed with --disable=local-storage, so there should be
+# exactly one default class already. This patch is the fallback for a cluster
+# that was installed before that flag existed: it fixes the symptom, and it is
+# NOT durable on its own, because k3s re-applies its bundled manifests on every
+# server restart and the annotation returns (GOTCHAS 3).
 say "one default StorageClass"
-k_ "patch storageclass local-path -p '{\"metadata\":{\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}'" >/dev/null
+if k_ "get sc local-path" >/dev/null 2>&1; then
+  echo "   local-path still exists (pre-existing cluster): patching it non-default"
+  k_ "patch storageclass local-path -p '{\"metadata\":{\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}'" >/dev/null
+  echo "   NOTE: re-run this after any k3s server restart, or reinstall with --disable=local-storage"
+fi
 k_ "get sc"
 
 # The RWX class the shared event log claims BY NAME (README "Fact 1"), so a
