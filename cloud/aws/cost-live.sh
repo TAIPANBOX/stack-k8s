@@ -79,8 +79,16 @@ if [ "${GB:-0}" -gt 0 ]; then
 fi
 
 # Load balancers, which is the piece Terraform never knew about
-LBN="$(aws_ elbv2 describe-load-balancers \
-  --query "LoadBalancers[?starts_with(LoadBalancerName, 'k8s-')].LoadBalancerName" --output text 2>/dev/null | tr '\t' '\n' | grep -c . || true)"
+ARNS="$(aws_ elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerArn' --output text 2>/dev/null || true)"
+LBN=0
+if [ -n "$ARNS" ]; then
+  # By tag: the in-tree controller names an NLB after the Service UID, so a
+  # name-prefix match silently counts zero and understates the bill.
+  # shellcheck disable=SC2086
+  LBN="$(aws_ elbv2 describe-tags --resource-arns $ARNS \
+    --query "TagDescriptions[?Tags[?Key=='kubernetes.io/cluster/$CLUSTER_NAME']].ResourceArn" \
+    --output text 2>/dev/null | tr '\t' '\n' | grep -c . || true)"
+fi
 if [ "${LBN:-0}" -gt 0 ]; then
   c="$(awk -v n="$LBN" -v r="$RATE_NLB_HOUR" 'BEGIN{printf "%.6f", n*r}')"
   line "$LBN x network load balancer" "$c"; add "$c"

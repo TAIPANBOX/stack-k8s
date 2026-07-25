@@ -42,6 +42,23 @@ say()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 warn() { printf '   !! %s\n' "$*"; }
 aws_() { aws --region "$REGION" "$@"; }
 
+# Load balancers are found by TAG, not by name. The in-tree service controller
+# names an NLB after the Service UID (a18d10d98be3c4e39b41b27fe205c1a9), not
+# k8s-<ns>-<svc> as the separate AWS Load Balancer Controller does. A sweep
+# keyed on a name prefix therefore finds nothing and reports "clear" over an
+# orphan that is still billing, which is the exact failure this script exists
+# to prevent. Both controllers tag with kubernetes.io/cluster/<name>.
+cluster_lbs() {
+  local arns
+  arns="$(aws_ elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerArn' --output text 2>/dev/null || true)"
+  [ -z "$arns" ] && return 0
+  # shellcheck disable=SC2086
+  aws_ elbv2 describe-tags --resource-arns $arns \
+    --query "TagDescriptions[?Tags[?Key=='kubernetes.io/cluster/$CLUSTER_NAME']].ResourceArn" \
+    --output text 2>/dev/null || true
+}
+
+
 command -v aws >/dev/null || { echo "aws cli not found" >&2; exit 1; }
 
 # Which account is this? A teardown pointed at the wrong account is the one
@@ -213,8 +230,7 @@ check "unassociated elastic IPs" aws_ ec2 describe-addresses \
 
 # Load balancers carry no Cluster tag once Terraform's VPC is gone, so this one
 # is checked by name prefix: the controller names them k8s-<namespace>-<service>.
-check "load balancers named k8s-agent-stack-*" aws_ elbv2 describe-load-balancers \
-  --query "LoadBalancers[?starts_with(LoadBalancerName, 'k8s-agent-stack')].LoadBalancerName" --output text
+check "load balancers tagged for this cluster" cluster_lbs
 
 echo
 if [ "$LEFT" = 0 ]; then
