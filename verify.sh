@@ -80,7 +80,7 @@ except Exception:
 
 head_ "every plane answers"
 out="$(inpod "
-import urllib.request
+import os, urllib.request
 for n,u in [('cloud',   'http://tokenfuse-cloud:8080/healthz'),
             ('gateway', 'http://tokenfuse-gateway:4100/healthz'),
             ('wardryx', 'http://wardryx:8090/healthz'),
@@ -96,9 +96,9 @@ echo "$out" | grep -q FAIL && bad "a plane did not answer" || ok "all five plane
 
 head_ "the data the console governs"
 inpod "
-import urllib.request, json
+import os, urllib.request, json
 def g(host, path, key=True):
-    h = {'Authorization': 'Bearer devkey'} if key else {}
+    h = {'Authorization': 'Bearer ' + os.environ.get('TOKENFUSE_CLOUD_ADMIN_KEY','')} if key else {}
     return json.loads(urllib.request.urlopen(urllib.request.Request(host+path, headers=h), timeout=30).read())
 runs = g('http://tokenfuse-cloud:8080', '/v1/runs')
 al   = g('http://tokenfuse-cloud:8080', '/v1/alerts')
@@ -121,8 +121,8 @@ if [ "$DO_FREEZE" = 1 ]; then
   head_ "freeze, restart, and check the freeze survived"
   AGENT="${AGENT:-agent://meridian.example/treasury/reconciliation-batch}"
   inpod "
-import urllib.request, json
-H={'Authorization':'Bearer devkey','Content-Type':'application/json'}
+import os, urllib.request, json
+H={'Authorization':'Bearer ' + os.environ.get('WARDRYX_ADMIN_KEY',''),'Content-Type':'application/json'}
 def post(p,b):
     return json.loads(urllib.request.urlopen(urllib.request.Request('http://wardryx:8090'+p,data=json.dumps(b).encode(),headers=H),timeout=15).read())
 probe={'agent_id':'$AGENT','run_id':'verify-probe','model':'gpt-4o','est_cost_usd':0.42,'tool_names':['ledger_read'],'steps':3}
@@ -133,8 +133,8 @@ print('  before restart, the PDP says:', post('/v1/decide',probe)['decision'])
   kc rollout status deploy/wardryx --timeout=180s >/dev/null 2>&1
   sleep 5
   after="$(inpod "
-import urllib.request, json
-H={'Authorization':'Bearer devkey','Content-Type':'application/json'}
+import os, urllib.request, json
+H={'Authorization':'Bearer ' + os.environ.get('WARDRYX_ADMIN_KEY',''),'Content-Type':'application/json'}
 probe={'agent_id':'$AGENT','run_id':'verify-probe-2','model':'gpt-4o','est_cost_usd':0.42,'tool_names':['ledger_read'],'steps':3}
 r=json.loads(urllib.request.urlopen(urllib.request.Request('http://wardryx:8090/v1/decide',data=json.dumps(probe).encode(),headers=H),timeout=20).read())
 print(r['decision'])

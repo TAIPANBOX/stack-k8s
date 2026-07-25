@@ -1,0 +1,356 @@
+#!/usr/bin/env bash
+# The security posture of this deployment, asserted rather than described.
+#
+#   ./security-tests.sh                    # cluster-side checks
+#   ./security-tests.sh --nodes ip1,ip2    # plus node-side checks over ssh
+#
+# `verify.sh` answers "is the stack running". This answers "is it contained":
+# what a compromised pod can reach, what leaves the cluster, what an attacker
+# with a copy of etcd gets, and whether the hardening the manifests claim is
+# actually in force. Every check is a NEGATIVE test where a negative test is
+# what proves the point: the interesting result is what fails to connect.
+#
+# Cloud-agnostic except the two node-side checks, so the same run is comparable
+# on Hetzner, EKS and GKE (PORTABILITY.md).
+set -uo pipefail
+
+NS="${NS:-agent-stack}"
+KUBECTL="${KUBECTL:-kubectl}"
+SSH_KEY="${SSH_KEY:-}"
+NODES=""
+[ "${1:-}" = "--nodes" ] && { NODES="$2"; shift 2; }
+
+pass=0; fail=0; warn=0
+ok()   { printf '  \033[32mok\033[0m   %s\n' "$*"; pass=$((pass+1)); }
+bad()  { printf '  \033[31mFAIL\033[0m %s\n' "$*"; fail=$((fail+1)); }
+note() { printf '  \033[33mnote\033[0m %s\n' "$*"; warn=$((warn+1)); }
+head_() { printf '\n\033[1m%s\033[0m\n' "$*"; }
+kc()   { $KUBECTL -n "$NS" "$@"; }
+
+# Probes run from the console pod: it is the one pod in the namespace with an
+# interpreter (every plane is distroless on purpose), and it is the pod with
+# the MOST permissions, so anything it cannot reach, nothing can.
+inpod() { kc exec -i deploy/genaryx-console -- python3 - 2>/dev/null; }
+
+connect_test() {  # host port expect(open|blocked) label
+  local host="$1" port="$2" expect="$3" label="$4" got
+  got="$(printf 'import socket\ns=socket.socket()\ns.settimeout(6)\ntry:\n    s.connect(("%s",%s)); print("open")\nexcept Exception:\n    print("blocked")\n' "$host" "$port" | inpod)"
+  if [ "$got" = "$expect" ]; then ok "$label ($got, as designed)"; else bad "$label: expected $expect, got ${got:-no answer}"; fi
+}
+
+head_ "1. a compromised pod in this namespace reaches nothing"
+# The strongest containment claim there is: put an attacker INSIDE the trust
+# boundary and show the boundary is not the namespace. This pod carries no
+# `plane` label, so no policy names it, so default-deny is all that applies.
+kc delete pod sec-probe --ignore-not-found >/dev/null 2>&1
+cat <<'YAML' | kc apply -f - >/dev/null 2>&1
+apiVersion: v1
+kind: Pod
+metadata: { name: sec-probe, labels: { role: security-probe } }
+spec:
+  restartPolicy: Never
+  securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+  containers:
+    - name: probe
+      image: stack/genaryx-console:dev
+      imagePullPolicy: IfNotPresent
+      command: ["sleep", "600"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: ["ALL"] }
+YAML
+if kc wait --for=condition=Ready pod/sec-probe --timeout=90s >/dev/null 2>&1; then
+  probe_out="$(kc exec -i sec-probe -- python3 - <<'PY' 2>/dev/null
+import socket
+targets = [("tokenfuse-cloud",8080),("tokenfuse-gateway",4100),("wardryx",8090),
+           ("idryx",8081),("genaryx-console",7420),("policy-db",5432)]
+for host, port in targets:
+    s = socket.socket(); s.settimeout(5)
+    try:
+        s.connect((host, port)); print(f"REACHED {host}:{port}")
+    except Exception:
+        print(f"blocked {host}:{port}")
+PY
+)"
+  echo "$probe_out" | sed 's/^/    /'
+  if echo "$probe_out" | grep -q REACHED; then
+    bad "an unlabelled pod reached a plane: the namespace is acting as a trust boundary"
+  else
+    ok "an unlabelled pod in the namespace reached none of the six services"
+  fi
+  kc delete pod sec-probe --wait=false >/dev/null 2>&1
+else
+  note "could not start the probe pod; skipping the in-namespace containment test"
+fi
+
+head_ "2. the console's own reach is exactly what it needs"
+connect_test tokenfuse-cloud   8080 open    "console -> money plane"
+connect_test wardryx           8090 open    "console -> policy plane"
+connect_test idryx             8081 open    "console -> identity plane"
+connect_test policy-db         5432 blocked "console -> the policy STORE (only wardryx may)"
+
+head_ "3. nothing leaves the cluster except the metered path"
+# The gateway is the only pod with an egress rule to the internet, and only on
+# 443. That is what makes "no prompt leaves without being metered" a property
+# of the deployment rather than a promise in a README.
+connect_test api.anthropic.com 443 blocked "console -> the model provider (must go through the gateway)"
+connect_test 1.1.1.1           443 blocked "console -> the open internet"
+gw="$(kc exec -i deploy/tokenfuse-gateway -- bash -s <<'SH' 2>/dev/null
+probe() { timeout 6 bash -c "echo > /dev/tcp/$1/$2" 2>/dev/null && echo "open $1:$2" || echo "blocked $1:$2"; }
+probe api.anthropic.com 443
+probe api.anthropic.com 80
+probe 10.10.0.2 6443
+SH
+)"
+echo "$gw" | sed 's/^/    /'
+echo "$gw" | grep -q "^open api.anthropic.com:443" \
+  && ok "gateway -> provider on 443 (the metered path is open)" \
+  || bad "gateway cannot reach the provider on 443: the gateway is the only way out and it is shut"
+echo "$gw" | grep -q "^blocked api.anthropic.com:80" \
+  && ok "gateway -> provider on 80 is blocked (443 only)" \
+  || bad "gateway reached port 80 outbound: the egress rule is wider than 443"
+echo "$gw" | grep -q "^blocked 10.10.0.2:6443" \
+  && ok "gateway cannot turn around and hit the cluster's own API" \
+  || bad "gateway reached the Kubernetes API: the 0.0.0.0/0 egress rule is missing its private-range exceptions"
+
+head_ "4. the namespace refuses a privileged pod"
+# The manifests promise `pod-security.kubernetes.io/enforce: restricted`. This
+# asks the API server to prove it, because a label that enforces nothing looks
+# identical to one that does until the day it matters.
+rejected="$(cat <<'YAML' | kc apply -f - 2>&1
+apiVersion: v1
+kind: Pod
+metadata: { name: sec-privileged }
+spec:
+  containers:
+    - name: p
+      image: stack/genaryx-console:dev
+      securityContext: { privileged: true }
+  hostNetwork: true
+  hostPID: true
+  volumes: [{ name: root, hostPath: { path: / } }]
+YAML
+)"
+if echo "$rejected" | grep -qi "forbidden\|violat\|denied"; then
+  ok "a privileged, hostNetwork, hostPath pod was REJECTED by admission"
+  echo "$rejected" | tr ',' '\n' | grep -oiE "(privileged|hostNetwork|hostPID|hostPath|allowPrivilegeEscalation|runAsNonRoot|seccompProfile)[^,]*" | head -4 | sed 's/^/    /'
+else
+  bad "a privileged pod was ACCEPTED: Pod Security admission is not enforcing"
+  kc delete pod sec-privileged --ignore-not-found >/dev/null 2>&1
+fi
+
+head_ "5. the workload runs as the manifests claim"
+bad_specs=0
+for kind in deployment statefulset; do
+  for name in $(kc get "$kind" -o name 2>/dev/null); do
+    spec="$(kc get "$name" -o json)"
+    for probe in \
+      '.spec.template.spec.securityContext.runAsNonRoot != true|runAsNonRoot' \
+      '(.spec.template.spec.containers[]|.securityContext.allowPrivilegeEscalation) != false|allowPrivilegeEscalation' \
+      '(.spec.template.spec.containers[]|.securityContext.capabilities.drop|index("ALL")) == null|capabilities drop ALL' \
+      '.spec.template.spec.securityContext.seccompProfile.type != "RuntimeDefault"|seccompProfile' \
+      '(.spec.template.spec.hostNetwork // false) != false|hostNetwork' \
+      '(.spec.template.spec.volumes // [])|map(select(.hostPath))|length > 0|hostPath volume'
+    do
+      q="${probe%%|*}"; label="${probe##*|}"
+      if echo "$spec" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+t=d['spec']['template']['spec']
+label='$label'
+bad=False
+if label=='runAsNonRoot': bad = t.get('securityContext',{}).get('runAsNonRoot') is not True
+elif label=='allowPrivilegeEscalation': bad = any(c.get('securityContext',{}).get('allowPrivilegeEscalation') is not False for c in t['containers'])
+elif label=='capabilities drop ALL': bad = any('ALL' not in (c.get('securityContext',{}).get('capabilities',{}).get('drop') or []) for c in t['containers'])
+elif label=='seccompProfile': bad = t.get('securityContext',{}).get('seccompProfile',{}).get('type')!='RuntimeDefault'
+elif label=='hostNetwork': bad = bool(t.get('hostNetwork'))
+elif label=='hostPath volume': bad = any('hostPath' in v for v in t.get('volumes',[]))
+sys.exit(0 if bad else 1)
+"; then
+        bad "$(basename "$name"): $label"
+        bad_specs=$((bad_specs+1))
+      fi
+    done
+  done
+done
+[ "$bad_specs" = 0 ] && ok "every Deployment and StatefulSet: non-root, no privilege escalation, all capabilities dropped, RuntimeDefault seccomp, no host namespaces, no hostPath"
+
+head_ "6. nothing in this namespace is published"
+published="$(kc get svc -o json | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+out=[s['metadata']['name']+':'+s['spec']['type'] for s in d['items'] if s['spec']['type'] in ('LoadBalancer','NodePort')]
+print(' '.join(out))
+")"
+[ -z "$published" ] && ok "every Service is ClusterIP (the operator reaches the console over their own tunnel)" \
+  || note "published Services: $published (deliberate only if you meant to open a public entry point)"
+
+head_ "7. secrets are not readable from a copy of etcd"
+# The check that catches the most damaging default: with no encryption
+# provider, every Secret sits in etcd as plaintext, so an etcd snapshot, a disk
+# image or a backup IS the credential set.
+canary="sec-canary-$$"
+kc create secret generic "$canary" --from-literal=probe=CANARY-VALUE-CHECK >/dev/null 2>&1
+sleep 2
+
+# Reading etcd needs to happen ON a server. Prefer this host when the script is
+# already running on one (the common case for k3s, where kubectl lives there),
+# and fall back to ssh. An unreachable etcd is reported as UNVERIFIED, never as
+# a pass and never as a failure: "I could not look" and "I looked and it was
+# plaintext" are different findings, and conflating them is how a suite starts
+# lying in whichever direction its author feared least.
+ETCD_CERTS=/var/lib/rancher/k3s/server/tls/etcd
+etcd_grep() {  # key pattern -> prints match count, or nothing if it could not look
+  local key="$1" pat="$2"
+  local cmd="D=$ETCD_CERTS; ETCDCTL_API=3 etcdctl --cacert=\$D/server-ca.crt --cert=\$D/client.crt --key=\$D/client.key --endpoints=https://127.0.0.1:2379 get $key 2>/dev/null | grep -ac $pat"
+  if [ -d "$ETCD_CERTS" ] && command -v etcdctl >/dev/null 2>&1; then
+    bash -c "$cmd" 2>/dev/null
+  elif [ -n "$NODES" ]; then
+    ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 \
+      ${SSH_KEY:+-i "$SSH_KEY"} "root@${NODES%%,*}" "$cmd" 2>/dev/null
+  fi
+}
+raw="$(etcd_grep "/registry/secrets/$NS/$canary" CANARY-VALUE-CHECK)"
+case "$raw" in
+  0) ok "a freshly written Secret is NOT plaintext in etcd (an encryption provider is active)" ;;
+  "") note "could not read etcd (needs etcdctl on a server, or --nodes with ssh): encryption at rest UNVERIFIED" ;;
+  *) bad "the Secret is plaintext in etcd, so an etcd snapshot IS the credential set: install the servers with --secrets-encryption (GOTCHAS 18)" ;;
+esac
+kc delete secret "$canary" --wait=false >/dev/null 2>&1
+
+head_ "8. no credential is hiding in a ConfigMap"
+leak="$(kc get cm -o json | python3 -c "
+import json,sys,re
+d=json.load(sys.stdin)
+pat=re.compile(r'(?i)(password|secret|token|bearer|api[_-]?key)\s*[:=]\s*\S{8,}')
+hits=[]
+for cm in d['items']:
+    for k,v in (cm.get('data') or {}).items():
+        if isinstance(v,str) and pat.search(v) and 'REPLACE_ME' not in v:
+            hits.append(cm['metadata']['name']+'/'+k)
+print(' '.join(hits))
+")"
+[ -z "$leak" ] && ok "no ConfigMap key looks like a credential" || bad "possible credential in a ConfigMap: $leak"
+
+head_ "9. the hosts themselves"
+# Local first, ssh second, and silence about what could not be checked. The
+# same reasoning as the etcd probe above.
+host_check() {  # label runner...
+  local label="$1"; shift
+  local out; out="$("$@" 2>/dev/null)"
+  case "$out" in
+    *"passwordauthentication no"*)  ok "$label: sshd refuses passwords" ;;
+    *"passwordauthentication yes"*) bad "$label: sshd accepts passwords (PasswordAuthentication no)" ;;
+    *) note "$label: could not read sshd config" ;;
+  esac
+  case "$out" in
+    *"etcd_public=0"*) ok "$label: etcd is not listening on a public address" ;;
+    *"etcd_public="*)  bad "$label: etcd is listening on a public address" ;;
+  esac
+}
+SSHD_PROBE='sshd -T 2>/dev/null | grep -E "^(permitrootlogin|passwordauthentication)" | tr "\n" " "; echo -n "etcd_public="; ss -ltn 2>/dev/null | grep ":2379" | grep -vcE "127\.0\.0\.1|10\.|\[::1\]" '
+if command -v sshd >/dev/null 2>&1; then
+  host_check "$(hostname) (local)" bash -c "$SSHD_PROBE"
+fi
+if [ -n "$NODES" ]; then
+  IFS=',' read -r -a NODE_LIST <<< "$NODES"
+  for n in "${NODE_LIST[@]}"; do
+    host_check "$n" ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 \
+      ${SSH_KEY:+-i "$SSH_KEY"} "root@$n" "$SSHD_PROBE"
+  done
+fi
+
+head_ "10. a forged pod label buys nothing without a credential"
+# GOTCHAS 20, kept as a standing check because it is the attack that worked.
+# NetworkPolicy authorises by the label `plane: console`, which a pod assigns to
+# ITSELF, so a label is reachability and never identity. What must stop an
+# attacker is the bearer; this asserts that it does.
+kc delete pod sec-forged --ignore-not-found >/dev/null 2>&1
+cat <<'FORGEDYAML' | kc apply -f - >/dev/null 2>&1
+apiVersion: v1
+kind: Pod
+metadata: { name: sec-forged, labels: { plane: console } }
+spec:
+  restartPolicy: Never
+  securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+  containers:
+    - name: forged
+      image: stack/genaryx-console:dev
+      imagePullPolicy: IfNotPresent
+      command: ["sleep", "300"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: ["ALL"] }
+FORGEDYAML
+if kc wait --for=condition=Ready pod/sec-forged --timeout=90s >/dev/null 2>&1; then
+  forged="$(kc exec -i sec-forged -- python3 - <<'FORGEDPROBE' 2>/dev/null
+import os, socket, urllib.request, urllib.error
+s = socket.socket(); s.settimeout(5)
+try:
+    s.connect(("wardryx", 8090)); print("reach=yes")
+except Exception:
+    print("reach=no")
+print("inherited_credential=" + ("yes" if (os.environ.get("WARDRYX_ADMIN_KEY") or os.environ.get("TOKENFUSE_CLOUD_ADMIN_KEY")) else "no"))
+for label, url, method in [("read_policies","http://wardryx:8090/v1/policies","GET"),
+                           ("delete_freeze","http://wardryx:8090/v1/policies/console-block-probe","DELETE"),
+                           ("read_fleet","http://tokenfuse-cloud:8080/v1/runs","GET")]:
+    try:
+        req = urllib.request.Request(url, method=method, headers={"Authorization":"Bearer devkey"})
+        r = urllib.request.urlopen(req, timeout=10); print(f"{label}={r.status}")
+    except urllib.error.HTTPError as e:
+        print(f"{label}={e.code}")
+    except Exception:
+        print(f"{label}=error")
+FORGEDPROBE
+)"
+  echo "$forged" | sed 's/^/    /'
+  echo "$forged" | grep -q "inherited_credential=no" \
+    && ok "the forged pod inherits no credential from the cluster" \
+    || bad "the forged pod inherited an admin credential from its environment"
+  if echo "$forged" | grep -qE "read_policies=(200|201)|delete_freeze=(200|204)|read_fleet=200"; then
+    bad "a self-labelled pod reached an admin API: a plane is accepting an unauthenticated or devkey bearer (GOTCHAS 20)"
+  else
+    ok "every admin verb from the forged pod was refused"
+  fi
+  kc delete pod sec-forged --wait=false >/dev/null 2>&1
+else
+  note "could not start the forged-label pod; that attack path is unverified here"
+fi
+
+head_ "11. the policy plane is on the data path, not only on the console"
+# GOTCHAS 21: the enforcement hook is off by default and reads its OWN env var,
+# so a cluster can look governed while its traffic is not.
+gw_env="$(kc get deploy tokenfuse-gateway -o json | python3 -c "
+import json,sys
+c=json.load(sys.stdin)['spec']['template']['spec']['containers'][0]
+env={e['name']: e.get('value','<ref>') for e in c.get('env',[])}
+print(env.get('TOKENFUSE_WARDRYX_MODE','unset'), env.get('TOKENFUSE_WARDRYX_URL','unset'), env.get('TOKENFUSE_WARDRYX_FAILMODE','open'), env.get('TOKENFUSE_UPSTREAM','unset'))
+")"
+set -- $gw_env
+[ "${1:-unset}" = "enforce" ] && ok "the gateway asks the PDP on every call (mode=$1)" \
+  || bad "TOKENFUSE_WARDRYX_MODE=${1:-unset}: a frozen agent's live traffic is NOT checked (GOTCHAS 21)"
+[ "${2:-unset}" != "unset" ] && ok "the gateway knows where the PDP is ($2)" \
+  || bad "TOKENFUSE_WARDRYX_URL is unset: the hook stays off whatever the mode says"
+[ "${3:-open}" = "closed" ] && ok "an unreachable PDP denies (failmode=closed)" \
+  || note "failmode=${3:-open}: an unreachable PDP will PERMIT calls"
+[ "${4:-unset}" != "unset" ] && ok "the gateway has a real upstream ($4)" \
+  || bad "TOKENFUSE_UPSTREAM is unset: the gateway answers from a stub and meters invented tokens (GOTCHAS 22)"
+
+head_ "12. the neighbouring namespaces"
+# GOTCHAS 23: this namespace is hardened; a neighbour is the platform's job.
+# Reported, not asserted: the suite cannot fix another namespace and must not
+# imply the gap is closed.
+for ns in $($KUBECTL get ns -o jsonpath='{.items[*].metadata.name}'); do
+  case "$ns" in kube-*|calico-*|tigera-*|longhorn-system|"$NS") continue ;; esac
+  pss="$($KUBECTL get ns "$ns" -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}' 2>/dev/null)"
+  nps="$($KUBECTL -n "$ns" get networkpolicy --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$pss" = "restricted" ] && [ "${nps:-0}" -gt 0 ]; then
+    ok "namespace $ns: restricted Pod Security and $nps NetworkPolicies"
+  else
+    note "namespace $ns: Pod Security '${pss:-none}', $nps NetworkPolicies - a privileged pod can run there"
+  fi
+done
+
+head_ "result"
+printf '  %d passed, %d failed, %d noted\n\n' "$pass" "$fail" "$warn"
+exit "$fail"

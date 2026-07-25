@@ -52,11 +52,20 @@ spec:
             # See ../GOTCHAS.md, item 9.
             - name: TOKENFUSE_CLOUD_HOST
               valueFrom: { fieldRef: { fieldPath: status.podIP } }
-            # A real cluster mounts real keys (see 40-secrets.example.yaml).
-            # This pair is the throwaway-cluster credential `up.sh` uses, and it
-            # is spelled out rather than hidden so nobody mistakes it for one.
-            - { name: TOKENFUSE_CLOUD_KEYS, value: "" }
-            - { name: TOKENFUSE_CLOUD_ALLOW_DEVKEY, value: "1" }
+            # The money plane's admin credential, generated per cluster by
+            # install.sh and never in this repo.
+            #
+            # What used to be here was `TOKENFUSE_CLOUD_ALLOW_DEVKEY=1` with an
+            # empty key list, which makes the literal string `devkey` an admin
+            # bearer. On one machine that is a dev convenience. In a cluster it
+            # is a published credential: any pod that can reach port 8080 is an
+            # admin, and the NetworkPolicy that decides who can reach 8080
+            # authorises by a POD LABEL, which a pod assigns to itself. Proven
+            # by attack on 2026-07-25: a pod labelled `plane: console` deleted a
+            # freeze with `Bearer devkey` and the agent resumed. See
+            # ../GOTCHAS.md, item 20.
+            - name: TOKENFUSE_CLOUD_KEYS
+              valueFrom: { secretKeyRef: { name: stack-keys, key: cloud_keys } }
             # Durable state, autosaved every 2s and reloaded on startup.
             # Without it every restart is a factory reset of the money plane
             # (see the cloud-state claim in 00-base.yaml).
@@ -113,6 +122,58 @@ spec:
             # than a log line. This is the whole point of the gateway.
             - { name: TOKENFUSE_MODE, value: "enforce" }
             - { name: TOKENFUSE_DATA_DIR, value: "/var/lib/stack/traces/gateway" }
+            # WHERE THE CALLS ACTUALLY GO. Leave this unset and the gateway does
+            # not fail and does not warn: it answers every request itself from
+            # `StubProvider`, with a fabricated body and a fixed 1000 input /
+            # 500 output tokens, and meters that as real spend. So an operator
+            # gets model answers that are not from a model and a console full of
+            # money that was never spent, all of it plausible. Measured on
+            # 2026-07-25: `{"stub": true, "usage": {"input_tokens": 1000,
+            # "output_tokens": 500}}`, metered at \$0.0035. See ../GOTCHAS.md,
+            # item 22.
+            # The FULL endpoint, not a base: the gateway POSTs to exactly this URL
+            # (its own module doc says so, and a base alone answers 404).
+            - { name: TOKENFUSE_UPSTREAM, value: "https://api.anthropic.com/v1/messages" }
+            # The gateway's own org key for the control plane. Without it the
+            # cloud sink never starts: the gateway meters locally, the console
+            # shows nothing, and the deployment looks fine from both ends while
+            # the money plane is deaf. `TOKENFUSE_CLOUD_URL` comes from
+            # `stack-wiring`; this is the other half it needs.
+            - name: TOKENFUSE_CLOUD_KEY
+              valueFrom: { secretKeyRef: { name: stack-keys, key: cloud_admin } }
+            # The policy hook on the DATA PATH, and the reason this block is
+            # long: without these four variables the gateway never asks the PDP
+            # anything. It defaults to `mode: off`, and it reads
+            # TOKENFUSE_WARDRYX_URL - not the `WARDRYX_URL` in `stack-wiring`,
+            # which every other component uses. So a cluster wired the obvious
+            # way had a policy plane that answered the console and was never
+            # consulted by the traffic. Measured on 2026-07-25: a frozen agent's
+            # calls went through untouched, because a freeze only stopped
+            # whoever ASKED. See ../GOTCHAS.md, item 21.
+            - { name: TOKENFUSE_WARDRYX_MODE, value: "enforce" }
+            - { name: TOKENFUSE_WARDRYX_URL, value: "http://wardryx:8090" }
+            # Least privilege: /v1/decide needs any authenticated principal, not
+            # an admin, so the gateway gets a VIEWER key. An admin key here
+            # would let the enforcement point rewrite the policy it enforces.
+            - name: TOKENFUSE_WARDRYX_KEY
+              valueFrom: { secretKeyRef: { name: stack-keys, key: wardryx_gateway } }
+            # Fail CLOSED. The default is open, which means an unreachable PDP
+            # turns into a permitted call, and on Kubernetes "unreachable" is an
+            # ordinary rollout. For a plane whose whole job is to say no, the
+            # honest failure is to say no. The cost is a deny window while
+            # wardryx restarts, which is why the policy plane got durable
+            # storage (15-policy-store.yaml) before this line was written.
+            - { name: TOKENFUSE_WARDRYX_FAILMODE, value: "closed" }
+            # Measured cross-node PDP latency on this cluster: p50 2.8ms,
+            # p95 3.7ms, p99 18.8ms. The default 50ms timeout is fine on one
+            # host and thin against that p99 once fail-closed makes a timeout a
+            # DENIAL, so it is widened deliberately rather than left at a
+            # value tuned for loopback.
+            - { name: TOKENFUSE_WARDRYX_TIMEOUT_MS, value: "250" }
+            # Decisions are cached for this long. Stated explicitly because it
+            # is the answer to "how fast does a freeze take effect on live
+            # traffic": up to this many milliseconds later, not instantly.
+            - { name: TOKENFUSE_WARDRYX_CACHE_TTL_MS, value: "3000" }
           envFrom:
             - configMapRef: { name: stack-wiring }
           ports: [{ name: http, containerPort: 4100 }]
@@ -176,6 +237,12 @@ spec:
             # the fleet while the console still shows it stopped. Serve flags
             # fall back to their WARDRYX_* variable, so this is `-db` by
             # another name. See ../GOTCHAS.md, item 14.
+            # Bearer auth on the policy plane. With WARDRYX_KEYS unset wardryx
+            # accepts ANY bearer, so `Authorization: Bearer devkey` was enough
+            # to rewrite policy - including deleting the console's own freezes
+            # (GOTCHAS 20). Generated per cluster by install.sh.
+            - name: WARDRYX_KEYS
+              valueFrom: { secretKeyRef: { name: stack-keys, key: wardryx_keys } }
             - name: WARDRYX_DB
               valueFrom: { secretKeyRef: { name: stack-policy-db, key: dsn } }
             # A policy can say "hold anything above $25 for a human". Without

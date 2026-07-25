@@ -36,18 +36,14 @@ spec:
             # talks to them. The key is what gates discovery (a URL alone
             # never invents a plane), which is why both halves are here.
             #
-            # These two are the same throwaway-cluster devkey 10-planes.yaml
-            # spells out, and they are written in plain sight for the same
-            # reason: so nobody mistakes them for a real credential. On a real
-            # cluster create the Secret in secrets.example.yaml and swap both
-            # for a reference the image never contains:
-            #
-            #   - name: TOKENFUSE_CLOUD_ADMIN_KEY
-            #     valueFrom: { secretKeyRef: { name: stack-keys, key: cloud_admin } }
-            #   - name: WARDRYX_ADMIN_KEY
-            #     valueFrom: { secretKeyRef: { name: stack-keys, key: wardryx_admin } }
-            - { name: TOKENFUSE_CLOUD_ADMIN_KEY, value: "devkey" }
-            - { name: WARDRYX_ADMIN_KEY, value: "devkey" }
+            # Both are generated per cluster into the `stack-keys` Secret by
+            # install.sh, so no credential is in this repo, in any image, or in
+            # any pod spec. They used to be the literal string `devkey`, which
+            # an attack turned into a fleet-wide unfreeze (GOTCHAS 20).
+            - name: TOKENFUSE_CLOUD_ADMIN_KEY
+              valueFrom: { secretKeyRef: { name: stack-keys, key: cloud_admin } }
+            - name: WARDRYX_ADMIN_KEY
+              valueFrom: { secretKeyRef: { name: stack-keys, key: wardryx_admin } }
             # Where the console looks for environment descriptors. Pointed off
             # the state volume on purpose: which planes exist is CLUSTER
             # configuration, not console state, so it is mounted read-only

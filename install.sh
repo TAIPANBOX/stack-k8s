@@ -106,6 +106,71 @@ if [ -z "$HCLOUD_TOKEN" ]; then
   echo "   Everything else works; a type=LoadBalancer Service will stay <pending>."
 fi
 
+# ---- 0b. close the doors before opening any ---------------------------------
+# Done FIRST, before k3s exists, because the window between "kubelet is
+# listening" and "firewall is up" is a window.
+#
+# What this closes, measured on the first live cluster: the kubelet API (:10250)
+# was reachable from the whole internet on every node, and the Kubernetes API
+# (:6443) on every server. Both answer 401 to an anonymous request, so neither
+# is an open door - but a kubelet reachable from anywhere is one authorization
+# bug away from remote code execution on every node, and neither belongs on the
+# public internet. See GOTCHAS.md item 19.
+#
+# A Hetzner cloud firewall costs nothing, is enforced OUTSIDE the host (so a
+# compromised node cannot switch it off), and is attached to the servers rather
+# than baked into them.
+if [ -n "$HCLOUD_TOKEN" ]; then
+  say "cloud firewall: ssh and the API from your address only"
+  OPERATOR_IP="${OPERATOR_IP:-$(sh_ "$FIRST" 'echo $SSH_CLIENT' | awk '{print $1}')}"
+  if [ -z "$OPERATOR_IP" ]; then
+    echo "   could not detect your public address; set OPERATOR_IP=x.x.x.x and re-run"
+  else
+    echo "   your address, as the node sees it: $OPERATOR_IP"
+    sh_ "$FIRST" "cat > /tmp/fw.py" <<'PY'
+import json, os, sys, urllib.request
+T = os.environ["HCLOUD_TOKEN"]; MY = sys.argv[1] + "/32"
+def api(path, payload=None, method="GET"):
+    data = json.dumps(payload).encode() if payload is not None else None
+    r = urllib.request.Request("https://api.hetzner.cloud/v1/"+path, data=data, method=method,
+        headers={"Authorization": "Bearer "+T, "Content-Type": "application/json"})
+    body = urllib.request.urlopen(r, timeout=30).read()
+    return json.loads(body) if body else {}
+rules = [
+    {"direction": "in", "protocol": "tcp", "port": "22",   "source_ips": [MY], "description": "ssh, operator only"},
+    {"direction": "in", "protocol": "tcp", "port": "6443", "source_ips": [MY], "description": "kube api, operator only"},
+    {"direction": "in", "protocol": "icmp",                "source_ips": [MY], "description": "ping, operator only"},
+]
+name = "agent-stack-operator-only"
+found = [f for f in api("firewalls")["firewalls"] if f["name"] == name]
+if found:
+    fw = found[0]; api(f"firewalls/{fw['id']}/actions/set_rules", {"rules": rules}, "POST")
+else:
+    fw = api("firewalls", {"name": name, "rules": rules}, "POST")["firewall"]
+servers = [s["id"] for s in api("servers?per_page=50")["servers"]]
+api(f"firewalls/{fw['id']}/actions/apply_to_resources",
+    {"apply_to": [{"type": "server", "server": {"id": i}} for i in servers]}, "POST")
+print(f"   firewall {fw['id']} applied to {len(servers)} server(s): everything inbound dropped except 22, 6443 and icmp from {MY}")
+PY
+    sh_ "$FIRST" "HCLOUD_TOKEN='$HCLOUD_TOKEN' python3 /tmp/fw.py '$OPERATOR_IP' && rm -f /tmp/fw.py"
+    echo "   NOTE: if your address changes, re-run this script or widen the rule, or you will be locked out."
+  fi
+else
+  echo "   no --token: SKIPPING the cloud firewall. The kubelet API will be reachable"
+  echo "   from the internet on every node. Fix that before this cluster holds anything."
+fi
+
+# sshd: key-only, and no root password path at all. Free, and it removes the
+# one service that is deliberately public from every password-guessing list.
+say "sshd: keys only"
+for n in "${ALL_NODES[@]}"; do
+  sh_ "$n" 'F=/etc/ssh/sshd_config.d/99-stack-hardening.conf
+    printf "PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin prohibit-password\nX11Forwarding no\nMaxAuthTries 3\n" > $F
+    chmod 644 $F
+    sshd -t && (systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null)' \
+    && echo "   $n hardened" || echo "   $n: sshd config rejected, left as it was"
+done
+
 # ---- 1. node prep ----------------------------------------------------------
 # Longhorn is not self-contained: its engine attaches volumes over iSCSI, and
 # an RWX volume is served to other nodes over NFS. Both live on the HOST, not
@@ -148,6 +213,15 @@ echo "   done"
 #                             the Node object, which on a server also removes
 #                             its etcd member and detaches its volumes
 #                             (GOTCHAS 10)
+#   --secrets-encryption      Secrets are encrypted at rest. Without it every
+#                             Secret sits in etcd as PLAINTEXT, so an etcd
+#                             snapshot, a disk image or a backup IS the
+#                             credential set - verified by reading a database
+#                             password straight out of etcd on the first live
+#                             cluster (GOTCHAS 18). Retrofitting this needs a
+#                             hand-written encryption config, a rolling
+#                             restart and a rewrite of every existing Secret;
+#                             at install time it is one flag
 #   --write-kubeconfig-mode 0600  the default 0644 leaves cluster-admin
 #                             credentials world-readable on the node
 #
@@ -163,6 +237,7 @@ sh_ "$FIRST" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh
     --tls-san '$FIRST_PRIV' --tls-san '$FIRST' \
     --flannel-backend=none --disable-network-policy \
     --disable=servicelb --disable=traefik \
+    --secrets-encryption \
     --kubelet-arg=provider-id=hcloud://${SID[$FIRST]} \
     --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
 
@@ -185,6 +260,7 @@ for n in "${SERVER_LIST[@]:1}"; do
       --tls-san '${PRIV[$n]}' --tls-san '$n' \
       --flannel-backend=none --disable-network-policy \
       --disable=servicelb --disable=traefik \
+      --secrets-encryption \
       --kubelet-arg=provider-id=hcloud://${SID[$n]} \
       --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
   for i in $(seq 1 40); do

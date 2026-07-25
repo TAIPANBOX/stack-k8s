@@ -331,3 +331,142 @@ node, so it packed them onto whichever node scored best.
 cluster or one node under maintenance can still run the stack. After it: console
 on node 1, idryx on 2, gateway on 3, wardryx on 4, cloud on 5, all five sharing
 the RWX event volume.
+
+## 18. Secrets sit in etcd as plaintext unless you say otherwise
+
+**Symptom:** none from inside the cluster. From a copy of etcd, everything.
+
+**Why:** k3s does not encrypt Secrets at rest by default. Proven by attack on
+the first live cluster: the policy store's Postgres password, its full DSN and
+`WARDRYX_APPROVAL_SECRET` were read straight out of etcd with `etcdctl get`, as
+ordinary strings. An etcd snapshot, a stolen disk image or a backup tarball is
+therefore the entire credential set.
+
+**Fixed here:** `install.sh` starts every server with `--secrets-encryption`,
+so an aescbc provider is active from the first boot and no Secret is ever
+written in the clear. `security-tests.sh` writes a canary Secret and greps it
+out of etcd to prove it. Retrofitting a running cluster is the hard path
+(hand-written encryption config, rolling restart, and a rewrite of every
+existing Secret with `kubectl get secret -A -o json | kubectl replace -f -`);
+at install time it is one flag.
+
+## 19. The kubelet API is on the public internet by default
+
+**Symptom:** none. `10250` answers `401` to an anonymous request, so a scan
+looks clean.
+
+**Why:** a Hetzner cloud server has a public interface, and the kubelet binds
+`0.0.0.0:10250` on it. A scan of the first live cluster found `10250` open to
+the whole internet on all five nodes, and `6443` on the three servers. `401`
+is not safety: it is one authorization bug, or one leaked node credential,
+away from remote code execution on every node.
+
+**Fixed here:** `install.sh` creates a Hetzner cloud firewall FIRST, before
+k3s exists, admitting `22` and `6443` only from the operator's own address and
+dropping everything else inbound. It is enforced outside the host, so a
+compromised node cannot switch it off. Cluster traffic already runs on the
+private network (GOTCHAS 5), so nothing internal depends on the public ports.
+
+## 20. A pod label is not a credential, and `devkey` is not a secret
+
+**Symptom:** an agent frozen from the console keeps being enforced, until any
+workload in the namespace deletes the block. No console, no passkey, no
+operator, and it works.
+
+**Why:** two defaults meeting. `TOKENFUSE_CLOUD_ALLOW_DEVKEY=1` with an empty
+key list makes the literal string `devkey` an admin bearer, and wardryx with
+no `WARDRYX_KEYS` accepts ANY bearer. The NetworkPolicy that decides who may
+reach the planes authorises by the pod label `plane: console` - which a pod
+assigns to ITSELF (the stack's own `drills` CronJob does exactly that). So the
+whole authorisation story was "a pod that calls itself console, using a
+password that is the word devkey". Proven: a pod labelled `plane: console`
+read every policy and `DELETE`d a `console-block:*` freeze with
+`Authorization: Bearer devkey`, and the PDP went from `deny` to `allow`.
+
+**Fixed here:** `install.sh` generates real bearer keys per cluster into the
+`stack-keys` Secret; the manifests reference them and set `WARDRYX_KEYS` so the
+policy plane enforces bearer auth; `ALLOW_DEVKEY` is gone. After the fix the
+same attack gets `401` on every plane and every verb, while the console's own
+Secret-provided key still works. The forged label still grants network reach -
+that is the label's job - but reach without a credential is nothing.
+
+`security-tests.sh` runs this exact attack as a standing check.
+
+## 21. The gateway never asks the PDP unless you wire it to
+
+**Symptom:** the policy plane answers the console, shows its policies, denies in
+`/v1/decide` when asked - and a frozen agent's real traffic sails straight
+through it.
+
+**Why:** the enforcement hook on the DATA PATH is off by default and reads its
+OWN variables. It needs `TOKENFUSE_WARDRYX_MODE=enforce` and
+`TOKENFUSE_WARDRYX_URL` - NOT the `WARDRYX_URL` in `stack-wiring` that every
+other component uses. Wire the cluster the obvious way and you get a policy
+plane that is consulted by the console and ignored by the traffic, which is the
+one place enforcement actually has to happen.
+
+**Fixed here:** the gateway is given the hook explicitly, with a VIEWER key
+(the enforcement point must not be able to rewrite the policy it enforces),
+`FAILMODE=closed` (an unreachable PDP denies rather than permits; the durable
+policy store in 15-policy-store.yaml is what makes that survivable), and a
+timeout widened to 250ms against a measured p99 of 18.8ms cross-node. Proven
+end to end against the real provider: a frozen agent gets `403` in ~20ms and
+the provider is never contacted; an untouched agent's call reaches the model,
+returns real usage, and is metered. Time-to-effect of a freeze on live traffic:
+one PDP round trip, measured at 5ms, because a freeze policy sets per-request
+dimensions and wardryx marks it `cacheable: false`.
+
+## 22. No upstream means the gateway invents the answer
+
+**Symptom:** every call succeeds, returns a plausible model reply, and is
+metered - and none of it is real.
+
+**Why:** with `TOKENFUSE_UPSTREAM` unset the gateway does not fail and does not
+warn. It answers from `StubProvider`: a canned body and a fixed 1000 input /
+500 output tokens, metered as spend. Measured: `{"stub": true, "usage":
+{"input_tokens": 1000, "output_tokens": 500}}` billed at $0.0035. A console
+full of fabricated money and answers that never came from a model, all of it
+looking exactly like the real thing.
+
+**Fixed here:** the manifest pins `TOKENFUSE_UPSTREAM` to the FULL provider
+endpoint (`https://api.anthropic.com/v1/messages` - a base URL alone answers
+404, the gateway POSTs to exactly this path). A cluster meant for a different
+provider changes this one line.
+
+## 23. The neighbouring namespace is the platform's job, not the manifests'
+
+**Symptom:** `agent-stack` is locked down - default-deny, restricted Pod
+Security, non-root everything - and a privileged pod with the host filesystem
+mounted starts freely in the `default` namespace right next to it.
+
+**Why:** NetworkPolicy and Pod Security are PER-NAMESPACE. The manifests here
+harden their own namespace and cannot harden a neighbour. Tested: a privileged,
+hostPID pod with `/` mounted came up in `default` with no objection. Our own
+containment held from the outside - it could reach NONE of our five services,
+because our policies key on label AND namespace, and it read no host secret
+because it ran as our image's uid 10001, not root - but a root image in that
+same unprotected namespace would own the node.
+
+**Fixed here:** it cannot be, and pretending otherwise would be the dishonest
+move. Documented instead: apply `pod-security.kubernetes.io/enforce: restricted`
+and a default-deny NetworkPolicy to every namespace that will run workloads, or
+keep this cluster single-tenant. `security-tests.sh` reports the posture of
+neighbouring namespaces so the gap is visible rather than assumed closed.
+
+## 24. A shared RWX reader can lag the writer
+
+**Symptom:** the gateway writes an event, and a `stat` from the console pod on
+another node shows the file unchanged for seconds. Looks like the write was
+lost.
+
+**Why:** the RWX event volume is NFS-backed (Longhorn), and NFS caches file
+attributes on the client. The writer's node sees the new size immediately; a
+reader on a different node can serve a cached `stat` for a few seconds. The
+data is there - a `grep`, which forces a read, finds it - but a size check
+does not. This is a read-consistency property of the shared volume, not a lost
+write, and it is why "the console has not shown the event yet" is usually
+latency, not failure.
+
+**Not a fix, a caveat:** the console tails the file, so it converges within the
+attribute-cache window. Anything that needs the writer's exact byte offset must
+read on the writer's node or force a read, never trust a cross-node `stat`.

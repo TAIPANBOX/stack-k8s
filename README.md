@@ -77,12 +77,23 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 
 ## Keys stay yours
 
-Nothing here bakes a credential into an image. The cloud and wardryx admin
-keys, and the console's own operator record, come from Secrets that the
-operator creates on their own cluster. `secrets.example.yaml` shows the shape
-and holds no real value; `taipan up`'s dev credential mode
-(`TOKENFUSE_CLOUD_ALLOW_DEVKEY=1`) is offered for a throwaway cluster and is
-labelled as exactly that.
+Nothing here bakes a credential into an image, and nothing here ships one.
+`install.sh` GENERATES the admin bearers for the money and policy planes, the
+policy store's database password and its approval secret, straight into Secrets
+on your own cluster. This repo never sees them.
+
+That is a correction, not a design note. The manifests used to hand out
+`TOKENFUSE_CLOUD_ALLOW_DEVKEY=1`, which makes the literal string `devkey` an
+admin bearer, and to leave `WARDRYX_KEYS` unset, which makes the policy plane
+accept ANY bearer. On one machine that is a dev convenience. In a cluster it is
+a published credential: on 2026-07-25 a pod that labelled itself
+`plane: console` used it to delete a freeze, and the frozen agent resumed while
+the console still displayed FROZEN (GOTCHAS 20).
+
+The operator's own login is separate and stays theirs: one account per box, set
+with `genaryx-web set-password` reading the password from stdin, stored as an
+Argon2id hash on the console's volume. There is no path by which we could
+issue, see or reset it.
 
 ## Layout
 
@@ -91,6 +102,8 @@ install.sh      bring up the cluster itself: k3s, Calico, Longhorn, the storage
                 classes, the cloud controller. Hetzner-specific by design.
 build.sh        build the images and import them into every node over ssh
 verify.sh       prove a cluster is running this stack, not merely green
+security-tests.sh  attack it: 23 checks, from a forged pod label to etcd at rest
+deploy.sh       one command: install.sh + images + manifests + both test suites
 manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm)
 images/         one Dockerfile per language family, plus the console's mixed build
 GOTCHAS.md      every trap this cost us, each with the fix that is already applied
@@ -106,9 +119,20 @@ Three commands, in this order:
 kubectl apply -k manifests/
 ```
 
+or all of it in one line:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TAIPANBOX/stack-k8s/main/deploy.sh | bash -s -- \
+  --servers ip1,ip2,ip3 --agents ip4,ip5 --hcloud-token <token>
+```
+
+The open stack needs no credentials at all: wardryx, idryx, qryx, mockryx,
+tokenfuse, verdryx and engram are public. `--console-token <github-token>` adds
+the Genaryx console, which is the one closed piece.
+
 Then reach the console over your own tunnel (`20-console.yaml` explains why
 there is no public entry point by default), and check the deployment with
-`./verify.sh --freeze`.
+`./verify.sh --freeze` and `./security-tests.sh`.
 
 ## Status
 
@@ -120,7 +144,18 @@ provisioned a real load balancer that served the console, and an agent frozen
 from the browser was denied by the policy plane's PDP and stayed denied after
 that plane's pod was restarted. `verify.sh --freeze`: 10 passed, 0 failed.
 
-The command output behind each of those sentences is in `evidence/`. Nine more
-traps found during that run are written up in `GOTCHAS.md` (items 9-17), each
-already fixed in these files - which is the whole point: the next person to run
-this should not meet any of them.
+Then attacked, the same night: a pod that labelled itself `plane: console`
+deleted a freeze with the literal bearer `devkey` and the agent resumed, while
+the console still displayed FROZEN. Secrets were readable in plaintext straight
+out of etcd. The kubelet API was open to the whole internet on every node. The
+gateway never asked the policy plane anything, and with no upstream configured
+it answered calls itself from a stub and metered the invented tokens as spend.
+
+All of that is closed in these files now, and `security-tests.sh` re-runs each
+attack as a standing check: **23 passed, 0 failed, 1 noted** (the note is the
+neighbouring namespace, which no manifest here can harden - see GOTCHAS 23).
+
+The command output behind every sentence above is in `evidence/`. Sixteen traps
+found across the two runs are written up in `GOTCHAS.md` (items 9-24), each
+already fixed here - which is the whole point: the next person to run this
+should not meet any of them.
