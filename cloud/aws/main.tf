@@ -291,6 +291,25 @@ resource "aws_instance" "node" {
   iam_instance_profile        = aws_iam_instance_profile.node.name
   associate_public_ip_address = true
 
+  # The single most expensive line in this file to have discovered by running
+  # it. EC2 drops any packet leaving an interface whose SOURCE address is not
+  # that interface's own, which is a sensible anti-spoofing default and is
+  # fatal to a pod network.
+  #
+  # It bites here specifically BECAUSE of the single-AZ decision above. Calico
+  # is configured VXLANCrossSubnet, meaning it encapsulates only when nodes are
+  # on different subnets. All five nodes are deliberately on ONE subnet to
+  # avoid cross-AZ charges, so Calico correctly decides not to encapsulate, and
+  # every cross-node pod packet leaves with a 10.42.x.x source that AWS then
+  # discards. Hetzner's private network has no equivalent check, so the exact
+  # same Calico configuration works there unchanged.
+  #
+  # Turning the check off here rather than switching Calico to unconditional
+  # VXLAN is deliberate: it keeps the Kubernetes configuration byte-identical
+  # across both clouds and confines the difference to the infrastructure layer,
+  # which is where a cloud difference belongs. See GOTCHAS.md item 44.
+  source_dest_check = false
+
   root_block_device {
     volume_type = "gp3"
     volume_size = var.disk_gb

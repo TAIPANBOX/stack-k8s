@@ -1111,3 +1111,66 @@ the last one.
 The general rule this earns: **when a check can only ever pass, it is not a
 check.** Before trusting one, ask what state would make it red, and if you
 cannot name that state, the check is decoration.
+
+## 44. EC2 drops your pod network, and blames nobody
+
+> **Platform.** AWS does this to everyone who runs an unencapsulated overlay.
+
+**Symptom:** every `PersistentVolumeClaim` sits `Pending`, so every pod sits
+`Pending`, so the whole workload never starts. Longhorn is the visible victim:
+four of its five `longhorn-manager` pods die on a loop with
+
+```
+Failed to check endpoint https://longhorn-conversion-webhook...:9501/v1/healthz:
+  context deadline exceeded
+level=fatal msg="Error starting manager: conversion webhook service is not
+  accessible after 1m0s sec"
+```
+
+which reads like a Longhorn problem, a webhook problem, or a timeout that
+wants raising. It is none of those. Cross-node pod-to-pod traffic does not
+work at all, and Longhorn is simply the first component to need it.
+
+**Why:** an EC2 network interface silently discards any packet whose SOURCE
+address is not one of the addresses assigned to that interface. It is a
+reasonable anti-spoofing default (`SourceDestCheck`, on by default) and it is
+exactly what a pod network does: pod packets carry `10.42.x.x`, the interface
+holds `10.10.0.x`, and they are dropped on the way out. No log, no counter
+anyone thinks to look at, no ICMP back.
+
+Three facts have to line up, and the third is the one we chose ourselves:
+
+| | |
+|---|---|
+| Calico | `encapsulation: VXLANCrossSubnet`, so it wraps packets ONLY between different subnets |
+| Nodes | all five in ONE subnet, deliberately, to avoid AWS cross-AZ charges at USD 0.01/GB each way |
+| EC2 | `SourceDestCheck = true` on every interface |
+
+Because the nodes share a subnet, Calico correctly decides encapsulation is
+unnecessary and sends raw pod addresses. On Hetzner that is right and fast: a
+Hetzner private network has no such check, which is why the identical Calico
+configuration worked there and why nothing in the Hetzner run hinted at this.
+**The cost optimisation is what triggered the outage.**
+
+**Fixed here:** `source_dest_check = false` on the instances in `main.tf`.
+
+The alternative, switching Calico to unconditional `VXLAN`, also works and
+needs no cloud API call, but it makes the two clouds run different CNI
+settings. Turning the check off keeps the Kubernetes configuration
+byte-identical across Hetzner and AWS and confines the difference to Terraform,
+which is where a cloud difference belongs.
+
+**How to recognise it quickly next time.** Any "service unreachable inside the
+cluster" on AWS, on a CNI that is not the VPC CNI, is this until proven
+otherwise. Three commands:
+
+```bash
+kubectl get ippool default-ipv4-ippool -o jsonpath='{.spec.vxlanMode}'   # CrossSubnet?
+kubectl get nodes -o wide                                                # one subnet?
+aws ec2 describe-instances --query 'Reservations[].Instances[].[PrivateIpAddress,SourceDestCheck]'
+```
+
+`CrossSubnet` + one subnet + `True` is the signature. Note that a managed
+cluster hides this: EKS with the VPC CNI gives pods real VPC addresses, so
+there is no foreign source address and the check never fires. It returns the
+moment you run your own CNI, which is the shape this repo deliberately tests.
