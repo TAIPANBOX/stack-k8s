@@ -405,6 +405,31 @@ subjects:
     name: cloud-controller-manager
     namespace: kube-system
 ---
+# Narrowing the ClusterRole above costs exactly one extra binding, and leaving
+# it out is a crash, not a degradation. Any controller-manager that serves an
+# authenticated endpoint loads the request-header CA from the
+# extension-apiserver-authentication ConfigMap at startup, and exits non-zero
+# if it cannot read it:
+#
+#   unable to load configmap based request-header-client-ca-file:
+#   configmaps "extension-apiserver-authentication" is forbidden
+#
+# Kubernetes already ships the Role for this in kube-system, so this is a
+# binding to an existing Role rather than a new grant (GOTCHAS.md item 43).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stack-aws-ccm-authentication-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+  - kind: ServiceAccount
+    name: cloud-controller-manager
+    namespace: kube-system
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -461,10 +486,42 @@ spec:
             name: aws-cloud-config
 YAML
   k_ "apply -f /tmp/aws-ccm.yaml"
-  k_ "-n kube-system rollout status daemonset/aws-cloud-controller-manager --timeout=180s" \
-    || die "the cloud controller did not come up. Check 'kubectl -n kube-system logs -l k8s-app=aws-cloud-controller-manager'.
+  k_ "-n kube-system rollout status daemonset/aws-cloud-controller-manager --timeout=180s" || true
+
+  # `rollout status` alone is a lie here, and it is worth being explicit about
+  # why. This DaemonSet has no readiness probe, so a pod counts as AVAILABLE
+  # the moment its container starts. A controller that starts, fails to read
+  # something it needs, and exits two seconds later is therefore "available" on
+  # the way past, and the rollout reports success.
+  #
+  # Measured on the first live AWS cluster, 2026-07-25: rollout status returned
+  # success, the install continued to the end, and the cloud controller was in
+  # CrashLoopBackOff the entire time. Nothing downstream noticed until a
+  # type=LoadBalancer Service sat <pending> with no explanation
+  # (GOTCHAS.md item 43).
+  #
+  # So ask what the check was meant to ask: are they RUNNING, and has the
+  # restart count stopped moving?
+  ccm_pods() {
+    k_ "-n kube-system get pods -l k8s-app=aws-cloud-controller-manager -o jsonpath='{range .items[*]}{.status.phase}{\":\"}{.status.containerStatuses[0].restartCount}{\" \"}{end}'" 2>/dev/null
+  }
+  say "confirming the cloud controller is actually running, not merely started"
+  before="$(ccm_pods)"
+  sleep 20
+  after="$(ccm_pods)"
+  running="$(printf '%s' "$after" | tr ' ' '\n' | grep -c '^Running:' || true)"
+  want="${#SERVER_LIST[@]}"
+  if [ "${running:-0}" -lt "$want" ] || [ "$before" != "$after" ]; then
+    echo "   state before: $before"
+    echo "   state after:  $after"
+    k_ "-n kube-system logs -l k8s-app=aws-cloud-controller-manager --tail=15" 2>/dev/null || true
+    die "the cloud controller is not staying up ($running/$want running, restart counts still moving).
+   The last lines of its log are above; the real error is usually the LAST line,
+   under a wall of usage text that makes it look like a flag problem.
    Everything else works without it; a type=LoadBalancer Service will stay <pending>.
    Re-run with --skip-ccm to continue deliberately without one."
+  fi
+  echo "   $running/$want running, restart counts stable"
 else
   echo "   --skip-ccm: no cloud controller. A type=LoadBalancer Service will stay <pending>."
 fi

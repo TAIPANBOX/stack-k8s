@@ -1058,3 +1058,56 @@ do not.
 Running one minor behind the API server is fine for the only controller this
 deployment enables. The service controller talks to the Kubernetes API through
 long-stable types and to the AWS ELB API, neither of which changed in 1.36.
+
+## 43. `rollout status` passes on a controller that never ran
+
+> **Ours, and fixed.** We wrote this wrong in this repository.
+
+**Symptom:** the install completes cleanly, every step green, and the cloud
+controller has been in `CrashLoopBackOff` since the moment it was applied.
+Nothing downstream complains until a `type=LoadBalancer` Service sits
+`<pending>` with no reason given.
+
+**Two separate mistakes, and the second is the dangerous one.**
+
+**The crash.** The upstream example binds `cluster-admin` to the cloud
+controller. We narrowed that to a ClusterRole covering Services, Nodes and
+Events, on the same principle that a gateway must not be able to rewrite the
+policy it enforces (item 20). One rule too few: any controller-manager that
+serves an authenticated endpoint reads the request-header CA out of the
+`extension-apiserver-authentication` ConfigMap in `kube-system` at startup, and
+exits non-zero when it cannot:
+
+```
+unable to load configmap based request-header-client-ca-file:
+configmaps "extension-apiserver-authentication" is forbidden
+```
+
+Kubernetes already ships the Role for exactly this, so the fix is a RoleBinding
+to an existing Role, not a widening of the grant. Narrow RBAC stays narrow.
+
+Worth noting how the error presents: the controller prints its **entire usage
+text** before dying, so the terminal fills with flag documentation and the one
+line that matters is the last one, far below. It reads like a bad flag. It is
+not.
+
+**The check that missed it.** This DaemonSet has no readiness probe, so a pod
+is AVAILABLE as soon as its container starts. `kubectl rollout status` asks
+whether pods are available, so a container that starts and exits two seconds
+later satisfies it on the way past. The install script asked the wrong
+question, got a true answer, and continued for another twenty minutes.
+
+This is the same class as item 30 (a check that fails on its own tooling) and
+item 22 (a component answering from a stub): **a green check that was never
+capable of being red.** The cost is worse than a failure, because a failure
+stops you.
+
+**Fixed here:** after `rollout status`, sample the pods twice twenty seconds
+apart and require that the expected number are `Running` AND that the restart
+counts have stopped moving. A crash loop fails both halves. On failure the
+script prints the last 15 log lines and says outright that the real error is
+the last one.
+
+The general rule this earns: **when a check can only ever pass, it is not a
+check.** Before trusting one, ask what state would make it red, and if you
+cannot name that state, the check is decoration.
