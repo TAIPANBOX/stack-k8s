@@ -614,3 +614,86 @@ helper so a future slip is loud rather than a phantom FAIL:
 DC="${COMPOSE[*]}"
 check() { [ "$#" -eq 2 ] || die "internal: check() got $# arguments, expected 2"; ... }
 ```
+
+## 28. A random string is not a key spec, and the plane will not tell you twice
+
+**Symptom:** every service is `Up`, every health endpoint answers, and the
+console can authenticate to nothing. The money plane logs one ERROR at startup
+and then behaves normally, serving 401 to every caller including the gateway.
+
+**Why:** both planes take a bearer-key SPEC of the form `key:org[:role]`, and
+parse it by splitting on `,` and then `:`. An entry with no `:org` half is
+skipped, so a plain random secret in `TOKENFUSE_CLOUD_KEYS` or `WARDRYX_KEYS`
+yields an EMPTY key map. Empty is not "allow everyone", it is "authenticate
+no one", which is the right default and also the quietest possible failure:
+the plane is healthy, reachable, and useless.
+
+The client side takes the BARE key, not the spec. Reusing one value for both,
+which is the obvious thing to do, is wrong in both directions at once.
+
+**Fixed here:** `install.sh` generates three secrets into five values and both
+deployments use the same split:
+
+```
+cloud_keys      = <secret>:default:admin      # what the plane accepts
+cloud_admin     = <secret>                    # what the gateway presents
+wardryx_keys    = <admin>:default:admin,<gw>:default:viewer
+wardryx_admin   = <admin>                     # the console administers policy
+wardryx_gateway = <gw>                        # VIEWER: /v1/decide needs no more
+```
+
+The gateway's viewer key is not tidiness. `/v1/decide` accepts any
+authenticated principal, and an enforcement point holding an admin key can
+rewrite the policy it is enforcing. The single-instance installer asserts all
+three states: 200 for the admin key, 401 for an unknown one, 403 when the
+gateway's key tries to read policy.
+
+Related: until this was written, `stack-keys` was referenced by five
+`secretKeyRef`s and created by nothing at all. A fresh cluster applied the
+manifests and sat in `CreateContainerConfigError` with no clue what the values
+should look like. Reachability checks cannot catch either failure. Check the
+credential, not the port.
+
+## 29. Compose has no `fsGroup`, and a fresh volume belongs to root
+
+**Symptom:** on Docker Compose, the policy plane crash-loops with
+`permission denied` writing its own event file, the identity plane exits
+because the log it was told to load does not exist, and the gateway drops
+every trace behind a single WARN while continuing to serve.
+
+**Why:** two platform differences at once. Kubernetes has `fsGroup`, which
+chowns a volume to the pod's group on mount; Compose has no equivalent, and a
+fresh Docker named volume is `root:root 0755` unless the image happens to
+contain that path (in which case it silently inherits the image's ownership
+instead, which is its own surprise). The cluster never showed this because its
+RWX volume came from a provisioner that hands out a permissive share.
+
+Two UID families share the event log, so a single `chown` cannot serve both:
+the Go planes are 65532 (distroless nonroot) and the Rust and Python ones are
+10001. And the identity plane's `--load` is not lazy: on a box that has served
+no traffic there is no log to load, and it treats that as fatal.
+
+**Fixed here** (in the single-instance sibling, `stack-single`): a one-shot
+`init-volumes` service runs as root before anything else, gives the event
+directory to GROUP 10001 with the setgid bit so every file created inside
+inherits it, chowns the trace and cloud-state volumes to their single writer,
+and pre-creates the two `.ndjson` files empty. The Go planes then run as
+`65532:10001`: static binaries read no `/etc/passwd`, so a numeric pair the
+image was not built with is fine. Each plane appends only to its own file, so
+no writer ever needs write access to another's.
+
+## 30. Distroless images have no `curl`, so a check that uses one is a lie
+
+**Symptom:** `docker compose exec <svc> curl ...` reports FAIL for three
+services on a stack that is provably healthy.
+
+**Why:** these images are distroless on purpose. Two have no shell at all and
+none has curl, so the check fails on the tooling rather than the service, and
+a tooling failure is indistinguishable from a real one in a pass/fail line.
+The negative checks in the same run kept passing, which made the result look
+even more credible.
+
+**Fixed here:** probe from a throwaway `busybox` attached to the same network.
+That is what a neighbouring container sees, which is what the check was
+supposed to be asking about in the first place, and it needs nothing from the
+images being tested.

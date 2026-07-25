@@ -442,6 +442,42 @@ else
   echo "   secret stack-policy-db already exists, left as is"
 fi
 
+# ---- 7b. the planes' bearer keys -------------------------------------------
+# `stack-keys` is referenced by five secretKeyRefs across 10-planes.yaml and
+# 20-console.yaml, and until this block existed nothing created it: a fresh
+# cluster applied the manifests and every plane sat in
+# CreateContainerConfigError with no hint about what the missing values should
+# even look like.
+#
+# Both planes take `key:org[:role]` on the SERVER side and the bare key on the
+# CLIENT side, and conflating the two is worse than an outage: a value with no
+# `:org` half parses to zero valid keys, so the plane starts cleanly,
+# authenticates nobody, answers 401 to its own console, and says so in one log
+# line. Three secrets, five values:
+#
+#   cloud_keys      the spec tokenfuse-cloud accepts
+#   cloud_admin     the bare key the gateway and console present to it
+#   wardryx_keys    the spec wardryx accepts, TWO principals
+#   wardryx_admin   the console's key: it administers policy
+#   wardryx_gateway the gateway's key, deliberately VIEWER. /v1/decide needs
+#                   any authenticated principal, and an enforcement point that
+#                   can rewrite the policy it enforces is not one.
+if ! k_ "-n agent-stack get secret stack-keys" >/dev/null 2>&1; then
+  say "plane credentials (generated, never committed)"
+  CLOUD_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  WARDRYX_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  WARDRYX_GATEWAY_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  k_ "-n agent-stack create secret generic stack-keys \
+      --from-literal=cloud_keys='$CLOUD_SECRET:default:admin' \
+      --from-literal=cloud_admin='$CLOUD_SECRET' \
+      --from-literal=wardryx_keys='$WARDRYX_ADMIN_SECRET:default:admin,$WARDRYX_GATEWAY_SECRET:default:viewer' \
+      --from-literal=wardryx_admin='$WARDRYX_ADMIN_SECRET' \
+      --from-literal=wardryx_gateway='$WARDRYX_GATEWAY_SECRET'" >/dev/null
+  echo "   created secret stack-keys"
+else
+  echo "   secret stack-keys already exists, left as is"
+fi
+
 # ---- 8. the operator's kubeconfig -----------------------------------------
 # Fetched with the PUBLIC address substituted for 127.0.0.1, so kubectl works
 # from the machine that ran this script. It carries cluster-admin credentials:
