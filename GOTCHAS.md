@@ -5,7 +5,29 @@ cluster up, not a theoretical warning. Each one is FIXED in the files here, so
 following the README should not reproduce any of them. They are written down
 anyway, because a fix you cannot see is a fix you will undo by accident.
 
+Each item says which KIND of trap it is, because the three kinds are worth very
+different amounts to you:
+
+- **Platform** (14 of 30). Kubernetes, Docker, k3s or the distro behaves this
+  way for everyone. These are the ones worth reading even if you never run this
+  stack, because the next thing you deploy will hit them too.
+- **The stack's own contract** (9 of 30). A default or a coupling in our
+  services. Not bugs, properties: the money plane binds loopback, the planes
+  talk through a shared file, the gateway asks the policy plane only if you
+  wire it to. Invisible until they bite, so they are written down.
+- **Ours, and fixed** (7 of 30). We wrote it wrong in this repository. A
+  missing Secret generator, a script that died silently, a check that reported
+  FAIL on a healthy stack. They stay in the list rather than being quietly
+  deleted, because the honest count of your own mistakes is the only reason to
+  trust the other twenty-three.
+
+If you are here to learn rather than to deploy, read the platform ones. If you
+are here because something broke, the symptom lines are ordered the way you
+will meet them: build, install, wire, run, attack.
+
 ## 1. The Go builder image is older than the code
+
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
 
 **Symptom:** `go: go.mod requires go >= 1.27 (running go 1.26.5; GOTOOLCHAIN=local)`,
 and the image build stops.
@@ -22,6 +44,8 @@ build keeps working as the repos move.
 
 ## 2. k3s ships a CNI that ignores NetworkPolicy
 
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
 **Symptom:** none, which is the problem. `kubectl apply` accepts every
 NetworkPolicy, `kubectl get networkpolicy` lists them, and nothing is enforced.
 
@@ -32,6 +56,8 @@ NetworkPolicy, `kubectl get networkpolicy` lists them, and nothing is enforced.
 default-deny posture in `manifests/30-network-policy.yaml` is decoration.
 
 ## 3. Two default StorageClasses
+
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
 
 **Symptom:** a PVC with no `storageClassName` binds to whichever default the
 API server picks, and you find out later when a volume is on the wrong class.
@@ -59,6 +85,8 @@ itself into being broken again with nobody touching storage at all.
 
 ## 4. The hcloud cloud-controller-manager fights k3s and Calico
 
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
 **Symptom:** `failed to listen on 0.0.0.0:10258: address already in use`, the
 pod crash-loops, and the log is a wall of usage text that hides the one real
 line.
@@ -85,6 +113,8 @@ overlaps.
 
 ## 5. Nodes join over the public internet
 
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
 **Symptom:** the cluster works, so nobody notices. etcd peer traffic, the
 kubelet API and the VXLAN overlay are all crossing the public network.
 
@@ -97,6 +127,8 @@ stays in `--tls-san` only, so an operator's kubectl can still reach the API.
 A Hetzner private network costs nothing, so there is no reason to skip it.
 
 ## 6. The stack's own coupling: a shared event log
+
+> **The stack's own contract.** A property of our services, not a bug.
 
 **Symptom:** put the planes on different nodes with the default storage class
 and idryx sees an empty identity graph, because the file it loads from is on
@@ -111,6 +143,8 @@ at apply time instead of quietly scheduling everything onto one node.
 
 ## 7. The console hosts the tools it runs
 
+> **The stack's own contract.** A property of our services, not a bug.
+
 **Symptom:** you split qryx, verdryx, engram and mockryx into their own
 Deployments, everything comes up green, and the Crypto, Quality, Memory and
 Drills tabs are permanently empty.
@@ -121,6 +155,8 @@ cannot be another container's stdin.
 **Fixed here:** they are built into the console image. See README, "Fact 2".
 
 ## 8. `USER nonroot` is not a non-root user, as far as kubelet is concerned
+
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
 
 **Symptom:** every pod sits in `CreateContainerConfigError` with
 `container has runAsNonRoot and image has non-numeric user (nonroot), cannot
@@ -139,6 +175,8 @@ and console), and the manifests also state `runAsUser` explicitly so the
 intent survives an image rebuild.
 
 ## 9. A service that binds loopback on purpose looks like a broken app in a pod
+
+> **The stack's own contract.** A property of our services, not a bug.
 
 **Symptom:** `tokenfuse-cloud` runs, its log says
 `tokenfuse cloud control plane listening on 127.0.0.1:8080`, and its readiness
@@ -165,6 +203,8 @@ strictly SMALLER reachable set than loopback on a shared box, where every local
 process of every local user can connect.
 
 ## 10. The cloud controller cannot see nodes that k3s named
+
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
 
 **Symptom:** a `type=LoadBalancer` Service gets a real Hetzner load balancer,
 a real public IP, and zero targets. `curl` connects and gets an empty reply.
@@ -204,6 +244,8 @@ Restart `k3s-agent` on that node.
 
 ## 11. Default-deny drops the load balancer's health check
 
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
 **Symptom:** the pod is Ready, the Service has an endpoint, and the cloud
 console shows the target `unhealthy`. No log line anywhere says why, because
 nothing logs a dropped packet.
@@ -219,6 +261,8 @@ admits the Hetzner private network on 7420 only. Narrow it to the balancer's
 
 ## 12. The money plane was a factory reset waiting to happen
 
+> **The stack's own contract.** A property of our services, not a bug.
+
 **Symptom:** everything works, then a rollout happens and the console reads
 `$0` across a fleet of 9,288 runs.
 
@@ -233,6 +277,8 @@ so a non-root container can write a freshly provisioned volume. Verified by
 killing the pod: 9,288 runs and $4,254.67 came back.
 
 ## 13. The operator's tunnel has to land where the pod is
+
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
 
 **Symptom:** `ssh -L 7420:<console clusterIP>:7420 root@<any node>` gives a
 tunnel that connects and then times out - but only when you pick the wrong
@@ -252,6 +298,8 @@ it at; `kubectl -n agent-stack get pod -l app=genaryx-console -o wide` answers
 that in one line.
 
 ## 14. An enforcement control that forgets is worse than no control
+
+> **The stack's own contract.** A property of our services, not a bug.
 
 **Symptom:** none, which is what makes it the worst item on this list. Freeze
 an agent, restart the policy plane's pod for any ordinary reason, and the
@@ -281,6 +329,8 @@ its holds can never be GRANTED. Same Secret, same fix.
 
 ## 15. Building the frontend without its mode ships a different product
 
+> **The stack's own contract.** A property of our services, not a bug.
+
 **Symptom:** the console loads, shows its whole chrome, and every panel says
 "No environment found. Run `taipan up` ...". No sign-in screen appears, and the
 backend's own API answers correctly to `curl` from the same pod.
@@ -297,6 +347,8 @@ to it.
 comment saying why the flag is not a preference.
 
 ## 16. With no environment descriptor, the console invents a fleet
+
+> **The stack's own contract.** A property of our services, not a bug.
 
 **Symptom:** the Graph tab draws 35 agents named
 `agent://taipanbox.dev/demo/*` on a cluster whose identity plane holds 29
@@ -328,6 +380,8 @@ planes now resolve the same way (`crates/api/src/money/env.rs`).
 
 ## 17. Five nodes, one node's worth of resilience
 
+> **Ours, and fixed.** We wrote this wrong in this repository.
+
 **Symptom:** `kubectl get pods -o wide` after a few rollouts: five pods, five
 nodes, all five pods on the same node.
 
@@ -343,6 +397,8 @@ on node 1, idryx on 2, gateway on 3, wardryx on 4, cloud on 5, all five sharing
 the RWX event volume.
 
 ## 18. Secrets sit in etcd as plaintext unless you say otherwise
+
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
 
 **Symptom:** none from inside the cluster. From a copy of etcd, everything.
 
@@ -402,6 +458,8 @@ Before this cluster, that sentence was a preference. Now it is a scar.
 
 ## 19. The kubelet API is on the public internet by default
 
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
 **Symptom:** none. `10250` answers `401` to an anonymous request, so a scan
 looks clean.
 
@@ -418,6 +476,8 @@ compromised node cannot switch it off. Cluster traffic already runs on the
 private network (GOTCHAS 5), so nothing internal depends on the public ports.
 
 ## 20. A pod label is not a credential, and `devkey` is not a secret
+
+> **Ours, meeting a platform fact.** Our defaults did the damage; self-assigned pod labels are simply how Kubernetes works.
 
 **Symptom:** an agent frozen from the console keeps being enforced, until any
 workload in the namespace deletes the block. No console, no passkey, no
@@ -444,6 +504,8 @@ that is the label's job - but reach without a credential is nothing.
 
 ## 21. The gateway never asks the PDP unless you wire it to
 
+> **The stack's own contract.** A property of our services, not a bug.
+
 **Symptom:** the policy plane answers the console, shows its policies, denies in
 `/v1/decide` when asked - and a frozen agent's real traffic sails straight
 through it.
@@ -467,6 +529,8 @@ one PDP round trip, measured at 5ms, because a freeze policy sets per-request
 dimensions and wardryx marks it `cacheable: false`.
 
 ## 22. No upstream means the gateway invents the answer
+
+> **The stack's own contract.** A property of our services, not a bug.
 
 **Symptom:** every call succeeds, returns a plausible model reply, and is
 metered - and none of it is real.
@@ -498,6 +562,8 @@ with one that fabricates spend.
 
 ## 23. The neighbouring namespace is the platform's job, not the manifests'
 
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
 **Symptom:** `agent-stack` is locked down - default-deny, restricted Pod
 Security, non-root everything - and a privileged pod with the host filesystem
 mounted starts freely in the `default` namespace right next to it.
@@ -518,6 +584,8 @@ neighbouring namespaces so the gap is visible rather than assumed closed.
 
 ## 24. A shared RWX reader can lag the writer
 
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
 **Symptom:** the gateway writes an event, and a `stat` from the console pod on
 another node shows the file unchanged for seconds. Looks like the write was
 lost.
@@ -535,6 +603,8 @@ attribute-cache window. Anything that needs the writer's exact byte offset must
 read on the writer's node or force a read, never trust a cross-node `stat`.
 
 ## 25. `tr </dev/urandom | head -c N` kills a `pipefail` script, silently
+
+> **Ours, and fixed.** We wrote this wrong in this repository.
 
 **Symptom:** the deploy runs cleanly through every image build, prints its
 `credentials` heading, and stops. No error, no stack trace, no partial output.
@@ -568,6 +638,8 @@ v="$( set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "$n" 
 
 ## 26. A `set -e` script that dies mid-run looks like one that finished
 
+> **Ours, and fixed.** We wrote this wrong in this repository.
+
 **Symptom:** the log's last line is a section heading. Whether that means
 "still working", "done", or "dead" is not knowable from the output, and the
 honest reading, that it is still running, is the wrong one.
@@ -589,6 +661,8 @@ trap 'rc=$?; { [ $rc -eq 0 ] || [ "${EXPLAINED:-0}" = 1 ]; } && exit $rc
 ```
 
 ## 27. `"${ARRAY[@]}"` inside a larger quoted string is not one argument
+
+> **Ours, and fixed.** We wrote this wrong in this repository.
 
 **Symptom:** every check that runs a command inside a container reports FAIL,
 while the stack is demonstrably healthy and the same command works by hand.
@@ -616,6 +690,8 @@ check() { [ "$#" -eq 2 ] || die "internal: check() got $# arguments, expected 2"
 ```
 
 ## 28. A random string is not a key spec, and the plane will not tell you twice
+
+> **Ours, and fixed.** We wrote this wrong in this repository.
 
 **Symptom:** every service is `Up`, every health endpoint answers, and the
 console can authenticate to nothing. The money plane logs one ERROR at startup
@@ -656,6 +732,8 @@ credential, not the port.
 
 ## 29. Compose has no `fsGroup`, and a fresh volume belongs to root
 
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
 **Symptom:** on Docker Compose, the policy plane crash-loops with
 `permission denied` writing its own event file, the identity plane exits
 because the log it was told to load does not exist, and the gateway drops
@@ -683,6 +761,8 @@ image was not built with is fine. Each plane appends only to its own file, so
 no writer ever needs write access to another's.
 
 ## 30. Distroless images have no `curl`, so a check that uses one is a lie
+
+> **Ours, and fixed.** We wrote this wrong in this repository.
 
 **Symptom:** `docker compose exec <svc> curl ...` reports FAIL for three
 services on a stack that is provably healthy.
