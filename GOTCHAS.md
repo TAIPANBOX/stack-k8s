@@ -8,22 +8,28 @@ anyway, because a fix you cannot see is a fix you will undo by accident.
 Each item says which KIND of trap it is, because the three kinds are worth very
 different amounts to you:
 
-- **Platform** (14 of 30). Kubernetes, Docker, k3s or the distro behaves this
-  way for everyone. These are the ones worth reading even if you never run this
-  stack, because the next thing you deploy will hit them too.
-- **The stack's own contract** (9 of 30). A default or a coupling in our
+- **Platform** (20 of 40). Kubernetes, Docker, k3s, WireGuard or the distro
+  behaves this way for everyone. These are the ones worth reading even if you
+  never run this stack, because the next thing you deploy will hit them too.
+- **The stack's own contract** (10 of 40). A default or a coupling in our
   services. Not bugs, properties: the money plane binds loopback, the planes
   talk through a shared file, the gateway asks the policy plane only if you
   wire it to. Invisible until they bite, so they are written down.
-- **Ours, and fixed** (7 of 30). We wrote it wrong in this repository. A
+- **Ours, and fixed** (10 of 40). We wrote it wrong in this repository. A
   missing Secret generator, a script that died silently, a check that reported
-  FAIL on a healthy stack. They stay in the list rather than being quietly
-  deleted, because the honest count of your own mistakes is the only reason to
-  trust the other twenty-three.
+  FAIL on a healthy stack, an audit line written to a directory nobody reads.
+  They stay in the list rather than being quietly deleted, because the honest
+  count of your own mistakes is the only reason to trust the other thirty.
 
 If you are here to learn rather than to deploy, read the platform ones. If you
 are here because something broke, the symptom lines are ordered the way you
 will meet them: build, install, wire, run, attack.
+
+Items 31 to 40 came from one day of bringing up the operator's WireGuard
+tunnel, TLS and the audit trail on a live box. Four of them were invisible to
+a green install run and to every test: the checks passed, each command reported
+success, and the damage only showed when a human opened the console and looked
+at it. That ratio is the reason this file exists.
 
 ## 1. The Go builder image is older than the code
 
@@ -777,3 +783,184 @@ even more credible.
 That is what a neighbouring container sees, which is what the check was
 supposed to be asking about in the first place, and it needs nothing from the
 images being tested.
+
+## 31. `wireguard-go` daemonises, so your supervisor supervises nothing
+
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
+**Symptom:** the container restart-loops with exit code **0**. A UAPI socket
+appears and vanishes between restarts, and `wg set` fails with
+`Unable to access interface: Protocol error` against a daemon that was alive a
+moment ago.
+
+**Why:** `wireguard-go <iface>` forks and the parent exits immediately. A
+script that starts it in the background captures the PARENT's pid, so `$!`
+names a process that is already gone, `wait` returns at once, the script ends,
+and the container stops - taking the tunnel with it. `WG_PROCESS_FOREGROUND=1`
+is documented but did not hold here; the `-f` flag did.
+
+**Fixed here:** `images/wg.Dockerfile` starts it as `wireguard-go -f`, which
+makes the container's lifecycle the tunnel's.
+
+## 32. `wireguard-go` refuses to run on a kernel that has WireGuard
+
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
+**Symptom:** a box drawn in the logs telling you the kernel supports WireGuard
+natively and to install the kernel module - on a machine where it is already
+there. The tunnel never comes up.
+
+**Why:** the userspace implementation deliberately steps aside when the kernel
+can do the job. That is right for a normal tunnel and wrong when you need the
+UAPI socket specifically: a kernel interface is driven over netlink inside one
+network namespace, so a console in a DIFFERENT container could never manage
+peers on it. The whole point of userspace here is that the socket crosses that
+boundary as a plain file.
+
+**Fixed here:** the entrypoint sets
+`WG_I_PREFER_BUGGY_USERSPACE_TO_POLISHED_KMOD=1`, deliberately and with the
+reason written next to it.
+
+## 33. A UAPI socket on a volume outlives the daemon that made it
+
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
+**Symptom:** after one ungraceful stop, every subsequent start fails with
+`UAPI listen error: unix socket in use`. A single hard restart becomes a
+permanent restart loop, and the logs blame the kernel module (see #32), which
+is not the cause.
+
+**Why:** the socket directory must be a volume for another container to reach
+it, and a volume survives the container. The next `wireguard-go` finds a file
+where its socket goes and refuses.
+
+**Fixed here:** the entrypoint removes a stale socket on start, but ONLY after
+checking that nothing answers on it - so a second copy started by mistake
+fails loudly instead of silently stealing a live tunnel's socket.
+
+## 34. The socket file appears before the daemon will answer on it
+
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
+**Symptom:** `wg set <iface> private-key ...` reports success, and the
+interface then has no public key. Reads as a corrupt key file or a broken
+image; it is neither, and it passes every time you add a `sleep`.
+
+**Why:** the file is created first and the daemon becomes ready a moment
+later. A wait on `[ -S "$SOCK" ]` therefore returns after about 100ms and
+everything after it lands in the gap, where writes are accepted and dropped.
+
+**Fixed here:** the entrypoint waits for `wg show <iface>` to ANSWER, which is
+the same round trip the configuration that follows performs. Wait for the
+answer, never for the file.
+
+## 35. `chmod` on a UAPI socket breaks the daemon behind it
+
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
+**Symptom:** you widen the socket so another container can use it, and the
+interface immediately starts answering `Unable to access interface: Protocol
+error` - to everyone, including the daemon's own tooling.
+
+**Why:** `wireguard-go` requires its socket to stay `0700` and treats a
+changed mode as a reason to stop serving. Verified directly: the interface
+reports its public key before the `chmod` and errors after it. So the obvious
+fix - loosen the socket - does not grant access, it removes it.
+
+**Fixed here:** a `socat` relay beside the real socket, group-readable and
+forwarding to it. The daemon keeps the posture it insists on, the console gets
+exactly the access it needs, and the forwarder is a place a later version can
+log or restrict what crosses.
+
+## 36. A tunnel that terminates nowhere looks identical to one that works
+
+> **Ours, and fixed.** We wrote this wrong in this repository.
+
+**Symptom:** a client completes a handshake, traffic counters move, and every
+request to the console times out or is refused.
+
+**Why:** the tunnel address lives in the WireGuard container's network
+namespace and the console runs in another. Nothing was listening on
+`10.9.0.1:7420` at all. From the server side this is invisible: the interface
+is up, the peer is configured, the handshake is real.
+
+**Fixed here:** the entrypoint forwards the console port from the tunnel
+address to the console service by compose name - bound to the tunnel address
+alone, never the host or the wildcard, so it cannot become a second way in.
+
+## 37. Peers live only in the running daemon
+
+> **Ours, and fixed.** We wrote this wrong in this repository.
+
+**Symptom:** after any restart, every device ever issued silently stops
+connecting. The configs on those phones still look valid, and the server
+simply never completes a handshake with them again.
+
+**Why:** the server key was persisted and the peer list was not, so a restart
+produced a working tunnel with no members. Nothing reports it: an absent peer
+is indistinguishable from one that has not dialled in yet.
+
+**Fixed here:** the peer list is snapshotted to the volume and restored with
+`wg addconf` on start. Snapshotted rather than saved on change, because peers
+are changed by the console over the UAPI and this container never sees an
+event to hook; a clean stop saves immediately via a trap.
+
+## 38. WebAuthn cannot run over a tunnel to an IP, in any configuration
+
+> **Platform.** Kubernetes, Docker or the distro does this to everyone.
+
+**Symptom:** the passkey button does nothing, or the assertion is refused with
+a binding mismatch, on a console reached at `http://10.9.0.1:7420` over the
+tunnel.
+
+**Why:** two independent barriers. WebAuthn only runs in a secure context
+(HTTPS or `localhost`), and it scopes credentials to a DOMAIN, refusing a bare
+IP as the relying party. No environment variable makes an IP work. A passkey
+enrolled at one origin is also useless at another, so `ssh -L` on a different
+port does not rescue it either.
+
+**Fixed here** (in `stack-single`): a Caddy sidecar terminates TLS on the
+tunnel address for a real name, and the console's relying party and origin are
+derived from that same name - one value instead of three kept in agreement by
+hand. Let's Encrypt via DNS-01, because the box publishes nothing on 80/443 and
+HTTP-01 has nothing to answer.
+
+## 39. `/v1/policies` is not the question "is anything enforced"
+
+> **The stack's own contract.** Not a bug; a property worth knowing.
+
+**Symptom:** a console posture check reports "governance fail-open: no
+policies, every agent action is allowed" on a box that is demonstrably denying
+`shell_exec` by name and holding a $5 call for human approval.
+
+**Why:** `GET /v1/policies` lists the STORE's operator-managed policies only.
+A deployment seeded from a `-policy` file has none there while enforcing all of
+them, so reading that list to judge enforcement reports an enforcing plane as
+wide open. That is the most damaging thing a posture check can do: an operator
+who disproves one warning stops reading the rest.
+
+**Fixed here** (wardryx `e9e29a6`): `GET /v1/status` reports what the PDP
+actually evaluates against - the file-loaded base, the store's layer, and the
+effective total. Zero effective policies, and only that, is a real fail-open.
+
+## 40. An audit line written to the wrong directory is still "written"
+
+> **Ours, and fixed.** We wrote this wrong in this repository.
+
+**Symptom:** every privileged console action reports success, and the events
+file the bus tails stays zero bytes forever. No error anywhere.
+
+**Why:** the console's own store directory (fresh per launch, under `/tmp`)
+and the directory the products write into are two different places, and one
+struct field named `events_dir` carried the former while the code derived both
+paths from it. So the database path was right and the events path was wrong:
+lines went somewhere nothing tails and nothing keeps, and vanished on restart.
+Invisible in demo mode, where the two directories happen to be the same.
+
+Compounding it: the journal outcome is returned to the caller only on the
+success path, so when the command itself failed, the fact that its audit line
+had gone nowhere was discarded with it.
+
+**Fixed here** (genaryx): the bootstrap carries both directories, the handle
+takes both, and every journal failure is logged as well as returned - so a
+broken audit trail cannot be silent whether or not the command succeeded.
