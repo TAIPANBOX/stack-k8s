@@ -68,7 +68,18 @@ chmod 600 "$KEY_FILE"
 # code 0, a UAPI socket that appears and vanishes, and `wg set` failing with
 # "Unable to access interface: Protocol error" against a daemon that just
 # died. The flag is what makes the container's lifecycle the tunnel's.
-wireguard-go -f "$IFACE" &
+#
+# The second variable is not optional here either, despite how it is spelled.
+# wireguard-go REFUSES to start on a kernel that has WireGuard built in, and
+# prints a box telling you to use the kernel module instead. That advice is
+# right for a normal tunnel and wrong for this one: a kernel interface is
+# driven over netlink inside THIS container's network namespace, and the
+# console lives in a different container with no privileges, so it could never
+# manage peers on it. The userspace implementation is what exposes the UAPI
+# socket, and that socket is the whole privilege split. The performance it
+# costs is irrelevant for a console session and would matter only if this
+# carried fleet traffic, which it does not.
+WG_I_PREFER_BUGGY_USERSPACE_TO_POLISHED_KMOD=1 wireguard-go -f "$IFACE" &
 WG_PID=$!
 
 # The socket appears asynchronously. Waiting for it is what makes the rest of
