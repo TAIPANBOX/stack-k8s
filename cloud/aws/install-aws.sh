@@ -31,7 +31,17 @@ SSH_USER="${SSH_USER:-ubuntu}"                      # [AWS] 5: Ubuntu AMIs have 
 K3S_VERSION="${K3S_VERSION:-v1.36.2+k3s1}"          # same pin as the Hetzner run
 CALICO_VERSION="${CALICO_VERSION:-v3.29.1}"
 LONGHORN_VERSION="${LONGHORN_VERSION:-v1.7.2}"
-CCM_VERSION="${CCM_VERSION:-v1.36.1}"               # [AWS] cloud-provider-aws, matched to k8s 1.36
+# [AWS] cloud-provider-aws. Pinned to the newest tag that is actually PUBLISHED
+# as an image, which is NOT the newest release. kubernetes/cloud-provider-aws
+# has GitHub releases v1.36.0 and v1.36.1, and neither exists in
+# registry.k8s.io: both 404, and the cluster answers with ImagePullBackOff
+# rather than anything that names the real problem (GOTCHAS.md item 42).
+# Verified 2026-07-25 by asking the registry directly:
+#   curl -sLo /dev/null -w '%{http_code}\n' \
+#     https://registry.k8s.io/v2/provider-aws/cloud-controller-manager/manifests/<tag>
+# v1.35.2 against k8s 1.36 is one minor behind, which the service controller
+# tolerates; it is the only controller enabled here.
+CCM_VERSION="${CCM_VERSION:-v1.35.2}"
 POD_CIDR="${POD_CIDR:-10.42.0.0/16}"
 CLUSTER_NAME="${CLUSTER_NAME:-stack-k8s}"           # [AWS] must equal the kubernetes.io/cluster/<name> tag
 SKIP_CCM=0

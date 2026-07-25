@@ -1002,3 +1002,59 @@ The wider lesson for anything in this repo that runs on an operator's own
 machine rather than on a node: the nodes are a distribution we choose, and the
 laptop is not. Test the operator side on macOS, or do not claim it works
 there.
+
+## 42. A GitHub release is not a published image
+
+> **Upstream.** Someone else's project does this to everyone.
+
+**Symptom:** the cloud controller sits in `ImagePullBackOff` on every control
+plane node, and the install script times out waiting for a rollout that will
+never finish:
+
+```
+Failed to pull image "registry.k8s.io/provider-aws/cloud-controller-manager:v1.36.1":
+  failed to resolve reference: not found
+```
+
+**Why:** the version was chosen by reading `gh api
+repos/kubernetes/cloud-provider-aws/releases`, which lists `v1.36.1` as the
+newest, and matching it to the cluster's Kubernetes 1.36. That is a reasonable
+way to pick a version and it is wrong: a GitHub release is a git tag plus
+release notes, and says nothing about whether an image was built and pushed
+under the same name. Asking the registry instead:
+
+```
+v1.36.2  404
+v1.36.1  404      <- newest GitHub release
+v1.36.0  404
+v1.35.3  404
+v1.35.2  200      <- newest image that exists
+v1.35.1  404
+```
+
+Note that the published set is not even contiguous: `v1.35.1` and `v1.35.3`
+are missing while `v1.35.2` is there, so "walk back one patch" is not a
+reliable recovery either.
+
+**Cost:** measured on 2026-07-25 during the first AWS run, on a five-node
+cluster already metering at USD 2.52/hour. The error surfaced as
+ImagePullBackOff, which reads like a network or credentials problem and sends
+you to check the node's egress, the registry mirror and the image pull secrets
+before you think to ask whether the tag was ever pushed.
+
+**Fixed here:** pinned to `v1.35.2`, with the one-line check that establishes
+it written into the comment above the pin, so the next person verifies rather
+than infers:
+
+```
+curl -sLo /dev/null -w '%{http_code}\n' \
+  https://registry.k8s.io/v2/provider-aws/cloud-controller-manager/manifests/<tag>
+```
+
+The `-L` matters: `registry.k8s.io` answers **307** and redirects to a regional
+mirror, so a check without it reports 307 for tags that exist and for tags that
+do not.
+
+Running one minor behind the API server is fine for the only controller this
+deployment enables. The service controller talks to the Kubernetes API through
+long-stable types and to the AWS ELB API, neither of which changed in 1.36.
