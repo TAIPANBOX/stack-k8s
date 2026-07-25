@@ -159,3 +159,11 @@ The command output behind every sentence above is in `evidence/`. Sixteen traps
 found across the two runs are written up in `GOTCHAS.md` (items 9-24), each
 already fixed here - which is the whole point: the next person to run this
 should not meet any of them.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
+
+The node addresses in `HANDOFF.md` and `evidence/` are placeholders: those
+documents are a field report from the cluster this was proven on, and that
+cluster is ephemeral. Substitute your own.

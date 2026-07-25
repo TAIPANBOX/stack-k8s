@@ -10,14 +10,14 @@ Five Hetzner CPX42 in Falkenstein, private network `10.10.0.0/16`:
 
 | Node | Public | Private | Role | providerID |
 |---|---|---|---|---|
-| ubuntu-16gb-fsn1-1 | 128.140.80.95 | 10.10.0.2 | k3s server, etcd | `k3s://` |
-| ubuntu-16gb-fsn1-2 | 178.105.111.148 | 10.10.0.3 | k3s server, etcd | `k3s://` |
-| ubuntu-16gb-fsn1-3 | 128.140.88.66 | 10.10.0.4 | k3s server, etcd | `k3s://` |
-| ubuntu-16gb-fsn1-4 | 78.47.130.154 | 10.10.0.5 | agent | `hcloud://154920115` |
-| ubuntu-16gb-fsn1-5 | 188.34.157.14 | 10.10.0.6 | agent, image build host | `hcloud://154920155` |
+| ubuntu-16gb-fsn1-1 | <node-1-public> | 10.10.0.2 | k3s server, etcd | `k3s://` |
+| ubuntu-16gb-fsn1-2 | <node-2-public> | 10.10.0.3 | k3s server, etcd | `k3s://` |
+| ubuntu-16gb-fsn1-3 | <node-3-public> | 10.10.0.4 | k3s server, etcd | `k3s://` |
+| ubuntu-16gb-fsn1-4 | <node-4-public> | 10.10.0.5 | agent | `hcloud://<server-id>` |
+| ubuntu-16gb-fsn1-5 | <node-5-public> | 10.10.0.6 | agent, image build host | `hcloud://<server-id>` |
 
 SSH as root with `~/.ssh/e02_hetzner_ed25519`. kubectl from node 1:
-`ssh root@128.140.80.95 '/usr/local/bin/k3s kubectl ...'`. The hcloud token is
+`ssh root@<node-1-public> '/usr/local/bin/k3s kubectl ...'`. The hcloud token is
 at `/root/.hcloud_token` on node 1, the k3s cluster token at `/root/.k3s_token`
 on each node.
 
@@ -28,7 +28,7 @@ SERVER would mean deleting its Node object, which also removes its etcd member.
 One command re-checks all of it:
 
 ```bash
-ssh root@128.140.80.95 'KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/verify.sh --freeze'
+ssh root@<node-1-public> 'KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/verify.sh --freeze'
 ```
 
 Last run: **10 passed, 0 failed.**
@@ -72,7 +72,7 @@ Last run: **10 passed, 0 failed.**
    (GOTCHAS 13):
 
    ```bash
-   ssh -L 17420:$(ssh root@128.140.80.95 '/usr/local/bin/k3s kubectl -n agent-stack get svc genaryx-console -o jsonpath={.spec.clusterIP}'):7420 root@<node running the console pod>
+   ssh -L 17420:$(ssh root@<node-1-public> '/usr/local/bin/k3s kubectl -n agent-stack get svc genaryx-console -o jsonpath={.spec.clusterIP}'):7420 root@<node running the console pod>
    ```
 
    The operator account is `ops`; its passphrase was generated into this

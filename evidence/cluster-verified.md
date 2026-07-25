@@ -9,8 +9,8 @@ NAME                 ROLES    PROVIDER                   INTERNAL-IP   VERSION
 ubuntu-16gb-fsn1-1   <none>   k3s://ubuntu-16gb-fsn1-1   10.10.0.2     v1.36.2+k3s1
 ubuntu-16gb-fsn1-2   <none>   k3s://ubuntu-16gb-fsn1-2   10.10.0.3     v1.36.2+k3s1
 ubuntu-16gb-fsn1-3   <none>   k3s://ubuntu-16gb-fsn1-3   10.10.0.4     v1.36.2+k3s1
-ubuntu-16gb-fsn1-4   <none>   hcloud://154920115         10.10.0.5     v1.36.2+k3s1
-ubuntu-16gb-fsn1-5   <none>   hcloud://154920155         10.10.0.6     v1.36.2+k3s1
+ubuntu-16gb-fsn1-4   <none>   hcloud://<server-id>         10.10.0.5     v1.36.2+k3s1
+ubuntu-16gb-fsn1-5   <none>   hcloud://<server-id>         10.10.0.6     v1.36.2+k3s1
 
 The providerIDs are the interesting column, and they are deliberately MIXED on
 this cluster.
