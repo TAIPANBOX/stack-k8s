@@ -153,6 +153,24 @@ if [ ! -S "$SOCK" ]; then
   exit 1
 fi
 
+# The setgid directory gives the socket the right GROUP, but wireguard-go
+# chmods its own socket to 0700 after creating it, so group access has to be
+# granted afterwards no matter what umask says. Retried briefly rather than
+# attempted once: this is the same window that made the old fix-up flaky, and
+# the difference now is that a failure is fatal instead of ignored. A tunnel
+# the console cannot manage is not a working tunnel, and it must not report
+# itself as one.
+j=0
+until chmod 0770 "$SOCK" 2>/dev/null; do
+  j=$((j + 1))
+  if [ "$j" -gt 50 ]; then
+    echo "!! could not make $SOCK group-accessible; the console cannot manage peers" >&2
+    kill "$WG_PID" 2>/dev/null || true
+    exit 1
+  fi
+  sleep 0.1
+done
+
 # Assert rather than announce. The previous version printed "up" with an empty
 # key while the daemon was already dead, which is the worst possible output: a
 # healthy-looking line for a tunnel nobody can reach.
