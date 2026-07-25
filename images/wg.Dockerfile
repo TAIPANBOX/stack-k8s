@@ -85,6 +85,18 @@ chmod 600 "$KEY_FILE"
 # code 0, a UAPI socket that appears and vanishes, and `wg set` failing with
 # "Unable to access interface: Protocol error" against a daemon that just
 # died. The flag is what makes the container's lifecycle the tunnel's.
+# The socket must be reachable by the console's uid, and the only reliable way
+# to arrange that is BEFORE it exists. Fixing up the socket afterwards is a
+# race against the daemon that created it: chgrp/chmod land microseconds after
+# a check that saw the file, and fail with "No such file or directory" on a
+# socket the daemon is still recreating. So the DIRECTORY carries the
+# permission instead - setgid, so anything created inside inherits the group -
+# and umask gives the socket group access at creation. Nothing to fix up, and
+# nothing to race.
+chgrp "$SOCK_GID" /var/run/wireguard 2>/dev/null \
+  || echo ">> could not chgrp the socket directory to $SOCK_GID"
+chmod 2770 /var/run/wireguard
+umask 007
 #
 # The second variable is not optional here either, despite how it is spelled.
 # wireguard-go REFUSES to start on a kernel that has WireGuard built in, and
@@ -140,8 +152,6 @@ if [ ! -S "$SOCK" ]; then
   echo "   directory now holds: $(ls -a /var/run/wireguard 2>&1 | tr '\n' ' ')" >&2
   exit 1
 fi
-chgrp "$SOCK_GID" "$SOCK" 2>/dev/null || echo ">> could not chgrp $SOCK to $SOCK_GID"
-chmod 660 "$SOCK"
 
 # Assert rather than announce. The previous version printed "up" with an empty
 # key while the daemon was already dead, which is the worst possible output: a
