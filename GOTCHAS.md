@@ -533,3 +533,84 @@ latency, not failure.
 **Not a fix, a caveat:** the console tails the file, so it converges within the
 attribute-cache window. Anything that needs the writer's exact byte offset must
 read on the writer's node or force a read, never trust a cross-node `stat`.
+
+## 25. `tr </dev/urandom | head -c N` kills a `pipefail` script, silently
+
+**Symptom:** the deploy runs cleanly through every image build, prints its
+`credentials` heading, and stops. No error, no stack trace, no partial output.
+Nothing is deployed. Re-running does the same thing at the same place.
+
+**Why:** the idiom everyone writes to generate a password is a pipeline whose
+last stage exits early. Once `head` has its N bytes it closes the pipe, `tr`
+is killed by SIGPIPE and reports 141, `set -o pipefail` promotes that to the
+pipeline's status, and `set -e` ends the script right there. Nothing prints
+because SIGPIPE is not an error message, it is a signal. Reproduce it in one
+line:
+
+```
+bash -c 'set -euo pipefail; v="$(tr -dc A-Za-z0-9 </dev/urandom | head -c 32)"; echo unreachable'; echo $?
+# 141
+```
+
+Note which pipelines are safe: `head -c 18 /dev/urandom | od -An -tx1 | tr -d " "`
+has the same commands and never fails, because there `head` reads a file and
+exits normally while every later stage consumes all of its input.
+
+**Fixed here:** the generator turns `pipefail` off for exactly that one
+pipeline, in a subshell, and then asserts the length it got, so a genuinely
+unreadable `/dev/urandom` still fails loudly rather than producing a short
+secret:
+
+```
+v="$( set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "$n" )"
+[ "${#v}" = "$n" ] || die "could not generate a $n-character secret"
+```
+
+## 26. A `set -e` script that dies mid-run looks like one that finished
+
+**Symptom:** the log's last line is a section heading. Whether that means
+"still working", "done", or "dead" is not knowable from the output, and the
+honest reading, that it is still running, is the wrong one.
+
+**Why:** this is what `set -e` does by design. It ends the script at the
+failing command, and the failing command is usually the one that printed
+nothing. Gotcha 25 is one instance; any command with a bad exit code is
+another. An installer is the worst place for it, because the reader has no
+prior sense of how long each step should take.
+
+**Fixed here:** both `install.sh` and `deploy.sh` carry an EXIT trap that names
+the line and the exit code every time, and translates 141 rather than leaving
+a bare number. Failures already explained by `die()` are not narrated twice.
+
+```
+trap 'rc=$?; { [ $rc -eq 0 ] || [ "${EXPLAINED:-0}" = 1 ]; } && exit $rc
+      printf "\n!! stopped at line %s (exit %s)\n" "$LINENO" "$rc" >&2
+      ...' EXIT
+```
+
+## 27. `"${ARRAY[@]}"` inside a larger quoted string is not one argument
+
+**Symptom:** every check that runs a command inside a container reports FAIL,
+while the stack is demonstrably healthy and the same command works by hand.
+
+**Why:** `check "name" "\"${COMPOSE[@]}\" exec -T svc curl ..."` reads like one
+string, and is not. With `COMPOSE=(docker compose)` the array expands to
+separate words even inside the quotes, the function receives three arguments
+instead of two, and `$2` is the fragment `"docker`. `eval` on that fragment
+fails, so the check fails, and the failure is indistinguishable from a real
+one:
+
+```
+bash -c 'COMPOSE=(docker compose); f() { echo "argc=$# arg2=[$2]"; }
+         f "name" "\"${COMPOSE[@]}\" exec -T svc true"'
+# argc=3 arg2=["docker]
+```
+
+**Fixed here:** build the command string with `[*]`, which joins the elements
+into the single word `eval` needs, and assert the argument count inside the
+helper so a future slip is loud rather than a phantom FAIL:
+
+```
+DC="${COMPOSE[*]}"
+check() { [ "$#" -eq 2 ] || die "internal: check() got $# arguments, expected 2"; ... }
+```

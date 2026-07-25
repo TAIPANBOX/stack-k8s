@@ -69,7 +69,17 @@ SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=
 sh_() { ssh "${SSH_OPTS[@]}" "root@$1" "${@:2}"; }
 k_()  { sh_ "$FIRST" "/usr/local/bin/k3s kubectl $*"; }
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
-die() { printf '\n!! %s\n' "$*" >&2; exit 1; }
+die() { EXPLAINED=1; printf '\n!! %s\n' "$*" >&2; exit 1; }
+EXPLAINED=0
+
+# A cluster install that ends mid-sentence looks like one that finished. Under
+# `set -e` that is the default behaviour, so name the line and the code every
+# time. 141 is SIGPIPE, the failure mode `set -e` hides best.
+trap 'rc=$?; { [ $rc -eq 0 ] || [ "${EXPLAINED:-0}" = 1 ]; } && exit $rc
+      printf "\n!! install.sh stopped at line %s (exit %s)\n" "$LINENO" "$rc" >&2
+      [ $rc -eq 141 ] && printf "   exit 141 is SIGPIPE: a pipeline ended early. This is a bug in the script, please report it.\n" >&2
+      printf "   Re-running is safe: every step here is idempotent.\n" >&2
+      exit $rc' EXIT
 
 # Hetzner's metadata service is the single source of truth for both facts this
 # install needs per node, so neither is typed by hand and neither can drift:

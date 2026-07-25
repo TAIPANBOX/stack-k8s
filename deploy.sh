@@ -54,7 +54,18 @@ done
 [ -n "$SERVERS" ] || { echo "--servers is required (comma-separated public IPs)" >&2; exit 1; }
 
 say()  { printf '\n\033[1m>> %s\033[0m\n' "$*"; }
-die()  { printf '\n!! %s\n' "$*" >&2; exit 1; }
+die()  { EXPLAINED=1; printf '\n!! %s\n' "$*" >&2; exit 1; }
+EXPLAINED=0
+
+# Under `set -e` an unhandled failure ends this script wherever it happens, and
+# a deploy that ends mid-sentence looks like a deploy that finished. Say which
+# line died and with what, always. 141 is SIGPIPE, which `set -e` otherwise
+# turns into an invisible exit.
+trap 'rc=$?; { [ $rc -eq 0 ] || [ "${EXPLAINED:-0}" = 1 ]; } && exit $rc
+      printf "\n!! deploy.sh stopped at line %s (exit %s)\n" "$LINENO" "$rc" >&2
+      [ $rc -eq 141 ] && printf "   exit 141 is SIGPIPE: a pipeline ended early. This is a bug in the script, please report it.\n" >&2
+      printf "   Re-running is safe: every step here is idempotent.\n" >&2
+      exit $rc' EXIT
 
 IFS=',' read -r -a SERVER_LIST <<< "$SERVERS"
 AGENT_LIST=(); [ -n "$AGENTS" ] && IFS=',' read -r -a AGENT_LIST <<< "$AGENTS"
@@ -196,7 +207,13 @@ if [ -n "$CONSOLE_NODE" ]; then
   else
     # 24 bytes of urandom, base64, punctuation stripped: long enough that the
     # Argon2id hash behind it is not the weak link, safe to paste anywhere.
-    CONSOLE_PASSWORD="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 28)"
+    # The subshell disables pipefail deliberately. `tr </dev/urandom | head -c N`
+    # is the idiom everyone writes, and under `set -o pipefail` it is a trap:
+    # head closes the pipe once it has its N bytes, tr dies of SIGPIPE, the
+    # pipeline reports 141 and `set -e` ends the deploy right here, silently,
+    # with the cluster up and no operator account.
+    CONSOLE_PASSWORD="$( set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 28 )"
+    [ "${#CONSOLE_PASSWORD}" = 28 ] || die "could not generate an operator password; /dev/urandom is not readable."
     if printf '%s\n' "$CONSOLE_PASSWORD" | k_ "-n agent-stack exec -i deploy/genaryx-console -- /usr/local/bin/genaryx-web set-password --username $CONSOLE_USER" >/dev/null 2>&1; then
       say "operator '$CONSOLE_USER' created"
     else
