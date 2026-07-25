@@ -51,6 +51,12 @@ SOCK="/var/run/wireguard/${IFACE}.sock"
 # What the console connects to. A separate path so the real socket keeps the
 # 0700 wireguard-go requires; see the relay below.
 RELAY="${WG_CONSOLE_SOCKET:-/var/run/wireguard/console.sock}"
+# Where the tunnel leads. The address is this interface's own, and the target
+# is the console service by compose name, so the forward below follows the
+# same DNS the rest of the stack uses.
+TUNNEL_IP="${WG_TUNNEL_IP:-10.9.0.1}"
+CONSOLE_HOST="${WG_CONSOLE_HOST:-console}"
+CONSOLE_PORT="${WG_CONSOLE_PORT:-7420}"
 
 mkdir -p "$(dirname "$KEY_FILE")" /var/run/wireguard
 
@@ -189,12 +195,27 @@ if [ -z "$SERVER_PUB" ]; then
   kill "$WG_PID" 2>/dev/null || true
   exit 1
 fi
+# The tunnel has to LEAD somewhere. The interface address lives in this
+# container's network namespace and the console runs in another, so a client
+# that completes a handshake and dials the console still gets "connection
+# refused" from an address that answers nothing: a tunnel into an empty room.
+# Verified exactly that way before this existed.
+#
+# So the console's port is forwarded from the tunnel address to the console
+# service, by name, over the compose network. Bound to the tunnel address
+# alone: this must never become a second way to reach the console from the
+# host or the internet, which is the whole reason the console is on loopback.
+socat "TCP-LISTEN:${CONSOLE_PORT},bind=${TUNNEL_IP},fork,reuseaddr" \
+      "TCP:${CONSOLE_HOST}:${CONSOLE_PORT}" &
+CONSOLE_FWD_PID=$!
+
 echo ">> $IFACE up on :$PORT, server public key: $SERVER_PUB"
+echo ">> console reachable at http://${TUNNEL_IP}:${CONSOLE_PORT} from inside the tunnel"
 echo ">> console relay $RELAY is group $SOCK_GID mode 0660; $SOCK stays 0700"
 
 # Do not exec-replace: the socket permissions above must be in place first,
 # and this process is what notices the tunnel dying.
-wait "$WG_PID" "$RELAY_PID"
+wait "$WG_PID" "$RELAY_PID" "$CONSOLE_FWD_PID"
 ENTRY
 
 ENTRYPOINT ["/usr/local/bin/wg-entrypoint.sh"]
