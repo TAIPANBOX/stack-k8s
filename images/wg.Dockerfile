@@ -99,13 +99,18 @@ chmod 600 "$KEY_FILE"
 WG_I_PREFER_BUGGY_USERSPACE_TO_POLISHED_KMOD=1 wireguard-go -f "$IFACE" &
 WG_PID=$!
 
-# The socket appears asynchronously. Waiting for it is what makes the rest of
-# this script deterministic rather than a race that usually wins.
+# Wait for the daemon to ANSWER, not for its socket file to exist. The file
+# appears first and the daemon is not ready behind it yet, so a wait on `-S`
+# returns after ~100ms and everything after it lands in that gap: `wg set`
+# reports success, the configuration is dropped, and the interface then has no
+# public key. That failure reads as a bad key or a broken image, and it is
+# neither. `wg show` is the readiness probe because it is the same round trip
+# the configuration below performs.
 i=0
-while [ ! -S "$SOCK" ]; do
+while ! wg show "$IFACE" >/dev/null 2>&1; do
   i=$((i + 1))
   if [ "$i" -gt 100 ]; then
-    echo "!! wireguard-go did not create $SOCK within 10s" >&2
+    echo "!! wireguard-go did not answer on $SOCK within 10s" >&2
     kill "$WG_PID" 2>/dev/null || true
     exit 1
   fi
