@@ -182,20 +182,64 @@ sh_ "$FIRST" 'KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/security
 CONSOLE_NODE="$(k_ "-n agent-stack get pod -l app=genaryx-console -o jsonpath='{.items[0].spec.nodeName}'" 2>/dev/null || true)"
 CONSOLE_IP="$(k_ "-n agent-stack get svc genaryx-console -o jsonpath='{.spec.clusterIP}'" 2>/dev/null || true)"
 
+# ---- the operator account --------------------------------------------------
+# Until one exists the console refuses EVERY sign-in, and says so only in its
+# own log, so an install that stops here looks broken rather than unfinished.
+# Generate one, set it, and print it once. Deliberately not stored anywhere:
+# not in a Secret (which every cluster-admin can read), not in a file, not in
+# this script's own output beyond the line below.
+CONSOLE_USER="${CONSOLE_USER:-ops}"
+CONSOLE_PASSWORD=""
+if [ -n "$CONSOLE_NODE" ]; then
+  if k_ "-n agent-stack exec -i deploy/genaryx-console -- test -s /var/lib/stack/.taipan/genaryx-web/operator.json" >/dev/null 2>&1; then
+    say "operator account already exists, left as is"
+  else
+    # 24 bytes of urandom, base64, punctuation stripped: long enough that the
+    # Argon2id hash behind it is not the weak link, safe to paste anywhere.
+    CONSOLE_PASSWORD="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 28)"
+    if printf '%s\n' "$CONSOLE_PASSWORD" | k_ "-n agent-stack exec -i deploy/genaryx-console -- /usr/local/bin/genaryx-web set-password --username $CONSOLE_USER" >/dev/null 2>&1; then
+      say "operator '$CONSOLE_USER' created"
+    else
+      CONSOLE_PASSWORD=""
+      say "could not set the operator password automatically; the command is printed below"
+    fi
+  fi
+fi
+
+# The tunnel has to land on the node running the console pod, so resolve that
+# node's real address here rather than leaving the reader to map a Kubernetes
+# node name onto an ssh target.
+CONSOLE_ADDR=""
+if [ -n "$CONSOLE_NODE" ]; then
+  CONSOLE_ADDR="$(k_ "get node $CONSOLE_NODE -o jsonpath='{.status.addresses[?(@.type==\"ExternalIP\")].address}'" 2>/dev/null || true)"
+  [ -n "$CONSOLE_ADDR" ] || CONSOLE_ADDR="$(k_ "get node $CONSOLE_NODE -o jsonpath='{.status.addresses[?(@.type==\"InternalIP\")].address}'" 2>/dev/null || true)"
+fi
+
 cat <<EOF
 
 $(printf '\033[1m')Done.$(printf '\033[0m')
 
-  Set the operator's password (read from stdin, stored as an Argon2id hash):
+${CONSOLE_PASSWORD:+  Your console sign-in, shown once and stored nowhere:
+
+      user      $CONSOLE_USER
+      password  $CONSOLE_PASSWORD
+
+  Change it whenever you like, and enrol a passkey once you are in:
 
       ssh root@$FIRST "/usr/local/bin/k3s kubectl -n agent-stack exec -i deploy/genaryx-console -- \\
-        /usr/local/bin/genaryx-web set-password --username you"
+        /usr/local/bin/genaryx-web set-password --username $CONSOLE_USER"
 
-  Then reach the console over YOUR tunnel. There is no public entry point by
+}${CONSOLE_PASSWORD:-  Set the operator's password (read from stdin, stored as an Argon2id hash).
+  Until one exists the console refuses every sign-in:
+
+      ssh root@$FIRST "/usr/local/bin/k3s kubectl -n agent-stack exec -i deploy/genaryx-console -- \\
+        /usr/local/bin/genaryx-web set-password --username $CONSOLE_USER"
+
+}  Reach the console over YOUR tunnel. There is no public entry point by
   design, and the tunnel has to land on the node running the console pod
-  (GOTCHAS.md item 13)${CONSOLE_NODE:+, which is currently $CONSOLE_NODE}:
+  (GOTCHAS.md item 13)${CONSOLE_NODE:+, currently $CONSOLE_NODE}:
 
-      ssh -L 17420:${CONSOLE_IP:-<console-clusterIP>}:7420 root@<that node's address>
+      ssh -L 17420:${CONSOLE_IP:-<console-clusterIP>}:7420 root@${CONSOLE_ADDR:-<that node's address>}
       open http://localhost:17420
 
   Re-check any time:
