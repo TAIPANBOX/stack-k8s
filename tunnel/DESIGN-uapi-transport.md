@@ -224,3 +224,39 @@ carries ten unmerged commits without a PR.
    image, or an extension of the relay that image already runs?
 4. **Does the branch land first?** Ten commits of peer issuance are unreviewed;
    building on them means the review gets larger, not smaller.
+
+
+---
+
+## Correction, 2026-07-26: one self-signed certificate does not work
+
+This document said the trust story was "one self-signed certificate, both ends
+handed the same file, no CA and no lifecycle". rustls refuses that:
+
+```
+invalid peer certificate: Other(OtherError(CaUsedAsEndEntity))
+```
+
+`openssl req -x509` marks a self-signed certificate `CA:TRUE`, and webpki will
+not accept a CA as an end-entity certificate. The same file cannot be both the
+trust anchor and the server certificate.
+
+**What replaces it:** a CA that signs exactly one leaf. The client pins the CA,
+the proxy serves the leaf, and `install.sh` **destroys the CA key the moment it
+has signed**, before anything is stored. So the property that mattered survives
+intact: there is no authority to protect, nothing can mint a second identity
+for that name, and rotating means running install.sh again. What is gone is
+only the claim that it was a single file.
+
+Found by `crates/connectors/tests/uapi_tls_pinning.rs` in genaryx, which stands
+up a real rustls server with the real fixture and completes a real handshake.
+The reason it is an integration test rather than reasoning in this file is
+exactly this: webpki's path building is stricter than `openssl verify`, which
+accepts the single-certificate form happily.
+
+The same test found a second defect, in the client rather than the design: it
+resolved `host:port` and dialled only the FIRST address. A name that resolves
+to both address families hands back one order on one machine and another
+elsewhere, so that works until the far end listens on the other family and then
+fails as "connection refused" against an address that was never serving. It now
+tries every resolved address.

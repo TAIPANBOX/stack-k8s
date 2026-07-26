@@ -495,6 +495,70 @@ else
   echo "   secret stack-keys already exists, left as is"
 fi
 
+# ---- 7c. the tunnel's network door ----------------------------------------
+# Only needed when the console reaches the WireGuard daemon over a network
+# rather than a shared volume, which is the Kubernetes shape (see
+# tunnel/DESIGN-uapi-transport.md). Generated here anyway, because it costs
+# nothing to have and the alternative is an operator minting a certificate by
+# hand at the moment they least want to.
+#
+# A tiny CA that signs exactly one leaf, and whose key is DESTROYED the moment
+# it has signed. That last part is what keeps this from being a certificate
+# authority in the sense that costs: there is no key left to protect, nothing
+# can mint a second identity, and rotating means running this block again.
+#
+# Why not one self-signed certificate handed to both ends, which is simpler and
+# was the first attempt: rustls refuses it outright with
+# `invalid peer certificate: CaUsedAsEndEntity`, because `openssl req -x509`
+# marks a self-signed certificate CA:TRUE and webpki will not accept a CA as an
+# end-entity certificate. Verified by a test rather than discovered on a
+# cluster (crates/connectors/tests/uapi_tls_pinning.rs in genaryx).
+#
+# The SAN carries both the short and the fully qualified Service name, because
+# which one a client uses depends on its namespace's search path and a mismatch
+# fails as a certificate error rather than a naming one.
+PROXY_DNS_SHORT="${WG_PROXY_DNS_SHORT:-wg-uapi.agent-tunnel}"
+PROXY_DNS_FQDN="${WG_PROXY_DNS_FQDN:-wg-uapi.agent-tunnel.svc.cluster.local}"
+if ! k_ "-n agent-stack get secret stack-tunnel-proxy" >/dev/null 2>&1; then
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "   no openssl on this machine: SKIPPING the tunnel proxy credentials."
+    echo "   The unix relay is unaffected; only a console in another pod needs these."
+  else
+    say "tunnel proxy credentials (generated, never committed)"
+    PROXY_TOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    PROXY_TMP="$(mktemp -d)"
+    # P-256 throughout: boring, and accepted by every TLS 1.3 stack without a
+    # feature flag.
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+      -keyout "$PROXY_TMP/ca.key" -out "$PROXY_TMP/ca.crt" -days 3650 \
+      -subj "/CN=stack-k8s tunnel proxy CA" \
+      -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+      -addext "keyUsage=critical,keyCertSign" >/dev/null 2>&1 \
+      || die "openssl could not generate the tunnel proxy CA"
+    openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+      -keyout "$PROXY_TMP/tls.key" -out "$PROXY_TMP/tls.csr" \
+      -subj "/CN=$PROXY_DNS_SHORT" >/dev/null 2>&1 \
+      || die "openssl could not generate the tunnel proxy key"
+    printf 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:%s,DNS:%s\n' \
+      "$PROXY_DNS_SHORT" "$PROXY_DNS_FQDN" > "$PROXY_TMP/leaf.ext"
+    openssl x509 -req -in "$PROXY_TMP/tls.csr" -CA "$PROXY_TMP/ca.crt" -CAkey "$PROXY_TMP/ca.key" \
+      -days 3650 -extfile "$PROXY_TMP/leaf.ext" -out "$PROXY_TMP/tls.crt" >/dev/null 2>&1 \
+      || die "openssl could not sign the tunnel proxy certificate"
+    # The authority stops existing here, before anything is stored. Nothing
+    # after this point can issue a second certificate for this name.
+    rm -f "$PROXY_TMP/ca.key"
+    k_ "-n agent-stack create secret generic stack-tunnel-proxy \
+        --from-literal=token='$PROXY_TOKEN' \
+        --from-literal=ca.crt='$(cat "$PROXY_TMP/ca.crt")' \
+        --from-literal=tls.crt='$(cat "$PROXY_TMP/tls.crt")' \
+        --from-literal=tls.key='$(cat "$PROXY_TMP/tls.key")'" >/dev/null
+    rm -rf "$PROXY_TMP"
+    echo "   created secret stack-tunnel-proxy for $PROXY_DNS_SHORT"
+  fi
+else
+  echo "   secret stack-tunnel-proxy already exists, left as is"
+fi
+
 # ---- 8. the operator's kubeconfig -----------------------------------------
 # Fetched with the PUBLIC address substituted for 127.0.0.1, so kubectl works
 # from the machine that ran this script. It carries cluster-admin credentials:
