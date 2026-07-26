@@ -8,20 +8,20 @@ author. Read `../GOTCHAS.md` items 56 to 63 before starting: every one of them
 was found that day, and six were steps that worked the first time and were
 impossible the second.
 
-> **Status, later the same day: `cloud/gcp/` now exists and this file is a
-> record of what it was asked to do rather than a to-do list.** Written and
-> checked without creating anything: Terraform (14 resources, `plan` clean),
-> `preflight.sh` including a live quota read, `install-gcp.sh` with the five
-> `[GCP]` differences, `deploy-gcp.sh`, `teardown.sh`, `cost-live.sh`,
-> `prices.sh`, `loadbalancer-gcp.yaml` and a README. `COSTS.md` section 7 is
-> filled from Google's own catalog, and `PORTABILITY.md` marks in italics
-> everything answered at a desk. What remains is the run itself: every
-> non-italic row of that sheet, and the three proofs.
+> **Status at the end of that day: the run happened, twice, and this file is
+> now history rather than a plan.** `cloud/gcp/` holds Terraform, preflight,
+> install, deploy, teardown, cost and price tooling, and `cloud/gcp/evidence/`
+> holds the command output. Five nodes on `c2d-highcpu-8`, verify 10/10 with
+> `--freeze`, security-tests 24 passed 0 failed 2 noted, USD 2.04/hour.
 >
-> The four questions below were answered while writing it. Point 3 found a
-> published tag that is NOT the newest release, exactly as predicted. Point 4
-> turned out to have no GCP counterpart at all, which is the single most useful
-> thing this preparation produced: see `cloud/gcp/README.md` item 6.
+> Nine bugs were found by running it, all fixed, four of them invisible on a
+> first run and only reachable by rebuilding a cluster in the same project.
+> GOTCHAS 64 to 69 carry them.
+>
+> Two things are still open and are marked as such rather than smoothed over:
+> the load balancer got an address and never carried a packet (item 69), and
+> the five-node column's timing rows come from a cluster whose first attempt
+> was three nodes because of a quota ceiling.
 
 ## What is already answered
 
