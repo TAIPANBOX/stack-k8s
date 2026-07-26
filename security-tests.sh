@@ -175,6 +175,77 @@ sys.exit(0 if bad else 1)
 done
 [ "$bad_specs" = 0 ] && ok "every Deployment and StatefulSet: non-root, no privilege escalation, all capabilities dropped, RuntimeDefault seccomp, no host namespaces, no hostPath"
 
+head_ "5b. the console namespace holds exactly the exceptions it is allowed"
+# Tests 4 and 5 above scan ONE namespace, and once the operator tunnel exists
+# the console no longer lives in it. Left alone, both would keep passing purely
+# by not looking, which is worse than failing: a suite that cannot go red for a
+# thing it used to cover has stopped being evidence for it (GOTCHAS 46).
+#
+# So the exception gets its own test. The console namespace is allowed to break
+# `restricted`, because wireguard-go needs NET_ADMIN and /dev/net/tun and the
+# console reaches it over a unix socket that cannot cross a pod boundary. It is
+# allowed to break it in EXACTLY these ways and no others. Anything new fails
+# here, which is the whole point.
+CONSOLE_NS="${CONSOLE_NS:-agent-console}"
+if ! $KUBECTL get ns "$CONSOLE_NS" >/dev/null 2>&1; then
+  ok "no $CONSOLE_NS namespace: the console runs inside $NS under enforced restricted"
+else
+  level="$($KUBECTL get ns "$CONSOLE_NS" -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}' 2>/dev/null)"
+  warnl="$($KUBECTL get ns "$CONSOLE_NS" -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/warn}' 2>/dev/null)"
+  echo "    $CONSOLE_NS: enforce=$level warn=${warnl:-none}"
+  [ -n "$warnl" ] && [ "$warnl" != "$level" ] \
+    && ok "the exception is announced: every apply prints what a stricter cluster would refuse" \
+    || bad "$CONSOLE_NS has no stricter warn level, so the exception is silent"
+
+  if $KUBECTL -n "$CONSOLE_NS" get deploy -o json 2>/dev/null | python3 -c "
+import json, sys
+# Exactly what the tunnel needs, named per container and per volume. Read this
+# list as the promise: nothing outside it is permitted to appear.
+ALLOWED_CAPS   = {'wg': {'NET_ADMIN'}, 'caddy': {'NET_BIND_SERVICE'}}
+ALLOWED_ROOT   = {'wg', 'caddy'}
+ALLOWED_VOLS   = {'tun': 'hostPath', 'events': 'nfs'}
+bad = []
+for d in json.load(sys.stdin)['items']:
+    name = d['metadata']['name']
+    t = d['spec']['template']['spec']
+    for c in t['containers']:
+        cn = c['name']
+        sc = c.get('securityContext', {})
+        caps = set((sc.get('capabilities', {}) or {}).get('add') or [])
+        extra = caps - ALLOWED_CAPS.get(cn, set())
+        if extra:
+            bad.append(f'{name}/{cn} adds unexpected capabilities: {sorted(extra)}')
+        if 'ALL' not in ((sc.get('capabilities', {}) or {}).get('drop') or []):
+            bad.append(f'{name}/{cn} does not drop ALL')
+        if sc.get('allowPrivilegeEscalation') is not False:
+            bad.append(f'{name}/{cn} allows privilege escalation')
+        root = sc.get('runAsUser') == 0 or sc.get('runAsNonRoot') is False
+        if root and cn not in ALLOWED_ROOT:
+            bad.append(f'{name}/{cn} runs as root and is not on the list')
+    if t.get('hostNetwork') or t.get('hostPID') or t.get('hostIPC'):
+        bad.append(f'{name} uses a host namespace, which nothing here needs')
+    for v in t.get('volumes', []):
+        for kind in ('hostPath', 'nfs'):
+            if kind in v and ALLOWED_VOLS.get(v['name']) != kind:
+                bad.append(f'{name} volume {v[\"name\"]} is an unexpected {kind}')
+for b in bad:
+    print('    ' + b)
+sys.exit(1 if bad else 0)
+"; then
+    ok "$CONSOLE_NS breaks restricted in exactly the documented ways: NET_ADMIN on wg, NET_BIND_SERVICE on caddy, root on those two, the tun device and the shared event log"
+  else
+    bad "$CONSOLE_NS has grown a privilege beyond the documented exception"
+  fi
+
+  pub="$($KUBECTL -n "$CONSOLE_NS" get svc -o json 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(' '.join(s['metadata']['name']+':'+s['spec']['type'] for s in d['items'] if s['spec']['type'] in ('LoadBalancer','NodePort')))")"
+  [ "$pub" = "genaryx-tunnel:NodePort" ] \
+    && ok "the only published Service is the tunnel itself, which answers nothing without a valid key" \
+    || bad "unexpected published Services in $CONSOLE_NS: ${pub:-none}"
+fi
+
 head_ "6. nothing in this namespace is published"
 published="$(kc get svc -o json | python3 -c "
 import json,sys
