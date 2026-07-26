@@ -199,9 +199,26 @@ TXT
       printf '   password (blank = generate): ' >&4
       IFS= read -rs p1 <&4 || p1=""; printf '\n' >&4
       [ -z "$p1" ] && break
-      if [ "${#p1}" -lt 12 ]; then
-        printf '   at least 12 characters. This one account is the whole console.\n' >&4
+      # Eight refused, under twelve warned and accepted.
+      #
+      # The floor is low on purpose, and the reason is the tunnel. This form
+      # cannot be reached from the internet at all: every Service is ClusterIP,
+      # so seeing the sign-in page already requires a working WireGuard device.
+      # There is no online guessing, and no offline guessing either, because the
+      # Argon2id hash lives on a volume inside the cluster. What the password
+      # actually stops is one case: somebody holding an old or leaked .conf who
+      # is already inside the tunnel.
+      #
+      # It stops being the second barrier the day anyone applies
+      # manifests/50-loadbalancer.yaml, which is a real and deliberate option in
+      # this repository. Hence a warning rather than silence between 8 and 12.
+      if [ "${#p1}" -lt 8 ]; then
+        printf '   at least 8 characters. This one account is the whole console.\n' >&4
         continue
+      fi
+      if [ "${#p1}" -lt 12 ]; then
+        printf '   \033[33mshort. Fine behind the tunnel, where reaching this form already\n' >&4
+        printf '   needs a WireGuard device. Weak the day this console is published.\033[0m\n' >&4
       fi
       printf '   again: ' >&4
       IFS= read -rs p2 <&4 || p2=""; printf '\n' >&4
