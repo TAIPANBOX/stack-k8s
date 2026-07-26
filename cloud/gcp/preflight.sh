@@ -220,6 +220,33 @@ if [ -n "$PROJECT" ] && printf '%s\n' "$ENABLED" | grep -qx compute.googleapis.c
       note "request an increase: IAM & Admin > Quotas & System Limits, filter on $metric in $REGION"
     fi
   }
+  # GCP has THREE separate vCPU ceilings and this run hit two of them, on two
+  # different applies, each time after some instances already existed:
+  #
+  #   CPUS                regional, per region      (200 here)
+  #   CPUS_PER_VM_FAMILY  regional, per FAMILY      (24 for C3D, none for C2D)
+  #   CPUS_ALL_REGIONS    GLOBAL, across everything (32 by default)
+  #
+  # Only the first is in `compute.regions.describe`. The second needs Service
+  # Usage, the third is on the PROJECT rather than the region. A preflight that
+  # checks one of the three is a preflight that lets the apply fail halfway with
+  # a partial cluster billing, which is exactly what happened twice on
+  # 2026-07-26. The global one is checked first because it is the smallest.
+  GLOBAL_CPUS="$(gcloud compute project-info describe --project="$PROJECT" --format=json 2>/dev/null \
+    | jq -r '.quotas[]? | select(.metric=="CPUS_ALL_REGIONS") | "\(.limit) \(.usage)"' 2>/dev/null || true)"
+  if [ -n "$GLOBAL_CPUS" ]; then
+    gl="${GLOBAL_CPUS%% *}"; gu="${GLOBAL_CPUS##* }"
+    if awk -v l="$gl" -v u="$gu" -v n="$NEED_CPU" 'BEGIN{exit !(l-u >= n)}'; then
+      ok "$(printf '%-18s limit %-8s used %-6s need %s   GLOBAL, all regions' "CPUS_ALL_REGIONS" "$gl" "$gu" "$NEED_CPU")"
+    else
+      bad "$(printf '%-18s limit %-8s used %-6s need %s   GLOBAL, all regions' "CPUS_ALL_REGIONS" "$gl" "$gu" "$NEED_CPU")"
+      note "This one is on the PROJECT, not the region, and a fresh project gets 32."
+      note "An increase here WAS approved in seconds on 2026-07-26, unlike the"
+      note "per-family one, so it is worth requesting: IAM & Admin > Quotas,"
+      note "filter on CPUS_ALL_REGIONS."
+    fi
+  fi
+
   check_quota CPUS "$NEED_CPU" "$NODES x $MACHINE_TYPE"
   check_quota "$FAMILY" "$NEED_CPU" "legacy per-family ceiling, if this family has one"
 

@@ -60,34 +60,44 @@ output "ccm_config" {
   }
 }
 
-output "hourly_usd" {
-  description = "What apply started spending, from Google's own published rates for this region."
-  value = format("%.4f",
-    local.node_count * lookup({
-      "c3d-highcpu-8"  = 0.35382064 # 8 x 0.03488434 core + 16 x 0.00467162 RAM
-      "c3-highcpu-8"   = 0.40144544 # 8 x 0.040887   core + 16 x 0.00464684 RAM
-      "c3d-standard-8" = 0.42027392 # 8 x 0.03488434 core + 32 x 0.00467162 RAM
-    }, var.machine_type, 0)
+# Rates in USD/hour for europe-west3, on demand, from the Cloud Billing Catalog
+# API (see ../COSTS.md section 7 and ./prices.sh). GCP prices a machine per
+# core-hour plus per GiB-hour, so each of these is that arithmetic done once.
+#
+# The -1 default is deliberate and was earned: the first version defaulted to 0,
+# so choosing a machine type that was not in the table printed a confident
+# "0.1072/hour" for a cluster about to burn 1.93. A cost output that silently
+# omits the largest line is worse than no cost output, because it is believed.
+locals {
+  machine_rates = {
+    "c3d-highcpu-8"  = 0.35382064 # 8 x 0.03488434 core + 16 x 0.00467162 RAM
+    "c3d-standard-8" = 0.42027392 # 8 x 0.03488434      + 32 x 0.00467162
+    "c3-highcpu-8"   = 0.40144544 # 8 x 0.040887        + 16 x 0.00464684
+    "c3-standard-8"  = 0.47614688 # 8 x 0.040887        + 32 x 0.00464684
+    "c2d-highcpu-8"  = 0.38630400 # 8 x 0.038088        + 16 x 0.0051
+    "c2d-standard-8" = 0.46790400 # 8 x 0.038088        + 32 x 0.0051
+    "n4-highcpu-8"   = 0.36126880 # 8 x 0.0368042       + 16 x 0.0041772
+  }
+  machine_rate = lookup(local.machine_rates, var.machine_type, -1)
+  hourly_total = (
+    local.node_count * local.machine_rate
     + local.node_count * 0.005                    # external IPv4, in use
     + local.node_count * var.disk_gb * 0.12 / 730 # pd-balanced
     + (var.enable_filestore ? 1024 * 0.19 / 730 : 0)
   )
+  hourly_text = local.machine_rate < 0 ? "UNKNOWN for ${var.machine_type}: add its rate to outputs.tf, or price it with ./prices.sh" : format("%.4f", local.hourly_total)
+}
+
+output "hourly_usd" {
+  description = "What apply started spending, from Google's own published rates for this region."
+  value       = local.hourly_text
 }
 
 output "next" {
   description = "The commands that follow a successful apply."
-  value = <<-EOT
+  value       = <<-EOT
 
-    Platform is provisioned. About USD ${format("%.2f",
-  local.node_count * lookup({
-    "c3d-highcpu-8"  = 0.35382064
-    "c3-highcpu-8"   = 0.40144544
-    "c3d-standard-8" = 0.42027392
-  }, var.machine_type, 0)
-  + local.node_count * 0.005
-  + local.node_count * var.disk_gb * 0.12 / 730
-  + (var.enable_filestore ? 1024 * 0.19 / 730 : 0)
-)}/hour is now being spent.
+    Platform is provisioned. About USD ${local.hourly_text} per hour is now being spent.
 
     1. Everything else, one command:
 
@@ -95,7 +105,8 @@ output "next" {
            --servers ${join(",", slice(local.nat_ips, 0, local.n_srv))} \
            --agents ${join(",", slice(local.nat_ips, local.n_srv, local.n_actual))}
 
-       Add --console-token <github-token> for the Genaryx console.
+       Add --console-token <github-token> for the Genaryx console, and
+       --copilot-key-file <path> to point its copilot at a cloud model.
 
     2. When finished, and this is the part that matters:
 

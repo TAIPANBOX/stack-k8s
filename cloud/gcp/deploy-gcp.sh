@@ -23,12 +23,18 @@
 # `--console-token <github-token>` is what adds it. Leave it out and you get the
 # governed stack without the control room, which is a real deployment and not a
 # crippled one: the planes enforce with or without a UI in front of them.
+#
+# `--copilot-key-file <path>` additionally points the console's copilot at a
+# cloud model, reading the key from that file. It is METERED on that key's
+# account rather than on the cluster, which is why it is a flag and not a
+# default, and why the key is a file rather than an argument.
 set -euo pipefail
 
 SERVERS=""; AGENTS=""
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/stack-k8s-gcp}"
 SSH_USER="${SSH_USER:-ubuntu}"
 CONSOLE_TOKEN="${CONSOLE_TOKEN:-}"
+COPILOT_KEY_FILE="${COPILOT_KEY_FILE:-}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 
 while [ $# -gt 0 ]; do
@@ -37,6 +43,7 @@ while [ $# -gt 0 ]; do
     --agents)        AGENTS="$2"; shift 2 ;;
     --ssh-key)       SSH_KEY="$2"; shift 2 ;;
     --console-token) CONSOLE_TOKEN="$2"; shift 2 ;;
+    --copilot-key-file) COPILOT_KEY_FILE="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     -h|--help)       sed -n '2,26p' "$0" | sed -E 's/^# ?//'; exit 0 ;;
@@ -215,6 +222,31 @@ for d in $(k_ "-n agent-stack get deploy -o name"); do
   k_ "-n agent-stack rollout status $d --timeout=300s" || true
 done
 k_ "-n agent-stack rollout status statefulset/policy-db --timeout=300s" || true
+
+# ---- Felyx on a cloud model, if a key was handed over ----------------------
+# Opt-in, one flag, and part of the SCRIPT rather than a command someone runs
+# afterwards: a step that only the author knows about is a step the next
+# operator does not get. Without the flag the console keeps the local-first
+# provider from 20-console.yaml and nothing bills a model account.
+#
+# The key travels on STDIN, never as an argument: an argument is visible in the
+# node's process list to anyone with a shell on it, and lands in history on the
+# way there. It is written with umask 077, read once by kubectl, and shredded.
+if [ -n "$COPILOT_KEY_FILE" ]; then
+  if [ ! -s "$COPILOT_KEY_FILE" ]; then
+    die "--copilot-key-file $COPILOT_KEY_FILE is missing or empty"
+  fi
+  say "Felyx: pointing the console's copilot at a cloud model (METERED, on that key's account)"
+  tr -d '\r\n' < "$COPILOT_KEY_FILE" | su_ "$FIRST" "umask 077; cat > /tmp/.ck"
+  k_ "-n agent-stack delete secret stack-copilot --ignore-not-found" >/dev/null 2>&1 || true
+  k_ "-n agent-stack create secret generic stack-copilot --from-file=api_key=/tmp/.ck" >/dev/null \
+    || die "could not create the stack-copilot secret"
+  su_ "$FIRST" "shred -u /tmp/.ck 2>/dev/null || rm -f /tmp/.ck"
+  k_ "-n agent-stack patch deployment genaryx-console --patch-file /root/stack-k8s/manifests/55-copilot-cloud.yaml" >/dev/null \
+    || die "could not apply the copilot patch"
+  k_ "-n agent-stack rollout status deploy/genaryx-console --timeout=240s" >/dev/null 2>&1 || true
+  echo "   Felyx is on claude-sonnet-5, key held in the stack-copilot Secret only"
+fi
 
 # ---- 4 and 5. proof, not vibes ---------------------------------------------
 tar -cz -C "$ROOT" verify.sh security-tests.sh | su_ "$FIRST" 'tar -xz -C /root/stack-k8s'

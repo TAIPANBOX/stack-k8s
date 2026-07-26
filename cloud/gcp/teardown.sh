@@ -147,8 +147,14 @@ done
 
 # The controller's own firewall rules, named k8s-*. Terraform does not own them
 # and the network will not delete while they exist.
+# The filter is anchored on purpose. `--filter="network:$NET"` looks right and
+# is wrong: gcloud matches that term anywhere in the network's URL, and the URL
+# contains the PROJECT name. In a project called stack-k8s-gcp, every rule on
+# the DEFAULT network matches "stack-k8s", so a sweep written that way reports
+# the project's own default-allow-ssh as this cluster's leftover, and a teardown
+# that trusted it would delete it. Measured here on 2026-07-26.
 say "sweeping firewall rules the controller created"
-for fw in $(g compute firewall-rules list --filter="network:$NET AND name~^k8s-" --format='value(name)' 2>/dev/null || true); do
+for fw in $(g compute firewall-rules list --filter="network~/networks/$NET\$ AND name~^k8s-" --format='value(name)' 2>/dev/null || true); do
   echo "   $fw"
   g compute firewall-rules delete "$fw" --quiet || warn "could not delete $fw"
 done
@@ -182,7 +188,7 @@ check "disks" g compute disks list --format='value(name)'
 check "forwarding rules" g compute forwarding-rules list --regions="$REGION" --format='value(name)'
 check "target pools" g compute target-pools list --regions="$REGION" --format='value(name)'
 check "reserved addresses" g compute addresses list --regions="$REGION" --format='value(name)'
-check "firewall rules on $NET" g compute firewall-rules list --filter="network:$NET" --format='value(name)'
+check "firewall rules on $NET" g compute firewall-rules list --filter="network~/networks/$NET\$" --format='value(name)'
 check "networks" g compute networks list --filter="name=$NET" --format='value(name)'
 check "filestore" g filestore instances list --format='value(name)'
 check "snapshots" g compute snapshots list --format='value(name)'
