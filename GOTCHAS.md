@@ -1237,3 +1237,115 @@ attach the balancer plus 15-45 s for the first health check to flip.
 **The rule worth carrying:** a load balancer reporting healthy targets has told
 you that its health check works. It has told you nothing about whether traffic
 arrives. Prove the second thing with a request.
+
+## 46. The stack's own posture forbids the operator's way in
+
+> **Ours, and unresolved by design.** A real constraint, not a mistake.
+
+**Symptom:** the tunnel overlay applies cleanly, `kubectl kustomize` renders,
+a server-side `--dry-run` passes without a single complaint, and then no pod
+appears at all. The Deployment exists, the ReplicaSet exists, replicas: zero.
+
+```
+ReplicaFailure=True FailedCreate: violates PodSecurity "restricted:latest":
+  wg must not include "NET_ADMIN"      volume "tun" uses hostPath
+  containers "wg","caddy" must not set runAsUser=0
+```
+
+**Why:** `manifests/00-base.yaml` puts
+`pod-security.kubernetes.io/enforce: restricted` on the namespace on purpose,
+so the API server enforces the posture rather than each pod promising it. The
+tunnel cannot meet it, and the reason is irreducible:
+
+- `wireguard-go` must create a TUN interface, which needs `CAP_NET_ADMIN` and a
+  `/dev/net/tun` hostPath
+- the console manages peers over a **unix socket**, and a unix socket cannot
+  cross a pod boundary, so wg must share the console's pod
+
+So the console's POD is privileged. Not the console CONTAINER, which still
+drops every capability and runs as 10001.
+
+**`baseline` does not help, and this cost a second cycle.** Baseline permits
+exactly one added capability, `NET_BIND_SERVICE`, and forbids hostPath
+outright. Kubernetes has three levels and nothing between baseline and
+privileged, so `privileged` is the only label that admits this pod.
+
+**What that actually costs:** in `agent-stack` the API server enforces; in the
+console's namespace the pod only promises. A future edit that adds a capability
+there will be accepted where in `agent-stack` it would be refused.
+
+**Done here:** the console moved to its own namespace so the planes keep their
+enforced `restricted`, `warn: baseline` keeps every apply printing what a
+stricter cluster would refuse, and `security-tests.sh` scans BOTH namespaces
+and asserts the console namespace holds exactly the expected violations and no
+others. The warning cannot fail; the test can.
+
+**The real fix is a product change:** give the console a network transport to
+the UAPI so wg can live alone and the console goes back inside `restricted`.
+Agreed as the next piece of work rather than left as a note.
+
+**The check that missed it, again.** `kubectl kustomize` renders a Deployment
+and `kubectl apply --dry-run=server` accepts it, because PodSecurity applies to
+a POD and the pod is created later, by the ReplicaSet. A dry run on a workload
+tells you the shape is valid. It cannot tell you the cluster will run it.
+
+## 47. A heredoc without BuildKit builds an empty entrypoint, quietly
+
+> **Platform.** Docker does this to everyone still on the classic builder.
+
+**Symptom:** the image builds, `docker images` shows a sane size, and every
+container dies immediately with:
+
+```
+exec /usr/local/bin/wg-entrypoint.sh: exec format error
+```
+
+which reads like an architecture mismatch and sends you to check the platform.
+
+**Why:** the entrypoint is written with `RUN cat > file <<'ENTRY' ... ENTRY`.
+Heredocs in `RUN` are a **BuildKit frontend** feature. The legacy builder
+accepts the Dockerfile, reports success, and writes a **zero-byte** file, so
+the kernel cannot find an interpreter and reports the exec failure above.
+
+```
+docker run --rm --entrypoint /bin/sh stack/wg:dev -c 'wc -c < /usr/local/bin/wg-entrypoint.sh'
+0
+```
+
+It stayed hidden because nothing ever built these two images: no manifest
+referenced them and neither `build.sh` nor `deploy-aws.sh` listed them. They
+were written for a deployment that did not exist yet.
+
+**Fixed here:** `# syntax=docker/dockerfile:1.7` as the first line of both
+Dockerfiles, plus `RUN test -s <entrypoint>` immediately before `ENTRYPOINT`,
+so an empty script fails the BUILD instead of the container. Build with
+`DOCKER_BUILDKIT=1` and `docker-buildx` installed; Ubuntu ships it as a
+separate package and `docker.io` does not pull it in.
+
+## 48. The ACME DNS-01 solver does not use your cluster DNS
+
+> **Platform.** Any DNS-01 issuer inside a namespace with a default-deny policy.
+
+**Symptom:** a certificate never arrives. The ACME account registers fine, the
+challenge starts, and then:
+
+```
+could not determine zone for domain "_acme-challenge.box.it-rat.com":
+could not find the start of authority: dial tcp 8.8.8.8:53: i/o timeout
+```
+
+The message names the ZONE, so the first hour goes into the API token and its
+permissions, which are fine.
+
+**Why:** before writing a TXT record the solver has to know which zone owns the
+name, and it finds out by querying the start of authority **against a public
+resolver of its own choosing**, not through the cluster's DNS. An egress policy
+that allows port 53 only to `k8s-app: kube-dns` therefore blocks it, while
+ordinary name resolution in the same pod keeps working perfectly.
+
+**Fixed here:** the ACME egress rule allows UDP and TCP 53 to the public
+internet alongside 443, with the private ranges still excepted so nothing
+inside the cluster is widened.
+
+**The tell:** the ACME account registered, which proves outbound 443 works. If
+443 works and the challenge still fails, the missing hole is 53.

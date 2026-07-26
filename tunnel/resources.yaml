@@ -1,145 +1,133 @@
-# Everything the tunnel needs that is not a change to the console pod.
-#
-# Fill in the two names in the ConfigMap below before applying. Both are
-# REQUIRED and neither is guessed: the console refuses to issue a device config
-# without an endpoint, because the previous default was one specific box's
-# public IP and every other deployment then handed out configs pointing at a
-# machine that was not theirs.
+# Everything the console needs once it lives in its own namespace.
 
 # ---------------------------------------------------------------------------
 # The two names, and why they are two.
 #
-#   console_domain   what the BROWSER addresses, from INSIDE the tunnel. Caddy
-#                    serves it on the tunnel address and WebAuthn binds every
-#                    passkey to it. Its A record points at 10.9.0.1, the
-#                    tunnel-side address. A public name resolving to a private
-#                    address is normal for this pattern and is what makes the
-#                    passkey ceremony possible at all (GOTCHAS 38).
+#   console_domain  what the BROWSER addresses from INSIDE the tunnel. Caddy
+#                   serves it on the tunnel address and WebAuthn binds every
+#                   passkey to it, so its A record points at 10.9.0.1. A public
+#                   name resolving to a private address is normal here and is
+#                   what makes the passkey ceremony possible (GOTCHAS 38).
 #
-#   endpoint_host    what the DEVICE dials from OUTSIDE, before there is a
-#                    tunnel. Its A record points at a node's public address.
+#   endpoint_host   what the DEVICE dials from OUTSIDE, before a tunnel
+#                   exists. Its A record points at a node's public address.
 #
-# Collapsing them into one name cannot work: the same name would have to
-# resolve to a public address for the handshake and a private one for the
-# console, at the same time, on the same device.
+# One name cannot do both: it would have to resolve to a public address for the
+# handshake and a private one for the console, on the same device, at once.
 # ---------------------------------------------------------------------------
 apiVersion: v1
 kind: ConfigMap
-metadata:
-  name: stack-tunnel
-  namespace: agent-stack
+metadata: { name: stack-tunnel, namespace: agent-console }
 data:
   console_domain: "box.it-rat.com"
   console_origin: "https://box.it-rat.com"
   endpoint_host: "gw.it-rat.com"
-  # Optional. Let's Encrypt uses it for expiry warnings; absent is fine.
   acme_email: ""
 ---
-# The way in. A NodePort, not a LoadBalancer, and that is a deliberate choice
-# rather than thrift.
+# The plane URLs, re-pointed. In agent-stack these are bare Service names and
+# resolve inside it; from another namespace `wardryx` is nothing. Same values,
+# fully qualified.
 #
-# A LoadBalancer would cost money on every provider and, on Hetzner, may not
-# support UDP at all. A NodePort costs nothing, works on any conformant
-# cluster, and answers on EVERY node: kube-proxy forwards to the pod wherever
-# it happens to be running. That is what retires GOTCHAS 13. Today an operator
-# must ssh to the specific node holding the console pod; with this, they dial
-# any node, and once inside the tunnel they reach the console by ClusterIP no
-# matter where it moved.
+# This is one of three things the console needs that the base creates in the
+# other namespace. The other two, stack-keys and stack-environment, carry
+# generated credentials and are copied by up.sh rather than written here, so no
+# credential enters this repository.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: stack-wiring, namespace: agent-console }
+data:
+  TOKENFUSE_CLOUD_URL: "http://tokenfuse-cloud.agent-stack:8080"
+  WARDRYX_URL: "http://wardryx.agent-stack:8090"
+  IDRYX_URL: "http://idryx.agent-stack:8081"
+  EVENTS_DIR: "/var/lib/stack/events"
+  TOKENFUSE_EVENTS_PATH: "/var/lib/stack/events/tokenfuse.ndjson"
+  WARDRYX_EVENTS_PATH: "/var/lib/stack/events/wardryx.ndjson"
+---
+# The way in. A NodePort, not a LoadBalancer, and that is a choice rather than
+# thrift: it costs nothing on any provider, Hetzner may not support UDP load
+# balancers at all, and it answers on EVERY node because kube-proxy forwards to
+# the pod wherever it runs. That is what actually retires GOTCHAS 13, where an
+# operator must ssh to the one node holding the console pod.
 #
-# The port number is not free to choose. The client config the console
-# generates takes its port from what the DAEMON reports, not from a setting, so
-# the daemon has to listen on the same number the outside world dials. 31820 is
-# inside the default NodePort range and is set in both places; changing it here
-# means changing WG_LISTEN_PORT in console-patch.yaml too.
+# The port is not free to choose: see WG_LISTEN_PORT in console.yaml.
 apiVersion: v1
 kind: Service
-metadata:
-  name: genaryx-tunnel
-  namespace: agent-stack
+metadata: { name: genaryx-tunnel, namespace: agent-console }
 spec:
   type: NodePort
   selector: { app: genaryx-console }
   ports:
-    - name: wg
-      protocol: UDP
-      port: 31820
-      targetPort: 31820
-      nodePort: 31820
+    - { name: wg, protocol: UDP, port: 31820, targetPort: 31820, nodePort: 31820 }
 ---
 # Issued devices must survive a restart. The daemon holds peers only in memory
-# and the entrypoint saves them to peers.conf on a timer, so this is a real
-# volume: an emptyDir would silently revoke every device the operator issued
-# the moment the pod moved.
+# and the entrypoint saves them on a timer, so an emptyDir here would silently
+# revoke every device the operator issued the moment the pod moved.
 apiVersion: v1
 kind: PersistentVolumeClaim
-metadata:
-  name: wg-state
-  namespace: agent-stack
+metadata: { name: wg-state, namespace: agent-console }
 spec:
   accessModes: ["ReadWriteOnce"]
   resources: { requests: { storage: 1Gi } }
 ---
-# Certificates. Also a real volume, for a duller reason: Let's Encrypt rate
-# limits are per name per week, and an emptyDir would re-issue on every
-# restart until the limit stopped it, at which point the console becomes
-# unreachable in a way that looks like a Caddy bug.
+# Certificates, for a duller reason: Let's Encrypt rate limits are per name per
+# week, and an emptyDir would re-issue on every restart until the limit stopped
+# it, at which point the console becomes unreachable in a way that reads like a
+# Caddy bug.
 apiVersion: v1
 kind: PersistentVolumeClaim
-metadata:
-  name: caddy-data
-  namespace: agent-stack
+metadata: { name: caddy-data, namespace: agent-console }
 spec:
   accessModes: ["ReadWriteOnce"]
   resources: { requests: { storage: 1Gi } }
 ---
-# The tunnel is the one thing here that must be reachable from anywhere, and
-# unlike an HTTP plane that is not a compromise: WireGuard answers NOTHING
-# without a valid key. No banner, no handshake, no response to a scan. That
-# property is why it is the road in rather than a published console.
-#
-# UDP only, and only this port. The console's own port stays closed to the
-# outside exactly as before; a device that completes the handshake reaches
-# Caddy over the tunnel, which is inside the pod's own network namespace and
-# therefore not subject to any NetworkPolicy at all.
+# Default-deny here too. Moving the console to a namespace with a weaker
+# PodSecurity profile must not also mean a weaker network posture: the only
+# reason this namespace exists is capabilities, and nothing else travels with
+# them.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
-metadata:
-  name: console-ingress-tunnel
-  namespace: agent-stack
+metadata: { name: default-deny, namespace: agent-console }
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+# The tunnel is the one thing that must be reachable from anywhere, and unlike
+# a published HTTP plane that is not a compromise: WireGuard answers NOTHING
+# without a valid key. No banner, no handshake, no reply to a scan. That is why
+# it is the road in rather than an exposed console.
+#
+# A device that completes the handshake reaches Caddy inside this pod's own
+# network namespace, so no policy governs that hop at all.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: console-ingress-tunnel, namespace: agent-console }
 spec:
   podSelector: { matchLabels: { plane: console } }
   policyTypes: ["Ingress"]
   ingress:
-    - from:
-        - ipBlock: { cidr: 0.0.0.0/0 }
-      ports:
-        - { protocol: UDP, port: 31820 }
+    - from: [{ ipBlock: { cidr: 0.0.0.0/0 } }]
+      ports: [{ protocol: UDP, port: 31820 }]
 ---
-# Caddy has to reach Let's Encrypt and the Cloudflare API to answer a DNS-01
-# challenge. The base policy is default-deny in BOTH directions, so without
-# this the certificate request hangs and Caddy falls back to its internal CA
-# after a delay long enough to look like a hang rather than a decision.
-#
-# Port 53 as well: the ACME client resolves names, and a pod that cannot do DNS
-# fails in a way that names neither DNS nor ACME.
+# Out to the planes, which now live in another namespace, and to DNS. Named
+# explicitly rather than opened wide: the same four ports the base policy
+# allows inside agent-stack.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
-metadata:
-  name: console-egress-acme
-  namespace: agent-stack
+metadata: { name: console-egress-planes, namespace: agent-console }
 spec:
   podSelector: { matchLabels: { plane: console } }
   policyTypes: ["Egress"]
   egress:
     - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-            # Not the cluster's own ranges: those paths are granted by the base
-            # policy, and widening them here would quietly undo default-deny
-            # between planes.
-            except: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: agent-stack } }
+          podSelector:
+            matchExpressions:
+              - { key: plane, operator: In, values: ["money", "policy", "identity"] }
       ports:
-        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 8090 }
+        - { protocol: TCP, port: 8081 }
+        - { protocol: TCP, port: 4100 }
     - to:
         - namespaceSelector: {}
           podSelector: { matchLabels: { k8s-app: kube-dns } }
@@ -147,23 +135,51 @@ spec:
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }
 ---
-# The DNS-01 credential, and the only secret this overlay needs.
+# The shared event log, over NFS to Longhorn's share-manager. Port 2049 plus
+# the RPC port the mount handshake needs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: console-egress-events, namespace: agent-console }
+spec:
+  podSelector: { matchLabels: { plane: console } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: longhorn-system } }
+      ports:
+        - { protocol: TCP, port: 2049 }
+        - { protocol: TCP, port: 111 }
+        - { protocol: UDP, port: 111 }
+---
+# Caddy has to reach Let's Encrypt and the Cloudflare API to answer a DNS-01
+# challenge. Without this the certificate request hangs and Caddy falls back to
+# its internal CA after a delay long enough to look like a hang rather than a
+# decision.
 #
-# NOT created here: this is a placeholder documenting the shape. Create it on
-# the cluster, from a file, so the token is never in this repo and never on a
-# command line where it lands in shell history:
+# Port 53 to the PUBLIC internet, and that is not a copy-paste of the cluster
+# DNS rule above. The ACME solver looks up the start of authority for
+# `_acme-challenge.<name>` itself, against a public resolver, bypassing cluster
+# DNS entirely. With only the kube-dns rule in place it fails like this:
 #
-#   kubectl -n agent-stack create secret generic stack-tunnel-dns \
-#     --from-file=cloudflare_api_token=$HOME/.config/stack-k8s/cloudflare-token
+#   could not determine zone for domain "_acme-challenge.box.it-rat.com":
+#   could not find the start of authority: dial tcp 8.8.8.8:53: i/o timeout
 #
-# The token needs exactly one permission, Zone:DNS:Edit, scoped to the one
-# zone. Absent, Caddy falls back to its internal CA, which works only on a
-# device told to trust it: fine for iterating, not for a demonstration.
-#
-# apiVersion: v1
-# kind: Secret
-# metadata:
-#   name: stack-tunnel-dns
-#   namespace: agent-stack
-# stringData:
-#   cloudflare_api_token: "<never here>"
+# which names the ZONE, not DNS, and sends you to check the API token first.
+# Measured here on 2026-07-26.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: console-egress-acme, namespace: agent-console }
+spec:
+  podSelector: { matchLabels: { plane: console } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            # Not the cluster's own ranges: those paths are granted above, and
+            # widening them here would quietly undo default-deny.
+            except: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+      ports:
+        - { protocol: TCP, port: 443 }
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }

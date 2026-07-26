@@ -1,35 +1,71 @@
-# The operator's road in, as a Kubernetes overlay.
+# The operator's road in.
 #
-#   kubectl apply -k tunnel/
+#   ./tunnel/up.sh          # discovers, checks, applies
+#   kubectl apply -k tunnel/    # only if you have already read up.sh
 #
-# This is the base stack PLUS the tunnel, not the tunnel alone: it patches the
-# console Deployment, so it needs the Deployment in the same build. Applying it
-# over a running base is idempotent, and `kubectl apply -k manifests/` puts
-# things back the way they were.
+# Prefer up.sh. Two things in here cannot be static YAML and it fills them in:
+# the address of the shared event log, which Longhorn chooses, and the copies
+# of the two generated Secrets the console needs in its new namespace.
 #
-# Why an overlay rather than another numbered file next to 50-loadbalancer.yaml:
-# that file adds an object, this one ADDS CONTAINERS to an object that already
-# exists. Plain `kubectl apply -f` cannot express that; a strategic merge patch
-# can, and kustomize is already how this repo assembles manifests.
+# WHAT THIS DOES TO THE SHAPE OF THE STACK
 #
-# NOT metered. Unlike 50-loadbalancer.yaml, nothing here creates a cloud
-# resource: the entry point is a NodePort, which costs nothing on any provider.
-# See resources.yaml for why that is also the more portable answer.
+# It moves the console out of `agent-stack` into `agent-console`, because once
+# the console carries the tunnel its pod holds a container with NET_ADMIN and a
+# hostPath, and `agent-stack` enforces PodSecurity `restricted` on purpose. The
+# console CONTAINER still drops every capability; what changes is what the
+# namespace can honestly promise. See namespace.yaml for the full reasoning and
+# for the permanent fix, which is a change to the product rather than to this.
 #
-# Before applying, fill in the two names in resources.yaml. The console refuses
-# to guess either of them, deliberately: the previous default was one specific
-# box's public IP, and every other deployment then issued device configs
-# pointing at a machine that was not theirs.
+# Applying `kubectl apply -k manifests/` afterwards puts the console back in
+# agent-stack WITHOUT removing the one in agent-console, so run `./tunnel/down.sh`
+# first if you are going back.
+#
+# NOT metered: the way in is a NodePort, which costs nothing on any provider.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: agent-stack
+
+# No global `namespace:` on purpose. This build spans two of them, and every
+# object below states its own.
 
 resources:
   - ../manifests
+  - namespace.yaml
+  - console.yaml
   - resources.yaml
 
 patches:
-  - path: console-patch.yaml
-    target:
+  # Let the console reach the planes from where it now lives.
+  - path: patches.yaml
+
+  # Remove the base's console, which is the same workload in the namespace it
+  # can no longer satisfy. Without these two deletes the cluster runs two
+  # consoles against one state volume, and the RWO claim means the second never
+  # starts, so the symptom is a Pending pod rather than anything that names the
+  # real problem.
+  - target: { kind: Deployment, name: genaryx-console, namespace: agent-stack }
+    patch: |
+      $patch: delete
+      apiVersion: apps/v1
       kind: Deployment
-      name: genaryx-console
+      metadata:
+        name: genaryx-console
+        namespace: agent-stack
+  - target: { kind: Service, name: genaryx-console, namespace: agent-stack }
+    patch: |
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: genaryx-console
+        namespace: agent-stack
+  # The console's state volume goes with it. The claim in agent-stack would
+  # otherwise sit bound to a volume nothing mounts, quietly costing whatever
+  # the provider charges for it.
+  - target: { kind: PersistentVolumeClaim, name: console-state, namespace: agent-stack }
+    patch: |
+      $patch: delete
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: console-state
+        namespace: agent-stack

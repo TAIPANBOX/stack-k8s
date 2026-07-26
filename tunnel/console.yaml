@@ -1,0 +1,198 @@
+# The console, its tunnel, and the TLS that makes a passkey possible.
+#
+# DERIVED FROM manifests/20-console.yaml. It is a copy rather than a patch
+# because this object changes NAMESPACE, and kustomize cannot move a resource
+# between namespaces cleanly. Keep the two in step: anything added to the
+# console container in the base belongs here too. The `up.sh` next to this file
+# diffs the container specs and refuses to apply if they have drifted, so this
+# is a checked duplication rather than a hopeful one.
+#
+# Three containers in one pod, and that shape is forced: the console manages
+# WireGuard peers over a unix socket, which cannot cross a pod boundary. The
+# privilege split survives intact and is the point:
+#
+#   wg       NET_ADMIN and /dev/net/tun, nothing else
+#   caddy    NET_BIND_SECURE only, to answer on 443
+#   console  NO capability at all, and it is the one that issues devices
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: genaryx-console
+  namespace: agent-console
+  labels: { app: genaryx-console, plane: console }
+spec:
+  replicas: 1
+  strategy: { type: Recreate } # one RWO state volume, so never two at once.
+  selector: { matchLabels: { app: genaryx-console } }
+  template:
+    metadata:
+      labels: { app: genaryx-console, plane: console }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: console
+          image: stack/genaryx-console:dev
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: { name: stack-wiring }
+          env:
+            - { name: HOME, value: "/var/lib/stack" }
+            - name: TOKENFUSE_CLOUD_ADMIN_KEY
+              valueFrom: { secretKeyRef: { name: stack-keys, key: cloud_admin } }
+            - name: WARDRYX_ADMIN_KEY
+              valueFrom: { secretKeyRef: { name: stack-keys, key: wardryx_admin } }
+            - { name: TAIPAN_HOME, value: "/etc/genaryx/taipan" }
+            - { name: GENARYX_SCAN_TARGET, value: "/srv/ui" }
+            - { name: GENARYX_COPILOT_PROVIDER, value: "ollama" }
+            # ---- the tunnel half -------------------------------------------
+            - { name: GENARYX_WG_IFACE, value: "wg-op" }
+            # The RELAY socket, not the daemon's own: wireguard-go requires its
+            # own socket to stay 0700 and stops answering if that changes, so
+            # the wg container forwards a group-readable one (GOTCHAS 35).
+            - { name: GENARYX_WG_UAPI_SOCKET, value: "/var/run/wireguard/console.sock" }
+            - name: GENARYX_WG_ENDPOINT_HOST
+              valueFrom: { configMapKeyRef: { name: stack-tunnel, key: endpoint_host } }
+            # WebAuthn binds credentials to this exact pair and refuses a
+            # mismatch with an error that reads like a broken passkey rather
+            # than a wrong origin (GOTCHAS 38).
+            - name: GENARYX_WEB_RP_ID
+              valueFrom: { configMapKeyRef: { name: stack-tunnel, key: console_domain } }
+            - name: GENARYX_WEB_ORIGIN
+              valueFrom: { configMapKeyRef: { name: stack-tunnel, key: console_origin } }
+          ports: [{ name: http, containerPort: 7420 }]
+          volumeMounts:
+            - { name: state, mountPath: /var/lib/stack }
+            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: environment, mountPath: /etc/genaryx/taipan/environments, readOnly: true }
+            - { name: wgapi, mountPath: /var/run/wireguard }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+
+        - name: wg
+          image: stack/wg:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: WG_IFACE, value: "wg-op" }
+            # 31820, not 51820, and it is load-bearing. The client config the
+            # console generates takes its port from what the DAEMON reports
+            # (`format!("{host}:{listen_port}")`), not from a setting, so the
+            # daemon must listen on the number the outside world dials or every
+            # issued config names a port nothing answers on.
+            - { name: WG_LISTEN_PORT, value: "31820" }
+            - { name: WG_SOCKET_GID, value: "10001" }
+            # Same pod, so localhost. On compose this was `caddy:443`.
+            - { name: WG_CONSOLE_HOST, value: "127.0.0.1" }
+            - { name: WG_CONSOLE_PORT, value: "443" }
+          ports:
+            - { name: wg, containerPort: 31820, protocol: UDP }
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_ADMIN"]
+          volumeMounts:
+            - { name: wgstate, mountPath: /var/lib/wireguard }
+            - { name: wgapi, mountPath: /var/run/wireguard }
+            - { name: tun, mountPath: /dev/net/tun }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+
+        - name: caddy
+          image: stack/caddy:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CONSOLE_DOMAIN
+              valueFrom: { configMapKeyRef: { name: stack-tunnel, key: console_domain } }
+            - { name: CONSOLE_UPSTREAM, value: "127.0.0.1:7420" }
+            - name: CLOUDFLARE_API_TOKEN
+              valueFrom:
+                secretKeyRef: { name: stack-tunnel-dns, key: cloudflare_api_token, optional: true }
+            - name: ACME_EMAIL
+              valueFrom:
+                configMapKeyRef: { name: stack-tunnel, key: acme_email, optional: true }
+          ports:
+            - { name: https, containerPort: 443 }
+          securityContext:
+            # Root with one capability. Kubernetes grants no ambient
+            # capabilities, so a non-root process cannot bind 443 however the
+            # capability set is written. A high port instead would have to
+            # appear in GENARYX_WEB_ORIGIN and in every URL an operator types.
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_BIND_SERVICE"]
+          volumeMounts:
+            - { name: caddydata, mountPath: /data }
+            - { name: caddyconfig, mountPath: /config }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+
+      volumes:
+        - name: state
+          persistentVolumeClaim: { claimName: console-state }
+        # The shared event log lives in the OTHER namespace, and a PVC cannot
+        # cross one. Longhorn already exports this RWX volume over NFS on a
+        # ClusterIP, so the console mounts that export directly. The address is
+        # Longhorn's to choose and changes if the volume is recreated, which is
+        # why up.sh discovers it at apply time instead of it being written here.
+        - name: events
+          nfs:
+            server: EVENTS_NFS_SERVER
+            path: EVENTS_NFS_PATH
+        - name: environment
+          projected:
+            sources:
+              - configMap:
+                  name: stack-environment
+                  items: [{ key: k8s.json, path: k8s.json }]
+              - secret:
+                  name: stack-keys
+                  optional: true
+                  items: [{ key: k8s.keys.json, path: k8s.keys.json }]
+        - name: wgapi
+          emptyDir: {}
+        - name: wgstate
+          persistentVolumeClaim: { claimName: wg-state }
+        - name: caddydata
+          persistentVolumeClaim: { claimName: caddy-data }
+        - name: caddyconfig
+          emptyDir: {}
+        - name: tun
+          hostPath: { path: /dev/net/tun, type: CharDevice }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: genaryx-console, namespace: agent-console }
+spec:
+  selector: { app: genaryx-console }
+  ports: [{ name: http, port: 7420, targetPort: http }]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: console-state, namespace: agent-console }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: { requests: { storage: 2Gi } }

@@ -1,0 +1,33 @@
+# The one change this overlay makes to the base, and why it is unavoidable.
+#
+# `planes-ingress` admits the console with `podSelector: {plane: console}` and
+# no namespaceSelector. In Kubernetes that means SAME NAMESPACE ONLY, so the
+# moment the console moves it is denied by a rule that looks like it still
+# allows it. Nothing in the policy changes meaning here: the same label, the
+# same four ports, now qualified by the namespace it actually lives in.
+#
+# Note what is NOT widened. `namespaceSelector` and `podSelector` in one `from`
+# entry are ANDed, so this admits pods labelled `plane: console` in
+# `agent-console` and nothing else. Written as two separate entries it would
+# have admitted every pod in that namespace, which is the mistake this shape
+# avoids.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: planes-ingress
+  namespace: agent-stack
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: plane, operator: In, values: ["money", "policy", "identity"] }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { plane: money } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: agent-console } }
+          podSelector: { matchLabels: { plane: console } }
+      ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 8090 }
+        - { protocol: TCP, port: 8081 }
+        - { protocol: TCP, port: 4100 }

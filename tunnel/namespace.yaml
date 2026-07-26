@@ -1,0 +1,56 @@
+# The console's own namespace, and the honest reason it exists.
+#
+# `agent-stack` enforces PodSecurity `restricted`, which forbids capabilities,
+# root, and host paths. That is deliberate (manifests/00-base.yaml) and it is
+# correct for the planes: they ENFORCE policy, and an enforcement plane with
+# host access is not one.
+#
+# The console cannot meet that bar once it carries the operator's tunnel, and
+# the reason is irreducible rather than lazy:
+#
+#   - `wireguard-go` must create a TUN interface, which needs CAP_NET_ADMIN and
+#     a /dev/net/tun hostPath. No configuration removes that.
+#   - the console manages peers over a UNIX socket, and a unix socket cannot
+#     cross a pod boundary, so wg must share the console's pod.
+#
+# So the console's POD is privileged. Not the console CONTAINER: that still
+# drops ALL capabilities and runs as 10001. What changes is what the namespace
+# can promise, and a namespace that promises "no host access" while holding a
+# container with NET_ADMIN is lying. Two namespaces, two honest promises.
+#
+# `privileged`, and that word is not a rounding error. `baseline` was tried
+# first and refuses this pod: it permits exactly one added capability,
+# NET_BIND_SERVICE, and forbids hostPath volumes outright. wg needs NET_ADMIN
+# and /dev/net/tun, so it fails on both counts. Kubernetes has three levels and
+# nothing between baseline and privileged, so there is no narrower label that
+# admits this pod.
+#
+# Be clear about what that costs. In agent-stack the API server ENFORCES the
+# posture; here the pod only PROMISES it. The containers still declare
+# `capabilities: drop: ALL` and `allowPrivilegeEscalation: false`, the console
+# still runs as 10001, and the namespace still carries its own default-deny
+# NetworkPolicy. What is gone is the second pair of eyes: a future edit that
+# quietly adds a capability here will be accepted, where in agent-stack it
+# would be refused.
+#
+# That gap is exactly why `warn: baseline` is set below. It cannot block
+# anything, but every apply prints what would have been rejected, so the
+# exception stays visible instead of becoming the new normal. And
+# security-tests.sh scans THIS namespace too and asserts the violations are
+# exactly the three expected ones, which is the part that can actually fail.
+#
+# The permanent fix is to give the console a network transport to the UAPI so
+# wg can live alone and the console can go back inside `restricted`. That is a
+# change to the product, not to its deployment, and it is the agreed next piece
+# of work rather than a note nobody acts on.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-console
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest
+    # Cannot block, but makes every apply print what a stricter cluster would
+    # have refused. The exception stays loud.
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: latest

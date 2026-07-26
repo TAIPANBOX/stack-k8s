@@ -1,3 +1,10 @@
+# syntax=docker/dockerfile:1.7
+# REQUIRES BuildKit. The entrypoint below is written with a heredoc, which only
+# the BuildKit frontend understands. The legacy builder accepts the Dockerfile,
+# reports success, and produces an EMPTY entrypoint: the container then dies
+# with "exec format error" and nothing in the build output hints why
+# (GOTCHAS.md item 47). Build with `DOCKER_BUILDKIT=1` and docker-buildx
+# installed.
 # The operator's road IN: a WireGuard server for the humans who run this box,
 # not for the agents it governs.
 #
@@ -252,5 +259,9 @@ echo ">> console relay $RELAY is group $SOCK_GID mode 0660; $SOCK stays 0700"
 # and this process is what notices the tunnel dying.
 wait "$WG_PID" "$RELAY_PID" "$CONSOLE_FWD_PID"
 ENTRY
+
+# A heredoc that silently produced nothing is the failure this catches: the
+# build fails here instead of the container failing at runtime.
+RUN test -s /usr/local/bin/wg-entrypoint.sh || (echo "entrypoint is EMPTY: build with DOCKER_BUILDKIT=1" >&2; exit 1)
 
 ENTRYPOINT ["/usr/local/bin/wg-entrypoint.sh"]
