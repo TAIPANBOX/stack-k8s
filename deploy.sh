@@ -387,8 +387,18 @@ CONSOLE_IP="$(k_ "-n agent-stack get svc genaryx-console -o jsonpath='{.spec.clu
 # not in a Secret (which every cluster-admin can read), not in a file, not in
 # this script's own output beyond the line below.
 if [ -n "$CONSOLE_NODE" ]; then
-  if k_ "-n agent-stack exec -i deploy/genaryx-console -- test -s /var/lib/stack/.taipan/genaryx-web/operator.json" >/dev/null 2>&1; then
-    say "operator account already exists, left as is"
+  if k_ "-n agent-stack exec -i deploy/genaryx-console -- test -s /var/lib/stack/.taipan/genaryx-web/operator.json" >/dev/null 2>&1 \
+     && [ "$CONSOLE_PASSWORD_CHOSEN" != 1 ]; then
+    # An account is already here and nobody typed a new password, so the
+    # existing one stands. Named, because "an account" is not enough: an
+    # operator signing in has to know WHICH name, and the default in this
+    # script has not always been the name a given cluster was set up with.
+    # python3, not sed: the console image has it, and a sed expression does not
+    # survive the layers of quoting between this shell, ssh, and `kubectl exec`.
+    # Measured, not assumed: the sed form answered `Syntax error: "(" unexpected`.
+    EXISTING_USER="$(k_ "-n agent-stack exec -i deploy/genaryx-console -- python3 -c \"import json;print(json.load(open('/var/lib/stack/.taipan/genaryx-web/operator.json'))['username'])\"" 2>/dev/null | tr -d '\r\n ' || true)"
+    say "operator account already exists, left as is${EXISTING_USER:+ (username: $EXISTING_USER)}"
+    CONSOLE_USER="${EXISTING_USER:-$CONSOLE_USER}"
   else
     # 24 bytes of urandom, base64, punctuation stripped: long enough that the
     # Argon2id hash behind it is not the weak link, safe to paste anywhere.
@@ -401,6 +411,12 @@ if [ -n "$CONSOLE_NODE" ]; then
       # Chosen at the top, before any of this ran. Never echoed back here: the
       # operator knows it, and printing it would put it in the scrollback and in
       # every screenshot of a successful install.
+      #
+      # It is APPLIED even when an account already exists. Asking somebody for a
+      # password and then discarding it is worse than not asking: they spend the
+      # next ten minutes typing it into a form that was never going to take it,
+      # and the line that explains why scrolled past long ago. Typing one here is
+      # an instruction, and this run is when it was given.
       CONSOLE_PASSWORD_CHOSEN=1
     else
       CONSOLE_PASSWORD="$( set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 28 )"
