@@ -1843,3 +1843,43 @@ do not do that.
 
 Same hazard, same reason: `git pull` or `git checkout` in a repository whose
 script is currently running.
+
+## 63. An apostrophe inside a heredoc inside `$( )` breaks bash
+
+This is a syntax error:
+
+```bash
+X="$(cat <<INNER
+Set the operator's password here.
+INNER
+)"
+```
+
+```
+unexpected EOF while looking for matching `''
+syntax error: unexpected end of file
+```
+
+Remove the apostrophe and it parses. Nothing else about the file is wrong, and
+`bash -n` reports the failure at the LAST line of the script rather than at the
+line that caused it, so a long file gives no hint at all.
+
+**Why:** bash tokenises the whole `$( ... )` before it knows the heredoc body is
+data. The `'` opens a quote that never closes, and the search for its partner
+runs off the end of the file.
+
+**Found** writing three branches of a message, one of which said "the operator's
+password". Two of the three parsed.
+
+**The way out**, in preference order:
+
+1. `printf -v VAR '%s\n' "line" "line"` and no heredoc at all. Readable,
+   substitutes normally, and has no quoting hazard.
+2. Quote the delimiter (`<<'INNER'`), which makes the body fully literal. Only
+   works when nothing in it needs expanding.
+3. Reword. Cheap, and the least honest of the three: the next person adds an
+   apostrophe back.
+
+**The general form:** a heredoc inside a command substitution is parsed twice,
+and the first pass does not know it is looking at prose. `$'...'`, backticks and
+unbalanced parentheses in the body are the same hazard.

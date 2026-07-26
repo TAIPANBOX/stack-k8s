@@ -50,6 +50,13 @@ WANT_TUNNEL="${WANT_TUNNEL:-}"
 TUNNEL_DONE=0
 CONSOLE_DOMAIN="${CONSOLE_DOMAIN:-}"
 ENDPOINT_HOST="${ENDPOINT_HOST:-}"
+# The console's own account. There is deliberately no --console-password: a
+# password on a command line is visible in `ps` to every user on the machine for
+# as long as the deploy runs, and stays in the shell history afterwards. Asked
+# on the terminal, or generated.
+CONSOLE_USER="${CONSOLE_USER:-ops}"
+CONSOLE_PASSWORD=""
+CONSOLE_PASSWORD_CHOSEN=0
 REF="${REF:-main}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/TAIPANBOX/stack-k8s}"
@@ -66,6 +73,7 @@ while [ $# -gt 0 ]; do
     --console-domain) CONSOLE_DOMAIN="$2"; WANT_TUNNEL=1; shift 2 ;;
     --endpoint-host)  ENDPOINT_HOST="$2";  WANT_TUNNEL=1; shift 2 ;;
     --no-tunnel)      WANT_TUNNEL=0; shift ;;
+    --console-user)   CONSOLE_USER="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     -h|--help)       awk 'NR>1 && /^#/ {print; next} NR>1 {exit}' "$0" | sed -E 's/^# ?//'; exit 0 ;;
@@ -150,6 +158,57 @@ TXT
     echo "   no terminal to ask on: SKIPPING the tunnel. Add it later with"
     echo "   ./tunnel/configure.sh then ./tunnel/up.sh, or pass --console-domain"
     echo "   and --endpoint-host here."
+  fi
+fi
+
+# ---- 0c. the console account, asked here and used at the end ---------------
+# Everything the operator needs to sign in is settled in one conversation at the
+# top, and travels the same SSH channel that installs the platform. It never
+# crosses the internet, and the console has no registration endpoint at all: the
+# account is created here, and the form the operator meets later is a sign-in.
+#
+# Three things this has to get right, and each of them is why it is a prompt
+# rather than a flag.
+#
+#   No echo. A password typed in front of anyone, or left in a screenshot of a
+#   terminal, is not a password.
+#   Typed twice. A single typo in a value nobody can read back produces a
+#   console that refuses its own operator, fifteen minutes later, with the
+#   install already finished.
+#   Never written down. It lives in this shell's memory until the moment it is
+#   piped into set-password, and goes nowhere else: no temp file, no flag, no
+#   history.
+if [ -z "$CONSOLE_PASSWORD" ]; then
+  if { exec 4<>/dev/tty; } 2>/dev/null; then
+    cat >&4 <<'TXT'
+
+   The console account. There is no sign-up page: this is the one account, and
+   it is created here rather than on the internet. You will type it into the
+   sign-in form once the tunnel is up.
+
+   Leave the password blank to have a long one generated and printed at the end
+   instead, which is the right answer if this is not the machine you will keep.
+
+TXT
+    printf '   username [%s]: ' "$CONSOLE_USER" >&4
+    IFS= read -r ans <&4 || ans=""
+    ans="$(printf '%s' "$ans" | tr -d '[:space:]')"
+    [ -n "$ans" ] && CONSOLE_USER="$ans"
+
+    while :; do
+      printf '   password (blank = generate): ' >&4
+      IFS= read -rs p1 <&4 || p1=""; printf '\n' >&4
+      [ -z "$p1" ] && break
+      if [ "${#p1}" -lt 12 ]; then
+        printf '   at least 12 characters. This one account is the whole console.\n' >&4
+        continue
+      fi
+      printf '   again: ' >&4
+      IFS= read -rs p2 <&4 || p2=""; printf '\n' >&4
+      if [ "$p1" = "$p2" ]; then CONSOLE_PASSWORD="$p1"; p1=""; p2=""; break; fi
+      printf '   those did not match.\n' >&4
+    done
+    exec 4>&-
   fi
 fi
 
@@ -310,8 +369,6 @@ CONSOLE_IP="$(k_ "-n agent-stack get svc genaryx-console -o jsonpath='{.spec.clu
 # Generate one, set it, and print it once. Deliberately not stored anywhere:
 # not in a Secret (which every cluster-admin can read), not in a file, not in
 # this script's own output beyond the line below.
-CONSOLE_USER="${CONSOLE_USER:-ops}"
-CONSOLE_PASSWORD=""
 if [ -n "$CONSOLE_NODE" ]; then
   if k_ "-n agent-stack exec -i deploy/genaryx-console -- test -s /var/lib/stack/.taipan/genaryx-web/operator.json" >/dev/null 2>&1; then
     say "operator account already exists, left as is"
@@ -323,8 +380,15 @@ if [ -n "$CONSOLE_NODE" ]; then
     # head closes the pipe once it has its N bytes, tr dies of SIGPIPE, the
     # pipeline reports 141 and `set -e` ends the deploy right here, silently,
     # with the cluster up and no operator account.
-    CONSOLE_PASSWORD="$( set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 28 )"
-    [ "${#CONSOLE_PASSWORD}" = 28 ] || die "could not generate an operator password; /dev/urandom is not readable."
+    if [ -n "$CONSOLE_PASSWORD" ]; then
+      # Chosen at the top, before any of this ran. Never echoed back here: the
+      # operator knows it, and printing it would put it in the scrollback and in
+      # every screenshot of a successful install.
+      CONSOLE_PASSWORD_CHOSEN=1
+    else
+      CONSOLE_PASSWORD="$( set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 28 )"
+      [ "${#CONSOLE_PASSWORD}" = 28 ] || die "could not generate an operator password; /dev/urandom is not readable."
+    fi
     if printf '%s\n' "$CONSOLE_PASSWORD" | k_ "-n agent-stack exec -i deploy/genaryx-console -- /usr/local/bin/genaryx-web set-password --username $CONSOLE_USER" >/dev/null 2>&1; then
       say "operator '$CONSOLE_USER' created"
       # The console resolved "do I have an operator" at startup and does not
@@ -348,27 +412,52 @@ if [ -n "$CONSOLE_NODE" ]; then
   [ -n "$CONSOLE_ADDR" ] || CONSOLE_ADDR="$(k_ "get node $CONSOLE_NODE -o jsonpath='{.status.addresses[?(@.type==\"InternalIP\")].address}'" 2>/dev/null || true)"
 fi
 
+# Built here rather than inside the final heredoc: three states, and a
+# conditional that long inside `cat <<EOF` is unreadable and easy to break.
+#
+# printf, not `$(cat <<INNER ... INNER)`. An APOSTROPHE inside a heredoc that
+# sits inside a command substitution breaks bash outright:
+#
+#   unexpected EOF while looking for matching `''
+#
+# on a file whose quoting is correct. The word "operator's" was enough. See
+# GOTCHAS.md item 63.
+#
+# The third state is the point of all this. A password the operator TYPED is
+# not repeated back: they already have it, and printing it would leave it in
+# this scrollback and in every screenshot anyone takes of a successful install.
+RESET_CMD="      ssh root@$FIRST \"/usr/local/bin/k3s kubectl -n agent-stack exec -i deploy/genaryx-console -- \\\\
+        /usr/local/bin/genaryx-web set-password --username $CONSOLE_USER\""
+
+if [ "$CONSOLE_PASSWORD_CHOSEN" = 1 ]; then
+  printf -v SIGNIN_BLOCK '%s\n\n%s\n%s\n\n%s\n%s\n\n%s\n\n%s\n' \
+    "  Your console sign-in:" \
+    "      user      $CONSOLE_USER" \
+    "      password  the one you typed at the start" \
+    "  Not repeated here on purpose: you have it already, and printing it would" \
+    "  leave it in this scrollback and in any screenshot of this run." \
+    "  Change it whenever you like, and enrol a passkey once you are in:" \
+    "$RESET_CMD"
+elif [ -n "$CONSOLE_PASSWORD" ]; then
+  printf -v SIGNIN_BLOCK '%s\n\n%s\n%s\n\n%s\n\n%s\n' \
+    "  Your console sign-in, shown once and stored nowhere:" \
+    "      user      $CONSOLE_USER" \
+    "      password  $CONSOLE_PASSWORD" \
+    "  Change it whenever you like, and enrol a passkey once you are in:" \
+    "$RESET_CMD"
+else
+  printf -v SIGNIN_BLOCK '%s\n%s\n\n%s\n' \
+    "  Set the operator password (read from stdin, stored as an Argon2id hash)." \
+    "  Until one exists the console refuses every sign-in:" \
+    "$RESET_CMD"
+fi
+
 cat <<EOF
 
 $(printf '\033[1m')Done.$(printf '\033[0m')
 
-${CONSOLE_PASSWORD:+  Your console sign-in, shown once and stored nowhere:
-
-      user      $CONSOLE_USER
-      password  $CONSOLE_PASSWORD
-
-  Change it whenever you like, and enrol a passkey once you are in:
-
-      ssh root@$FIRST "/usr/local/bin/k3s kubectl -n agent-stack exec -i deploy/genaryx-console -- \\
-        /usr/local/bin/genaryx-web set-password --username $CONSOLE_USER"
-
-}${CONSOLE_PASSWORD:-  Set the operator's password (read from stdin, stored as an Argon2id hash).
-  Until one exists the console refuses every sign-in:
-
-      ssh root@$FIRST "/usr/local/bin/k3s kubectl -n agent-stack exec -i deploy/genaryx-console -- \\
-        /usr/local/bin/genaryx-web set-password --username $CONSOLE_USER"
-
-}  Reach the console over YOUR tunnel. There is no public entry point by
+${SIGNIN_BLOCK}
+  Reach the console over YOUR tunnel. There is no public entry point by
   design, and the tunnel has to land on the node running the console pod
   (GOTCHAS.md item 13)${CONSOLE_NODE:+, currently $CONSOLE_NODE}:
 
