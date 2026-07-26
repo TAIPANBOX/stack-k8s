@@ -2093,3 +2093,61 @@ an address the cloud has just re-issued, and then verifies normally from there.
 **The general form:** any state keyed on a cloud's ephemeral addresses is state
 that will be wrong after the next rebuild. `known_hosts` is the one that bites
 first because it fails closed.
+
+## 69. A GCP load balancer with a healthy backend that carries nothing
+
+> **Open.** This one is recorded because it was measured, not because it was
+> solved. Anybody repeating the GCP run will meet it and should not spend the
+> hour again before reading this.
+
+**Symptom:** `kubectl apply -f loadbalancer-gcp.yaml`, the Service gets an
+external address within 30 seconds, and nothing ever reaches it. Not slowly:
+never, across 40 minutes and two separate load balancers.
+
+**What was verified, and all of it was correct:**
+
+| Checked | State |
+|---|---|
+| forwarding rule | exists, `EXTERNAL`, `PREMIUM`, TCP, points at the target pool |
+| target pool | all 5 instances, 1 health check attached |
+| backend health | the node running the console pod is `HEALTHY`, the other four `UNHEALTHY`, which is correct for `externalTrafficPolicy: Local` |
+| health check | HTTP on the `healthCheckNodePort`, and that port answers 200 on the node |
+| firewall, from the controller | `k8s-fw-*` allows `0.0.0.0/0` to tcp:80,443 on the node tag; `k8s-*-http-hc` allows the four Google probe ranges to the health check port |
+| network tags | every instance carries `stack-k8s-node` |
+| org policies | none; the project has no organization at all |
+| routes | defaults only |
+
+**What was ruled out by experiment, not by reasoning:**
+
+- **The operator's own network.** An independent external fetcher got the same
+  timeout, so the failure is not local.
+- **`externalTrafficPolicy`.** Switching to `Cluster` changed nothing.
+- **The multi-port forwarding rule.** The in-tree provider turns two ports into
+  a single rule with the range `80-443`. A second, minimal Service with ONE
+  port got its own address and behaved identically.
+- **A half-built balancer from the earlier permission failure.** The Service was
+  deleted, the controller cleaned up, and a fresh one was built with the role
+  already correct. Same result.
+- **Packets arriving and being dropped on the node.** `tcpdump` on the healthy
+  node, filtered to the operator's address and excluding ssh, captured **zero**
+  packets while requests were being made.
+
+That last line is the important one: the packets never leave Google's side, so
+nothing in the cluster can be the cause.
+
+**What is left, in order of likelihood:**
+
+1. Dataplane provisioning for a passthrough NLB in a project that has never had
+   one. This project was created that morning, on a billing account upgraded
+   from a trial an hour before.
+2. Something about the account's state rather than its configuration, which is
+   not visible from any API this run could read.
+
+**What to do about it.** The deployment does not need it: the console's own
+posture is an operator tunnel (`ssh -L`, or the WireGuard flow in `tunnel/`),
+and the load balancer is opt-in for exactly this reason. If a run needs a public
+entry point and hits this, prove it early rather than at the end, and be ready
+to fall back to the tunnel.
+
+**Do not leave it up while investigating.** A forwarding rule bills USD
+0.030/hour whether or not it forwards anything.

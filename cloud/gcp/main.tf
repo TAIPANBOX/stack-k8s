@@ -205,6 +205,20 @@ resource "google_project_iam_custom_role" "node_extra" {
     "compute.firewalls.get",
     "compute.firewalls.list",
     "compute.firewalls.update",
+    # Creating a firewall rule needs a permission on the FIREWALL and another
+    # one on the NETWORK it is attached to, and the second is not guessable
+    # from the first. Without it the cloud controller reserves an address,
+    # fails, releases the address again, and retries forever while the Service
+    # sits <pending>:
+    #
+    #   Error 403: Required 'compute.networks.updatePolicy' permission for
+    #   'projects/PROJECT/global/networks/stack-k8s', forbidden
+    #
+    # Measured on the live cluster, 2026-07-26, applying loadbalancer-gcp.yaml.
+    # The predefined roles/compute.securityAdmin carries it, along with SSL
+    # certificates and security policies this deployment has no business
+    # touching, which is why it is one line here instead.
+    "compute.networks.updatePolicy",
     "compute.zones.get",
     "compute.zones.list",
     "compute.regions.get",

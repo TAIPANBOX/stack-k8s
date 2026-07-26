@@ -169,11 +169,11 @@ a ceiling of 100.
 
 | | Hetzner | AWS | GCP |
 |---|---|---|---|
-| does `type=LoadBalancer` get targets automatically | yes | **yes, all 5 instances** | |
+| does `type=LoadBalancer` get targets automatically | yes | **yes, all 5 instances** | **yes, all 5, and the right one goes healthy** |
 | what source does the health check arrive with | the balancer's private address | **its own ENIs in the subnet, on a SEPARATE port kube-proxy answers** | _35.191.0.0/16 and 130.211.0.0/22, two published prefixes that belong to no VPC_ |
 | how many annotations does the Service need | 6 | **5, sharing none of Hetzner's** | _0_ |
-| does a healthy target mean traffic flows | yes | **NO. Healthy and silent for six minutes (item 45)** | |
-| apply to a request returning 200 | about 1 min | **3 min 34 s** | |
+| does a healthy target mean traffic flows | yes | **NO. Healthy and silent for six minutes (item 45)** | **NO, and it never started: 40 minutes, two balancers, zero packets reaching the node (item 69, open)** |
+| apply to a request returning 200 | about 1 min | **3 min 34 s** | **never, in this project** |
 | hourly price | EUR 7.49/month | **USD 0.027/hour + LCU, about USD 19.71/month** | _USD 0.030/hour + USD 0.010/GiB, about USD 21.90/month_ |
 
 **Cost, like for like, measured from each provider's own price list**
@@ -196,7 +196,7 @@ a ceiling of 100.
 | | Hetzner | AWS | GCP |
 |---|---|---|---|
 | `cluster-verified` | 10 passed, 0 failed | **10 passed, 0 failed** | **10 passed, 0 failed** (9 without `--freeze`, as on AWS) |
-| `loadbalancer-verified` | reproduced | **reproduced, after item 45** | not run yet |
+| `loadbalancer-verified` | reproduced | **reproduced, after item 45** | **NOT reproduced**: address yes, traffic no (item 69) |
 | `freeze-test-verified` | reproduced | **reproduced, survives a policy-plane restart** | **reproduced, survives a policy-plane restart** (block made through the admin API, not the browser) |
 | `security-tests` | 23 passed, 1 noted | **22 passed, 0 failed, 2 noted** (the extra note is a missing `etcdctl`, encryption verified separately) | **24 passed, 0 failed, 2 noted** (the same two: no `etcdctl`, and the `default` namespace) |
 | console reachable, operator signed in | yes | yes | **yes, and a passkey enrolled** after the origin fix |
