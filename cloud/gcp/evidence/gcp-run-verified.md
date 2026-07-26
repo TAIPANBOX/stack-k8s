@@ -193,3 +193,61 @@ that broke the previous rebuild (item 68), and it passed without a word.
 
 This is the run that answers "will it work for the next person", and it answers
 it for the second run as well as the first, which is the harder half.
+
+---
+
+## What the governance layer costs, measured
+
+The four numbers `../GCP-NEXT.md` asked for, so the GCP column can sit beside
+Hetzner's. Driven from inside the console pod, which is the only pod the
+NetworkPolicy admits to the policy plane.
+
+| | Hetzner (CPX42, shared vCPU) | GCP (c2d-highcpu-8, dedicated) |
+|---|---|---|
+| peak decisions/s per pod | 2,344 | **2,479** at concurrency 32 |
+| p50 / p95 at working rates | 3.9 / 4.5 ms | **3.2 / 4.9 ms** at concurrency 8 |
+| behaviour past 64 concurrent | **collapse to 1,059** | **no collapse: 2,417 at 64, 2,306 at 128, 2,353 at 256** |
+| audit bytes per decision | 393 | **426** |
+| audit volume at 1000 calls/min | about 550 MB/day | **614 MB/day**, a 5 GiB volume lasts 8.7 days |
+| freeze reaches traffic | 5 ms | **5.0 ms** |
+
+Raw, at rising concurrency:
+
+```
+concurrency    1:    994.2 decisions/s   p50  0.97 ms   p95   1.08 ms
+concurrency    8:   2348.9 decisions/s   p50  3.22 ms   p95   4.88 ms
+concurrency   16:   2357.4 decisions/s   p50  6.36 ms   p95  10.44 ms
+concurrency   32:   2478.6 decisions/s   p50 11.80 ms   p95  20.39 ms
+concurrency   64:   2416.9 decisions/s   p50 23.87 ms   p95  41.92 ms
+concurrency  128:   2306.3 decisions/s   p50 43.72 ms   p95  82.85 ms
+concurrency  256:   2353.0 decisions/s   p50 45.81 ms   p95 104.62 ms
+```
+
+**The collapse was the instance type, not the design.** Hetzner's run lost more
+than half its throughput past 64 concurrent clients, and that was written up as
+a limit to design against. On dedicated cores the same software holds 2,300 to
+2,400 decisions per second all the way to 256 concurrent, and only latency
+grows, which is what a queue is supposed to do. CPX42 is a SHARED vCPU
+instance; `c2d-highcpu-8` is not. The honest revision: the ceiling is real, the
+cliff was the neighbours.
+
+**What still binds is the audit, on both clouds.** 426 bytes per decision means
+a five-node cluster governing 1000 calls a minute writes about 614 MB a day,
+and the 5 GiB shared event volume fills in nine days. Governance is cheap in
+CPU and expensive in storage, and retention has to be designed on day one.
+
+**The audit is per decision, not per interesting decision.** 23,700 decisions
+produced 23,700 `policy_allow` lines, each hash-chained to the one before. That
+is what makes the trail provable and what makes it grow.
+
+### The measurement trap that nearly produced a false headline
+
+The first attempt reported **0 bytes of audit over 18,500 decisions**, which
+would have read as "GCP writes no audit trail" and was wrong. The RWX volume is
+Longhorn, which serves ReadWriteMany over NFS, and a pod that only READS the
+file gets a cached size: `os.path.getsize`, `open()` plus `seek(0,2)` and even
+`ls -l` all answered 0 or a stale number while the file held 10 MB. Only
+reading the content through gives the truth.
+
+Any measurement of "how fast does this file grow" on an RWX volume has to read
+bytes, not ask for a size.

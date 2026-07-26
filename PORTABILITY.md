@@ -191,6 +191,22 @@ a ceiling of 100.
 | egress | 20 TB per node included | 100 GB free, then about USD 0.09/GB | _no free allowance, USD 0.12/GiB to western Europe_ |
 | **burn while running** | **about EUR 0.20/hour** | **USD 2.52/hour** | **USD 2.04/hour** (measured on what ran) |
 
+**What the governance layer costs, measured**
+
+| | Hetzner | AWS | GCP |
+|---|---|---|---|
+| peak decisions/s per pod | 2,344 | not measured | **2,479** (concurrency 32) |
+| p50 / p95 at working rates | 3.9 / 4.5 ms | not measured | **3.2 / 4.9 ms** |
+| past 64 concurrent | **collapse to 1,059** | not measured | **no collapse, 2,353 at 256** |
+| audit bytes per decision | 393 | not measured | **426** |
+| freeze reaches traffic | 5 ms | not measured | **5.0 ms** |
+
+The collapse row is the one that changes a conclusion rather than adding a
+column. It was written up from the Hetzner run as a design limit. CPX42 is a
+SHARED vCPU instance and `c2d-highcpu-8` is not, and on dedicated cores the
+same software holds its throughput to 256 concurrent clients with only latency
+growing. The ceiling is real; the cliff was the neighbours.
+
 **The same three proofs**
 
 | | Hetzner | AWS | GCP |

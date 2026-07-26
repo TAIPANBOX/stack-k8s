@@ -2151,3 +2151,34 @@ to fall back to the tunnel.
 
 **Do not leave it up while investigating.** A forwarding rule bills USD
 0.030/hour whether or not it forwards anything.
+
+## 70. A file on an RWX volume lies about its size to every reader but one
+
+**Symptom:** a benchmark that measures how fast the audit trail grows reports
+**0 bytes over 18,500 decisions**, on a cluster that is writing the trail
+correctly. Left unchecked it would have been published as "this cloud writes no
+audit".
+
+**Why:** `stack-events` is a ReadWriteMany claim, and Longhorn serves RWX over
+NFS. The pod doing the measuring is a READER; `wardryx` is the writer, on
+another node. NFS caches file attributes, so the reader is told a size that was
+true some time ago and is not told when it changes:
+
+| asked this way | answered |
+|---|---|
+| `os.path.getsize(p)` | 0 |
+| `open(p).seek(0, 2)` | 0 |
+| `ls -l` | 7,997,360, and unchanged across two runs |
+| reading the file through and counting bytes | **10,106,250** |
+
+Only the last one is true. `open()` revalidates on NFS in theory; in practice
+the attribute cache still answered stale here.
+
+**How to measure growth on an RWX volume:** count bytes, not size. Read the
+file and add up the lines, or count lines and multiply by a measured average.
+It costs a pass over the file and it is the only number that is real.
+
+**The wider version:** any metric taken with `stat()` against a shared volume
+is suspect, including "is the disk filling up" dashboards that watch a file
+from a sidecar. The writer's own view is correct; every other pod's view is a
+cache with no invalidation you control.
