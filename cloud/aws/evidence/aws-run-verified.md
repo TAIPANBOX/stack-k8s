@@ -203,3 +203,41 @@ attributes, stale data pages. On GCP the skew ran the other way. The number
 above was read from the node running `wardryx`, through the kubelet's own mount
 of the volume, which is the writer's view and the only one that is true.
 GOTCHAS item 70.
+
+---
+
+## Third run, 2026-07-26 23:07 to 23:40: the same silicon as GCP
+
+The second run compared `c7a.2xlarge` (Genoa) against GCP's `c2d-highcpu-8`
+(Milan) and AWS won by 62%. That is a chip result wearing a cloud costume, and
+GCP could not be raised to Genoa because `c3d`'s quota ceiling here is 24 vCPU
+with the increase auto-denied. So AWS was lowered instead: `c6a.2xlarge`, AMD
+EPYC Milan, the exact generational match, with 100 GB disks to match as well.
+One variable left: the cloud.
+
+```
+concurrency    1:    521.2 decisions/s   p50  1.88 ms   p95   2.21 ms
+concurrency    8:   2389.1 decisions/s   p50  3.21 ms   p95   4.43 ms
+concurrency   16:   2418.9 decisions/s   p50  6.32 ms   p95   9.71 ms
+concurrency   32:   2445.2 decisions/s   p50 12.25 ms   p95  20.31 ms
+concurrency   64:   2449.1 decisions/s   p50 23.62 ms   p95  40.12 ms
+concurrency  128:   2397.4 decisions/s   p50 40.41 ms   p95  79.01 ms
+concurrency  256:   2330.6 decisions/s   p50 46.38 ms   p95 108.71 ms
+```
+
+**2,449 decisions/s against GCP's 2,479 is 1.2%, and the p50 differs by 0.01 ms.**
+On the same generation of the same vendor's silicon, the two hyperscalers are
+the same machine, and every apparent cloud difference in the earlier run was the
+chip.
+
+Audit: 18,703 lines, 7,997,360 bytes, **427.6 bytes per decision**, identical to
+the Genoa run and to GCP's 426.4, read from the node running `wardryx` because
+the reader's view of an NFS-backed RWX volume is not to be trusted (item 70).
+
+Freeze reached traffic in 9.2 ms here against 5.3 on Genoa and 5.0 on GCP. One
+sample each, and the number is dominated by a poll interval rather than by the
+cloud, so it is reported and not leaned on.
+
+`verify.sh` 9 passed 0 failed, `security-tests.sh` 24 passed 0 failed 2 noted,
+deploy 30 minutes end to end, no interventions. Torn down immediately after,
+about USD 1 of cluster time.

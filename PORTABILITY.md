@@ -193,51 +193,53 @@ a ceiling of 100.
 
 **What the governance layer costs, measured**
 
-**Read this table with one inequality in mind, because it is not a like-for-like
-on silicon.** The AWS nodes were `c7a.2xlarge`, AMD EPYC **Genoa**; the GCP
-nodes were `c2d-highcpu-8`, AMD EPYC **Milan**, one generation older. Same spec,
-different chip, and that gap explains much of AWS's lead. It was not a choice:
-`c3d` is GCP's Genoa part, its quota ceiling in this region was 24 vCPU against
-the 40 needed, and the increase was auto-denied. The disks differed too, and
-that one was an oversight: AWS ran 240 GB gp3 (a value left in the tfvars from
-the July run) against GCP's 100 GB pd-balanced, which changes the hourly cost
-and the disk's IOPS model but has little effect on a sequential audit append.
+**This table is now silicon-fair.** All three clouds ran AMD EPYC **Milan** at
+8 vCPU / 16 GiB with 100 GB disks: Hetzner CPX42 on SHARED cores, AWS
+`c6a.2xlarge` and GCP `c2d-highcpu-8` on dedicated ones. The AWS Genoa row is
+kept underneath because it answers a different and useful question.
 
-So: "what AWS gave us beat what GCP gave us" is supported. "AWS is faster than
-GCP" is not, and a silicon-fair rematch would run `c7i` against `c3` (both
-Intel, both available) or wait for a `c3d` quota.
-
-| | Hetzner CPX42 (SHARED vCPU) | AWS c7a.2xlarge (dedicated, Genoa) | GCP c2d-highcpu-8 (dedicated, Milan) |
+| | Hetzner CPX42 (Milan, SHARED) | AWS c6a.2xlarge (Milan) | GCP c2d-highcpu-8 (Milan) |
 |---|---|---|---|
-| peak decisions/s per pod | 2,344 | **4,028** (concurrency 16) | **2,479** (concurrency 32) |
-| p50 at working rates | 3.9 ms | **1.9 ms** | **3.2 ms** |
-| past 64 concurrent | **collapse to 1,059** | **no collapse, 3,782 at 256** | **no collapse, 2,353 at 256** |
-| audit bytes per decision | 393 | **428** | **426** |
-| freeze reaches traffic | 5 ms | **5.3 ms** | **5.0 ms** |
-| cluster burn while measuring | EUR 0.20/h | USD 2.52/h (240 GB disks) | USD 2.04/h (100 GB disks) |
-| decisions per currency-hour of cluster | 42.2 M per EUR | 5.7 M per USD | 4.4 M per USD |
-| **cost per million governed decisions** | **EUR 0.024** | **USD 0.174** | **USD 0.229** |
+| peak decisions/s per pod | 2,344 | **2,449** | **2,479** |
+| p50 at working rates (8 concurrent) | 3.9 ms | **3.21 ms** | **3.22 ms** |
+| past 64 concurrent | **collapse to 1,059** | **no collapse, 2,331 at 256** | **no collapse, 2,353 at 256** |
+| audit bytes per decision | 393 | **427.6** | **426.4** |
+| freeze reaches traffic | 5 ms | **9.2 ms** | **5.0 ms** |
+| cluster burn while measuring | EUR 0.20/h | **USD 1.836/h** | **USD 2.04/h** |
+| **cost per million governed decisions** | **EUR 0.024** | **USD 0.208** | **USD 0.229** |
 
-**The collapse was the instance type, and now two clouds say so.** It was
-written up from the Hetzner run as a design limit to plan against. CPX42 is a
-SHARED vCPU instance; `c7a.2xlarge` and `c2d-highcpu-8` are not. On dedicated
-cores, on two different hypervisors and two different AMD generations, the same
-software holds its throughput all the way to 256 concurrent clients and only
-latency grows, which is what a queue is supposed to do. The ceiling is real;
-the cliff was the neighbours. That correction belongs in the article.
+**On the same silicon the two hyperscalers are the same machine.** 2,449 against
+2,479 decisions per second is 1.2% apart, and the p50 differs by one hundredth
+of a millisecond. Everything that looked like a cloud difference in the first
+measurement was the chip: the earlier AWS run used `c7a.2xlarge`, which is
+Genoa, one generation newer, because GCP's Genoa part is quota-blocked for a new
+account. The software behaves identically on both.
 
-**Audit bytes per decision is a property of the software, not the cloud**: 426
-and 428 on two clouds, from the same binary writing the same hash-chained
-schema. The 393 from Hetzner differs because the payload did, not because the
-cloud did.
+**The collapse was the shared vCPU, and three columns now say so.** Hetzner's
+CPX42 lost more than half its throughput past 64 concurrent clients. Neither
+dedicated-core cloud loses any, on either chip generation: throughput holds and
+only latency grows. The published conclusion that a fleet must be designed
+against a 64-client cliff was wrong; it was designed against a neighbour.
 
-**The last row is the one to lead with.** Governing an agent action costs
-almost nothing in CPU, and what it costs is legible: about EUR 0.024 per
-million decisions on Hetzner against USD 0.174 on AWS and USD 0.229 on GCP.
-The hyperscalers land within a third of each other once the hourly rate is
-divided by what the hour bought, and Hetzner is an order of magnitude below
-both at half the throughput. That ordering survives the silicon caveat above;
-the gap between the two hyperscalers does not.
+**And the newest generation is the cheapest work, not the dearest.** For
+reference, the same benchmark on AWS `c7a.2xlarge` (Genoa):
+
+| | AWS c7a.2xlarge (Genoa) |
+|---|---|
+| peak decisions/s per pod | 4,028 |
+| p50 at 8 concurrent | 1.92 ms |
+| cluster burn | USD 2.524/h (with 240 GB disks) |
+| **cost per million governed decisions** | **USD 0.174** |
+
+Genoa costs 37% more per hour than Milan on AWS and returns 64% more
+throughput, so it is **16% cheaper per governed decision**. Anyone sizing this
+stack for cost per unit of governance should reach for the newest generation
+available to them, and the quota that blocks it is therefore a price increase in
+disguise.
+
+**Audit bytes per decision belong to the software, not the cloud**: 427.6 and
+426.4 on two clouds from the same binary. Hetzner's 393 differs because the
+payload did.
 
 **The same three proofs**
 
