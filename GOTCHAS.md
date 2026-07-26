@@ -1707,3 +1707,45 @@ a re-run reports "already covers all N node(s)" and makes no request at all.
 **The general form:** when a script has been given the list, do not ask an API
 for a bigger one. The token's scope and the task's scope are different
 questions, and cloud APIs answer the first.
+
+## 59. A fresh random k3s token makes the installer unrepeatable
+
+`install.sh` generated the cluster token like this:
+
+```bash
+K3S_TOKEN_VALUE="${K3S_TOKEN_VALUE:-$(head -c 18 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
+```
+
+which is correct exactly once. k3s encrypts its bootstrap data with the token
+the cluster was created with, so the second run hands it a different one and
+k3s refuses to start:
+
+```
+level=fatal msg="Error: preparing server: failed to bootstrap cluster data:
+  failed to reconcile with local datastore:
+  bootstrap data already found and encrypted with different token"
+```
+
+The operator sees only `Job for k3s.service failed because the control process
+exited with error code`, and the journal buries the one line that matters under
+a hundred repetitions of `Unit process NNNN (containerd-shim) remains running
+after unit stopped`.
+
+The script meanwhile prints, in its own preflight, `(k3s already present on X:
+this script is idempotent, it will re-run the installer)`, and its error trap
+promises `Re-running is safe: every step here is idempotent`. Both were false
+for the one step that mattered.
+
+**Fixed here:** the token is read from `/var/lib/rancher/k3s/server/token` when
+that exists, and only generated when it does not.
+
+**Read it from the DATASTORE, not from the environment file.** The k3s installer
+rewrites `/etc/systemd/system/k3s.service.env` with whatever it was just given,
+so after a failed run that file holds the WRONG token and the right one survives
+only in the datastore's own copy. Measured on the box: 38 characters in the env
+file, 112 in the datastore, and only the second one worked.
+
+**The general form:** anything generated with `/dev/urandom` at the top of an
+installer is a first-run value. If the thing it identifies persists, the second
+run has to find it rather than mint it, and "idempotent" in a comment is not a
+property, it is a claim that has to be true of every line under it.

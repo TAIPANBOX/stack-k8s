@@ -288,7 +288,27 @@ echo "   done"
 # /etc/systemd/system/k3s.service.env (0600), whereas a flag would put it in
 # the unit file and in every `ps` listing for the life of the node.
 say "k3s server on $FIRST ($FIRST_PRIV)"
-K3S_TOKEN_VALUE="${K3S_TOKEN_VALUE:-$(head -c 18 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
+# The token is REUSED when this cluster already has one, and that is what makes
+# a second run of this script possible at all. k3s encrypts its bootstrap data
+# with the token the cluster was created with, so handing it a fresh random one
+# is fatal and says so in a way that names neither the token nor this script:
+#
+#   failed to reconcile with local datastore:
+#   bootstrap data already found and encrypted with different token
+#
+# Read from the DATASTORE's own copy, not from
+# /etc/systemd/system/k3s.service.env: the k3s installer rewrites that env file
+# with whatever it was just given, so by the time a failed run is examined it
+# holds the wrong token and the right one survives only here.
+K3S_TOKEN_VALUE="${K3S_TOKEN_VALUE:-}"
+if [ -z "$K3S_TOKEN_VALUE" ]; then
+  K3S_TOKEN_VALUE="$(sh_ "$FIRST" 'cat /var/lib/rancher/k3s/server/token 2>/dev/null' || true)"
+  if [ -n "$K3S_TOKEN_VALUE" ]; then
+    echo "   reusing the token this cluster was created with"
+  else
+    K3S_TOKEN_VALUE="$(head -c 18 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  fi
+fi
 sh_ "$FIRST" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - server \
     --cluster-init \
     --node-ip '$FIRST_PRIV' --advertise-address '$FIRST_PRIV' \
