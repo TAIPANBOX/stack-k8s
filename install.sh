@@ -174,12 +174,35 @@ if found:
     fw = found[0]; api(f"firewalls/{fw['id']}/actions/set_rules", {"rules": rules}, "POST")
 else:
     fw = api("firewalls", {"name": name, "rules": rules}, "POST")["firewall"]
-servers = [s["id"] for s in api("servers?per_page=50")["servers"]]
-api(f"firewalls/{fw['id']}/actions/apply_to_resources",
-    {"apply_to": [{"type": "server", "server": {"id": i}} for i in servers]}, "POST")
-print(f"   firewall {fw['id']} applied to {len(servers)} server(s): everything inbound dropped except 22, 6443 and icmp from {MY}")
+# THIS cluster's nodes, matched by public address, and not one server more.
+# This used to take every server the token could see and apply the firewall to
+# all of them. A Hetzner token is project-wide, so a project holding anything
+# else got that machine locked to one operator's address by a script it was
+# never named in. The nodes are an argument to this installer; there is no
+# reason to ask the API which servers exist.
+wanted = set(sys.argv[2:])
+servers = [s for s in api("servers?per_page=50")["servers"]
+           if (s["public_net"]["ipv4"] or {}).get("ip") in wanted]
+missing = wanted - {(s["public_net"]["ipv4"] or {}).get("ip") for s in servers}
+if missing:
+    sys.exit(f"   these --servers/--agents are not in this Hetzner project: {sorted(missing)}\n"
+             f"   (a firewall applied to the wrong project is worse than none)")
+
+# Already applied is not an error. `apply_to_resources` answers 422 for a
+# resource the firewall already covers, so a plain re-run of an installer that
+# advertises itself as idempotent died on its own previous success.
+already = {a.get("server", {}).get("id") for a in fw.get("applied_to", [])
+           if a.get("type") == "server"}
+todo = [s["id"] for s in servers if s["id"] not in already]
+if todo:
+    api(f"firewalls/{fw['id']}/actions/apply_to_resources",
+        {"apply_to": [{"type": "server", "server": {"id": i}} for i in todo]}, "POST")
+    print(f"   firewall {fw['id']} applied to {len(todo)} node(s)")
+else:
+    print(f"   firewall {fw['id']} already covers all {len(servers)} node(s)")
+print(f"   everything inbound dropped except 22, 6443 and icmp from {MY}")
 PY
-    sh_ "$FIRST" "HCLOUD_TOKEN='$HCLOUD_TOKEN' python3 /tmp/fw.py '$OPERATOR_IP' && rm -f /tmp/fw.py"
+    sh_ "$FIRST" "HCLOUD_TOKEN='$HCLOUD_TOKEN' python3 /tmp/fw.py '$OPERATOR_IP' ${ALL_NODES[*]} && rm -f /tmp/fw.py"
     echo "   NOTE: if your address changes, re-run this script or widen the rule, or you will be locked out."
   fi
 else

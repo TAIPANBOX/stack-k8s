@@ -1669,3 +1669,41 @@ so RollingUpdate was describing something that cannot happen.
 **The general form:** RollingUpdate assumes old and new can coexist. Anything
 claiming a node-wide resource, a host port, a host path lock, a fixed device,
 breaks that assumption, and the failure is a deadlock rather than an error.
+
+## 58. A Hetzner token is project-wide, so "all servers" is not "your cluster"
+
+The firewall step read the server list from the API:
+
+```python
+servers = [s["id"] for s in api("servers?per_page=50")["servers"]]
+api(f"firewalls/{fw['id']}/actions/apply_to_resources", ...)
+```
+
+and applied the firewall to every one of them. The installer is TOLD which
+machines it owns, on the command line, and asked the API instead.
+
+A Hetzner API token is scoped to a project, not to a server. So a project
+holding anything besides this cluster gets that machine's inbound traffic
+restricted to one operator's address by a script it was never named in. Found
+with five servers in the project and one in the cluster: both firewalls this
+repo creates were attached to all five.
+
+Nothing warns you. The firewall applies cleanly, and the other machines stay
+reachable from the operator's own address, so it looks fine from the desk of
+the person who caused it.
+
+**Also not idempotent.** `apply_to_resources` answers **HTTP 422 Unprocessable
+Entity** for a resource the firewall already covers, so the second run of an
+installer whose own error message says "Re-running is safe: every step here is
+idempotent" died on its own previous success, with a Python traceback and no
+sentence about what was unprocessable.
+
+**Fixed here:** the nodes named in `--servers`/`--agents` are matched against
+the project by public address, and anything not found is a hard stop rather
+than a silent skip (a firewall applied to the wrong project is worse than
+none). Servers the firewall already covers are subtracted before the call, so
+a re-run reports "already covers all N node(s)" and makes no request at all.
+
+**The general form:** when a script has been given the list, do not ask an API
+for a bigger one. The token's scope and the task's scope are different
+questions, and cloud APIs answer the first.
