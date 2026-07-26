@@ -1942,6 +1942,19 @@ plans for: the NEWEST families are the closed ones.
 | N4, N4A | 200 |
 | N4D | 16 |
 
+**There is a THIRD ceiling, and it is global.** `CPUS_ALL_REGIONS` defaults to
+32 on a fresh project, lives on the PROJECT rather than the region, and is
+therefore in neither of the two APIs above. It is read with
+
+```bash
+gcloud compute project-info describe --format=json \
+  | jq -r '.quotas[]|select(.metric=="CPUS_ALL_REGIONS")|"\(.limit) \(.usage)"'
+```
+
+Five 8-vCPU nodes need 40, so a five-node cluster fails at the fifth instance
+even when both regional ceilings are fine. Measured the same day, on the second
+apply, with four instances already created and billing.
+
 **And the increase request is auto-denied.** Filed through the Cloud Quotas API
 with a justification, it came back in three seconds:
 
@@ -1952,6 +1965,19 @@ with a justification, it came back in three seconds:
 
 which is normal for a billing account with no spend history, and is not
 something to wait on.
+
+**But that rule is not the rule.** The GLOBAL increase, filed the same way, on
+the same project, by the same account, minutes later, was APPROVED in under ten
+seconds:
+
+```json
+"quotaConfig": { "preferredValue": "48", "grantedValue": "48",
+                 "stateDetail": "Quota request approved to 48" }
+```
+
+So "a new account cannot raise quotas" is wrong, and worth not repeating: WHICH
+quota decides. The premium current-generation machine families are the guarded
+ones.
 
 **Fixed here:** `cloud/gcp/preflight.sh` reads this ceiling from Service Usage
 before anything is created, and says which families have room when the chosen
@@ -2021,3 +2047,49 @@ of a five-node cluster, for nothing.
 
 **Fixed here:** the wait asks the node for its own `hostname`, which is what
 `cloud/aws/install-aws.sh` already did.
+
+## 68. A rebuilt cluster gets the old addresses, and ssh refuses every node
+
+> **Second-run only.** The first run of a deployment cannot see this, which is
+> why it survived a full clean run and killed the next one.
+
+**Symptom:** `terraform apply` succeeds, the installer starts, and EVERY node
+fails the preflight. On its own the message reads like a network problem:
+
+```
+cannot ssh to ubuntu@34.141.35.26 after two minutes
+```
+
+Behind it, from a plain ssh:
+
+```
+@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@
+Offending ECDSA key in ~/.ssh/known_hosts:53
+```
+
+**Why:** the cloud recycles ephemeral addresses. Tear a cluster down and build
+another in the same project, and there is a good chance the new machines are
+handed the old machines' public addresses. The operator's `known_hosts` still
+holds host keys for the destroyed instances, so ssh does exactly what it should
+and refuses.
+
+`StrictHostKeyChecking=accept-new`, which these scripts use, does NOT help. It
+accepts a host never seen before and rejects one whose key changed. That is the
+correct behaviour and precisely the wrong outcome here.
+
+Measured on 2026-07-26: the first five-node run on this project was clean, the
+teardown was clean, and the rebuild died in the preflight with all five nodes
+refusing while the cluster billed at USD 2.04/hour.
+
+**Fixed here:** both `install-gcp.sh` and `deploy-gcp.sh` run `ssh-keygen -R`
+for every node address before connecting.
+
+**What that is and is not.** It is not disabling host key verification, and the
+difference matters enough to write down. Turning checking off
+(`StrictHostKeyChecking=no` with a throwaway `known_hosts`) means never noticing
+a substituted host. This forgets the key of a machine that no longer exists, for
+an address the cloud has just re-issued, and then verifies normally from there.
+
+**The general form:** any state keyed on a cloud's ephemeral addresses is state
+that will be wrong after the next rebuild. `known_hosts` is the one that bites
+first because it fails closed.
