@@ -8,6 +8,21 @@ author. Read `../GOTCHAS.md` items 56 to 63 before starting: every one of them
 was found that day, and six were steps that worked the first time and were
 impossible the second.
 
+> **Status, later the same day: `cloud/gcp/` now exists and this file is a
+> record of what it was asked to do rather than a to-do list.** Written and
+> checked without creating anything: Terraform (14 resources, `plan` clean),
+> `preflight.sh` including a live quota read, `install-gcp.sh` with the five
+> `[GCP]` differences, `deploy-gcp.sh`, `teardown.sh`, `cost-live.sh`,
+> `prices.sh`, `loadbalancer-gcp.yaml` and a README. `COSTS.md` section 7 is
+> filled from Google's own catalog, and `PORTABILITY.md` marks in italics
+> everything answered at a desk. What remains is the run itself: every
+> non-italic row of that sheet, and the three proofs.
+>
+> The four questions below were answered while writing it. Point 3 found a
+> published tag that is NOT the newest release, exactly as predicted. Point 4
+> turned out to have no GCP counterpart at all, which is the single most useful
+> thing this preparation produced: see `cloud/gcp/README.md` item 6.
+
 ## What is already answered
 
 `../PORTABILITY.md` holds the Hetzner baseline and the AWS column, both from
@@ -33,6 +48,27 @@ not start by discovering it:
 So the run is blocked on one act that is nobody's but the account owner's:
 linking a project to that billing account. That is switching spending ON, and it
 is the reason this file does not contain a command to do it.
+
+**Resolved the same evening, and worth recording because the mechanism is a GCP
+difference in its own right.** The run now uses a project belonging to a
+different person, `stack-k8s-gcp`, on THEIR billing account, with the operator
+added to it. On AWS the equivalent was an IAM user, an access key and a secret
+that had to travel from one person to the other. On GCP nothing travels: the
+owner grants a role to the operator's existing Google identity, and the operator
+signs in as themselves. Three things about that were not obvious:
+
+- **Owner cannot be granted from the command line** on a project with no
+  organization. The API answers `SOLO_MUST_INVITE_OWNERS` and the console
+  instead sends an email invitation that has to be accepted. Roles below Owner
+  (`editor`, `resourcemanager.projectIamAdmin`, `iam.serviceAccountUser`) take
+  effect immediately and are enough for everything here.
+- **A role on the project says nothing about the bill.** Seeing credits, spend
+  or setting a budget alert needs a separate grant on the BILLING account
+  (`billing.viewer`, `billing.costsManager`), and the console page that grants
+  it hides behind a "SHOW INFO PANEL" button.
+- **The trial has to be upgraded to a paid account** before a region will allow
+  40 vCPUs, and the upgrade keeps the credits but removes the trial's automatic
+  stop: past the credits, the card is charged.
 
 The shape to price against: AWS ran five `c7a.2xlarge`, 8 vCPU and 16 GB each,
 and burned about **USD 2.16 per hour**. GCP at the same shape is in the same

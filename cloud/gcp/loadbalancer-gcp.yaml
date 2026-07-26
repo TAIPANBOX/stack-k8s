@@ -1,0 +1,74 @@
+# The GCP counterpart of ../../manifests/50-loadbalancer.yaml and of
+# ../aws/loadbalancer-aws.yaml.
+#
+# Those two files exist because that object is the single genuinely NON-portable
+# piece of the whole deployment. Everything else in manifests/ applied to AWS
+# unchanged, and is expected to apply here unchanged too.
+#
+# The interesting part of this file is what is NOT in it. Hetzner needed six
+# annotations. AWS needed five different ones and shared not a single annotation
+# with Hetzner. GCP's in-tree service controller needs NONE: it reads the ports,
+# the selector and externalTrafficPolicy, and it derives everything else from
+# the gce.conf the cloud controller was given at install time.
+#
+#   Hetzner                                         AWS                                  GCP
+#   load-balancer.hetzner.cloud/name                (from the Service name)              (from the Service UID)
+#   load-balancer.hetzner.cloud/location            (from the subnet)                    (from local-zone in gce.conf)
+#   load-balancer.hetzner.cloud/type: lb11          aws-load-balancer-type: nlb          (no sizes, no types)
+#   load-balancer.hetzner.cloud/use-private-ip      (implicit)                           (implicit)
+#   load-balancer.hetzner.cloud/health-check-*      aws-load-balancer-healthcheck-*      (derived from the Service)
+#   load-balancer.hetzner.cloud/uses-proxyprotocol  aws-load-balancer-proxy-protocol     (no proxy protocol at all)
+#
+# That is worth stating plainly in the write-up, because it cuts against the
+# usual story: the cloud with the most configuration surface needed the least
+# configuration here. What it costs instead is that nothing about the balancer
+# is visible in this file, so "why did it do that" is answered by reading
+# gce.conf on the cluster rather than by reading the manifest.
+#
+# METERED. A regional external passthrough Network Load Balancer in Frankfurt is
+# USD 0.030/hour for the forwarding rule plus USD 0.010/GiB of data processed,
+# so about USD 21.90/month before traffic, against USD 19.71 for the AWS NLB and
+# EUR 7.49 for the Hetzner lb11 this replaces.
+#
+# Deleting this object deletes the balancer, which is the point: nothing is left
+# hand-made in a console for someone to forget. ../gcp/teardown.sh deletes it
+# first for exactly that reason, and then sweeps for the target pool, the health
+# check and the FIREWALL RULE that the controller also created and that keep the
+# VPC undeletable if they survive.
+apiVersion: v1
+kind: Service
+metadata:
+  name: genaryx-console-lb
+  namespace: agent-stack
+  # One annotation, and it is optional: it pins the legacy target-pool
+  # implementation that cloud-provider-gcp uses by default on a self-managed
+  # cluster. Stated rather than assumed, because GKE has been moving Services to
+  # a backend-service implementation with different health check behaviour, and
+  # a run whose balancer type depends on a default is a run that cannot be
+  # reproduced.
+  annotations:
+    cloud.google.com/l4-rbs: "disabled"
+spec:
+  type: LoadBalancer
+  # Local, matching both other clouds, so the console sees real client
+  # addresses. It also changes where the health check lands: with Local,
+  # kube-proxy opens a separate healthCheckNodePort and only nodes actually
+  # running the pod answer it.
+  #
+  # The health check arrives from 35.191.0.0/16 and 130.211.0.0/22, which are
+  # Google's published probe ranges and belong to no VPC, so main.tf admits
+  # exactly those two prefixes on the NodePort range. That is GOTCHAS.md item 11
+  # re-derived for a third cloud, and it had to be re-derived again: on Hetzner
+  # the check came from one balancer address, on AWS from network interfaces
+  # inside the subnet, here from two fixed prefixes that exist before the
+  # balancer does.
+  externalTrafficPolicy: Local
+  selector:
+    app: genaryx-console
+  ports:
+    - name: https
+      port: 443
+      targetPort: http
+    - name: http
+      port: 80
+      targetPort: http

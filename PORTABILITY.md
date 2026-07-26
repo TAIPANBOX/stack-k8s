@@ -122,48 +122,57 @@ mode and its environment descriptor).
 ## 3. The comparison sheet, AWS column filled in
 
 Run on 2026-07-25, self-managed k3s on EC2. Evidence in
-`cloud/aws/evidence/aws-run-verified.md`. GCP is still open.
+`cloud/aws/evidence/aws-run-verified.md`.
+
+The GCP column has two kinds of entry, and they are marked apart on purpose.
+Anything in **bold** was measured on a live cluster. Anything in _italics_ was
+established at a desk on 2026-07-26 while `cloud/gcp/` was being written, from
+Google's own price list, registry and API, with no cluster running and nothing
+spent. The rest is blank because it needs the run.
 
 **Bring-up**
 
 | | Hetzner | AWS | GCP |
 |---|---|---|---|
 | wall-clock, zero to "every plane answers" | about 25 min | **about 24 min** (33:47 the first time, three blocking bugs) | |
-| steps needing a cloud-specific decision | baseline | **6** (see below) | |
-| does `providerID` come out right unasked | no, set at install | **no, set at install**, and it carries the zone | |
+| steps needing a cloud-specific decision | baseline | **6** (see below) | _6 found before the run, one of them Kubernetes-level_ |
+| does `providerID` come out right unasked | no, set at install | **no, set at install**, and it carries the zone | _no, set at install, and it carries project, zone and the NAME_ |
 | is NetworkPolicy actually enforced | yes, Calico | **yes, Calico, unchanged** | |
-| infrastructure created by one command | no, servers by hand | **yes, 28 s for 3 nodes, 12 s for 2 more** | |
+| infrastructure created by one command | no, servers by hand | **yes, 28 s for 3 nodes, 12 s for 2 more** | _yes, 14 Terraform resources_ |
 
 **Storage**
 
 | | Hetzner | AWS | GCP |
 |---|---|---|---|
 | does an RWX claim bind, which driver | yes, Longhorn | **yes, Longhorn, unchanged** | |
-| minimum billable capacity for RWX | none | **none** (EFS has no minimum; not needed, Longhorn sufficed) | Filestore minimum is the number to check |
+| minimum billable capacity for RWX | none | **none** (EFS has no minimum; not needed, Longhorn sufficed) | _1 TiB. Filestore BASIC_HDD bills a whole TiB at USD 0.19/GiB-month, so a 5 GiB claim costs USD 194.56/month against USD 1.80 on EFS_ |
 | RWO detach/reattach when a pod moves | 30-60 s | not re-measured | |
-| node disk | included in the server | **billed separately, USD 0.0952/GB-month** | |
+| node disk | included in the server | **billed separately, USD 0.0952/GB-month** | _billed separately, USD 0.12/GiB-month, and it counts against the SSD quota_ |
 
 **Load balancer**
 
 | | Hetzner | AWS | GCP |
 |---|---|---|---|
 | does `type=LoadBalancer` get targets automatically | yes | **yes, all 5 instances** | |
-| what source does the health check arrive with | the balancer's private address | **its own ENIs in the subnet, on a SEPARATE port kube-proxy answers** | |
+| what source does the health check arrive with | the balancer's private address | **its own ENIs in the subnet, on a SEPARATE port kube-proxy answers** | _35.191.0.0/16 and 130.211.0.0/22, two published prefixes that belong to no VPC_ |
+| how many annotations does the Service need | 6 | **5, sharing none of Hetzner's** | _0_ |
 | does a healthy target mean traffic flows | yes | **NO. Healthy and silent for six minutes (item 45)** | |
 | apply to a request returning 200 | about 1 min | **3 min 34 s** | |
-| hourly price | EUR 7.49/month | **USD 0.027/hour + LCU, about USD 19.71/month** | |
+| hourly price | EUR 7.49/month | **USD 0.027/hour + LCU, about USD 19.71/month** | _USD 0.030/hour + USD 0.010/GiB, about USD 21.90/month_ |
 
 **Cost, like for like, measured from each provider's own price list**
 
 | | Hetzner | AWS | GCP |
 |---|---|---|---|
-| 5 x (8 vCPU / 16 GB) on demand, monthly | EUR 137 | **USD 1,710** (`c7a.2xlarge`) | |
-| node disks, 5 x 240 GB, monthly | included | **USD 114.24** | |
-| public IPv4, 5 addresses, monthly | included | **USD 18.25** | |
-| private network | EUR 0 | **USD 0** (VPC), but cross-AZ traffic is USD 0.01/GB each way | |
-| load balancer, monthly | EUR 7.49 | **USD 19.71** | |
-| egress | 20 TB per node included | 100 GB free, then about USD 0.09/GB | |
-| **burn while running** | **about EUR 0.20/hour** | **USD 2.52/hour** | |
+| 5 x (8 vCPU / 16 GB) on demand, monthly | EUR 137 | **USD 1,710** (`c7a.2xlarge`, AMD) | _USD 1,291_ (`c3d-highcpu-8`, AMD) |
+| same, on the Intel part | n/a | **USD 1,487** (`c7i.2xlarge`) | _USD 1,465_ (`c3-highcpu-8`), and it needs a quota increase |
+| node disks, 5 x 240 GB, monthly | included | **USD 114.24** | _USD 144.00_ |
+| public IPv4, 5 addresses, monthly | included | **USD 18.25** | _USD 14.88, after 744 free IP-hours a month_ |
+| private network | EUR 0 | **USD 0** (VPC), but cross-AZ traffic is USD 0.01/GB each way | _USD 0 (VPC), cross-zone traffic also billed_ |
+| load balancer, monthly | EUR 7.49 | **USD 19.71** | _USD 21.90_ |
+| RWX for a 5 GiB event log, monthly | EUR 0 (Longhorn) | **USD 1.80** (EFS) | _USD 194.56_ (Filestore, 1 TiB minimum) |
+| egress | 20 TB per node included | 100 GB free, then about USD 0.09/GB | _no free allowance, USD 0.12/GiB to western Europe_ |
+| **burn while running** | **about EUR 0.20/hour** | **USD 2.52/hour** | _USD 1.88/hour_ |
 
 **The same three proofs**
 
@@ -223,9 +232,14 @@ engineering; it suggests the two are priced for different questions.
 
 ## 5. Still open
 
-- GCP, both shapes, entire column above.
-- Filestore minimum billable capacity: the one number most likely to decide the
-  storage section.
+- GCP, every row above that is not in italics: the run itself.
+- ~~Filestore minimum billable capacity~~ **answered without creating anything,
+  2026-07-26: 1 TiB on BASIC_HDD, USD 194.56/month for the 5 GiB event log,
+  against USD 1.80 on EFS.** The section 2 prediction that RWX would be the
+  biggest cost difference was wrong on AWS and is right on GCP, which is a
+  better result than either answer alone: it means the prediction was about the
+  wrong thing, not simply wrong. What varies is not "cloud RWX is dear" but
+  whether the product bills provisioned or used capacity.
 - Whether EKS removes items 2, 4 and 6 (it should remove all three) and what
   the USD 0.10/hour control plane fee is actually buying.
 - RWO detach/reattach timing, not re-measured on AWS.

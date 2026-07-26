@@ -111,6 +111,8 @@ manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm)
 images/         one Dockerfile per language family, plus the console's mixed build
 GOTCHAS.md      every trap this cost us, each with the fix that is already applied
 PORTABILITY.md  the measured Hetzner baseline, and what to compare AWS/GCP on
+cloud/          the same cluster on AWS and on GCP: Terraform, the installer
+                differences, the teardown, and COSTS.md for what each one burns
 evidence/       command output from the live cluster, not claims about it
 ```
 
