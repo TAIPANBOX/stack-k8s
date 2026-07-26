@@ -41,6 +41,12 @@ done
 say()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 warn() { printf '   !! %s\n' "$*"; }
 
+# A teardown must never sit waiting for an answer nobody is there to give.
+# gcloud offers to enable a disabled API and blocks on the reply, which in this
+# script would mean a cluster still billing behind a blinking cursor. The one
+# question worth asking here is asked below, by this script, in its own words.
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+
 command -v gcloud >/dev/null || { echo "gcloud not found" >&2; exit 1; }
 
 if [ -z "$PROJECT" ]; then

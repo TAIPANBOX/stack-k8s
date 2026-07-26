@@ -138,8 +138,25 @@ zone_of() { printf '%s' "${NODE_ZONE[$(node_index "$1")]}"; }
 
 PROJECT_ID=""
 for n in "${ALL_NODES[@]}"; do
-  sh_ "$n" true 2>/dev/null || die "cannot ssh to $SSH_USER@$n (key: $SSH_KEY).
-   If this is a fresh cluster, the usual cause is OS Login: with it enabled GCE
+  # A GCE instance answers the API as RUNNING well before it accepts an ssh
+  # key. The key arrives from instance metadata via the guest agent, which
+  # starts after sshd, so `terraform apply` can finish and hand over addresses
+  # that refuse connections for another half minute. Measured here on
+  # 2026-07-26: a node created 40 seconds earlier failed the preflight while its
+  # two siblings, four minutes old, passed.
+  #
+  # So this waits rather than dying, and only says the discouraging thing about
+  # OS Login once waiting has genuinely failed.
+  ssh_ok=0
+  for attempt in $(seq 1 24); do
+    sh_ "$n" true 2>/dev/null && { ssh_ok=1; break; }
+    [ "$attempt" = 1 ] && printf '   %s not answering ssh yet, waiting' "$n"
+    printf '.'
+    sleep 5
+  done
+  [ "$ssh_ok" = 1 ] && [ "${attempt:-1}" -gt 1 ] && printf ' ok\n'
+  [ "$ssh_ok" = 1 ] || die "cannot ssh to $SSH_USER@$n after two minutes (key: $SSH_KEY).
+   If the instance is up, the usual cause is OS Login: with it enabled GCE
    ignores the ssh-keys metadata entirely and derives a different username.
    main.tf pins enable-oslogin=FALSE for exactly this reason."
   su_ "$n" true 2>/dev/null || die "$SSH_USER@$n cannot sudo"
@@ -272,8 +289,15 @@ for n in "${SERVER_LIST[@]:1}"; do
       --kubelet-arg=provider-id=$(provider_id_of "$n") \
       --node-label 'topology.kubernetes.io/zone=$(zone_of "$n")' \
       --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
+  # Ask the node what it calls itself rather than assuming the metadata name.
+  # GCE sets the host name to the FULLY QUALIFIED internal name, so k3s
+  # registers stack-k8s-server-2.europe-west3-a.c.PROJECT.internal while the
+  # metadata service answers stack-k8s-server-2. Looking up the short form never
+  # matches, the loop runs its full 40 attempts, and each server join stalls a
+  # silent 200 seconds on a cluster that is billing (GOTCHAS.md item 67).
+  JOINED_NAME="$(sh_ "$n" hostname 2>/dev/null || printf '%s' "$(name_of "$n")")"
   for i in $(seq 1 40); do
-    k_ "get node $(name_of "$n") -o name" >/dev/null 2>&1 && break
+    k_ "get node $JOINED_NAME -o name" >/dev/null 2>&1 && break
     sleep 5
   done
 done

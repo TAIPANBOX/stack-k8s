@@ -221,7 +221,43 @@ if [ -n "$PROJECT" ] && printf '%s\n' "$ENABLED" | grep -qx compute.googleapis.c
     fi
   }
   check_quota CPUS "$NEED_CPU" "$NODES x $MACHINE_TYPE"
-  check_quota "$FAMILY" "$NEED_CPU" "per-family ceiling for $MACHINE_TYPE"
+  check_quota "$FAMILY" "$NEED_CPU" "legacy per-family ceiling, if this family has one"
+
+  # The quota that actually stops a modern machine type, and the reason this
+  # block exists at all. `compute.regions.describe` does NOT list it: it lists
+  # CPUS, C2_CPUS, N2_CPUS and friends, all of which passed, while the apply
+  # died on a ceiling none of them mentions:
+  #
+  #   Quota 'CPUS_PER_VM_FAMILY' exceeded. Limit: 24.0 in region europe-west3
+  #   dimensions = map[region:europe-west3 vm_family:C3D]
+  #
+  # Measured 2026-07-26: three of five instances created, two refused, and the
+  # partial cluster billed while it was sorted out. It is readable ahead of
+  # time, just not from the same API, so this asks Service Usage directly.
+  #
+  # Worth knowing before choosing a machine type on a fresh project: in
+  # europe-west3 the NEWEST families (C3D, C4, C4A) were capped at 24 vCPU and
+  # an increase request was auto-denied in three seconds, while C2D sat at 100
+  # and N4/N4A at 200. The previous generation is open and the current one is
+  # not, which is the opposite of what anyone plans for.
+  FAM_CODE="$(printf '%s' "$MACHINE_TYPE" | cut -d- -f1 | tr '[:lower:]' '[:upper:]')"
+  PF_URL="https://serviceusage.googleapis.com/v1beta1/projects/$PROJECT/services/compute.googleapis.com"
+  PF_URL="$PF_URL/consumerQuotaMetrics/compute.googleapis.com%2Fcpus_per_vm_family/limits/%2Fproject%2Fregion%2Fvm_family"
+  PF_LIMIT="$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token 2>/dev/null)" "$PF_URL" 2>/dev/null \
+    | jq -r --arg r "$REGION" --arg f "$FAM_CODE" \
+      '.quotaBuckets[]? | select(.dimensions.region==$r and .dimensions.vm_family==$f) | .effectiveLimit' 2>/dev/null | head -1)"
+  if [ -z "$PF_LIMIT" ] || [ "$PF_LIMIT" = "null" ]; then
+    note "CPUS_PER_VM_FAMILY: no separate ceiling for $FAM_CODE in $REGION"
+  elif [ "$PF_LIMIT" -ge "$NEED_CPU" ] 2>/dev/null; then
+    ok "$(printf '%-18s limit %-8s need %-6s   the ceiling that regions.describe does not show' "CPUS_PER_VM_FAMILY" "$PF_LIMIT" "$NEED_CPU")"
+  else
+    bad "$(printf '%-18s limit %-8s need %s   for family %s' "CPUS_PER_VM_FAMILY" "$PF_LIMIT" "$NEED_CPU" "$FAM_CODE")"
+    note "This is the one that fails the apply HALFWAY, leaving instances billing."
+    note "Either request an increase (a fresh project's request may be auto-denied),"
+    note "or pick a family with room. To see them all:"
+    note "    curl -s -H \"Authorization: Bearer \$(gcloud auth print-access-token)\" \\"
+    note "      '$PF_URL' | jq -r '.quotaBuckets[]|select(.dimensions.region==\"$REGION\")|\"\\(.dimensions.vm_family) \\(.effectiveLimit)\"'"
+  fi
   check_quota SSD_TOTAL_GB "$NEED_SSD" "pd-balanced counts as SSD"
   check_quota IN_USE_ADDRESSES "$NODES" "one public address per node"
   check_quota INSTANCES "$NODES" ""

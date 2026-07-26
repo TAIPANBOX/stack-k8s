@@ -15,6 +15,13 @@
 # for. The credits balance lives in the console under Billing > Credits.
 set -euo pipefail
 
+# gcloud offers to ENABLE a disabled API and waits for an answer. In a report
+# that is meant to be free and non-interactive that is two failures at once: it
+# hangs forever with no output, and the thing it is offering to do is turn on a
+# service. Measured here: `filestore instances list` on a project without the
+# Filestore API sat for five minutes with the cursor blinking.
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+
 REGION="${REGION:-europe-west3}"
 CLUSTER_NAME="${CLUSTER_NAME:-stack-k8s}"
 PROJECT="${GCP_PROJECT:-}"
@@ -98,7 +105,7 @@ if [ "${IDLE:-0}" -gt 0 ]; then
 fi
 
 # Disks
-GB="$(g compute disks list --format='value(sizeGb)' 2>/dev/null | awk '{s+=$1} END{print s+0}')"
+GB="$(g compute disks list --format='value(sizeGb)' 2>/dev/null | awk '{s+=$1} END{print s+0}' || true)"
 if [ "${GB:-0}" -gt 0 ]; then
   c="$(awk -v g="$GB" -v r="$RATE_PD_BALANCED_GB_MONTH" 'BEGIN{printf "%.6f", g*r/730}')"
   line "${GB} GB pd-balanced" "$c"; add "$c"
@@ -111,8 +118,17 @@ if [ "${FWD:-0}" -gt 0 ]; then
   line "$FWD x forwarding rule (load balancer)" "$c"; add "$c"
 fi
 
-# Filestore, billed on PROVISIONED capacity, not used
-FSGB="$(g filestore instances list --format='value(fileShares[0].capacityGb)' 2>/dev/null | awk '{s+=$1} END{print s+0}')"
+# Filestore, billed on PROVISIONED capacity, not used.
+#
+# `|| true` is load-bearing and was found the hard way. Under `set -o pipefail`
+# a pipeline reports the RIGHTMOST NON-ZERO status, not the last command's, so
+# when the Filestore API is not enabled on the project (which is the normal
+# case, since nothing here turns it on) gcloud exits 1, awk's clean 0 is
+# discarded, the assignment fails, and `set -e` ends the script SILENTLY at this
+# line. The symptom is a cost report that prints every component and then stops
+# before the total, which reads like a formatting bug rather than an early exit.
+# GOTCHAS.md item 25 is the same mechanism with `head`.
+FSGB="$(g filestore instances list --format='value(fileShares[0].capacityGb)' 2>/dev/null | awk '{s+=$1} END{print s+0}' || true)"
 if [ "${FSGB:-0}" -gt 0 ]; then
   c="$(awk -v g="$FSGB" -v r="$RATE_FILESTORE_HDD_GB_MONTH" 'BEGIN{printf "%.6f", g*r/730}')"
   line "filestore, ${FSGB} GB provisioned" "$c"; add "$c"

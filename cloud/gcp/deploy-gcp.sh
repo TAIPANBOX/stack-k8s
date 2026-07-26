@@ -186,10 +186,30 @@ else
   echo "   done, the nodes are back to the operator's key only"
 fi
 
+# The local port of the operator's ssh tunnel. It is not a free choice: the
+# console checks the WebAuthn origin of every passkey ceremony against
+# http://localhost:<its own bind port>, which is 7420 inside the pod. A tunnel
+# on any other local port therefore enrolls nothing, and the console answers
+#
+#   webauthn: origin mismatch
+#
+# which names neither the port nor the tunnel. Measured on the first live GCP
+# console, 2026-07-26, while enrolling a passkey called gcp-k8s.
+#
+# 17420 is kept, because 7420 is often already taken by a console running on the
+# operator's own machine, and the origin is told to match instead.
+TUNNEL_PORT="${TUNNEL_PORT:-17420}"
+
 # ---- 3. the workload --------------------------------------------------------
 say "step 3/5: the workload"
 tar -cz -C "$ROOT" manifests | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
 k_ "apply -k /root/stack-k8s/manifests"
+
+# Tell the console which origin its operator will actually arrive from, before
+# anything asks it to verify a passkey. See the comment on TUNNEL_PORT.
+k_ "-n agent-stack set env deploy/genaryx-console \
+    GENARYX_WEB_ORIGIN=http://localhost:$TUNNEL_PORT GENARYX_WEB_RP_ID=localhost" >/dev/null 2>&1 || true
+
 say "waiting for rollouts"
 for d in $(k_ "-n agent-stack get deploy -o name"); do
   k_ "-n agent-stack rollout status $d --timeout=300s" || true
@@ -231,10 +251,23 @@ if [ -n "$CONSOLE_NODE" ]; then
   fi
 fi
 
+# Which address does the operator ssh to? Not the Node object's: k3s is told
+# --node-ip <private> on purpose, so a GCE Node carries an InternalIP and NO
+# ExternalIP at all, and a tunnel command built from it points at 10.10.0.x,
+# which is unreachable from the operator's laptop. The first run printed exactly
+# that and looked right.
+#
+# The public addresses are the ones this script was CALLED with, so the mapping
+# is: read each node's private address from the metadata service, find the one
+# that matches the console node's InternalIP, and use its public partner.
 CONSOLE_ADDR=""
 if [ -n "$CONSOLE_NODE" ]; then
-  CONSOLE_ADDR="$(k_ "get node $CONSOLE_NODE -o jsonpath='{.status.addresses[?(@.type==\"ExternalIP\")].address}'" 2>/dev/null || true)"
-  [ -n "$CONSOLE_ADDR" ] || CONSOLE_ADDR="$(k_ "get node $CONSOLE_NODE -o jsonpath='{.status.addresses[?(@.type==\"InternalIP\")].address}'" 2>/dev/null || true)"
+  CONSOLE_PRIV="$(k_ "get node $CONSOLE_NODE -o jsonpath='{.status.addresses[?(@.type==\"InternalIP\")].address}'" 2>/dev/null || true)"
+  for n in "${ALL_NODES[@]}"; do
+    p="$(su_ "$n" "curl -sf -H 'Metadata-Flavor: Google' --max-time 5 http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip" 2>/dev/null || true)"
+    [ -n "$p" ] && [ "$p" = "$CONSOLE_PRIV" ] && { CONSOLE_ADDR="$n"; break; }
+  done
+  [ -n "$CONSOLE_ADDR" ] || CONSOLE_ADDR="$CONSOLE_PRIV"
 fi
 
 cat <<EOF
@@ -250,8 +283,8 @@ ${CONSOLE_PASSWORD:+  Your console sign-in, shown once and stored nowhere:
   design, and the tunnel has to land on the node running the console pod
   (GOTCHAS.md item 13)${CONSOLE_NODE:+, currently $CONSOLE_NODE}:
 
-      ssh -i $SSH_KEY -L 17420:${CONSOLE_IP:-<console-clusterIP>}:7420 $SSH_USER@${CONSOLE_ADDR:-<the address of that node>}
-      open http://localhost:17420
+      ssh -i $SSH_KEY -L $TUNNEL_PORT:${CONSOLE_IP:-<console-clusterIP>}:7420 $SSH_USER@${CONSOLE_ADDR:-<the address of that node>}
+      open http://localhost:$TUNNEL_PORT
 
   Re-check any time:
 

@@ -1,0 +1,51 @@
+# Felyx, the console's copilot, pointed at a cloud model instead of a local one.
+#
+# NOT in kustomization.yaml, for the same reason 50-loadbalancer.yaml is not:
+# applying it starts a meter, and on somebody else's account. 20-console.yaml
+# ships `GENARYX_COPILOT_PROVIDER=ollama` so a default install talks to a model
+# on the operator's own machines and nothing leaves the cluster.
+#
+# Apply it deliberately, and only after the Secret exists:
+#
+#   kubectl -n agent-stack create secret generic stack-copilot \
+#     --from-file=api_key=/path/to/a/file/holding/the/key
+#   kubectl -n agent-stack patch deployment genaryx-console \
+#     --patch-file manifests/55-copilot-cloud.yaml
+#
+# --from-file, not --from-literal: a literal puts the key in this machine's
+# shell history and in the argument list of a running process, where anyone with
+# a terminal on the box can read it out of `ps`. The file is deleted afterwards.
+#
+# METERED, and on a different bill from the cluster: every Felyx conversation is
+# billed by the model provider to the key's owner. A demo session is cents
+# rather than dollars, and it is still real money, so it is an explicit act by
+# the person whose key it is. Use a key with a spend limit, and revoke it when
+# the run ends.
+#
+# GENARYX_COPILOT_ALLOW_REMOTE is the interesting line. The copilot refuses a
+# non-local endpoint unless something states that opt-in explicitly, so a URL
+# alone cannot send a prompt off the box. That guard is the product's own, and
+# it is why this file has to set four variables rather than two.
+#
+# To go back to local-first, delete the Secret and re-apply the manifests:
+#
+#   kubectl -n agent-stack delete secret stack-copilot
+#   kubectl apply -k manifests/
+spec:
+  template:
+    spec:
+      containers:
+        - name: console
+          env:
+            - { name: GENARYX_COPILOT_PROVIDER, value: "anthropic" }
+            - { name: GENARYX_COPILOT_MODEL, value: "claude-sonnet-5" }
+            # A reference, not the key: the copilot resolves env:NAME itself, so
+            # the secret value reaches exactly one process and appears in no
+            # config file.
+            - { name: GENARYX_COPILOT_API_KEY_REF, value: "env:GENARYX_COPILOT_KEY" }
+            - { name: GENARYX_COPILOT_ALLOW_REMOTE, value: "1" }
+            - name: GENARYX_COPILOT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stack-copilot
+                  key: api_key

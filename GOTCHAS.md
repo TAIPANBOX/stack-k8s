@@ -1903,3 +1903,121 @@ Neither `bash -n` nor `shellcheck` is a substitute for running the last line.
 and the first pass does not know it is looking at prose. `$'...'`, backticks and
 unbalanced parentheses in the body are the same hazard. So is an apostrophe in
 `${VAR:-...}`, anywhere.
+
+## 64. The quota that stops a GCP apply is not in the quota list
+
+> **Platform.** GCP does this to everyone whose cluster is newer than their
+> project.
+
+**Symptom:** `terraform apply` creates SOME of the instances and then fails,
+leaving a partial cluster that is already billing:
+
+```
+Error: Error waiting for instance to create: Quota 'CPUS_PER_VM_FAMILY' exceeded.
+  Limit: 24.0 in region europe-west3
+  dimensions = map[region:europe-west3 vm_family:C3D]
+```
+
+**Why:** the preflight checked what `gcloud compute regions describe` reports,
+and every one of those numbers was fine: `CPUS` 200 against 40 needed,
+`INSTANCES` 24 against 5, `IN_USE_ADDRESSES` 8 against 5, and no `C3D_CPUS`
+metric at all, which reads as "this family draws on the general pool".
+
+It does not. `CPUS_PER_VM_FAMILY` is a separate, per-family ceiling that the
+regions API does not list. It is readable, but only from Service Usage:
+
+```bash
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+ 'https://serviceusage.googleapis.com/v1beta1/projects/PROJECT/services/compute.googleapis.com/consumerQuotaMetrics/compute.googleapis.com%2Fcpus_per_vm_family/limits/%2Fproject%2Fregion%2Fvm_family' \
+ | jq -r '.quotaBuckets[]|select(.dimensions.region=="europe-west3")|"\(.dimensions.vm_family) \(.effectiveLimit)"'
+```
+
+On a fresh paid project in `europe-west3`, that answers with a shape nobody
+plans for: the NEWEST families are the closed ones.
+
+| Family | Ceiling |
+|---|---|
+| C3D, C4, C4A (current generation) | 24 |
+| C2D (previous generation, same AMD Milan as Hetzner CPX42) | 100 |
+| N4, N4A | 200 |
+| N4D | 16 |
+
+**And the increase request is auto-denied.** Filed through the Cloud Quotas API
+with a justification, it came back in three seconds:
+
+```json
+"quotaConfig": { "preferredValue": "40", "grantedValue": "24",
+                 "stateDetail": "Quota request denied" }
+```
+
+which is normal for a billing account with no spend history, and is not
+something to wait on.
+
+**Fixed here:** `cloud/gcp/preflight.sh` reads this ceiling from Service Usage
+before anything is created, and says which families have room when the chosen
+one does not. The machine type is a variable for exactly this reason.
+
+**The comparison note:** AWS has one account-wide vCPU ceiling and it is the
+same number for every instance type. GCP's is per family, invisible in the
+obvious API, and inverted against generation. Two clouds, the same class of
+trap, and only one of them can be checked with the command you would think to
+run.
+
+## 65. A Terraform output that assumes success blocks the fix for a failure
+
+**Symptom:** after the partial apply above, EVERY Terraform command fails,
+including the destroy that would stop the billing:
+
+```
+Invalid value for "end_index" parameter: end index must not be greater than
+the length of the list.
+  local.node_count is 5
+```
+
+**Why:** the outputs sliced the instance list by the counts that were REQUESTED
+(`slice(nodes, 0, var.server_count)`), and only three instances existed.
+Terraform evaluates outputs on plan, apply AND destroy, so a broken output is a
+broken destroy. The cluster kept billing until the outputs were repaired.
+
+**Fixed here:** `cloud/gcp/outputs.tf` slices against `length()` of what exists.
+
+**The general form:** anything that runs on the way OUT must not assume the way
+in worked. An output, a teardown script, a status line: if it can only describe
+a healthy cluster, it will be useless at the exact moment it is needed.
+
+## 66. A GCE instance is RUNNING before it will accept your ssh key
+
+**Symptom:** `terraform apply` finishes, the installer starts, and one node
+refuses ssh while its siblings answer:
+
+```
+cannot ssh to ubuntu@34.141.35.26 (key: ~/.ssh/stack-k8s-gcp)
+```
+
+The node was 40 seconds old; the two that worked were four minutes old.
+
+**Why:** the key does not come from the image. It comes from instance metadata,
+installed by the guest agent, which starts AFTER sshd. So GCE reports RUNNING,
+Terraform hands over an address, and the machine answers on port 22 with a host
+key and no authorized key for perhaps another half minute.
+
+**Fixed here:** `cloud/gcp/install-gcp.sh` retries for two minutes before
+giving up, and only then suggests the other cause, which is OS Login being on.
+
+## 67. GCE registers a node under its FULL internal name
+
+**Symptom:** nothing fails. Each server join simply takes 200 seconds longer
+than it should, silently, and the install looks hung.
+
+**Why:** the installer waits for the new node to appear, and looked it up by
+the name the metadata service gives (`stack-k8s-server-2`). GCE sets the host's
+name to the fully qualified internal one, so k3s registers
+`stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal` and the lookup
+never matches. The loop runs its full 40 attempts and continues anyway, because
+the join itself worked.
+
+Costly in the only way that matters on a metered cluster: about seven minutes
+of a five-node cluster, for nothing.
+
+**Fixed here:** the wait asks the node for its own `hostname`, which is what
+`cloud/aws/install-aws.sh` already did.

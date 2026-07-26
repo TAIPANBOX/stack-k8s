@@ -1,11 +1,28 @@
+# Every output below slices against the instances that ACTUALLY EXIST rather
+# than against the counts that were asked for, and that is not defensive
+# programming, it is a bug that cost a live cluster fifteen minutes.
+#
+# The first apply hit a quota ceiling and created three of five instances.
+# Terraform evaluates outputs on every command, including the destroy that was
+# needed to fix it, and `slice(list_of_3, 0, 5)` fails with "end index must not
+# be greater than the length of the list". So the partial apply could not be
+# torn down or reshaped until the outputs were repaired, with all three
+# instances billing throughout. An output that only works when everything
+# worked is an output that breaks exactly when it is needed.
+locals {
+  nat_ips  = google_compute_instance.node[*].network_interface[0].access_config[0].nat_ip
+  n_actual = length(local.nat_ips)
+  n_srv    = min(local.server_count, local.n_actual)
+}
+
 output "servers" {
-  description = "Public addresses of the etcd members."
-  value       = slice(google_compute_instance.node[*].network_interface[0].access_config[0].nat_ip, 0, local.server_count)
+  description = "Public addresses of the etcd members that exist."
+  value       = slice(local.nat_ips, 0, local.n_srv)
 }
 
 output "agents" {
-  description = "Public addresses of the workers."
-  value       = slice(google_compute_instance.node[*].network_interface[0].access_config[0].nat_ip, local.server_count, local.node_count)
+  description = "Public addresses of the workers that exist."
+  value       = slice(local.nat_ips, local.n_srv, local.n_actual)
 }
 
 output "all_nodes" {
@@ -75,8 +92,8 @@ output "next" {
     1. Everything else, one command:
 
          ./deploy-gcp.sh \
-           --servers ${join(",", slice(google_compute_instance.node[*].network_interface[0].access_config[0].nat_ip, 0, local.server_count))} \
-           --agents ${join(",", slice(google_compute_instance.node[*].network_interface[0].access_config[0].nat_ip, local.server_count, local.node_count))}
+           --servers ${join(",", slice(local.nat_ips, 0, local.n_srv))} \
+           --agents ${join(",", slice(local.nat_ips, local.n_srv, local.n_actual))}
 
        Add --console-token <github-token> for the Genaryx console.
 
