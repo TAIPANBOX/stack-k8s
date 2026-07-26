@@ -13,3 +13,8 @@ kubeconfig-tunnel.yaml
 
 # The operator's own two names. site.example.yaml is the tracked template.
 tunnel/site.yaml
+
+# Issued device configs. up.sh writes <console_domain>.conf beside itself, and
+# it carries that device's PRIVATE key. Committing one hands a way in to
+# everyone who can read the repository.
+*.conf
