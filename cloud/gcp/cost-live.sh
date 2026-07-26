@@ -53,9 +53,18 @@ rate_machine() {
     c3d-standard-8) echo 0.42027392 ;;  # 8 x 0.03488434 + 32 x 0.00467162
     c3-highcpu-8)   echo 0.40144544 ;;  # 8 x 0.040887   + 16 x 0.00464684
     c3-standard-8)  echo 0.47614688 ;;  # 8 x 0.040887   + 32 x 0.00464684
+    c2d-highcpu-8)  echo 0.38630400 ;;  # 8 x 0.038088   + 16 x 0.0051
+    c2d-standard-8) echo 0.46790400 ;;  # 8 x 0.038088   + 32 x 0.0051
+    n4-highcpu-8)   echo 0.36126880 ;;  # 8 x 0.0368042  + 16 x 0.0041772
     *)              echo 0 ;;
   esac
 }
+# Set when any running machine type is missing from that table. Without it the
+# total silently omits the largest line: measured on 2026-07-26, a five-node
+# c2d cluster burning USD 2.04/hour was reported as USD 0.1072 because only the
+# disks and addresses had known rates. The instance line said "unknown" on its
+# own row, which nobody reads when the bold number underneath looks calm.
+INCOMPLETE=0
 RATE_PD_BALANCED_GB_MONTH=0.12
 RATE_IPV4_HOUR=0.005          # External IP Charge on a Standard VM, in use
 RATE_ADDRESS_IDLE_HOUR=0.012  # Static Ip Charge in Frankfurt, reserved and unused
@@ -77,6 +86,7 @@ if [ -n "$TYPES" ]; then
     r="$(rate_machine "$t")"
     if [ "$r" = "0" ]; then
       printf '   %-44s %10s (unknown type, add its rate above)\n' "$n x $t" "?"
+      INCOMPLETE=1
     else
       c="$(awk -v n="$n" -v r="$r" 'BEGIN{printf "%.6f", n*r}')"
       line "$n x $t" "$c"; add "$c"
@@ -135,7 +145,13 @@ if [ "${FSGB:-0}" -gt 0 ]; then
 fi
 
 echo "   -----------------------------------------------------------------------"
-printf '   %-44s %10s USD/hour\n' "TOTAL" "$(printf '%.4f' "$TOTAL")"
+if [ "$INCOMPLETE" = 1 ]; then
+  printf '   %-44s %10s USD/hour  INCOMPLETE\n' "TOTAL (machines above are NOT counted)" "$(printf '%.4f' "$TOTAL")"
+  printf '   %s\n' "   ^ this is NOT what you are spending. Add the missing rate to"
+  printf '   %s\n' "     rate_machine() above, or run ./prices.sh to compute it."
+else
+  printf '   %-44s %10s USD/hour\n' "TOTAL" "$(printf '%.4f' "$TOTAL")"
+fi
 printf '   %-44s %10s USD\n' "an 8 hour session" "$(awk -v t="$TOTAL" 'BEGIN{printf "%.2f", t*8}')"
 printf '   %-44s %10s USD\n' "a 30 day month at this rate" "$(awk -v t="$TOTAL" 'BEGIN{printf "%.2f", t*730}')"
 printf '\n   Hetzner baseline, measured:   EUR 144.49/month for the same shape\n'
