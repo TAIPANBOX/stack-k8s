@@ -126,25 +126,37 @@ Run on 2026-07-25, self-managed k3s on EC2. Evidence in
 
 The GCP column has two kinds of entry, and they are marked apart on purpose.
 Anything in **bold** was measured on a live cluster. Anything in _italics_ was
-established at a desk on 2026-07-26 while `cloud/gcp/` was being written, from
-Google's own price list, registry and API, with no cluster running and nothing
-spent. The rest is blank because it needs the run.
+established at a desk on 2026-07-26 from Google's own price list, registry and
+API, with nothing running and nothing spent. The rest is blank because it needs
+more of the run.
+
+**Read the GCP column with one caveat, and it is not a small one: that cluster
+had THREE nodes, not five.** `CPUS_PER_VM_FAMILY` capped C3D at 24 vCPU in
+`europe-west3` and the increase request was auto-denied on a fresh billing
+account (GOTCHAS item 64), so the run went ahead at three servers, which is a
+shape this repo supports: three etcd members, Longhorn's three replicas, the
+whole workload. Every row about behaviour is comparable. Rows about timing are
+not: three nodes means fewer images to distribute and one less join. A
+five-node GCP column needs a second run on a family with room, and `c2d-highcpu-8`
+is the one to use: AMD Milan, the same silicon generation as Hetzner CPX42, and
+a ceiling of 100.
 
 **Bring-up**
 
 | | Hetzner | AWS | GCP |
 |---|---|---|---|
-| wall-clock, zero to "every plane answers" | about 25 min | **about 24 min** (33:47 the first time, three blocking bugs) | |
-| steps needing a cloud-specific decision | baseline | **6** (see below) | _6 found before the run, one of them Kubernetes-level_ |
-| does `providerID` come out right unasked | no, set at install | **no, set at install**, and it carries the zone | _no, set at install, and it carries project, zone and the NAME_ |
-| is NetworkPolicy actually enforced | yes, Calico | **yes, Calico, unchanged** | |
-| infrastructure created by one command | no, servers by hand | **yes, 28 s for 3 nodes, 12 s for 2 more** | _yes, 14 Terraform resources_ |
+| wall-clock, zero to "every plane answers" | about 25 min | **about 24 min** (33:47 the first time, three blocking bugs) | **36 min at 3 nodes**, of which 7 were a silent stall (item 67), so about 29 corrected |
+| steps needing a cloud-specific decision | baseline | **6** (see below) | **7**: the six found before the run, plus the WebAuthn origin |
+| does `providerID` come out right unasked | no, set at install | **no, set at install**, and it carries the zone | **no, set at install**, and it carries project, zone and the NAME |
+| is NetworkPolicy actually enforced | yes, Calico | **yes, Calico, unchanged** | **yes, Calico, 8 policies, default-deny verified** |
+| infrastructure created by one command | no, servers by hand | **yes, 28 s for 3 nodes, 12 s for 2 more** | **yes, 14 resources, and it FAILED HALFWAY on an invisible quota** |
+| did the cloud controller work first try | no (item 4) | **no (items 42, 43)** | **yes**, gce.conf and narrow RBAC derived from source |
 
 **Storage**
 
 | | Hetzner | AWS | GCP |
 |---|---|---|---|
-| does an RWX claim bind, which driver | yes, Longhorn | **yes, Longhorn, unchanged** | |
+| does an RWX claim bind, which driver | yes, Longhorn | **yes, Longhorn, unchanged** | **yes, Longhorn, unchanged**, and the multipathd trap (item 60) did not fire because the fix was already in |
 | minimum billable capacity for RWX | none | **none** (EFS has no minimum; not needed, Longhorn sufficed) | _1 TiB. Filestore BASIC_HDD bills a whole TiB at USD 0.19/GiB-month, so a 5 GiB claim costs USD 194.56/month against USD 1.80 on EFS_ |
 | RWO detach/reattach when a pod moves | 30-60 s | not re-measured | |
 | node disk | included in the server | **billed separately, USD 0.0952/GB-month** | _billed separately, USD 0.12/GiB-month, and it counts against the SSD quota_ |
@@ -176,12 +188,13 @@ spent. The rest is blank because it needs the run.
 
 **The same three proofs**
 
-| | Hetzner | AWS |
-|---|---|---|
-| `cluster-verified` | 10 passed, 0 failed | **10 passed, 0 failed** |
-| `loadbalancer-verified` | reproduced | **reproduced, after item 45** |
-| `freeze-test-verified` | reproduced | **reproduced, survives a policy-plane restart** |
-| `security-tests` | 23 passed, 1 noted | **22 passed, 0 failed, 2 noted** (the extra note is a missing `etcdctl`, encryption verified separately) |
+| | Hetzner | AWS | GCP |
+|---|---|---|---|
+| `cluster-verified` | 10 passed, 0 failed | **10 passed, 0 failed** | **9 passed, 0 failed** (3-node cluster) |
+| `loadbalancer-verified` | reproduced | **reproduced, after item 45** | not run yet |
+| `freeze-test-verified` | reproduced | **reproduced, survives a policy-plane restart** | not run yet |
+| `security-tests` | 23 passed, 1 noted | **22 passed, 0 failed, 2 noted** (the extra note is a missing `etcdctl`, encryption verified separately) | **24 passed, 0 failed, 2 noted** (the same two: no `etcdctl`, and the `default` namespace) |
+| console reachable, operator signed in | yes | yes | **yes, and a passkey enrolled** after the origin fix |
 
 **Teardown**
 
