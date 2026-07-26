@@ -1,0 +1,50 @@
+# Your two names. Copy to site.yaml and fill in, or let ./tunnel/up.sh ask.
+#
+# This file is the only thing in this directory that is yours rather than the
+# repository's, which is why it is a separate file and why site.yaml is not
+# tracked: while these lived in resources.yaml, every `git pull` replaced
+# whatever an operator had set with the names of the machine this was developed
+# on. That failed quietly and in the worst possible direction, so it is now
+# impossible by construction.
+#
+#   console_domain  what the BROWSER addresses from INSIDE the tunnel. Caddy
+#                   serves it on the tunnel address and WebAuthn binds every
+#                   passkey to it, so its A record points at 10.9.0.1.
+#   endpoint_host   what the DEVICE dials from OUTSIDE, before a tunnel exists.
+#                   Its A record points at a public address of one of your nodes.
+#
+# One name cannot do both. It would have to resolve to a public address for the
+# handshake and to a private one for the console, on the same device, at once.
+#
+# `up.sh` resolves both before it creates anything and refuses if they do not
+# match reality, because the failure otherwise is silence rather than an error:
+# WireGuard answers nothing at all to a key it does not know.
+#
+# Two DNS records, then:
+#
+#   box.example.com   A   10.9.0.1                 (Cloudflare: proxy OFF)
+#   gw.example.com    A   <public address of a node>
+#
+# The object is applied in BOTH namespaces because the console reads two of
+# these values and Caddy reads the third, and they live apart. Identical
+# content, so it is written twice here rather than allowed to drift.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: stack-tunnel, namespace: agent-stack }
+data:
+  console_domain: "box.example.com"
+  console_origin: "https://box.example.com"
+  endpoint_host: "gw.example.com"
+  # Optional. Let's Encrypt uses it only to warn you before a certificate
+  # expires unrenewed, which is worth having and costs nothing.
+  acme_email: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: stack-tunnel, namespace: agent-tunnel }
+data:
+  console_domain: "box.example.com"
+  console_origin: "https://box.example.com"
+  endpoint_host: "gw.example.com"
+  acme_email: ""

@@ -20,6 +20,10 @@ resources:
   - namespace.yaml
   - tunnel-pod.yaml
   - resources.yaml
+  # Yours, not the repository's, and deliberately untracked: while these two
+  # names lived in resources.yaml, a `git pull` replaced them with ours.
+  # up.sh writes it if it is missing (asking, or from site.example.yaml).
+  - site.yaml
 
 patches:
   - path: console-patch.yaml

@@ -27,8 +27,8 @@ kubectl version -o json >/dev/null 2>&1 || die "no cluster: set KUBECONFIG"
 # ---- the two names, checked BEFORE anything is created ---------------------
 # This block exists because the alternative is a silent wrong answer.
 #
-# resources.yaml ships with the names of the machine it was developed on. An
-# operator who applies it unchanged does not get an error. They get a console
+# site.yaml carries the two names that are the operator's own. Get them wrong
+# and there is no error. There is a console
 # certificate request for a domain they do not own, which is loud, and a
 # WireGuard config that tells their phone to dial SOMEBODY ELSE'S server, which
 # is not: WireGuard answers nothing at all to an unknown key, by design, so the
@@ -38,14 +38,25 @@ kubectl version -o json >/dev/null 2>&1 || die "no cluster: set KUBECONFIG"
 # Checked here, from the file on disk, before a single object is applied. A
 # refusal at this point costs nothing; the same refusal after the apply has
 # already spent one of five Let's Encrypt attempts for the week (item 54).
-CONSOLE_DOMAIN="$(awk -F'"' '/^  console_domain:/ {print $2; exit}' "$HERE/resources.yaml")"
-ENDPOINT_HOST="$(awk -F'"' '/^  endpoint_host:/ {print $2; exit}' "$HERE/resources.yaml")"
+# Written by configure.sh and not tracked, so a `git pull` cannot replace an
+# operator's names with the ones this was developed on. Missing means nobody has
+# been asked yet, and asking is the first thing to do rather than the last.
+if [ ! -s "$HERE/site.yaml" ]; then
+  say "this tunnel has no names yet"
+  "$HERE/configure.sh" || die "no names, so there is nothing to create.
+   ./tunnel/configure.sh --console-domain box.you.com --endpoint-host gw.you.com"
+fi
+CONSOLE_DOMAIN="$(awk -F'"' '/^  console_domain:/ {print $2; exit}' "$HERE/site.yaml")"
+ENDPOINT_HOST="$(awk -F'"' '/^  endpoint_host:/ {print $2; exit}' "$HERE/site.yaml")"
+[ -n "$CONSOLE_DOMAIN" ] && [ -n "$ENDPOINT_HOST" ] \
+  || die "tunnel/site.yaml has no console_domain or endpoint_host.
+   Rewrite it: ./tunnel/configure.sh --force"
 TUNNEL_IP="10.9.0.1"
 
 say "the two names this tunnel answers to"
 printf '   %-16s %s\n' "console_domain" "$CONSOLE_DOMAIN"
 printf '   %-16s %s\n' "endpoint_host" "$ENDPOINT_HOST"
-echo "   (both live in tunnel/resources.yaml; they are the only two values in"
+echo "   (tunnel/site.yaml, written by configure.sh: the only two values in"
 echo "    this directory that belong to YOU rather than to the repository)"
 
 # python3, not `getent`: macOS ships no getent at all, and this script runs on
@@ -75,9 +86,9 @@ case " $got " in
    Create an A record:   $CONSOLE_DOMAIN  ->  $TUNNEL_IP
    (Cloudflare: proxying OFF, or the name resolves to Cloudflare instead.)
 
-   If the name itself is wrong, change console_domain and console_origin in
-   tunnel/resources.yaml. WebAuthn binds every passkey to that exact name, so
-   changing it later invalidates the ones already enrolled." ;;
+   If the name itself is wrong: ./tunnel/configure.sh --force
+   WebAuthn binds every passkey to that exact name, so changing it later
+   invalidates the ones already enrolled." ;;
 esac
 
 # The endpoint is what a device dials from OUTSIDE, so pointing it at a machine
@@ -105,7 +116,7 @@ else
    replies to nothing it has no key for. There would be no error to read.
 
    Create an A record:   $ENDPOINT_HOST  ->  a public address of one of your nodes
-   or change endpoint_host in tunnel/resources.yaml to a name you control.
+   or ./tunnel/configure.sh --force to give a name you do control.
 
    If the address IS yours and this cluster simply cannot see it (no ExternalIP
    on the nodes, and a gateway the kubeconfig does not name), say so:

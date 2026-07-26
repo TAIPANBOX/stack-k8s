@@ -1,39 +1,11 @@
 # Everything the split needs beyond the two pods.
 
-# ---------------------------------------------------------------------------
-# The two names, and why they are two.
-#
-#   console_domain  what the BROWSER addresses from INSIDE the tunnel. Caddy
-#                   serves it on the tunnel address and WebAuthn binds every
-#                   passkey to it, so its A record points at 10.9.0.1.
-#   endpoint_host   what the DEVICE dials from OUTSIDE, before a tunnel
-#                   exists. Its A record points at a node's public address.
-#
-# One name cannot do both: it would have to resolve to a public address for the
-# handshake and a private one for the console, on the same device, at once.
-#
-# In BOTH namespaces, because the console reads two of these and Caddy reads
-# the third, and they now live apart. Identical content, so up.sh applies the
-# same object twice rather than letting them drift.
-# ---------------------------------------------------------------------------
-apiVersion: v1
-kind: ConfigMap
-metadata: { name: stack-tunnel, namespace: agent-stack }
-data:
-  console_domain: "box.it-rat.com"
-  console_origin: "https://box.it-rat.com"
-  endpoint_host: "gw.it-rat.com"
-  acme_email: ""
----
-apiVersion: v1
-kind: ConfigMap
-metadata: { name: stack-tunnel, namespace: agent-tunnel }
-data:
-  console_domain: "box.it-rat.com"
-  console_origin: "https://box.it-rat.com"
-  endpoint_host: "gw.it-rat.com"
-  acme_email: ""
----
+# The names moved OUT of this file, into tunnel/site.yaml, which is the
+# operator's and is not tracked here. They are the only two values in this
+# directory that differ between deployments, and while they lived in a tracked
+# file every `git pull` overwrote whatever the operator had set with ours. See
+# tunnel/site.example.yaml and tunnel/README.md.
+
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata: { name: wg-state, namespace: agent-tunnel }

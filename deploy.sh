@@ -43,6 +43,13 @@ CONSOLE_TOKEN="${CONSOLE_TOKEN:-}"
 # branch and still be undeployable, which is a strange thing for a deployment
 # script to enforce.
 CONSOLE_REF="${CONSOLE_REF:-main}"
+# The operator tunnel, which is how anyone reaches the console afterwards. Empty
+# means "ask, if there is a terminal to ask on"; 0 means the operator said no
+# and will use `ssh -L` instead, which is a real way to run this.
+WANT_TUNNEL="${WANT_TUNNEL:-}"
+TUNNEL_DONE=0
+CONSOLE_DOMAIN="${CONSOLE_DOMAIN:-}"
+ENDPOINT_HOST="${ENDPOINT_HOST:-}"
 REF="${REF:-main}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/TAIPANBOX/stack-k8s}"
@@ -56,6 +63,9 @@ while [ $# -gt 0 ]; do
     --hcloud-token)  HCLOUD_TOKEN="$2"; shift 2 ;;
     --console-token) CONSOLE_TOKEN="$2"; shift 2 ;;
     --console-ref)   CONSOLE_REF="$2"; shift 2 ;;
+    --console-domain) CONSOLE_DOMAIN="$2"; WANT_TUNNEL=1; shift 2 ;;
+    --endpoint-host)  ENDPOINT_HOST="$2";  WANT_TUNNEL=1; shift 2 ;;
+    --no-tunnel)      WANT_TUNNEL=0; shift ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     -h|--help)       awk 'NR>1 && /^#/ {print; next} NR>1 {exit}' "$0" | sed -E 's/^# ?//'; exit 0 ;;
@@ -105,11 +115,63 @@ else
 fi
 [ -d "$ROOT/manifests" ] || die "no manifests/ in $ROOT"
 
+# ---- 0b. the tunnel's two names, asked BEFORE the long part -----------------
+# Asked here rather than at the end, and the ordering is the whole point: the
+# answers are checked against DNS, and an operator should learn that a record is
+# missing in the first ten seconds rather than after fifteen minutes of building
+# images. Everything else this script needs was already on the command line.
+#
+# Opening /dev/tty rather than testing it: `[ -r /dev/tty ]` succeeds whenever
+# the device node exists, including in a detached process, and the failure then
+# lands after the question has been printed. And a plain `read` would be worse
+# still under the documented `curl ... | bash` form, where this script's own
+# stdin IS the script: it would consume the remaining source as the answer.
+if [ -z "$WANT_TUNNEL" ]; then
+  if { exec 4<>/dev/tty; } 2>/dev/null; then
+    cat >&4 <<'TXT'
+
+   The console is published nowhere: every Service is ClusterIP and
+   security-tests.sh asserts it. Two ways to reach it afterwards:
+
+     a WireGuard tunnel, which needs two names you control and two DNS
+     records, and which every device you later issue goes through
+     ssh -L from your own machine, which needs nothing and suits one operator
+
+TXT
+    printf '   set up the tunnel now? [Y/n] ' >&4
+    IFS= read -r ans <&4 || ans=""
+    case "$(printf '%s' "$ans" | tr 'A-Z' 'a-z' | tr -d '[:space:]')" in
+      n|no) WANT_TUNNEL=0 ;;
+      *)    WANT_TUNNEL=1 ;;
+    esac
+    exec 4>&-
+  else
+    WANT_TUNNEL=0
+    echo "   no terminal to ask on: SKIPPING the tunnel. Add it later with"
+    echo "   ./tunnel/configure.sh then ./tunnel/up.sh, or pass --console-domain"
+    echo "   and --endpoint-host here."
+  fi
+fi
+
+if [ "$WANT_TUNNEL" = 1 ]; then
+  cfg=("$ROOT/tunnel/configure.sh")
+  [ -n "$CONSOLE_DOMAIN" ] && cfg+=(--console-domain "$CONSOLE_DOMAIN")
+  [ -n "$ENDPOINT_HOST" ]  && cfg+=(--endpoint-host  "$ENDPOINT_HOST")
+  [ -s "$ROOT/tunnel/site.yaml" ] && cfg+=(--force)
+  "${cfg[@]}" || die "the tunnel was not configured, so nothing has been installed yet.
+   Re-run, or add --no-tunnel to deploy without it."
+fi
+
 # ---- 1. the cluster ---------------------------------------------------------
 if [ "$SKIP_INSTALL" = 1 ]; then
   say "skipping install.sh (--skip-install)"
 else
   say "step 1/5: the cluster"
+  # KUBECONFIG_OUT stated rather than left to default. install.sh writes
+  # `./kubeconfig.yaml` relative to the CURRENT directory, and this script never
+  # cd's into $ROOT, so run from anywhere else the file lands in one place and
+  # step 6 below looks in another. Naming it makes the two agree.
+  KUBECONFIG_OUT="$ROOT/kubeconfig.yaml" \
   bash "$ROOT/install.sh" --servers "$SERVERS" ${AGENTS:+--agents "$AGENTS"} \
     ${SSH_KEY:+--ssh-key "$SSH_KEY"} ${HCLOUD_TOKEN:+--token "$HCLOUD_TOKEN"}
 fi
@@ -224,6 +286,20 @@ say "step 4/5: is it running"
 sh_ "$FIRST" 'KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/verify.sh' || true
 say "step 5/5: is it contained"
 sh_ "$FIRST" 'KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/security-tests.sh' || true
+
+# ---- 6. the way in ---------------------------------------------------------
+# Last, because it is the only step that hands the operator something to use
+# rather than something to read: a config file, a QR, and an address. The two
+# names it needs were asked for at the top, before any of the above, so a
+# missing DNS record cannot waste the fifteen minutes in between.
+if [ "$WANT_TUNNEL" = 1 ]; then
+  say "step 6: your way in"
+  ( cd "$ROOT" && KUBECONFIG="$ROOT/kubeconfig.yaml" ./tunnel/up.sh ) \
+    || die "the stack is up and verified; only the tunnel failed.
+   Fix what it printed and re-run just that part:
+       cd $ROOT && KUBECONFIG=./kubeconfig.yaml ./tunnel/up.sh"
+  TUNNEL_DONE=1
+fi
 
 CONSOLE_NODE="$(k_ "-n agent-stack get pod -l app=genaryx-console -o jsonpath='{.items[0].spec.nodeName}'" 2>/dev/null || true)"
 CONSOLE_IP="$(k_ "-n agent-stack get svc genaryx-console -o jsonpath='{.spec.clusterIP}'" 2>/dev/null || true)"

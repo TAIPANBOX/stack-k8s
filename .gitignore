@@ -10,3 +10,6 @@ cloud/**/*.tfvars
 cloud/**/kubeconfig.yaml
 cloud/**/tfplan
 kubeconfig-tunnel.yaml
+
+# The operator's own two names. site.example.yaml is the tracked template.
+tunnel/site.yaml
