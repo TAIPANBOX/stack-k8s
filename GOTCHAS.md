@@ -1810,3 +1810,36 @@ failure, because there it means something.
 **The general form:** GOTCHAS collects checks that cannot go red. This is the
 mirror image, and it costs more: a check that cannot go green teaches people to
 ignore red.
+
+## 62. Editing a shell script while it is running corrupts the running copy
+
+A deploy was in its last step when its own file was edited on disk. It ended:
+
+```
+24 passed, 0 failed, 2 noted
+./deploy.sh: line 308: unexpected EOF while looking for matching `"'
+```
+
+The script was syntactically perfect both before and after. `bash -n` passed on
+both versions.
+
+**Why:** bash does not read a script into memory. It reads it lazily, and it
+remembers its position as a BYTE OFFSET into the open file. Insert forty lines
+near the top while it is running and the offset it returns to no longer points
+at the start of a command; it points into the middle of one. The interpreter
+then reports a syntax error at a line number that is correct for neither the old
+file nor the new one.
+
+The failure lands wherever the script happens to be when it next reads, so it
+looks unrelated to the edit and unrelated to whatever the script was doing. Here
+it swallowed the block that prints the operator password, once, which is exactly
+the output that cannot be reproduced by re-running.
+
+**The rule:** never edit a script that is executing. If a fix cannot wait, write
+it to a different file and swap the whole file with `mv`, which replaces the
+directory entry and leaves the running process reading the original inode
+undisturbed. In-place editors that truncate and rewrite (`>`, most editors' save)
+do not do that.
+
+Same hazard, same reason: `git pull` or `git checkout` in a repository whose
+script is currently running.
