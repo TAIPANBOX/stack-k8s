@@ -47,7 +47,7 @@ CLUSTER_NAME="${CLUSTER_NAME:-stack-k8s}"           # [AWS] must equal the kuber
 SKIP_CCM=0
 KUBECONFIG_OUT="${KUBECONFIG_OUT:-./kubeconfig.yaml}"
 
-usage() { sed -n '2,30p' "$0" | sed 's/^# \?//'; exit "${1:-0}"; }
+usage() { sed -n '2,30p' "$0" | sed -E 's/^# ?//'; exit "${1:-0}"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in

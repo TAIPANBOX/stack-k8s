@@ -28,11 +28,21 @@
 # it out and you get the governed stack without the control room, which is a
 # real deployment and not a crippled one: the planes enforce with or without a
 # UI in front of them.
+#
+# `--console-ref <branch>` builds the console from a branch instead of main.
+# The console is a separate repository, so a change proven on a branch there
+# was, until this flag, undeployable by this script at any version.
 set -euo pipefail
 
 SERVERS=""; AGENTS=""; SSH_KEY="${SSH_KEY:-}"
 HCLOUD_TOKEN="${HCLOUD_TOKEN:-}"
 CONSOLE_TOKEN="${CONSOLE_TOKEN:-}"
+# The console is its OWN repository with its own branches, and until this
+# existed there was no way to deploy one: the clone below took whatever `main`
+# happened to be. A console change could be written, reviewed and proven on a
+# branch and still be undeployable, which is a strange thing for a deployment
+# script to enforce.
+CONSOLE_REF="${CONSOLE_REF:-main}"
 REF="${REF:-main}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/TAIPANBOX/stack-k8s}"
@@ -45,9 +55,10 @@ while [ $# -gt 0 ]; do
     --ssh-key)       SSH_KEY="$2"; shift 2 ;;
     --hcloud-token)  HCLOUD_TOKEN="$2"; shift 2 ;;
     --console-token) CONSOLE_TOKEN="$2"; shift 2 ;;
+    --console-ref)   CONSOLE_REF="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
-    -h|--help)       sed -n '2,30p' "$0" | sed 's/^# \?//'; exit 0 ;;
+    -h|--help)       awk 'NR>1 && /^#/ {print; next} NR>1 {exit}' "$0" | sed -E 's/^# ?//'; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
 done
@@ -132,7 +143,21 @@ else
 
   WITH_CONSOLE=0
   if [ -n "$CONSOLE_TOKEN" ]; then
-    if sh_ "$BUILDER" "cd /root/src && if [ -d genaryx-a360 ]; then git -C genaryx-a360 pull -q --ff-only || true; else git clone -q --depth 1 https://x-access-token:$CONSOLE_TOKEN@github.com/TAIPANBOX/genaryx.git genaryx-a360; fi && git -C genaryx-a360 remote set-url origin https://github.com/TAIPANBOX/genaryx.git && echo '   genaryx (console) ok'"; then
+    # `--branch` on both paths, and a hard reset rather than a pull on the
+    # second: `git pull --ff-only` on a checkout sitting on a DIFFERENT branch
+    # fails, gets swallowed by `|| true`, and the build then quietly produces
+    # the previous branch's console while reporting success.
+    if sh_ "$BUILDER" "cd /root/src && \
+       if [ -d genaryx-a360/.git ]; then \
+         git -C genaryx-a360 remote set-url origin https://x-access-token:$CONSOLE_TOKEN@github.com/TAIPANBOX/genaryx.git && \
+         git -C genaryx-a360 fetch -q --depth 1 origin '$CONSOLE_REF' && \
+         git -C genaryx-a360 checkout -q -B '$CONSOLE_REF' FETCH_HEAD; \
+       else \
+         rm -rf genaryx-a360 && \
+         git clone -q --depth 1 --branch '$CONSOLE_REF' https://x-access-token:$CONSOLE_TOKEN@github.com/TAIPANBOX/genaryx.git genaryx-a360; \
+       fi && \
+       git -C genaryx-a360 remote set-url origin https://github.com/TAIPANBOX/genaryx.git && \
+       echo \"   genaryx (console) ok, at \$(git -C genaryx-a360 rev-parse --short HEAD) on $CONSOLE_REF\""; then
       WITH_CONSOLE=1
     else
       echo "   could not clone the console with that token: continuing WITHOUT it"

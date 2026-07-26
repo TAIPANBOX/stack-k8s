@@ -33,7 +33,7 @@ while [ $# -gt 0 ]; do
     --yes|-y)   ASSUME_YES=1; shift ;;
     --check)    CHECK_ONLY=1; shift ;;
     --region)   REGION="$2"; shift 2 ;;
-    -h|--help)  sed -n '2,26p' "$0" | sed 's/^# \?//'; exit 0 ;;
+    -h|--help)  sed -n '2,26p' "$0" | sed -E 's/^# ?//'; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
 done

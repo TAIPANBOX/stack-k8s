@@ -36,7 +36,7 @@ HCLOUD_TOKEN="${HCLOUD_TOKEN:-}"            # read-write project token, for the 
 KUBECONFIG_OUT="${KUBECONFIG_OUT:-./kubeconfig.yaml}"
 
 usage() {
-  sed -n '2,20p' "$0" | sed 's/^# \?//'
+  sed -n '2,20p' "$0" | sed -E 's/^# ?//'
   exit "${1:-0}"
 }
 

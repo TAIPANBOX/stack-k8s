@@ -39,7 +39,7 @@ while [ $# -gt 0 ]; do
     --console-token) CONSOLE_TOKEN="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
-    -h|--help)       sed -n '2,26p' "$0" | sed 's/^# \?//'; exit 0 ;;
+    -h|--help)       sed -n '2,26p' "$0" | sed -E 's/^# ?//'; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
 done
