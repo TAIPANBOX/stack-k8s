@@ -1,0 +1,51 @@
+# raw output, GCP run 2, 5 x c2d-highcpu-8, europe-west3-a, 2026-07-26T19:51:44Z
+
+## nodes
+```
+NAME                                                         STATUS   PROVIDER
+stack-k8s-agent-1.europe-west3-a.c.stack-k8s-gcp.internal    Ready    gce://stack-k8s-gcp/europe-west3-a/stack-k8s-agent-1
+stack-k8s-agent-2.europe-west3-a.c.stack-k8s-gcp.internal    Ready    gce://stack-k8s-gcp/europe-west3-a/stack-k8s-agent-2
+stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal   Ready    gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-1
+stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   Ready    gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-2
+stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   Ready    gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-3
+```
+
+## pods, spread by anti-affinity
+```
+POD                                  STATUS    NODE
+genaryx-console-5d48c65949-psxq7     Running   stack-k8s-agent-1.europe-west3-a.c.stack-k8s-gcp.internal
+idryx-fbf7dfd98-xzwrr                Running   stack-k8s-agent-2.europe-west3-a.c.stack-k8s-gcp.internal
+policy-db-0                          Running   stack-k8s-agent-1.europe-west3-a.c.stack-k8s-gcp.internal
+tokenfuse-cloud-8479cf64b9-xxww4     Running   stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal
+tokenfuse-gateway-77f79b6cff-mbl9t   Running   stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal
+wardryx-f8f44f555-r9ngz              Running   stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal
+```
+
+## volumes
+```
+NAME               STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+cloud-state        Bound    pvc-8bb0b5d2-9333-47f5-a27b-ab147e6bacba   2Gi        RWO            longhorn       <unset>                 14m
+console-state      Bound    pvc-f5f60e6e-d6f6-4598-ad1b-5157195c6e4d   2Gi        RWO            longhorn       <unset>                 14m
+data-policy-db-0   Bound    pvc-b926c0b2-12c1-4732-8cac-a14cb83befed   5Gi        RWO            longhorn       <unset>                 14m
+stack-events       Bound    pvc-f8d5966a-6586-4551-910e-cc3b469a8528   5Gi        RWX            stack-rwx      <unset>                 14m
+```
+
+## storage classes
+```
+NAME                 PROVISIONER          RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+longhorn (default)   driver.longhorn.io   Delete          Immediate           true                   33m
+longhorn-static      driver.longhorn.io   Delete          Immediate           true                   33m
+stack-rwx            driver.longhorn.io   Retain          Immediate           true                   33m
+```
+
+## cloud controller (load balancers only)
+```
+gcp-cloud-controller-manager-2wgvm Running restarts:0
+gcp-cloud-controller-manager-qqpbj Running restarts:0
+gcp-cloud-controller-manager-w28fs Running restarts:0
+```
+
+## the freeze that survived a policy-plane restart
+```
+console-block:verify -> {"id": "console-block:verify", "name": "console-block:verify", "target": "agent://meridian.example/treasury/reconciliati
+```

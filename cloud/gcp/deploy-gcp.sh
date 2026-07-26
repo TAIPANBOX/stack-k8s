@@ -79,6 +79,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 [ -d "$ROOT/manifests" ] || die "no manifests/ above this script. Run it from a checkout of stack-k8s."
 say "using this checkout: $ROOT"
 
+# Same reason as install-gcp.sh section 0: a rebuilt cluster is very likely to be
+# handed the previous one's public addresses, and ssh refuses an address whose
+# host key changed. Done here too because this script ssh's directly, and with
+# --skip-install it never reaches the other one.
+for n in "${ALL_NODES[@]}"; do
+  ssh-keygen -R "$n" >/dev/null 2>&1 || true
+done
+
 # ---- 1. the cluster ---------------------------------------------------------
 if [ "$SKIP_INSTALL" = 1 ]; then
   say "skipping install-gcp.sh (--skip-install)"
@@ -237,7 +245,13 @@ if [ -n "$COPILOT_KEY_FILE" ]; then
     die "--copilot-key-file $COPILOT_KEY_FILE is missing or empty"
   fi
   say "Felyx: pointing the console's copilot at a cloud model (METERED, on that key's account)"
-  tr -d '\r\n' < "$COPILOT_KEY_FILE" | su_ "$FIRST" "umask 077; cat > /tmp/.ck"
+  # `sudo umask 077; cat > file` does NOT do what it reads like, and it took a
+  # live run to notice: umask is a shell builtin, so sudo answers
+  # `sudo: 'umask': command not found`, the semicolon ends that command, and the
+  # redirect then runs UNPRIVILEGED and with the default mask, writing the key
+  # 0644. The error is printed, the script continues, and everything downstream
+  # succeeds, so nothing looks wrong. Measured 2026-07-26.
+  tr -d '\r\n' < "$COPILOT_KEY_FILE" | su_ "$FIRST" "sh -c 'umask 077; cat > /tmp/.ck'"
   k_ "-n agent-stack delete secret stack-copilot --ignore-not-found" >/dev/null 2>&1 || true
   k_ "-n agent-stack create secret generic stack-copilot --from-file=api_key=/tmp/.ck" >/dev/null \
     || die "could not create the stack-copilot secret"

@@ -130,8 +130,12 @@ established at a desk on 2026-07-26 from Google's own price list, registry and
 API, with nothing running and nothing spent. The rest is blank because it needs
 more of the run.
 
-**Read the GCP column with one caveat, and it is not a small one: that cluster
-had THREE nodes, not five.** `CPUS_PER_VM_FAMILY` capped C3D at 24 vCPU in
+**The GCP column is now from a FIVE-node cluster** (`c2d-highcpu-8`, AMD Milan,
+the same silicon generation as CPX42), rebuilt after the first attempt.
+The earlier three-node caveat below is kept because the first run is where most
+of the findings came from.
+
+**The first GCP cluster had THREE nodes, not five.** `CPUS_PER_VM_FAMILY` capped C3D at 24 vCPU in
 `europe-west3` and the increase request was auto-denied on a fresh billing
 account (GOTCHAS item 64), so the run went ahead at three servers, which is a
 shape this repo supports: three etcd members, Longhorn's three replicas, the
@@ -145,7 +149,7 @@ a ceiling of 100.
 
 | | Hetzner | AWS | GCP |
 |---|---|---|---|
-| wall-clock, zero to "every plane answers" | about 25 min | **about 24 min** (33:47 the first time, three blocking bugs) | **36 min at 3 nodes**, of which 7 were a silent stall (item 67), so about 29 corrected |
+| wall-clock, zero to "every plane answers" | about 25 min | **about 24 min** (33:47 the first time, three blocking bugs) | **28 min 44 s at 5 nodes**, second run, no stalls |
 | steps needing a cloud-specific decision | baseline | **6** (see below) | **7**: the six found before the run, plus the WebAuthn origin |
 | does `providerID` come out right unasked | no, set at install | **no, set at install**, and it carries the zone | **no, set at install**, and it carries project, zone and the NAME |
 | is NetworkPolicy actually enforced | yes, Calico | **yes, Calico, unchanged** | **yes, Calico, 8 policies, default-deny verified** |
@@ -176,7 +180,8 @@ a ceiling of 100.
 
 | | Hetzner | AWS | GCP |
 |---|---|---|---|
-| 5 x (8 vCPU / 16 GB) on demand, monthly | EUR 137 | **USD 1,710** (`c7a.2xlarge`, AMD) | _USD 1,291_ (`c3d-highcpu-8`, AMD) |
+| 5 x (8 vCPU / 16 GB) on demand, monthly | EUR 137 | **USD 1,710** (`c7a.2xlarge`, AMD) | **USD 1,410** (`c2d-highcpu-8`, AMD Milan, what actually ran) |
+| cheapest AMD option, if quota allowed it | n/a | n/a | _USD 1,291_ (`c3d-highcpu-8`, capped at 24 vCPU here) |
 | same, on the Intel part | n/a | **USD 1,487** (`c7i.2xlarge`) | _USD 1,465_ (`c3-highcpu-8`), and it needs a quota increase |
 | node disks, 5 x 240 GB, monthly | included | **USD 114.24** | _USD 144.00_ |
 | public IPv4, 5 addresses, monthly | included | **USD 18.25** | _USD 14.88, after 744 free IP-hours a month_ |
@@ -184,15 +189,15 @@ a ceiling of 100.
 | load balancer, monthly | EUR 7.49 | **USD 19.71** | _USD 21.90_ |
 | RWX for a 5 GiB event log, monthly | EUR 0 (Longhorn) | **USD 1.80** (EFS) | _USD 194.56_ (Filestore, 1 TiB minimum) |
 | egress | 20 TB per node included | 100 GB free, then about USD 0.09/GB | _no free allowance, USD 0.12/GiB to western Europe_ |
-| **burn while running** | **about EUR 0.20/hour** | **USD 2.52/hour** | _USD 1.88/hour_ |
+| **burn while running** | **about EUR 0.20/hour** | **USD 2.52/hour** | **USD 2.04/hour** (measured on what ran) |
 
 **The same three proofs**
 
 | | Hetzner | AWS | GCP |
 |---|---|---|---|
-| `cluster-verified` | 10 passed, 0 failed | **10 passed, 0 failed** | **9 passed, 0 failed** (3-node cluster) |
+| `cluster-verified` | 10 passed, 0 failed | **10 passed, 0 failed** | **10 passed, 0 failed** (9 without `--freeze`, as on AWS) |
 | `loadbalancer-verified` | reproduced | **reproduced, after item 45** | not run yet |
-| `freeze-test-verified` | reproduced | **reproduced, survives a policy-plane restart** | not run yet |
+| `freeze-test-verified` | reproduced | **reproduced, survives a policy-plane restart** | **reproduced, survives a policy-plane restart** (block made through the admin API, not the browser) |
 | `security-tests` | 23 passed, 1 noted | **22 passed, 0 failed, 2 noted** (the extra note is a missing `etcdctl`, encryption verified separately) | **24 passed, 0 failed, 2 noted** (the same two: no `etcdctl`, and the `default` namespace) |
 | console reachable, operator signed in | yes | yes | **yes, and a passkey enrolled** after the origin fix |
 

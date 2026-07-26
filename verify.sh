@@ -140,14 +140,34 @@ bus="$(kc exec deploy/genaryx-console -- sh -c 'echo' >/dev/null 2>&1; kc get cm
 if [ "$DO_FREEZE" = 1 ]; then
   head_ "freeze, restart, and check the freeze survived"
   AGENT="${AGENT:-agent://meridian.example/treasury/reconciliation-batch}"
-  inpod "
+  # This check has a PRECONDITION it never used to state: the agent has to be
+  # frozen already, by somebody clicking Freeze in the console or by a policy
+  # put through the admin API. It does not create the block itself, on purpose,
+  # because what it is proving is that a block SOMEONE ELSE made survives.
+  #
+  # Without that precondition the probe answers "allow" both times and the old
+  # code reported `the block did not survive`, which names a persistence bug
+  # (GOTCHAS 14) that has not happened. Measured on the first GCP cluster,
+  # 2026-07-26, on a cluster where nothing had ever been frozen: a clean stack
+  # reported a failure, which is the most expensive kind of wrong.
+  before="$(inpod "
 import os, urllib.request, json
 H={'Authorization':'Bearer ' + os.environ.get('WARDRYX_ADMIN_KEY',''),'Content-Type':'application/json'}
-def post(p,b):
-    return json.loads(urllib.request.urlopen(urllib.request.Request('http://wardryx:8090'+p,data=json.dumps(b).encode(),headers=H),timeout=15).read())
 probe={'agent_id':'$AGENT','run_id':'verify-probe','model':'gpt-4o','est_cost_usd':0.42,'tool_names':['ledger_read'],'steps':3}
-print('  before restart, the PDP says:', post('/v1/decide',probe)['decision'])
-"
+print(json.loads(urllib.request.urlopen(urllib.request.Request('http://wardryx:8090/v1/decide',data=json.dumps(probe).encode(),headers=H),timeout=15).read())['decision'])
+")"
+  echo "  before restart, the PDP says: $before"
+fi
+
+if [ "$DO_FREEZE" = 1 ] && [ "${before:-}" != "deny" ]; then
+  note "nothing is frozen, so there is nothing for a restart to lose"
+  echo "     Freeze $AGENT in the console (or PUT a policy that denies it) and"
+  echo "     run this again. Reporting a pass here would prove nothing, and"
+  echo "     reporting a failure would name a bug that has not happened."
+  DO_FREEZE=0
+fi
+
+if [ "$DO_FREEZE" = 1 ]; then
   echo "  restarting the policy plane..."
   kc delete pod -l app=wardryx --wait=true >/dev/null 2>&1
   kc rollout status deploy/wardryx --timeout=180s >/dev/null 2>&1

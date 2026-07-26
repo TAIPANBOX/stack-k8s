@@ -118,6 +118,29 @@ imds() {
 # ---- 0. preflight ----------------------------------------------------------
 say "preflight on ${#ALL_NODES[@]} node(s)"
 
+# A cloud recycles addresses. The SECOND run of this script on the same project
+# is very likely to be handed the exact addresses the previous cluster had, on
+# machines that are not the previous cluster, and ssh then refuses to connect at
+# all:
+#
+#   WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+#   Offending ECDSA key in ~/.ssh/known_hosts:53
+#
+# `StrictHostKeyChecking=accept-new` does NOT cover this: it accepts a host it
+# has never seen, and rejects one whose key changed, which is the correct
+# behaviour and exactly the wrong outcome here. Measured on 2026-07-26: the
+# first run of this script was clean, the second died in the preflight with
+# every node refusing, on a cluster that was already billing.
+#
+# What this does is NOT "turn off host key checking". It forgets the key of a
+# machine that no longer exists, for an address Terraform has just been handed
+# back, and then checks normally from there.
+say "forgetting host keys for addresses this cloud may have recycled"
+for n in "${ALL_NODES[@]}"; do
+  ssh-keygen -R "$n" >/dev/null 2>&1 || true
+done
+echo "   done (this is not the same as disabling the check: see the comment)"
+
 # Facts per node in parallel INDEXED arrays rather than one associative array.
 # `declare -A` needs bash 4, and macOS still ships bash 3.2.57 as /bin/bash, so
 # an operator driving this from a stock Mac gets "declare: -A: invalid option"
