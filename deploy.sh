@@ -216,6 +216,11 @@ if [ -n "$CONSOLE_NODE" ]; then
     [ "${#CONSOLE_PASSWORD}" = 28 ] || die "could not generate an operator password; /dev/urandom is not readable."
     if printf '%s\n' "$CONSOLE_PASSWORD" | k_ "-n agent-stack exec -i deploy/genaryx-console -- /usr/local/bin/genaryx-web set-password --username $CONSOLE_USER" >/dev/null 2>&1; then
       say "operator '$CONSOLE_USER' created"
+      # The console resolved "do I have an operator" at startup and does not
+      # look again, so without this restart the account exists on disk and the
+      # sign-in page still says the box has none (GOTCHAS.md item 50).
+      k_ "-n agent-stack rollout restart deploy/genaryx-console" >/dev/null 2>&1 || true
+      k_ "-n agent-stack rollout status deploy/genaryx-console --timeout=180s" >/dev/null 2>&1 || true
     else
       CONSOLE_PASSWORD=""
       say "could not set the operator password automatically; the command is printed below"

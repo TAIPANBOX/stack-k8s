@@ -27,13 +27,41 @@ note() { printf '  \033[33mnote\033[0m %s\n' "$*"; warn=$((warn+1)); }
 head_() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 kc()   { $KUBECTL -n "$NS" "$@"; }
 
+# Where the console actually is. It lives in $NS on a plain install, and in its
+# own namespace once the operator tunnel is applied, because the tunnel needs
+# capabilities that $NS refuses on purpose (GOTCHAS 46). Every probe below runs
+# INSIDE the console pod, so a hardcoded namespace here does not make the
+# checks fail honestly: it makes them report that the planes are unreachable
+# when the truth is that the prober could not be found. Measured on 2026-07-26:
+# six FAILs, all of them "expected open, got no answer", all of them wrong.
+CONSOLE_NS="${CONSOLE_NS:-}"
+if [ -z "$CONSOLE_NS" ]; then
+  if $KUBECTL -n "$NS" get deploy genaryx-console >/dev/null 2>&1; then
+    CONSOLE_NS="$NS"
+  elif $KUBECTL -n agent-console get deploy genaryx-console >/dev/null 2>&1; then
+    CONSOLE_NS="agent-console"
+  else
+    CONSOLE_NS="$NS"
+  fi
+fi
+kcc()  { $KUBECTL -n "$CONSOLE_NS" "$@"; }
+[ "$CONSOLE_NS" = "$NS" ] || printf '  (the console is in %s, probes run there)\n' "$CONSOLE_NS"
+
 # Probes run from the console pod: it is the one pod in the namespace with an
 # interpreter (every plane is distroless on purpose), and it is the pod with
 # the MOST permissions, so anything it cannot reach, nothing can.
-inpod() { kc exec -i deploy/genaryx-console -- python3 - 2>/dev/null; }
+inpod() { kcc exec -i deploy/genaryx-console -- python3 - 2>/dev/null; }
 
 connect_test() {  # host port expect(open|blocked) label
   local host="$1" port="$2" expect="$3" label="$4" got
+  # A bare name is a Service in the PLANES namespace. Once the console lives
+  # somewhere else, `wardryx` resolves to nothing there, and the probe reports
+  # the plane unreachable when the truth is that the NAME was. Qualify it.
+  # Anything already carrying a dot is external and left alone.
+  case "$host" in
+    *.*) ;;
+    *) [ "$CONSOLE_NS" = "$NS" ] || host="$host.$NS" ;;
+  esac
   got="$(printf 'import socket\ns=socket.socket()\ns.settimeout(6)\ntry:\n    s.connect(("%s",%s)); print("open")\nexcept Exception:\n    print("blocked")\n' "$host" "$port" | inpod)"
   if [ "$got" = "$expect" ]; then ok "$label ($got, as designed)"; else bad "$label: expected $expect, got ${got:-no answer}"; fi
 }
@@ -186,9 +214,10 @@ head_ "5b. the console namespace holds exactly the exceptions it is allowed"
 # console reaches it over a unix socket that cannot cross a pod boundary. It is
 # allowed to break it in EXACTLY these ways and no others. Anything new fails
 # here, which is the whole point.
-CONSOLE_NS="${CONSOLE_NS:-agent-console}"
-if ! $KUBECTL get ns "$CONSOLE_NS" >/dev/null 2>&1; then
-  ok "no $CONSOLE_NS namespace: the console runs inside $NS under enforced restricted"
+# CONSOLE_NS is resolved once at the top of this file. When it equals $NS the
+# console is in the strict namespace and there is no exception to audit.
+if [ "$CONSOLE_NS" = "$NS" ]; then
+  ok "the console runs inside $NS under enforced restricted: no exception to audit"
 else
   level="$($KUBECTL get ns "$CONSOLE_NS" -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}' 2>/dev/null)"
   warnl="$($KUBECTL get ns "$CONSOLE_NS" -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/warn}' 2>/dev/null)"

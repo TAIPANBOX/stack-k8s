@@ -1349,3 +1349,74 @@ inside the cluster is widened.
 
 **The tell:** the ACME account registered, which proves outbound 443 works. If
 443 works and the challenge still fails, the missing hole is 53.
+
+## 49. A NetworkPolicy selects a POD, so a sidecar's egress is the app's egress
+
+> **Ours, and unfixed in this shape.** Recorded so it cannot reach a demo.
+
+**Symptom:** after moving the console into a pod that also holds Caddy,
+`security-tests.sh` reports:
+
+```
+FAIL console -> the model provider (must go through the gateway): expected blocked, got open
+FAIL console -> the open internet: expected blocked, got open
+```
+
+**Why:** Caddy needs egress on 443 to answer an ACME challenge, so the pod got
+a rule allowing it. NetworkPolicy has no notion of a container: `podSelector`
+picks the POD, and every container in it shares the result. The console
+inherited Caddy's way out.
+
+**Why it matters more than a failed check.** The deployment's central claim is
+that the gateway is the only metered path out, which is what makes "no prompt
+leaves without being metered" a property of the deployment rather than a
+sentence in a README (item 3 of this suite). A console with its own Copilot
+that can reach `api.anthropic.com` directly punctures exactly that. It did not
+happen in `agent-stack`; it happened because the tunnel forced the console into
+a pod with a component that legitimately needs the internet.
+
+**Why it cannot be narrowed away.** Caddy needs `api.cloudflare.com` and
+`acme-v02.api.letsencrypt.org`, both behind CDNs with moving addresses.
+NetworkPolicy matches addresses, not names; FQDN egress rules are a Calico
+Enterprise feature, not an open-source one. "Allow only those two" is not
+expressible here.
+
+**Three ways out, none of them a patch:**
+
+1. take certificate issuance out of the pod entirely, so Caddy reads a Secret
+   somebody else filled and needs no internet at all
+2. give Caddy its own pod, which the tunnel can reach by Service instead of
+   `127.0.0.1`, and which would also let it drop root by listening high
+3. the network transport to the UAPI (item 46), which separates wg and Caddy
+   from the console by construction and closes this as a side effect
+
+The third is the agreed direction, so this is recorded rather than patched:
+fixing it inside the current shape is work that the right shape discards.
+
+**Until then, treat these two failures as expected and named.** A suite with a
+known failure that is written down is honest; the same failure quietly removed
+from the suite is not.
+
+## 50. The console reads whether it has an operator once, at startup
+
+> **Ours.** Harmless on one box, a dead end on Kubernetes.
+
+**Symptom:** `genaryx-web set-password --username ops` prints
+`operator 'ops' set in /var/lib/stack/.taipan/genaryx-web/operator.json` and
+exits zero. The file is on disk with the right size and timestamp. The browser
+still shows **"This box has no operator yet"**, and `/api/auth/session` still
+answers `{"configured": false}`.
+
+**Why:** the console resolves whether an operator exists when it starts, and
+does not look again. On one machine that is invisible, because the operator is
+set before the process runs. On Kubernetes the console starts automatically
+with its Deployment, so the account is necessarily created AFTER it is already
+running, and the console never notices.
+
+Everything about the failure argues for a different cause: a command that
+reports success, a file that exists, and a UI that tells you to run the command
+you just ran.
+
+**Fixed here:** `deploy.sh` and `cloud/aws/deploy-aws.sh` restart the console
+after setting the password and wait for the rollout. One line each, and without
+it every fresh cluster hands its operator a login they cannot use.
