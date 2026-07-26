@@ -50,6 +50,15 @@ spec:
           ports:
             - { name: wg, containerPort: 31820, protocol: UDP }
             - { name: uapi, containerPort: 9090 }
+          # Without this, `rollout status` reports success as soon as the
+          # container STARTS, and an entrypoint that dies a second later is
+          # reported as a healthy rollout (GOTCHAS 43, and it happened again
+          # here). The door is the one thing the console needs, so readiness
+          # means the door is open and nothing weaker.
+          readinessProbe:
+            tcpSocket: { port: uapi }
+            periodSeconds: 3
+            failureThreshold: 10
           securityContext:
             # Root with one capability. Creating and configuring a TUN
             # interface is not something an unprivileged user can do, and

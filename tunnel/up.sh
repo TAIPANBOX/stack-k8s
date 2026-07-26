@@ -90,8 +90,19 @@ with socket.create_connection(('wg-uapi.agent-tunnel', 9090), timeout=8) as raw:
 " 2>/dev/null; then
   echo "   TLS to wg-uapi.agent-tunnel:9090 completes and the pinned CA verifies"
 else
-  die "the console cannot complete TLS to the daemon. Check, in this order:
-   the console-egress-tunnel and tunnel-ingress NetworkPolicies, then that the
+  # Say what is actually wrong before blaming the network. The first version of
+  # this message sent the reader to the NetworkPolicies while the real cause was
+  # a tunnel container that had already exited, and the policies were fine.
+  RESTARTS="$(kubectl -n "$TUN_NS" get pod -l app=genaryx-tunnel \
+    -o jsonpath='{.items[0].status.containerStatuses[?(@.name=="wg")].restartCount}' 2>/dev/null || true)"
+  if [ "${RESTARTS:-0}" != "0" ]; then
+    printf '\n   the tunnel container has restarted %s time(s). Its own last words:\n\n' "$RESTARTS"
+    kubectl -n "$TUN_NS" logs deploy/genaryx-tunnel -c wg --previous --tail=15 2>/dev/null | sed 's/^/     /'
+    die "the daemon is not staying up, so no client could reach it. Fix that first."
+  fi
+  die "the console cannot complete TLS to the daemon, and the daemon is up, so
+   this is the path between them. Check, in this order: the
+   console-egress-tunnel and tunnel-ingress NetworkPolicies, then that the
    Service is still called wg-uapi in $TUN_NS (install.sh puts that exact name
    in the certificate's SAN, so a rename fails as a TLS error)."
 fi

@@ -1,6 +1,6 @@
 // uapi-proxy: the console's way to a WireGuard daemon that is not in its pod.
 //
-// WHY THIS EXISTS
+// # WHY THIS EXISTS
 //
 // The console manages peers over the WireGuard userspace API, which is a unix
 // socket. A unix socket cannot cross a pod boundary, so without this the
@@ -9,7 +9,7 @@
 // a namespace enforcing PodSecurity `restricted`. Everything that costs is
 // downstream of one sentence. See stack-k8s/tunnel/DESIGN-uapi-transport.md.
 //
-// WHY IT IS NOT socat
+// # WHY IT IS NOT socat
 //
 // The relay this replaces is one socat line, and socat can even do mTLS
 // natively. It cannot look inside the protocol, and three of the four things
@@ -23,7 +23,7 @@
 // The socat line it replaces carried a comment predicting this: "the forwarder
 // is a place a future version can log or restrict what crosses it".
 //
-// WHY A FILE RATHER THAN A HEREDOC
+// # WHY A FILE RATHER THAN A HEREDOC
 //
 // wg.Dockerfile writes its entrypoint inline "so the image is one
 // self-contained artifact". That is right for a shell script. This guards the
@@ -125,6 +125,14 @@ func main() {
 			defer conn.Close()
 			_ = conn.SetDeadline(time.Now().Add(ioTimeout))
 			if err := serve(conn, cfg); err != nil {
+				// Nothing was asked, so there is nothing to refuse and nobody
+				// to tell. A Kubernetes readiness probe opens this port every
+				// few seconds forever and says nothing; logging that as a
+				// refusal put ten identical lines a minute in front of every
+				// real one, which is how a log stops being read.
+				if errors.Is(err, errNothingSaid) {
+					return
+				}
 				// The caller gets the same shape a daemon refusal has, so a
 				// client parsing UAPI does not also need to parse prose.
 				fmt.Fprintf(conn, "errno=1\n\n")
@@ -182,8 +190,11 @@ func serve(conn net.Conn, cfg config) error {
 	if err != nil {
 		return err
 	}
+	// readRequest turns this into errNothingSaid, which the accept loop drops
+	// without a word. Kept so a future change there cannot make an empty
+	// request fall through into the bearer check below with no lines to read.
 	if len(lines) == 0 {
-		return errors.New("empty request")
+		return errNothingSaid
 	}
 
 	// The bearer comes first, on its own line, and never reaches the daemon.
@@ -211,6 +222,16 @@ func serve(conn net.Conn, cfg config) error {
 	return err
 }
 
+// errNothingSaid marks a connection that opened and closed without sending a
+// single byte. That is what a TCP health check is, and what a connect-scan is,
+// and neither is a refusal: no operation was attempted, so none was denied.
+//
+// The trade is deliberate. A bare connect from an unauthorised source goes
+// unlogged, and what actually keeps such a source away is the NetworkPolicy in
+// front of this port, not a line in this file. What is bought is a log where
+// every "refused" is a real attempt to do something.
+var errNothingSaid = errors.New("connection opened and said nothing")
+
 // readRequest reads UAPI lines up to the blank line that terminates an
 // operation. Bounded in both directions: this is a listener, and an unbounded
 // read on a listener is a denial of service waiting to be found.
@@ -221,6 +242,13 @@ func readRequest(r io.Reader) ([]string, error) {
 	for sc.Scan() {
 		line := strings.TrimRight(sc.Text(), "\r")
 		if line == "" {
+			// A bare terminator with no operation before it: the caller spoke
+			// the protocol and asked for nothing. Same rule as a silent
+			// connection, so the rule stays one rule rather than two that can
+			// drift: nothing attempted, nothing to log.
+			if len(out) == 0 {
+				return nil, errNothingSaid
+			}
 			return out, nil
 		}
 		out = append(out, line)
@@ -228,8 +256,17 @@ func readRequest(r io.Reader) ([]string, error) {
 			return nil, fmt.Errorf("more than %d lines, which no UAPI operation needs", maxLines)
 		}
 	}
+	// A read error before a single line arrived is the same event as a clean
+	// close before a single line arrived: a probe that resets rather than
+	// closes gets here instead of below, and it is no more a refusal.
 	if err := sc.Err(); err != nil {
+		if len(out) == 0 {
+			return nil, errNothingSaid
+		}
 		return nil, fmt.Errorf("read: %w", err)
+	}
+	if len(out) == 0 {
+		return nil, errNothingSaid
 	}
 	// EOF without a blank line: the caller went away mid-request.
 	return out, nil

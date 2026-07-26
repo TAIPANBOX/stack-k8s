@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -37,6 +38,39 @@ func TestGetIsForwardedAndTheKeysAreExact(t *testing.T) {
 				t.Fatal("expected refused, was forwarded")
 			}
 		})
+	}
+}
+
+// A readiness probe connects, sends nothing, and closes, every few seconds,
+// for as long as the pod lives. Reporting that as a refusal is not a cosmetic
+// problem: it put ten identical lines a minute in front of every real refusal,
+// which is how a log stops being read at all. The distinction has to survive
+// future edits to readRequest, so it is asserted rather than assumed.
+func TestAProbeThatSaysNothingIsNotARefusal(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		input string
+	}{
+		{"closed straight away", ""},
+		{"a blank line and nothing else", "\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := readRequest(strings.NewReader(tc.input))
+			if !errors.Is(err, errNothingSaid) {
+				t.Fatalf("want errNothingSaid so the accept loop stays quiet, got %v", err)
+			}
+		})
+	}
+
+	// And the opposite: something was actually attempted, so it must NOT be
+	// silent. A test that only proves silence would pass on a proxy that
+	// logged nothing at all.
+	lines, err := readRequest(strings.NewReader("bearer=nope\nget=1\n\n"))
+	if err != nil {
+		t.Fatalf("a real request must not be mistaken for a probe: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("want the 2 lines that were sent, got %q", lines)
 	}
 }
 

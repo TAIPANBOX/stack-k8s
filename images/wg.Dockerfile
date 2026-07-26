@@ -129,9 +129,17 @@ chmod 600 "$KEY_FILE"
 # fix-up afterwards. The real UAPI socket is deliberately left exactly as
 # wireguard-go makes it (0700, root): loosening THAT is what breaks the
 # daemon, which is why the relay exists at all.
-chgrp "$SOCK_GID" /var/run/wireguard 2>/dev/null \
-  || echo ">> could not chgrp the socket directory to $SOCK_GID"
-chmod 2770 /var/run/wireguard
+#
+# Only when a console shares this pod. `chgrp` needs CAP_CHOWN, and a
+# Kubernetes container that drops ALL and adds back only NET_ADMIN does not
+# have it EVEN AS ROOT: dropping a capability drops it for uid 0 too. Doing
+# this unconditionally printed a failure line about a group nothing in that
+# deployment ever uses.
+if [ -z "$PROXY_LISTEN" ]; then
+  chgrp "$SOCK_GID" /var/run/wireguard 2>/dev/null \
+    || echo ">> could not chgrp the socket directory to $SOCK_GID"
+  chmod 2770 /var/run/wireguard
+fi
 #
 # The second variable is not optional here either, despite how it is spelled.
 # wireguard-go REFUSES to start on a kernel that has WireGuard built in, and
@@ -200,20 +208,32 @@ fi
 # console gets exactly the access it needs, the daemon keeps the posture it
 # insists on, and the forwarder is a place a future version can log or
 # restrict what crosses it.
-socat "UNIX-LISTEN:$RELAY,fork,unlink-early,mode=0660,group=$SOCK_GID" \
-      "UNIX-CONNECT:$SOCK" &
-RELAY_PID=$!
+#
+# ONLY when the console shares this pod, which is what an empty WG_PROXY_LISTEN
+# means. A unix socket cannot cross a pod boundary at all, so where the network
+# door is the transport this relay serves nobody. It is not merely redundant
+# there: `socat`'s `group=` needs CAP_CHOWN, which the Kubernetes container
+# drops, so socat exits, the socket never appears, and the wait below killed
+# the whole tunnel over a relay that deployment never wanted. The two
+# transports are alternatives, so the script now treats them as alternatives.
+if [ -z "$PROXY_LISTEN" ]; then
+  socat "UNIX-LISTEN:$RELAY,fork,unlink-early,mode=0660,group=$SOCK_GID" \
+        "UNIX-CONNECT:$SOCK" &
+  RELAY_PID=$!
 
-k=0
-while [ ! -S "$RELAY" ]; do
-  k=$((k + 1))
-  if [ "$k" -gt 50 ]; then
-    echo "!! the console relay socket never appeared at $RELAY" >&2
-    kill "$WG_PID" "$RELAY_PID" 2>/dev/null || true
-    exit 1
-  fi
-  sleep 0.1
-done
+  k=0
+  while [ ! -S "$RELAY" ]; do
+    k=$((k + 1))
+    if [ "$k" -gt 50 ]; then
+      echo "!! the console relay socket never appeared at $RELAY" >&2
+      kill "$WG_PID" "$RELAY_PID" 2>/dev/null || true
+      exit 1
+    fi
+    sleep 0.1
+  done
+else
+  RELAY_PID=""
+fi
 
 # Assert rather than announce. The previous version printed "up" with an empty
 # key while the daemon was already dead, which is the worst possible output: a
@@ -233,7 +253,7 @@ if [ -n "$PROXY_LISTEN" ]; then
     if [ ! -s "$f" ]; then
       echo "!! WG_PROXY_LISTEN is set but $f is missing or empty." >&2
       echo "   The network door needs a certificate, its key and a bearer; install.sh writes all three." >&2
-      kill "$WG_PID" "$RELAY_PID" 2>/dev/null || true
+      kill "$WG_PID" ${RELAY_PID:+"$RELAY_PID"} 2>/dev/null || true
       exit 1
     fi
   done
@@ -286,17 +306,39 @@ trap 'save_peers; kill "${WG_PID:-}" "${RELAY_PID:-}" "${CONSOLE_FWD_PID:-}" "${
 # service, by name, over the compose network. Bound to the tunnel address
 # alone: this must never become a second way to reach the console from the
 # host or the internet, which is the whole reason the console is on loopback.
-socat "TCP-LISTEN:${CONSOLE_PORT},bind=${TUNNEL_IP},fork,reuseaddr" \
-      "TCP:${CONSOLE_HOST}:${CONSOLE_PORT}" &
-CONSOLE_FWD_PID=$!
+# Unless the destination is already in this pod. A loopback CONSOLE_HOST means
+# whatever serves that port is a container beside this one, sharing this
+# network namespace, and it binds every address in it INCLUDING the tunnel's:
+# verified with netstat, Caddy holds `:::443`. Forwarding then means binding a
+# port that is already bound, so socat exits with "Address in use" every start,
+# and the log carries a failure for a component this deployment does not need.
+case "$CONSOLE_HOST" in
+  127.*|localhost|::1|"[::1]")
+    echo ">> no tunnel forwarder: ${CONSOLE_HOST}:${CONSOLE_PORT} is in this pod and already answers on ${TUNNEL_IP}"
+    CONSOLE_FWD_PID=""
+    ;;
+  *)
+    socat "TCP-LISTEN:${CONSOLE_PORT},bind=${TUNNEL_IP},fork,reuseaddr" \
+          "TCP:${CONSOLE_HOST}:${CONSOLE_PORT}" &
+    CONSOLE_FWD_PID=$!
+    ;;
+esac
 
 echo ">> $IFACE up on :$PORT, server public key: $SERVER_PUB"
-echo ">> console reachable at http://${TUNNEL_IP}:${CONSOLE_PORT} from inside the tunnel"
-echo ">> console relay $RELAY is group $SOCK_GID mode 0660; $SOCK stays 0700"
+# The scheme is whatever answers, not a guess: 443 here is Caddy holding a real
+# certificate, and printing `http://` beside it sent a reader to a URL that
+# resets the connection.
+if [ "$CONSOLE_PORT" = "443" ]; then SCHEME=https; else SCHEME=http; fi
+echo ">> console reachable at ${SCHEME}://${TUNNEL_IP}:${CONSOLE_PORT} from inside the tunnel"
+if [ -n "$RELAY_PID" ]; then
+  echo ">> console relay $RELAY is group $SOCK_GID mode 0660; $SOCK stays 0700"
+else
+  echo ">> no unix relay: the console is not in this pod and reaches $SOCK through the network door"
+fi
 
 # Do not exec-replace: the socket permissions above must be in place first,
 # and this process is what notices the tunnel dying.
-wait "$WG_PID" "$RELAY_PID" "$CONSOLE_FWD_PID" ${PROXY_PID:+"$PROXY_PID"}
+wait "$WG_PID" ${RELAY_PID:+"$RELAY_PID"} ${CONSOLE_FWD_PID:+"$CONSOLE_FWD_PID"} ${PROXY_PID:+"$PROXY_PID"}
 ENTRY
 
 # A heredoc that silently produced nothing is the failure this catches: the
