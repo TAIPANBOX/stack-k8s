@@ -1548,3 +1548,35 @@ curl -s "https://crt.sh/?serial=$SER&output=json"
 `crt.sh/?q=<name>&output=json` also returns HTML rather than JSON under load, so
 a script that pipes it straight into a parser fails with a decode error that
 says nothing about rate limits. Retry, and check the body starts with `[`.
+
+## 55. The process printing to your terminal is not the one that can see it
+
+`kubectl exec` without `-t` gives the container a pipe. So a program that
+decides how to format its output by asking "am I on a terminal" gets the answer
+`no` in exactly the case where a human is watching, and `yes` never.
+
+Found while wiring `up.sh` to print the first device's QR. The QR renderer chose
+ANSI colour with `std::io::stderr().is_terminal()`, which is the right check in
+a program run directly on the box, and is always false when `up.sh` runs it. A
+QR is dark modules on a LIGHT field; without colour the light field is the
+terminal's background, so on a dark theme the code comes out inverted and a
+scanner that does not try both polarities reads nothing.
+
+The failure is quiet in the worst way: the QR appears, correctly shaped and
+plausible, and simply does not scan. Nothing logs anything.
+
+**Fixed here:** the decision moved to the caller that can make it. The CLI takes
+`--color` and `--no-color`, keeps the automatic check only as the default for
+someone running it directly, and `up.sh` passes `[ -t 2 ] && --color`. Whoever
+owns the terminal owns the question.
+
+**Guarded:** `the_terminal_qr_carries_the_same_modules_the_encoder_produced`
+reads the drawing back, rebuilding the module matrix from the characters (each
+carries two stacked modules) and comparing it with the encoder's own output.
+Verified to go red by inverting the renderer on purpose: `module (7,0) differs`.
+A test that only checked the output was non-empty would have passed on every
+version of this bug.
+
+**The general form:** any `isatty` in a program that something else invokes is
+a guess about a terminal it cannot see. Environment-based colour detection has
+the same hole. Let the outermost caller decide and pass it down.

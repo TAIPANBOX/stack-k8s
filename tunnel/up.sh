@@ -107,14 +107,64 @@ else
    in the certificate's SAN, so a rename fails as a TLS error)."
 fi
 
+# ---- the first device -------------------------------------------------------
+# This block replaces an instruction that could not be followed. It used to read
+# "issue yourself a device from the console, dial <endpoint>, then open
+# https://<console>", and an operator at that moment has no tunnel, so the
+# console is unreachable, so there is nothing to issue the device FROM. The
+# console is behind the tunnel and the tunnel needs a config the console issues.
+#
+# Somebody has to hand out the first one from outside the browser, and the only
+# channel that exists before a tunnel does is the one used to install this. So
+# the script that creates the tunnel also issues the device that reaches it.
+#
+# Skipped with FIRST_DEVICE=0 on a re-run: a second `up.sh` should not mint a
+# peer nobody asked for. Existing devices are never touched either way; issuing
+# is additive, and the peers already on the interface keep working.
+CONSOLE_DOMAIN="$(kubectl -n "$TUN_NS" get configmap stack-tunnel -o jsonpath='{.data.console_domain}')"
+CONF_OUT="${CONF_OUT:-$PWD/${CONSOLE_DOMAIN}.conf}"
+
+if [ "${FIRST_DEVICE:-1}" = "1" ]; then
+  say "your first device"
+  # stdout is the config and stderr is the QR plus the notes, so the redirect
+  # saves the file and the QR still reaches the terminal.
+  # Whether the QR gets colour is decided HERE, because only here can it be
+  # known. `kubectl exec` without a TTY hands the pod a pipe, so the process
+  # printing the QR sees "not a terminal" no matter what the operator is
+  # looking at, and a QR without colour on a dark background is inverted and
+  # may not scan (GOTCHAS 55). This shell's own stderr is the honest signal.
+  QR_COLOR=--no-color
+  [ -t 2 ] && QR_COLOR=--color
+
+  # umask in a subshell, not chmod afterwards. This file carries the device's
+  # private key from the moment the first byte lands, and a chmod after the
+  # redirect leaves it world-readable for however long the write takes.
+  if ( umask 077
+       kubectl -n "$SRC_NS" exec "$POD" -c console -- \
+         genaryx-web issue-device "$QR_COLOR" > "$CONF_OUT.tmp" 2>/tmp/issue-device.$$ ); then
+    mv "$CONF_OUT.tmp" "$CONF_OUT"
+    cat /tmp/issue-device.$$ >&2
+    rm -f /tmp/issue-device.$$
+    echo "   saved to $CONF_OUT (mode 0600)"
+  else
+    rm -f "$CONF_OUT.tmp"
+    sed 's/^/   /' /tmp/issue-device.$$ >&2
+    rm -f /tmp/issue-device.$$
+    die "could not issue the first device. The tunnel is up and the console can
+   reach it, so this is the issuance itself: check the console's log."
+  fi
+fi
+
 cat <<EOF
 
 $(printf '\033[1m')Up.$(printf '\033[0m') The tunnel is in $TUN_NS; the console stayed in $SRC_NS
 under enforced PodSecurity restricted.
 
-  Issue yourself a device from the console, dial
-  $(kubectl -n "$TUN_NS" get configmap stack-tunnel -o jsonpath='{.data.endpoint_host}'):31820,
-  then open https://$(kubectl -n "$TUN_NS" get configmap stack-tunnel -o jsonpath='{.data.console_domain}')/
+  1. Import $CONF_OUT into WireGuard, or scan the QR above with a phone.
+  2. Connect. It routes ONLY the console address, not your other traffic.
+  3. Open https://$CONSOLE_DOMAIN/ and sign in.
+  4. Enrol a passkey THERE, not earlier: WebAuthn binds it to that exact
+     name, so one enrolled anywhere else is useless here (GOTCHAS 38).
 
   Going back: ./tunnel/down.sh, then kubectl apply -k manifests/
 EOF
