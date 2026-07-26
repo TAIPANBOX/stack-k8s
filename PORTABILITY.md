@@ -193,19 +193,35 @@ a ceiling of 100.
 
 **What the governance layer costs, measured**
 
-| | Hetzner | AWS | GCP |
+| | Hetzner CPX42 (SHARED vCPU) | AWS c7a.2xlarge (dedicated, Genoa) | GCP c2d-highcpu-8 (dedicated, Milan) |
 |---|---|---|---|
-| peak decisions/s per pod | 2,344 | not measured | **2,479** (concurrency 32) |
-| p50 / p95 at working rates | 3.9 / 4.5 ms | not measured | **3.2 / 4.9 ms** |
-| past 64 concurrent | **collapse to 1,059** | not measured | **no collapse, 2,353 at 256** |
-| audit bytes per decision | 393 | not measured | **426** |
-| freeze reaches traffic | 5 ms | not measured | **5.0 ms** |
+| peak decisions/s per pod | 2,344 | **4,028** (concurrency 16) | **2,479** (concurrency 32) |
+| p50 at working rates | 3.9 ms | **1.9 ms** | **3.2 ms** |
+| past 64 concurrent | **collapse to 1,059** | **no collapse, 3,782 at 256** | **no collapse, 2,353 at 256** |
+| audit bytes per decision | 393 | **428** | **426** |
+| freeze reaches traffic | 5 ms | **5.3 ms** | **5.0 ms** |
+| decisions per USD-hour of cluster | 42.2 M per EUR | 6.8 M | 4.4 M |
+| **cost per million governed decisions** | **EUR 0.024** | **USD 0.147** | **USD 0.229** |
 
-The collapse row is the one that changes a conclusion rather than adding a
-column. It was written up from the Hetzner run as a design limit. CPX42 is a
-SHARED vCPU instance and `c2d-highcpu-8` is not, and on dedicated cores the
-same software holds its throughput to 256 concurrent clients with only latency
-growing. The ceiling is real; the cliff was the neighbours.
+**The collapse was the instance type, and now two clouds say so.** It was
+written up from the Hetzner run as a design limit to plan against. CPX42 is a
+SHARED vCPU instance; `c7a.2xlarge` and `c2d-highcpu-8` are not. On dedicated
+cores, on two different hypervisors and two different AMD generations, the same
+software holds its throughput all the way to 256 concurrent clients and only
+latency grows, which is what a queue is supposed to do. The ceiling is real;
+the cliff was the neighbours. That correction belongs in the article.
+
+**Audit bytes per decision is a property of the software, not the cloud**: 426
+and 428 on two clouds, from the same binary writing the same hash-chained
+schema. The 393 from Hetzner differs because the payload did, not because the
+cloud did.
+
+**The last row is the one to lead with.** Governing an agent action costs
+almost nothing in CPU, and what it costs is legible: about EUR 0.024 per
+million decisions on Hetzner against USD 0.147 on AWS and USD 0.229 on GCP.
+AWS is the fastest per pod by 62% and, because of that, cheaper per decision
+than GCP despite costing more per hour. Hetzner is an order of magnitude
+cheaper than either, at half the throughput.
 
 **The same three proofs**
 

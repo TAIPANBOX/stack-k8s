@@ -158,3 +158,48 @@ Measured rates, AWS's own price list, `eu-central-1`:
 | \+ NLB while published | 0.0270 |
 
 The whole session, from `terraform apply` to `teardown.sh`, cost under USD 5.
+
+---
+
+## Second run, 2026-07-26: the governance layer measured
+
+The 25 July run proved the deployment. This one existed for one number: whether
+the throughput collapse past 64 concurrent clients, recorded on Hetzner and
+written up as a design limit, is in the software or in the machine.
+
+The cluster was rebuilt for it (`c7a.2xlarge`, five nodes, 25 min 29 s end to
+end, `verify.sh` 9 passed 0 failed, `security-tests.sh` 24 passed 0 failed 2
+noted) and destroyed immediately after the measurement. About 40 minutes of
+cluster time.
+
+```
+concurrency    1:   1334.9 decisions/s   p50  0.72 ms   p95   0.79 ms
+concurrency    8:   4015.9 decisions/s   p50  1.92 ms   p95   2.55 ms
+concurrency   16:   4027.9 decisions/s   p50  3.76 ms   p95   5.73 ms
+concurrency   32:   4003.0 decisions/s   p50  7.45 ms   p95  11.57 ms
+concurrency   64:   3949.8 decisions/s   p50 14.69 ms   p95  23.98 ms
+concurrency  128:   3883.3 decisions/s   p50 26.64 ms   p95  45.36 ms
+concurrency  256:   3782.2 decisions/s   p50 30.96 ms   p95  64.97 ms
+```
+
+**No collapse.** Throughput holds within 6% from concurrency 8 to 256 and only
+latency grows. GCP's dedicated-core run said the same thing on different
+silicon and a different hypervisor. Hetzner's CPX42 is a SHARED vCPU instance
+and lost more than half its throughput past 64. Two independent confirmations
+are enough to correct the original conclusion: the ceiling is real, the cliff
+was the neighbours.
+
+Audit: 18,703 lines, 7,997,360 bytes, **427.6 bytes per decision**, which is 616
+MB/day at 1000 calls a minute and fills the 5 GiB event volume in 8.7 days. GCP
+measured 426.4 on the same binary. This number is the software's, not the
+cloud's.
+
+Freeze reaches traffic in **5.3 ms** (GCP 5.0, Hetzner 5).
+
+**How the audit was measured, because the obvious way is wrong.** The event
+volume is RWX, which Longhorn serves over NFS. In the console pod `ls -l`
+reported 7,997,360 bytes while reading the same file returned ZERO lines: fresh
+attributes, stale data pages. On GCP the skew ran the other way. The number
+above was read from the node running `wardryx`, through the kubelet's own mount
+of the volume, which is the writer's view and the only one that is true.
+GOTCHAS item 70.
