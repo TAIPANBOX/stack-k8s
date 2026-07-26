@@ -1,0 +1,35 @@
+# The operator's road in, as a Kubernetes overlay.
+#
+#   kubectl apply -k tunnel/
+#
+# This is the base stack PLUS the tunnel, not the tunnel alone: it patches the
+# console Deployment, so it needs the Deployment in the same build. Applying it
+# over a running base is idempotent, and `kubectl apply -k manifests/` puts
+# things back the way they were.
+#
+# Why an overlay rather than another numbered file next to 50-loadbalancer.yaml:
+# that file adds an object, this one ADDS CONTAINERS to an object that already
+# exists. Plain `kubectl apply -f` cannot express that; a strategic merge patch
+# can, and kustomize is already how this repo assembles manifests.
+#
+# NOT metered. Unlike 50-loadbalancer.yaml, nothing here creates a cloud
+# resource: the entry point is a NodePort, which costs nothing on any provider.
+# See resources.yaml for why that is also the more portable answer.
+#
+# Before applying, fill in the two names in resources.yaml. The console refuses
+# to guess either of them, deliberately: the previous default was one specific
+# box's public IP, and every other deployment then issued device configs
+# pointing at a machine that was not theirs.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: agent-stack
+
+resources:
+  - ../manifests
+  - resources.yaml
+
+patches:
+  - path: console-patch.yaml
+    target:
+      kind: Deployment
+      name: genaryx-console
