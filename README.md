@@ -98,12 +98,15 @@ issue, see or reset it.
 ## Layout
 
 ```
-install.sh      bring up the cluster itself: k3s, Calico, Longhorn, the storage
-                classes, the cloud controller. Hetzner-specific by design.
+deploy.sh       THE entry point. Asks what it needs, then: install.sh, images,
+                manifests, verify.sh, security-tests.sh, and your way in.
+install.sh      the cluster itself: k3s, Calico, Longhorn, the storage classes,
+                the cloud controller. Hetzner-specific by design.
 build.sh        build the images and import them into every node over ssh
 verify.sh       prove a cluster is running this stack, not merely green
-security-tests.sh  attack it: 23 checks, from a forged pod label to etcd at rest
-deploy.sh       one command: install.sh + images + manifests + both test suites
+security-tests.sh  attack it: 24 checks, from a forged pod label to etcd at rest
+tunnel/         the operator's way in: WireGuard, TLS, and the console behind
+                both. Nothing here is published; see tunnel/README.md
 manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm)
 images/         one Dockerfile per language family, plus the console's mixed build
 GOTCHAS.md      every trap this cost us, each with the fix that is already applied
@@ -111,20 +114,59 @@ PORTABILITY.md  the measured Hetzner baseline, and what to compare AWS/GCP on
 evidence/       command output from the live cluster, not claims about it
 ```
 
-Three commands, in this order:
+## Running it
+
+One command. It asks what it needs BEFORE the long part, so a missing DNS
+record costs ten seconds rather than fifteen minutes of building images.
+
+```bash
+git clone https://github.com/TAIPANBOX/stack-k8s && cd stack-k8s
+./deploy.sh --servers ip1,ip2,ip3 --agents ip4,ip5 --hcloud-token <token>
+```
+
+What it asks, in order:
+
+| | |
+|---|---|
+| the operator tunnel? | `Y/n`. No means you will reach the console with `ssh -L`, which is a real way to run this |
+| your console domain | must have an A record at `10.9.0.1`. Checked against DNS while you are still watching |
+| your gateway host | must have an A record at a public address of one of your nodes. Also checked |
+| the console account | username, and a password typed blind and twice. Blank generates one |
+
+Then it installs, and ends by issuing your first WireGuard device: a `.conf`
+saved beside the script at mode 0600, a QR for a phone, and the address to open.
+
+The whole conversation can be skipped for automation:
+
+```bash
+./deploy.sh --servers ip1,ip2,ip3 --hcloud-token <token> \
+  --console-domain box.you.com --endpoint-host gw.you.com
+```
+
+or `--no-tunnel` to leave the way in for later. There is deliberately no
+`--console-password`: an argument is visible in `ps` to every user on the
+machine for as long as the deploy runs.
+
+Piped from curl it still works, and with no terminal to ask on it says so and
+names the flags rather than hanging or guessing:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TAIPANBOX/stack-k8s/main/deploy.sh | bash -s -- \
+  --servers ip1,ip2,ip3 --hcloud-token <token> --no-tunnel
+```
+
+### The parts, if you want them separately
 
 ```bash
 ./install.sh --servers ip1,ip2,ip3 --agents ip4,ip5 --token <hcloud-token>
 ./build.sh root@ip1 root@ip2 root@ip3 root@ip4 root@ip5
 kubectl apply -k manifests/
+KUBECONFIG=./kubeconfig.yaml ./tunnel/up.sh
 ```
 
-or all of it in one line:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/TAIPANBOX/stack-k8s/main/deploy.sh | bash -s -- \
-  --servers ip1,ip2,ip3 --agents ip4,ip5 --hcloud-token <token>
-```
+Every one of them is idempotent, and that is now true rather than merely
+claimed: the first time anyone ran this twice on the same machine it broke six
+times, each a step correct once and impossible the second time. GOTCHAS 56-62.
 
 The open stack needs no credentials at all: wardryx, idryx, qryx, mockryx,
 tokenfuse, verdryx and engram are public. `--console-token <github-token>` adds
