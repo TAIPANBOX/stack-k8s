@@ -165,3 +165,31 @@ and four of them impossible to see on a first run:
 The cost report and the teardown sweep each had a bug of their own: one exited
 before printing its total when an API was disabled, the other reported the
 project's own default firewall rules as this cluster's leftovers.
+
+---
+
+## The control cycle, 2026-07-26 20:46 to 21:18 UTC
+
+The run above found nine bugs and fixed them. Fixed code that has not been run
+from the top proves nothing, so the whole thing was done again on the corrected
+scripts, from an empty project, with **no intervention of any kind between
+`preflight.sh` and the final line**.
+
+| | |
+|---|---|
+| `preflight.sh` | green on all three vCPU ceilings, both credentials, image, quota against live usage |
+| `terraform apply` | 14 resources, first attempt, no quota failure |
+| `deploy-gcp.sh` | **30 min 01 s**, five nodes, console and copilot included |
+| interventions | **none** |
+| errors printed anywhere in the log | **none** (`stopped at line`, `command not found`, `FAIL`: zero occurrences) |
+| `verify.sh` | 9 passed, 0 failed |
+| `security-tests.sh` | 24 passed, 0 failed, 2 noted |
+| Felyx on a cloud model | wired by the script, from `--copilot-key-file` |
+| console | operator created, reachable over the tunnel, HTTP 200 |
+
+The addresses GCP handed this cluster included two that had been load balancer
+addresses twenty minutes earlier and one that had been a node. That is the case
+that broke the previous rebuild (item 68), and it passed without a word.
+
+This is the run that answers "will it work for the next person", and it answers
+it for the second run as well as the first, which is the harder half.
