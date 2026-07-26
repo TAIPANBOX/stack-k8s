@@ -146,7 +146,9 @@ if [ -s "$CF_TOKEN_FILE" ]; then
     --from-file=cloudflare_api_token="$CF_TOKEN_FILE" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   echo "   stack-tunnel-dns (real certificate)"
+  CERT_KIND="a real Let's Encrypt certificate"
 else
+  CERT_KIND="Caddy's INTERNAL CA, which no browser trusts until told to"
   echo "   no $CF_TOKEN_FILE: Caddy will use its INTERNAL CA, so the passkey"
   echo "   ceremony will fail on any device that has not been told to trust it"
 fi
@@ -248,11 +250,47 @@ cat <<EOF
 $(printf '\033[1m')Up.$(printf '\033[0m') The tunnel is in $TUN_NS; the console stayed in $SRC_NS
 under enforced PodSecurity restricted.
 
-  1. Import $CONF_OUT into WireGuard, or scan the QR above with a phone.
-  2. Connect. It routes ONLY the console address, not your other traffic.
-  3. Open https://$CONSOLE_DOMAIN/ and sign in.
-  4. Enrol a passkey THERE, not earlier: WebAuthn binds it to that exact
-     name, so one enrolled anywhere else is useless here (GOTCHAS 38).
+$(printf '\033[1m')What you have$(printf '\033[0m')
+
+  config      $CONF_OUT
+  dial        $ENDPOINT_HOST:31820      (UDP, from anywhere)
+  console     https://$CONSOLE_DOMAIN/  (only through the tunnel)
+  served with $CERT_KIND
+
+$(printf '\033[1m')What to do$(printf '\033[0m')
+
+  1. Import that file into WireGuard, or scan the QR above with a phone.
+  2. Connect. It routes ONLY $CONSOLE_DOMAIN, not your other traffic, so
+     nothing else on this machine changes.
+  3. Open https://$CONSOLE_DOMAIN/ and sign in with the operator account.
+     No account yet? genaryx-web set-password inside the console pod, then
+     restart it: the console reads whether one exists once, at startup
+     (GOTCHAS 50).
+  4. Enrol a passkey THERE and not earlier. WebAuthn binds it to
+     $CONSOLE_DOMAIN exactly, so one enrolled at any other address, including
+     an ssh -L to localhost, is useless here (GOTCHAS 38). Until one exists,
+     kill and budget actions still work and are journaled as software-signed;
+     enrolling upgrades them to hardware-confirmed.
+
+$(printf '\033[1m')If step 2 never handshakes$(printf '\033[0m')
+
+  WireGuard answers NOTHING to a key it does not know, so a wrong endpoint
+  and a blocked port look identical: silence. In order:
+
+    the config says $ENDPOINT_HOST:31820, and that name has to be yours
+    UDP 31820 has to be open inbound to the node (a cloud firewall counts)
+    kubectl -n $TUN_NS logs deploy/genaryx-tunnel -c wg
+
+$(printf '\033[1m')Afterwards$(printf '\033[0m')
+
+  More devices, and revoking them, are in the console under Remote. Each
+  issue is a per-action ceremony once a passkey exists, and lands in the
+  audit as console.issue_wg_peer with the credential that confirmed it.
+
+  Re-running this script is safe. FIRST_DEVICE=0 skips the issuance so it
+  does not mint a peer nobody asked for.
 
   Going back: ./tunnel/down.sh, then kubectl apply -k manifests/
+  That deletes the volume holding the issued peers, so every device ever
+  issued here stops working. tunnel/README.md says why that is deliberate.
 EOF
