@@ -111,6 +111,19 @@ imds() {
 # ---- 0. preflight ----------------------------------------------------------
 say "preflight on ${#ALL_NODES[@]} node(s)"
 
+# A cloud recycles addresses, and the SECOND run in the same account is likely
+# to be handed the previous cluster's public addresses on machines that are not
+# the previous cluster. ssh then refuses every node with REMOTE HOST
+# IDENTIFICATION HAS CHANGED, and `accept-new` does not help: it accepts an
+# unknown host and rejects a changed one, which is correct and exactly wrong
+# here. Found on GCP on 2026-07-26 (GOTCHAS item 68); EC2 recycles addresses
+# the same way. This forgets the key of a machine that no longer exists, which
+# is not the same as disabling the check.
+say "forgetting host keys for addresses this cloud may have recycled"
+for n in "${ALL_NODES[@]}"; do
+  ssh-keygen -R "$n" >/dev/null 2>&1 || true
+done
+
 # Three facts per node, kept in parallel INDEXED arrays rather than one
 # associative array. `declare -A` needs bash 4, and macOS still ships bash
 # 3.2.57 as /bin/bash with no newer one in PATH by default, so an operator
@@ -131,7 +144,18 @@ iid_of() { printf '%s' "${NODE_IID[$(node_index "$1")]}"; }
 az_of() { printf '%s' "${NODE_AZ[$(node_index "$1")]}"; }
 
 for n in "${ALL_NODES[@]}"; do
-  sh_ "$n" true 2>/dev/null || die "cannot ssh to $SSH_USER@$n (key: $SSH_KEY)"
+  # An instance answers the API as running before cloud-init has finished
+  # installing the operator's key, so a node created seconds ago refuses while
+  # its older siblings answer. Wait rather than die (GOTCHAS item 66).
+  ssh_ok=0
+  for attempt in $(seq 1 24); do
+    sh_ "$n" true 2>/dev/null && { ssh_ok=1; break; }
+    [ "$attempt" = 1 ] && printf '   %s not answering ssh yet, waiting' "$n"
+    printf '.'
+    sleep 5
+  done
+  [ "$ssh_ok" = 1 ] && [ "${attempt:-1}" -gt 1 ] && printf ' ok\n'
+  [ "$ssh_ok" = 1 ] || die "cannot ssh to $SSH_USER@$n after two minutes (key: $SSH_KEY)"
   su_ "$n" true 2>/dev/null || die "$SSH_USER@$n cannot sudo"
   p="$(imds "$n" "local-ipv4" || true)"
   [ -n "$p" ] || die "$n did not answer IMDSv2. If http_tokens is not 'required' this reads differently; check the instance's metadata_options."
@@ -186,7 +210,17 @@ for n in "${ALL_NODES[@]}"; do
     apt-get install -y -qq open-iscsi nfs-common cryptsetup >/dev/null
     systemctl enable --now iscsid >/dev/null 2>&1 || true
     modprobe iscsi_tcp || true
-    modprobe dm_crypt || true"' &
+    modprobe dm_crypt || true
+    # multipathd arrives WITH open-iscsi and claims every Longhorn device, so
+    # every PVC stays Pending and the pod event blames the CSI driver. Found on
+    # 2026-07-26, after this file was first written (GOTCHAS item 60).
+    if systemctl is-enabled multipathd >/dev/null 2>&1 || [ -e /etc/multipath.conf ]; then
+      if ! grep -q VIRTUAL-DISK /etc/multipath.conf 2>/dev/null; then
+        printf \"\\n# Longhorn volumes: see stack-k8s install.sh and GOTCHAS.md item 60.\\nblacklist {\\n    device {\\n        vendor \\\"IET\\\"\\n        product \\\"VIRTUAL-DISK\\\"\\n    }\\n}\\n\" >> /etc/multipath.conf
+        systemctl restart multipathd 2>/dev/null || true
+        sleep 2; multipath -F 2>/dev/null || true
+      fi
+    fi"' &
 done
 wait
 echo "   done"

@@ -72,6 +72,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 [ -d "$ROOT/manifests" ] || die "no manifests/ above this script. Run it from a checkout of stack-k8s."
 say "using this checkout: $ROOT"
 
+# A rebuilt cluster is likely to be handed the previous one's public addresses,
+# and ssh refuses an address whose host key changed (GOTCHAS item 68).
+for n in "${ALL_NODES[@]}"; do
+  ssh-keygen -R "$n" >/dev/null 2>&1 || true
+done
+
 # ---- 1. the cluster ---------------------------------------------------------
 if [ "$SKIP_INSTALL" = 1 ]; then
   say "skipping install-aws.sh (--skip-install)"
@@ -247,10 +253,18 @@ if [ -n "$CONSOLE_NODE" ]; then
   fi
 fi
 
+# k3s is told --node-ip <private> on purpose, so the Node object carries an
+# InternalIP and often NO ExternalIP, and a tunnel command built from it points
+# at an address the operator cannot reach. Map the console's node to the PUBLIC
+# address this script was called with, through the metadata service.
 CONSOLE_ADDR=""
 if [ -n "$CONSOLE_NODE" ]; then
-  CONSOLE_ADDR="$(k_ "get node $CONSOLE_NODE -o jsonpath='{.status.addresses[?(@.type==\"ExternalIP\")].address}'" 2>/dev/null || true)"
-  [ -n "$CONSOLE_ADDR" ] || CONSOLE_ADDR="$(k_ "get node $CONSOLE_NODE -o jsonpath='{.status.addresses[?(@.type==\"InternalIP\")].address}'" 2>/dev/null || true)"
+  CONSOLE_PRIV="$(k_ "get node $CONSOLE_NODE -o jsonpath='{.status.addresses[?(@.type==\"InternalIP\")].address}'" 2>/dev/null || true)"
+  for n in "${ALL_NODES[@]}"; do
+    p="$(su_ "$n" 'sh -c "T=\$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H \"X-aws-ec2-metadata-token-ttl-seconds: 60\" --max-time 5); curl -sf -H \"X-aws-ec2-metadata-token: \$T\" --max-time 5 http://169.254.169.254/latest/meta-data/local-ipv4"' 2>/dev/null || true)"
+    [ -n "$p" ] && [ "$p" = "$CONSOLE_PRIV" ] && { CONSOLE_ADDR="$n"; break; }
+  done
+  [ -n "$CONSOLE_ADDR" ] || CONSOLE_ADDR="$CONSOLE_PRIV"
 fi
 
 cat <<EOF
