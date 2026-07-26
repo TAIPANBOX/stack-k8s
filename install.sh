@@ -415,6 +415,25 @@ if [ -n "$HCLOUD_TOKEN" ]; then
   k_ "apply -f https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/download/$CCM_VERSION/ccm-networks.yaml"
   sh_ "$FIRST" "cat > /tmp/ccm-args.yaml" <<'YAML'
 spec:
+  # Recreate, and this is the whole reason the patch below can ever take
+  # effect. The upstream manifest is applied first, so its pod starts with the
+  # DEFAULT :10258, which k3s itself is already listening on, and crash-loops.
+  # That pod is hostNetwork, so while it exists it holds the node's port budget
+  # and the corrected pod cannot be scheduled at all: "0/1 nodes are available:
+  # 1 node(s) didn't have free ports". Under RollingUpdate the two then wait
+  # for each other forever, because the old pod is not removed until the new
+  # one is Ready and the new one cannot start until the old is gone. The
+  # rollout times out with "1 old replicas are pending termination" and nothing
+  # in that message mentions a port.
+  #
+  # Recreate breaks it by stopping the old pod BEFORE starting the new one,
+  # which is correct for a single-replica hostNetwork controller anyway: two of
+  # these can never run side by side on one node whatever the strategy says.
+  strategy:
+    type: Recreate
+    # Required: leaving the old block would be Recreate with RollingUpdate
+    # settings, which the API server rejects.
+    rollingUpdate: null
   template:
     spec:
       containers:

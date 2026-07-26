@@ -1580,3 +1580,92 @@ version of this bug.
 **The general form:** any `isatty` in a program that something else invokes is
 a guess about a terminal it cannot see. Environment-based colour detection has
 the same hole. Let the outermost caller decide and pass it down.
+
+## 56. k3s-uninstall.sh hangs forever on a Longhorn RWX volume
+
+Uninstalling k3s from a cluster that ran Longhorn with an RWX class stops dead,
+with no error and no timeout. The last thing on screen is an ordinary-looking
+line:
+
+```
+sh -c 'umount -f "$0" && rm -rf "$0"' /var/lib/kubelet/plugins/.../globalmount
+```
+
+and nothing follows it. Ten minutes later, nothing still. `ps` tells the story:
+
+```
+618245 D  rpc_wait_bit_killable  umount.nfs4
+```
+
+**Why:** Longhorn serves an RWX volume over NFS from a share-manager POD. The
+uninstall script kills the pods first and unmounts afterwards, so by the time
+it reaches that mount the NFS server it belongs to no longer exists. `umount -f`
+on a dead NFS server does not fail: it blocks in the RPC layer, in
+uninterruptible sleep, indefinitely. `-f` reads like "force" and here means the
+opposite of giving up.
+
+Nothing on screen mentions NFS, Longhorn, or a volume. The path scrolls past
+looking like the fifty before it.
+
+**The way out**, in order:
+
+```bash
+pkill -9 -x umount.nfs4          # -x, an exact name: see below
+pkill -9 -f 'k3s-unin''stall'    # the script itself
+mount | grep -E 'kubelet|longhorn' | awk '{print $3}' | sort -r |
+  while read -r m; do umount -l "$m"; done
+/usr/local/bin/k3s-uninstall.sh  # now completes
+```
+
+`umount -l` is the lazy unmount: it detaches the tree immediately and never
+speaks to the server, which is exactly right when the server is gone.
+
+**And the trap inside the fix.** `pkill -f k3s-uninstall` matches ANY process
+whose command line contains that string, including the shell running the script
+that contains the pkill. Written the obvious way it kills its own session
+mid-cleanup, which is how this was found the second time. Split the literal, or
+match the interpreter's argument precisely.
+
+## 57. Apply-then-patch deadlocks a hostNetwork Deployment
+
+`install.sh` applied the upstream hcloud CCM manifest and then patched its
+arguments, because the default `--secure-port=10258` collides with k3s's own
+listener (item 4). The patch is correct. The ORDER made it unreachable.
+
+What happens: the apply creates a pod with the default port. It crash-loops,
+and the error is the fourth line of a wall of usage text:
+
+```
+failed to listen on 0.0.0.0:10258: bind: address already in use
+```
+
+The patch then creates a second ReplicaSet with `--secure-port=10268`. That pod
+never starts:
+
+```
+0/1 nodes are available: 1 node(s) didn't have free ports for the requested pod ports
+```
+
+because the first pod is `hostNetwork: true` and holds the node's port budget
+while it crash-loops. Under RollingUpdate the two wait for each other forever:
+the old pod is not removed until the new one is Ready, and the new one cannot be
+scheduled until the old is gone. What the operator sees is:
+
+```
+Waiting for deployment "hcloud-cloud-controller-manager" rollout to finish:
+  1 old replicas are pending termination...
+error: timed out waiting for the condition
+```
+
+Nothing in that message is about a port, and the pod that is actually wrong is
+the one being waited ON, not the one being waited FOR.
+
+**Fixed here:** the patch also sets `strategy: type: Recreate` (with
+`rollingUpdate: null`, or the API server rejects the mixture). The old pod stops
+before the new one starts. That is the right strategy regardless: two
+single-replica hostNetwork controllers can never run side by side on one node,
+so RollingUpdate was describing something that cannot happen.
+
+**The general form:** RollingUpdate assumes old and new can coexist. Anything
+claiming a node-wide resource, a host port, a host path lock, a fixed device,
+breaks that assumption, and the failure is a deadlock rather than an error.
