@@ -1514,3 +1514,37 @@ asserted separately again.
 the property happened to live when the check was written. A location is a fact
 about today's layout; a capability is the thing worth auditing, and it can move
 without anybody editing the test that claims to cover it.
+
+## 54. Let's Encrypt backdates notBefore, so counting by it counts wrong
+
+The duplicate-certificate rate limit is five per identical name set per seven
+days, and hitting it makes the console unreachable in a way that reads like a
+Caddy bug. So it is worth counting before deliberately discarding a `caddy-data`
+volume, and the public CT log is the way to count without touching the CA.
+
+The trap is which timestamp to count. A certificate obtained at 12:42 reads:
+
+```
+not_before:      2026-07-26T11:44:21     <- backdated ~1 hour
+entry_timestamp: 2026-07-26T12:42:52     <- when it was actually logged
+```
+
+Let's Encrypt sets `notBefore` about an hour in the past to tolerate clock skew
+on the machines that will validate it. Read `not_before` as issuance time and a
+certificate issued minutes ago looks an hour old, so a fresh volume looks like
+it reused an existing certificate rather than burning one of five.
+
+That is the wrong direction to be wrong in: it says there is headroom that has
+already been spent.
+
+**Count `entry_timestamp`**, and confirm identity by serial rather than by time
+at all:
+
+```bash
+SER=$(openssl x509 -in cert.crt -noout -serial | cut -d= -f2 | tr 'A-Z' 'a-z' | sed 's/^0*//')
+curl -s "https://crt.sh/?serial=$SER&output=json"
+```
+
+`crt.sh/?q=<name>&output=json` also returns HTML rather than JSON under load, so
+a script that pipes it straight into a parser fails with a decode error that
+says nothing about rate limits. Retry, and check the body starts with `[`.
