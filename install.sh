@@ -237,7 +237,41 @@ for n in "${ALL_NODES[@]}"; do
     modprobe iscsi_tcp || true
     # dm_crypt is only needed if you later turn on Longhorn volume encryption,
     # but loading it now costs nothing and saves a puzzling failure later.
-    modprobe dm_crypt || true' &
+    modprobe dm_crypt || true
+
+    # multipathd arrives WITH open-iscsi and breaks Longhorn on contact.
+    # Longhorn presents every volume over iSCSI as IET/VIRTUAL-DISK, multipathd
+    # claims each one as an mpath map, and mke2fs then refuses to format it:
+    #
+    #   /dev/longhorn/pvc-... is apparently in use by the system;
+    #   will not make a filesystem here!
+    #
+    # Every PVC stays Pending and every pod waits on it. Nothing in the pod
+    # event mentions multipath, and the package was never asked for: it came in
+    # as a dependency of the line above.
+    #
+    # Blacklisted by VENDOR, not by devnode. The blacklist most often quoted for
+    # this is a devnode match on ^sd[a-z0-9]+, which switches multipath off for
+    # every SCSI disk on the host. This excludes only the Longhorn devices and
+    # leaves a real multipath configuration, if there is one, working.
+    if systemctl is-enabled multipathd >/dev/null 2>&1 || [ -e /etc/multipath.conf ]; then
+      if ! grep -q "VIRTUAL-DISK" /etc/multipath.conf 2>/dev/null; then
+        cat >> /etc/multipath.conf <<MP
+
+# Longhorn volumes: see stack-k8s install.sh and GOTCHAS.md item 60.
+blacklist {
+    device {
+        vendor "IET"
+        product "VIRTUAL-DISK"
+    }
+}
+MP
+        systemctl restart multipathd 2>/dev/null || true
+        # Drop maps already claimed, or volumes created before this stay
+        # unformattable until the node reboots.
+        sleep 2; multipath -F 2>/dev/null || true
+      fi
+    fi' &
 done
 wait
 echo "   done"

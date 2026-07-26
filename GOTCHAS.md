@@ -1749,3 +1749,64 @@ file, 112 in the datastore, and only the second one worked.
 installer is a first-run value. If the thing it identifies persists, the second
 run has to find it rather than mint it, and "idempotent" in a comment is not a
 property, it is a claim that has to be true of every line under it.
+
+## 60. multipathd arrives with open-iscsi and takes every Longhorn volume
+
+Longhorn needs `open-iscsi` on the host, so `install.sh` installs it. On Ubuntu
+that pulls in `multipath-tools`, which nobody asked for and which starts
+`multipathd` by default.
+
+Longhorn presents each volume over iSCSI as `IET / VIRTUAL-DISK`. multipathd
+sees a SCSI device, claims it as a multipath map, and from then on the device
+has a holder. Formatting fails:
+
+```
+format of disk "/dev/longhorn/pvc-..." failed: type:("ext4") ... output:(
+mke2fs 1.47.0 (5-Feb-2023)
+/dev/longhorn/pvc-... is apparently in use by the system;
+will not make a filesystem here!)
+```
+
+Every PVC stays Pending, every pod waits on its volume, and the deployment
+reports `0 of 1 updated replicas are available` forever. The pod event blames
+the CSI driver. Nothing anywhere says `multipath`, and the package that caused
+it was never named in any command the operator ran.
+
+Confirm it in one line:
+
+```bash
+multipath -ll     # mpatha (36000...) dm-0 IET,VIRTUAL-DISK
+```
+
+**Fixed here:** node prep appends a blacklist to `/etc/multipath.conf`,
+restarts multipathd, and runs `multipath -F` so maps already claimed are
+dropped (without the flush, volumes created before the fix stay unformattable
+until the node reboots).
+
+**Blacklist by VENDOR, not by devnode.** The fix most often quoted for this is
+`devnode "^sd[a-z0-9]+"`, which turns multipath off for every SCSI disk on the
+host. Matching `vendor "IET" product "VIRTUAL-DISK"` excludes exactly the
+Longhorn devices and leaves a genuine multipath configuration working.
+
+## 61. verify.sh had a check a single-node cluster could never pass
+
+`install.sh` supports one server and says so out loud: "one server means one
+etcd member. Fine for a demo, not HA." `verify.sh` then asserted the workload
+was spread over more than one node, and reported:
+
+```
+FAIL every pod is on one node: check the podAntiAffinity patch
+```
+
+There is no podAntiAffinity patch that can spread six pods over one node. The
+line was a permanent red on a topology the installer offers, which trains an
+operator to read the summary as "8 passed, 1 expected failure" and stop looking
+at the failure count altogether.
+
+**Fixed here:** with one node it is a `note`, counted separately from passes so
+it cannot inflate them either. With more than one node it is still a hard
+failure, because there it means something.
+
+**The general form:** GOTCHAS collects checks that cannot go red. This is the
+mirror image, and it costs more: a check that cannot go green teaches people to
+ignore red.

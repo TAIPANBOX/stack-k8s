@@ -17,9 +17,13 @@ KUBECTL="${KUBECTL:-kubectl}"
 DO_FREEZE=0
 [ "${1:-}" = "--freeze" ] && DO_FREEZE=1
 
-pass=0; fail=0
+pass=0; fail=0; warn=0
 ok()   { printf '  \033[32mok\033[0m   %s\n' "$*"; pass=$((pass+1)); }
 bad()  { printf '  \033[31mFAIL\033[0m %s\n' "$*"; fail=$((fail+1)); }
+# For a thing that is neither passing nor broken, usually because the cluster
+# is smaller than the property being asked about. Counted separately so it
+# cannot quietly inflate the pass count either.
+note() { printf '  \033[33mnote\033[0m %s\n' "$*"; warn=$((warn+1)); }
 head_() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 kc()   { $KUBECTL -n "$NS" "$@"; }
 
@@ -44,9 +48,21 @@ notrunning="$(kc get pods --no-headers 2>/dev/null | awk '$3 != "Running" && $3 
 
 # One node holding every pod is a five-node cluster with one node's worth of
 # resilience (GOTCHAS 17), so this is a check, not a cosmetic note.
+#
+# Unless the cluster HAS one node, which install.sh supports and says so:
+# "one server means one etcd member. Fine for a demo, not HA." Reported as a
+# failure there, this was a red line no arrangement of pods could turn green,
+# on a topology the installer offers. A check that cannot pass is as useless as
+# one that cannot fail; it is just louder.
+nodes_total="$($KUBECTL get nodes --no-headers 2>/dev/null | grep -c .)"
 nodes_used="$(kc get pods -o jsonpath='{.items[*].spec.nodeName}' 2>/dev/null | tr ' ' '\n' | sort -u | grep -c .)"
-[ "${nodes_used:-0}" -gt 1 ] && ok "workload spread over $nodes_used nodes" \
-  || bad "every pod is on one node: check the podAntiAffinity patch"
+if [ "${nodes_total:-0}" -le 1 ]; then
+  note "single-node cluster: nothing to spread over, and no resilience to claim"
+elif [ "${nodes_used:-0}" -gt 1 ]; then
+  ok "workload spread over $nodes_used nodes"
+else
+  bad "every pod is on one node of $nodes_total: check the podAntiAffinity patch"
+fi
 
 head_ "storage"
 kc get pvc -o custom-columns=CLAIM:.metadata.name,MODE:.spec.accessModes,CLASS:.spec.storageClassName,STATUS:.status.phase,SIZE:.status.capacity.storage
@@ -151,5 +167,9 @@ print(r['decision'])
 fi
 
 head_ "result"
-printf '  %d passed, %d failed\n\n' "$pass" "$fail"
+if [ "${warn:-0}" -gt 0 ]; then
+  printf '  %d passed, %d failed, %d noted\n\n' "$pass" "$fail" "$warn"
+else
+  printf '  %d passed, %d failed\n\n' "$pass" "$fail"
+fi
 exit "$fail"

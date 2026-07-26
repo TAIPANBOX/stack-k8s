@@ -177,6 +177,15 @@ else
     done
     docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
     echo '   built stack/tokenfuse:dev'
+    # The operator tunnel needs these two, and nothing else builds them. Left
+    # out, ./tunnel/up.sh reaches a running cluster and then sits in
+    # ImagePullBackOff for images that were never built anywhere, which reads
+    # like a registry problem rather than a missing build. Cheap: one Go binary
+    # and one xcaddy build, both tiny beside the console.
+    docker build -q -f stack-k8s/images/wg.Dockerfile -t stack/wg:dev stack-k8s >/dev/null
+    echo '   built stack/wg:dev'
+    docker build -q -f stack-k8s/images/caddy.Dockerfile -t stack/caddy:dev stack-k8s >/dev/null
+    echo '   built stack/caddy:dev'
     if [ '$WITH_CONSOLE' = '1' ]; then
       docker build -q -f stack-k8s/images/console.Dockerfile -t stack/genaryx-console:dev . >/dev/null
       echo '   built stack/genaryx-console:dev'
@@ -184,6 +193,7 @@ else
 
   say "importing images into every node's containerd"
   IMAGES="stack/wardryx:dev stack/idryx:dev stack/qryx:dev stack/mockryx:dev stack/tokenfuse:dev"
+  IMAGES="$IMAGES stack/wg:dev stack/caddy:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
   PRIVS=""
   for n in "${ALL_NODES[@]}"; do
