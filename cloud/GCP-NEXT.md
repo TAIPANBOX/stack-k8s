@@ -19,6 +19,38 @@ lists. The GCP column is the first thing to fill in, and it can be filled in at
 a desk: no cluster is needed to read a price list, and doing it first tells you
 whether the deployment is worth its own cost.
 
+## What is already on the machine, and what blocks the run
+
+Measured 2026-07-26 on the machine this will run from, so the next session does
+not start by discovering it:
+
+- `gcloud` and `terraform` are both installed.
+- The account is `yukosemail@gmail.com`, with six projects.
+- There is exactly ONE billing account, `01A7A8-25FAAC-59E085`, and it is open.
+- **No project has billing enabled.** Every one checked answered
+  `billingEnabled: False`. GCP creates no instance at all in that state.
+
+So the run is blocked on one act that is nobody's but the account owner's:
+linking a project to that billing account. That is switching spending ON, and it
+is the reason this file does not contain a command to do it.
+
+The shape to price against: AWS ran five `c7a.2xlarge`, 8 vCPU and 16 GB each,
+and burned about **USD 2.16 per hour**. GCP at the same shape is in the same
+region of the price list, so a run of a few hours is single-digit dollars. Real
+money, and the owner's.
+
+## Do the desk comparison first, because it is free
+
+Hetzner and AWS are already answered, and the answer is not subtle: **EUR 137
+against USD 1,487 per month** for the same five nodes. Filling the GCP column in
+`cloud/COSTS.md` from Google's own price list needs no cluster, no billing and no
+permission, and it tells you whether the live run would change any conclusion or
+merely add a third point to a chart that already makes its case.
+
+If GCP lands between the two, the deployment proves portability and nothing
+about cost. If it lands somewhere unexpected, that is when a live run earns its
+own bill.
+
 ## The shape of the work
 
 `install.sh` is Hetzner-specific by design and says so: it reads
