@@ -193,6 +193,20 @@ a ceiling of 100.
 
 **What the governance layer costs, measured**
 
+**Read this table with one inequality in mind, because it is not a like-for-like
+on silicon.** The AWS nodes were `c7a.2xlarge`, AMD EPYC **Genoa**; the GCP
+nodes were `c2d-highcpu-8`, AMD EPYC **Milan**, one generation older. Same spec,
+different chip, and that gap explains much of AWS's lead. It was not a choice:
+`c3d` is GCP's Genoa part, its quota ceiling in this region was 24 vCPU against
+the 40 needed, and the increase was auto-denied. The disks differed too, and
+that one was an oversight: AWS ran 240 GB gp3 (a value left in the tfvars from
+the July run) against GCP's 100 GB pd-balanced, which changes the hourly cost
+and the disk's IOPS model but has little effect on a sequential audit append.
+
+So: "what AWS gave us beat what GCP gave us" is supported. "AWS is faster than
+GCP" is not, and a silicon-fair rematch would run `c7i` against `c3` (both
+Intel, both available) or wait for a `c3d` quota.
+
 | | Hetzner CPX42 (SHARED vCPU) | AWS c7a.2xlarge (dedicated, Genoa) | GCP c2d-highcpu-8 (dedicated, Milan) |
 |---|---|---|---|
 | peak decisions/s per pod | 2,344 | **4,028** (concurrency 16) | **2,479** (concurrency 32) |
@@ -200,8 +214,9 @@ a ceiling of 100.
 | past 64 concurrent | **collapse to 1,059** | **no collapse, 3,782 at 256** | **no collapse, 2,353 at 256** |
 | audit bytes per decision | 393 | **428** | **426** |
 | freeze reaches traffic | 5 ms | **5.3 ms** | **5.0 ms** |
-| decisions per USD-hour of cluster | 42.2 M per EUR | 6.8 M | 4.4 M |
-| **cost per million governed decisions** | **EUR 0.024** | **USD 0.147** | **USD 0.229** |
+| cluster burn while measuring | EUR 0.20/h | USD 2.52/h (240 GB disks) | USD 2.04/h (100 GB disks) |
+| decisions per currency-hour of cluster | 42.2 M per EUR | 5.7 M per USD | 4.4 M per USD |
+| **cost per million governed decisions** | **EUR 0.024** | **USD 0.174** | **USD 0.229** |
 
 **The collapse was the instance type, and now two clouds say so.** It was
 written up from the Hetzner run as a design limit to plan against. CPX42 is a
@@ -218,10 +233,11 @@ cloud did.
 
 **The last row is the one to lead with.** Governing an agent action costs
 almost nothing in CPU, and what it costs is legible: about EUR 0.024 per
-million decisions on Hetzner against USD 0.147 on AWS and USD 0.229 on GCP.
-AWS is the fastest per pod by 62% and, because of that, cheaper per decision
-than GCP despite costing more per hour. Hetzner is an order of magnitude
-cheaper than either, at half the throughput.
+million decisions on Hetzner against USD 0.174 on AWS and USD 0.229 on GCP.
+The hyperscalers land within a third of each other once the hourly rate is
+divided by what the hour bought, and Hetzner is an order of magnitude below
+both at half the throughput. That ordering survives the silicon caveat above;
+the gap between the two hyperscalers does not.
 
 **The same three proofs**
 
