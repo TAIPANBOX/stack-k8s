@@ -32,6 +32,13 @@ RUN apk add --no-cache git
 # something different between two runs of the same script is not reproducible.
 RUN go install golang.zx2c4.com/wireguard@v0.0.0-20260522210424-ecfc5a8d5446
 
+# The authenticated, filtering door for a console in ANOTHER pod. Built from
+# this repository rather than fetched: standard library only, so there is
+# nothing to resolve and the dependency list stays a security property.
+# CGO off so it runs on the distroless-ish alpine below without a libc match.
+COPY images/uapi-proxy /src/uapi-proxy
+RUN cd /src/uapi-proxy && CGO_ENABLED=0 go build -ldflags='-s -w' -o /go/bin/uapi-proxy ./...
+
 FROM alpine:3.20
 # `wireguard-tools` for `wg`, which talks the same UAPI this image serves,
 # `iproute2` to give the interface its address, and `socat` for the console
@@ -41,6 +48,7 @@ RUN apk add --no-cache wireguard-tools iproute2 socat
 # The binary takes its name from the module, so it installs as `wireguard`.
 # Renamed here to the name every piece of WireGuard documentation uses.
 COPY --from=build /go/bin/wireguard /usr/local/bin/wireguard-go
+COPY --from=build /go/bin/uapi-proxy /usr/local/bin/uapi-proxy
 
 # Written here rather than shipped as a separate file so the image is one
 # self-contained artifact, the same way the other images in this directory are.
@@ -69,6 +77,15 @@ CONSOLE_PORT="${WG_CONSOLE_PORT:-7420}"
 # phones stay valid-looking and simply never complete a handshake again.
 PEERS_FILE="${WG_PEERS_FILE:-/var/lib/wireguard/peers.conf}"
 PEERS_SAVE_SECONDS="${WG_PEERS_SAVE_SECONDS:-10}"
+# The network door, for a console that is NOT in this pod. Empty means off,
+# which is every single-box install: compose shares a volume, so the unix relay
+# below is the whole story there and this must not change it. Set it and the
+# certificate, key and bearer become required rather than defaulted, because a
+# missing one would mean "trust nothing" or "accept an empty bearer".
+PROXY_LISTEN="${WG_PROXY_LISTEN:-}"
+PROXY_CERT="${WG_PROXY_CERT:-/etc/wg-proxy/tls.crt}"
+PROXY_KEY="${WG_PROXY_KEY:-/etc/wg-proxy/tls.key}"
+PROXY_TOKEN_FILE="${WG_PROXY_TOKEN_FILE:-/etc/wg-proxy/token}"
 
 mkdir -p "$(dirname "$KEY_FILE")" /var/run/wireguard
 
@@ -207,6 +224,28 @@ if [ -z "$SERVER_PUB" ]; then
   kill "$WG_PID" 2>/dev/null || true
   exit 1
 fi
+# The network door, once the interface is up and its public key is known. That
+# ordering matters: the proxy substitutes this key for the private one the
+# daemon reports, so starting it earlier would mean starting it with nothing to
+# substitute.
+if [ -n "$PROXY_LISTEN" ]; then
+  for f in "$PROXY_CERT" "$PROXY_KEY" "$PROXY_TOKEN_FILE"; do
+    if [ ! -s "$f" ]; then
+      echo "!! WG_PROXY_LISTEN is set but $f is missing or empty." >&2
+      echo "   The network door needs a certificate, its key and a bearer; install.sh writes all three." >&2
+      kill "$WG_PID" "$RELAY_PID" 2>/dev/null || true
+      exit 1
+    fi
+  done
+  PROXY_LISTEN="$PROXY_LISTEN" PROXY_CERT="$PROXY_CERT" PROXY_KEY="$PROXY_KEY" \
+  PROXY_TOKEN_FILE="$PROXY_TOKEN_FILE" UAPI_SOCKET="$SOCK" SERVER_PUBKEY_B64="$SERVER_PUB" \
+    /usr/local/bin/uapi-proxy &
+  PROXY_PID=$!
+  echo ">> network door on $PROXY_LISTEN, forwarding to $SOCK"
+else
+  PROXY_PID=""
+fi
+
 # Restore the devices this box had authorized before it restarted. `addconf`
 # rather than `setconf`: it ADDS the saved peers and leaves the interface's own
 # key and port alone, where `setconf` would rewrite the whole interface from a
@@ -235,7 +274,7 @@ SAVER_PID=$!
 # `:-` on every pid: this trap is armed before the forwarder below exists, and
 # under `set -u` an unset variable in the handler would turn a clean shutdown
 # into an error that skips the save.
-trap 'save_peers; kill "${WG_PID:-}" "${RELAY_PID:-}" "${CONSOLE_FWD_PID:-}" "${SAVER_PID:-}" 2>/dev/null; exit 0' TERM INT
+trap 'save_peers; kill "${WG_PID:-}" "${RELAY_PID:-}" "${CONSOLE_FWD_PID:-}" "${SAVER_PID:-}" "${PROXY_PID:-}" 2>/dev/null; exit 0' TERM INT
 
 # The tunnel has to LEAD somewhere. The interface address lives in this
 # container's network namespace and the console runs in another, so a client
@@ -257,7 +296,7 @@ echo ">> console relay $RELAY is group $SOCK_GID mode 0660; $SOCK stays 0700"
 
 # Do not exec-replace: the socket permissions above must be in place first,
 # and this process is what notices the tunnel dying.
-wait "$WG_PID" "$RELAY_PID" "$CONSOLE_FWD_PID"
+wait "$WG_PID" "$RELAY_PID" "$CONSOLE_FWD_PID" ${PROXY_PID:+"$PROXY_PID"}
 ENTRY
 
 # A heredoc that silently produced nothing is the failure this catches: the
