@@ -226,6 +226,36 @@ gcloud projects delete stack-k8s-gcp
 
 ---
 
+## Run it twice, because the second run is the one that tells you the truth
+
+Every script here is idempotent and says so. That claim is worth exactly nothing
+until somebody rebuilds a cluster in the same project, which is why this
+directory was proven by doing it: five nodes, teardown, five nodes again.
+
+The rebuild is a different test, not a repeat of the first one. It exercises:
+
+- **Recycled addresses.** The new machines are very likely to get the previous
+  ones' public addresses, and the operator's `known_hosts` still holds keys for
+  instances that no longer exist. On the first attempt this refused all five
+  nodes at once (GOTCHAS item 68). Both scripts now forget those keys first.
+- **Quota that is already spent.** `preflight.sh` reads the ceilings against
+  CURRENT usage, so during a rebuild it correctly refuses a second cluster that
+  would not fit beside the first.
+- **Terraform state that does not match reality.** A partial apply, a
+  hand-deleted instance, an interrupted destroy: the outputs slice against what
+  exists rather than what was requested, so a broken state can still be planned
+  and destroyed (item 65).
+- **A cluster token that already exists.** `install-gcp.sh` reuses the token
+  from the datastore rather than generating a fresh one, without which a second
+  install is fatal and blames neither the token nor the script (item 59).
+- **Secrets that are already there.** Every credential step checks first and
+  leaves what it finds, so re-running does not rotate a password somebody is
+  holding.
+
+If a change is made to anything in this directory, the honest test is not "does
+it still work", it is "does it still work TWICE, from an empty project, without
+anyone touching it in between".
+
 ## What to write down while it runs
 
 The rows in `../PORTABILITY.md` section 3, plus the six differences this
