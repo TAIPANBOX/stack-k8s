@@ -1,0 +1,56 @@
+# What the console needs to reach a tunnel it no longer shares a pod with.
+#
+# A patch rather than a copy, and that is the difference the network transport
+# bought. The earlier shape had to duplicate the whole Deployment into another
+# namespace, with a drift check to keep the copy honest. Everything here is
+# additive: environment, and one read-only Secret projection.
+#
+# Every addition is allowed under PodSecurity `restricted`. The console keeps
+# `capabilities: drop: ALL`, runs as 10001, mounts no host path, and stays in
+# `agent-stack` where the API server enforces all of that rather than taking
+# the pod's word for it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: genaryx-console
+  namespace: agent-stack
+spec:
+  template:
+    spec:
+      containers:
+        - name: console
+          env:
+            - { name: GENARYX_WG_IFACE, value: "wg-op" }
+            # A host:port rather than a path, which is what tells the client to
+            # use TLS at all. Renaming the Service without regenerating the
+            # certificate fails as a TLS error rather than a naming one,
+            # because install.sh puts this exact name in the SAN.
+            - { name: GENARYX_WG_UAPI_SOCKET, value: "wg-uapi.agent-tunnel:9090" }
+            # The CA that signed the proxy's leaf, pinned as the ONLY root.
+            - { name: GENARYX_WG_UAPI_CERT, value: "/etc/wg-uapi/ca.crt" }
+            - name: GENARYX_WG_UAPI_TOKEN
+              valueFrom: { secretKeyRef: { name: stack-tunnel-proxy, key: token } }
+            # The address a phone dials from OUTSIDE. Nothing on the interface
+            # can report it and the console refuses to guess: the previous
+            # default was one box's public IP, so every other deployment issued
+            # configs pointing at a machine that was not theirs.
+            - name: GENARYX_WG_ENDPOINT_HOST
+              valueFrom: { configMapKeyRef: { name: stack-tunnel, key: endpoint_host } }
+            # WebAuthn binds credentials to this exact pair, and it must match
+            # what the browser addresses through Caddy. A mismatch is refused
+            # with an error that reads like a broken passkey rather than a
+            # wrong origin (GOTCHAS 38).
+            - name: GENARYX_WEB_RP_ID
+              valueFrom: { configMapKeyRef: { name: stack-tunnel, key: console_domain } }
+            - name: GENARYX_WEB_ORIGIN
+              valueFrom: { configMapKeyRef: { name: stack-tunnel, key: console_origin } }
+          volumeMounts:
+            - { name: wg-uapi-ca, mountPath: /etc/wg-uapi, readOnly: true }
+      volumes:
+        # Only the CA. The proxy's key and the bearer are not projected here:
+        # the bearer arrives as an environment value the client needs, and the
+        # key is the tunnel's alone.
+        - name: wg-uapi-ca
+          secret:
+            secretName: stack-tunnel-proxy
+            items: [{ key: ca.crt, path: ca.crt }]

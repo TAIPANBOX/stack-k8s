@@ -1,56 +1,41 @@
-# The console's own namespace, and the honest reason it exists.
+# The tunnel's own namespace, holding the two containers that genuinely need
+# privileges and nothing else.
 #
-# `agent-stack` enforces PodSecurity `restricted`, which forbids capabilities,
-# root, and host paths. That is deliberate (manifests/00-base.yaml) and it is
-# correct for the planes: they ENFORCE policy, and an enforcement plane with
-# host access is not one.
+# `privileged`, and the word is exact rather than lazy. `baseline` was tried
+# and refuses this pod: it permits one added capability, NET_BIND_SERVICE, and
+# forbids hostPath outright, while `wireguard-go` needs NET_ADMIN and
+# /dev/net/tun. Kubernetes has three levels and nothing between baseline and
+# privileged, so there is no narrower label that admits it.
 #
-# The console cannot meet that bar once it carries the operator's tunnel, and
-# the reason is irreducible rather than lazy:
+# WHAT CHANGED, AND WHY IT MATTERS
 #
-#   - `wireguard-go` must create a TUN interface, which needs CAP_NET_ADMIN and
-#     a /dev/net/tun hostPath. No configuration removes that.
-#   - the console manages peers over a UNIX socket, and a unix socket cannot
-#     cross a pod boundary, so wg must share the console's pod.
+# An earlier version put the CONSOLE in here too, because the console managed
+# peers over a unix socket and a unix socket cannot cross a pod boundary. That
+# cost three things, all of them downstream of that one sentence:
 #
-# So the console's POD is privileged. Not the console CONTAINER: that still
-# drops ALL capabilities and runs as 10001. What changes is what the namespace
-# can promise, and a namespace that promises "no host access" while holding a
-# container with NET_ADMIN is lying. Two namespaces, two honest promises.
+#   - the console left a namespace where the API server ENFORCES its posture
+#     for one where the pod only promises it
+#   - Caddy came with it, and a NetworkPolicy selects a POD, so the console
+#     inherited Caddy's way to the open internet, past the gateway that is
+#     supposed to be the only metered path out (GOTCHAS 49)
+#   - the shared event log had to be reached over NFS across namespaces, and
+#     the generated credentials had to exist in two places
 #
-# `privileged`, and that word is not a rounding error. `baseline` was tried
-# first and refuses this pod: it permits exactly one added capability,
-# NET_BIND_SERVICE, and forbids hostPath volumes outright. wg needs NET_ADMIN
-# and /dev/net/tun, so it fails on both counts. Kubernetes has three levels and
-# nothing between baseline and privileged, so there is no narrower label that
-# admits this pod.
+# The console now reaches this daemon over an authenticated network channel, so
+# it stays in `agent-stack` under enforced `restricted` and none of that
+# applies. What is privileged here is exactly what has to be: a WireGuard
+# daemon and the TLS terminator that lives with it.
 #
-# Be clear about what that costs. In agent-stack the API server ENFORCES the
-# posture; here the pod only PROMISES it. The containers still declare
-# `capabilities: drop: ALL` and `allowPrivilegeEscalation: false`, the console
-# still runs as 10001, and the namespace still carries its own default-deny
-# NetworkPolicy. What is gone is the second pair of eyes: a future edit that
-# quietly adds a capability here will be accepted, where in agent-stack it
-# would be refused.
-#
-# That gap is exactly why `warn: baseline` is set below. It cannot block
-# anything, but every apply prints what would have been rejected, so the
-# exception stays visible instead of becoming the new normal. And
-# security-tests.sh scans THIS namespace too and asserts the violations are
-# exactly the three expected ones, which is the part that can actually fail.
-#
-# The permanent fix is to give the console a network transport to the UAPI so
-# wg can live alone and the console can go back inside `restricted`. That is a
-# change to the product, not to its deployment, and it is the agreed next piece
-# of work rather than a note nobody acts on.
+# `warn: baseline` cannot block anything, but every apply prints what a
+# stricter cluster would have refused, so the exception stays loud. The test
+# that can actually fail is security-tests.sh 5b, which asserts this namespace
+# holds exactly the expected violations and no others.
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: agent-console
+  name: agent-tunnel
   labels:
     pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/enforce-version: latest
-    # Cannot block, but makes every apply print what a stricter cluster would
-    # have refused. The exception stays loud.
     pod-security.kubernetes.io/warn: baseline
     pod-security.kubernetes.io/warn-version: latest

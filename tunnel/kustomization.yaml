@@ -1,71 +1,26 @@
 # The operator's road in.
 #
-#   ./tunnel/up.sh          # discovers, checks, applies
-#   kubectl apply -k tunnel/    # only if you have already read up.sh
+#   ./tunnel/up.sh
 #
-# Prefer up.sh. Two things in here cannot be static YAML and it fills them in:
-# the address of the shared event log, which Longhorn chooses, and the copies
-# of the two generated Secrets the console needs in its new namespace.
+# The base stack plus a tunnel in its own namespace. The console STAYS in
+# agent-stack under enforced `restricted` and gains only environment and one
+# read-only Secret projection: it reaches the daemon over an authenticated
+# network channel rather than a shared unix socket, which is what lets the
+# privileged half live apart. See DESIGN-uapi-transport.md, and namespace.yaml
+# for what the earlier shape cost.
 #
-# WHAT THIS DOES TO THE SHAPE OF THE STACK
-#
-# It moves the console out of `agent-stack` into `agent-console`, because once
-# the console carries the tunnel its pod holds a container with NET_ADMIN and a
-# hostPath, and `agent-stack` enforces PodSecurity `restricted` on purpose. The
-# console CONTAINER still drops every capability; what changes is what the
-# namespace can honestly promise. See namespace.yaml for the full reasoning and
-# for the permanent fix, which is a change to the product rather than to this.
-#
-# Applying `kubectl apply -k manifests/` afterwards puts the console back in
-# agent-stack WITHOUT removing the one in agent-console, so run `./tunnel/down.sh`
-# first if you are going back.
-#
-# NOT metered: the way in is a NodePort, which costs nothing on any provider.
+# NOT metered: the way in is a NodePort, free on any provider.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# No global `namespace:` on purpose. This build spans two of them, and every
-# object below states its own.
+# No global `namespace:`: this build spans two, and every object states its own.
 
 resources:
   - ../manifests
   - namespace.yaml
-  - console.yaml
+  - tunnel-pod.yaml
   - resources.yaml
 
 patches:
-  # Let the console reach the planes from where it now lives.
-  - path: patches.yaml
-
-  # Remove the base's console, which is the same workload in the namespace it
-  # can no longer satisfy. Without these two deletes the cluster runs two
-  # consoles against one state volume, and the RWO claim means the second never
-  # starts, so the symptom is a Pending pod rather than anything that names the
-  # real problem.
-  - target: { kind: Deployment, name: genaryx-console, namespace: agent-stack }
-    patch: |
-      $patch: delete
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: genaryx-console
-        namespace: agent-stack
-  - target: { kind: Service, name: genaryx-console, namespace: agent-stack }
-    patch: |
-      $patch: delete
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: genaryx-console
-        namespace: agent-stack
-  # The console's state volume goes with it. The claim in agent-stack would
-  # otherwise sit bound to a volume nothing mounts, quietly costing whatever
-  # the provider charges for it.
-  - target: { kind: PersistentVolumeClaim, name: console-state, namespace: agent-stack }
-    patch: |
-      $patch: delete
-      apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: console-state
-        namespace: agent-stack
+  - path: console-patch.yaml
+    target: { kind: Deployment, name: genaryx-console, namespace: agent-stack }
