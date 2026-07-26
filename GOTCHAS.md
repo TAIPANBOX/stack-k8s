@@ -1420,3 +1420,97 @@ you just ran.
 **Fixed here:** `deploy.sh` and `cloud/aws/deploy-aws.sh` restart the console
 after setting the password and wait for the rollout. One line each, and without
 it every fresh cluster hands its operator a login they cannot use.
+
+## 51. Dropping ALL drops CAP_CHOWN, and root does not get it back
+
+`securityContext: { runAsUser: 0, capabilities: { drop: ["ALL"], add: ["NET_ADMIN"] } }`
+reads like "root, with one extra power". It is the opposite: root with exactly
+one power and none of the fifteen it normally has. `chown`, `chgrp`, and
+anything that calls them, fail with `Operation not permitted` **as uid 0**,
+which is a sentence that sends you looking for a filesystem problem.
+
+Found through `socat`. The tunnel image relays the daemon's UAPI socket to a
+second socket the console can open, and that relay is created with
+`group=10001`, which is a `chown` underneath. On Docker Compose, where the
+container is root with the default capability set, it works. On Kubernetes with
+`drop: ALL` the relay never comes up:
+
+```
+socat[32] E chown("/var/run/wireguard/console.sock", -1, 10001): Operation not permitted
+!! the console relay socket never appeared at /var/run/wireguard/console.sock
+```
+
+The second line is the entrypoint's own, and it killed the container, so the
+tunnel died over a component that deployment did not need at all: the console
+was in another pod, reaching the daemon over the network door, and a unix
+socket cannot cross a pod boundary in the first place.
+
+**Fixed here:** the two transports are written as alternatives. `WG_PROXY_LISTEN`
+set means the console is elsewhere, so the unix relay is not started, not
+required, and not waited for. If a future deployment genuinely needs both, the
+capability to add is `CAP_CHOWN`, named explicitly.
+
+**The general form:** `drop: ["ALL"]` is not a hardening decoration on top of
+root. It is the whole capability set, and every `add:` is the complete list of
+what the container may do. Anything the image did as root before, that is not
+on that list, now fails.
+
+## 52. A readiness probe is a client, and a silent one
+
+Adding a `tcpSocket` readiness probe to the tunnel fixed a real problem: without
+it `rollout status` reported success on a container that was already dying
+(item 43, in a new place). It created a quieter one.
+
+The probe opens the port, sends nothing, and closes. Every three seconds.
+Forever. The proxy behind that port logged every connection that carried no
+valid request as a refusal, so the log filled with:
+
+```
+>> uapi-proxy: refused: empty request
+>> uapi-proxy: refused: empty request
+```
+
+ten a minute, in front of every real refusal. A log where the interesting line
+is one in three hundred is a log nobody reads, so an actual attempt to send
+`replace_peers=true` would have scrolled past unseen. The check meant to make a
+failure visible made a different failure invisible.
+
+**Fixed here:** nothing attempted is nothing logged. A connection that closes
+without sending a byte, and a connection that sends only the blank line that
+terminates a request, both return the same sentinel and produce no output and
+no reply. Everything else still logs loudly. The trade is stated in the source:
+a bare connect from an unauthorised source goes unlogged, and what keeps such a
+source away is the NetworkPolicy in front of the port, not a line in a file.
+
+Both halves are asserted in `images/uapi-proxy/main_test.go`, including the
+opposite direction, because a test that only proves silence would also pass on
+a proxy that logged nothing at all.
+
+## 53. A test that follows the namespace stops following the thing
+
+Item 46 added test 5b to `security-tests.sh` because tests 4 and 5 scan one
+namespace, and when the console moved out of it both kept passing purely by not
+looking. 5b was written to audit "the console's namespace".
+
+Then the console moved BACK, and the capabilities did not come with it. On the
+next run 5b reported:
+
+```
+ok  the console runs inside agent-stack under enforced restricted:
+    no exception to audit
+```
+
+which is true and useless. The NET_ADMIN, the `/dev/net/tun` hostPath and the
+two root containers all still existed, one namespace over, unaudited, and the
+suite said so in green. The exact failure 5b was written to prevent, recurring
+inside the fix for it.
+
+**Fixed here:** the test finds the namespace that holds `NET_ADMIN` by looking
+for it, and audits that, whichever namespace it turns out to be. "No namespace
+holds NET_ADMIN" is a separate, honest pass. The console's own posture is
+asserted separately again.
+
+**The general form:** name what a check is about by the PROPERTY, not by where
+the property happened to live when the check was written. A location is a fact
+about today's layout; a capability is the thing worth auditing, and it can move
+without anybody editing the test that claims to cover it.

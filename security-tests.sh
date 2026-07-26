@@ -47,6 +47,19 @@ fi
 kcc()  { $KUBECTL -n "$CONSOLE_NS" "$@"; }
 [ "$CONSOLE_NS" = "$NS" ] || printf '  (the console is in %s, probes run there)\n' "$CONSOLE_NS"
 
+# Where the PRIVILEGED half is, which is a different question and the one test
+# 5b actually cares about. The capabilities never went away; across three
+# shapes they have merely moved. Finding them by looking for the pod that holds
+# them, rather than by assuming which namespace that is, is what stops 5b from
+# passing because the thing it audits is somewhere it was not told to look.
+PRIV_NS="${PRIV_NS:-}"
+if [ -z "$PRIV_NS" ]; then
+  for cand in agent-tunnel agent-console "$NS"; do
+    if $KUBECTL -n "$cand" get deploy -o json 2>/dev/null \
+       | grep -q '"NET_ADMIN"'; then PRIV_NS="$cand"; break; fi
+  done
+fi
+
 # Probes run from the console pod: it is the one pod in the namespace with an
 # interpreter (every plane is distroless on purpose), and it is the pod with
 # the MOST permissions, so anything it cannot reach, nothing can.
@@ -214,19 +227,30 @@ head_ "5b. the console namespace holds exactly the exceptions it is allowed"
 # console reaches it over a unix socket that cannot cross a pod boundary. It is
 # allowed to break it in EXACTLY these ways and no others. Anything new fails
 # here, which is the whole point.
-# CONSOLE_NS is resolved once at the top of this file. When it equals $NS the
-# console is in the strict namespace and there is no exception to audit.
+# It audits PRIV_NS, not CONSOLE_NS, and those stopped being the same namespace
+# the moment the console moved back under enforced `restricted`. Written the
+# other way this test would have reported "no exception to audit" while the
+# NET_ADMIN, the tun device and the root containers all still existed one
+# namespace over: the precise failure the paragraph above was added to prevent,
+# recurring inside the fix for it. What is audited is wherever the capabilities
+# are, and if they are nowhere then there is genuinely nothing to audit.
 if [ "$CONSOLE_NS" = "$NS" ]; then
-  ok "the console runs inside $NS under enforced restricted: no exception to audit"
+  ok "the console itself runs inside $NS under enforced restricted"
+fi
+if [ -z "$PRIV_NS" ]; then
+  ok "no namespace holds NET_ADMIN: there is no privileged half to audit"
 else
-  level="$($KUBECTL get ns "$CONSOLE_NS" -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}' 2>/dev/null)"
-  warnl="$($KUBECTL get ns "$CONSOLE_NS" -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/warn}' 2>/dev/null)"
-  echo "    $CONSOLE_NS: enforce=$level warn=${warnl:-none}"
+  [ "$PRIV_NS" = "$CONSOLE_NS" ] \
+    && echo "    the privileged half shares the console's namespace ($PRIV_NS)" \
+    || echo "    the privileged half is in $PRIV_NS, apart from the console in $CONSOLE_NS"
+  level="$($KUBECTL get ns "$PRIV_NS" -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}' 2>/dev/null)"
+  warnl="$($KUBECTL get ns "$PRIV_NS" -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/warn}' 2>/dev/null)"
+  echo "    $PRIV_NS: enforce=$level warn=${warnl:-none}"
   [ -n "$warnl" ] && [ "$warnl" != "$level" ] \
     && ok "the exception is announced: every apply prints what a stricter cluster would refuse" \
-    || bad "$CONSOLE_NS has no stricter warn level, so the exception is silent"
+    || bad "$PRIV_NS has no stricter warn level, so the exception is silent"
 
-  if $KUBECTL -n "$CONSOLE_NS" get deploy -o json 2>/dev/null | python3 -c "
+  if $KUBECTL -n "$PRIV_NS" get deploy -o json 2>/dev/null | python3 -c "
 import json, sys
 # Exactly what the tunnel needs, named per container and per volume. Read this
 # list as the promise: nothing outside it is permitted to appear.
@@ -261,18 +285,18 @@ for b in bad:
     print('    ' + b)
 sys.exit(1 if bad else 0)
 "; then
-    ok "$CONSOLE_NS breaks restricted in exactly the documented ways: NET_ADMIN on wg, NET_BIND_SERVICE on caddy, root on those two, the tun device and the shared event log"
+    ok "$PRIV_NS breaks restricted in exactly the documented ways: NET_ADMIN on wg, NET_BIND_SERVICE on caddy, root on those two, the tun device and the shared event log"
   else
-    bad "$CONSOLE_NS has grown a privilege beyond the documented exception"
+    bad "$PRIV_NS has grown a privilege beyond the documented exception"
   fi
 
-  pub="$($KUBECTL -n "$CONSOLE_NS" get svc -o json 2>/dev/null | python3 -c "
+  pub="$($KUBECTL -n "$PRIV_NS" get svc -o json 2>/dev/null | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 print(' '.join(s['metadata']['name']+':'+s['spec']['type'] for s in d['items'] if s['spec']['type'] in ('LoadBalancer','NodePort')))")"
   [ "$pub" = "genaryx-tunnel:NodePort" ] \
     && ok "the only published Service is the tunnel itself, which answers nothing without a valid key" \
-    || bad "unexpected published Services in $CONSOLE_NS: ${pub:-none}"
+    || bad "unexpected published Services in $PRIV_NS: ${pub:-none}"
 fi
 
 head_ "6. nothing in this namespace is published"
