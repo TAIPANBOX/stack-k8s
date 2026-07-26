@@ -56,13 +56,11 @@ the unix path is untouched.
 
 ### 2. The private key must never cross
 
-This is the part that changed the design, and it is worth stating carefully.
-
 The obvious safety measure is for the daemon side to strip `private_key=` from
-`get=1` before it goes on the wire. **That breaks issuance**, and the reason is
-not obvious: the daemon reports only the interface's PRIVATE key and never its
-public one, so the console derives the public half and puts it in every client
-config. Strip the private key and every issued config names no server.
+`get=1`. **That breaks issuance**, and not obviously: the daemon reports only
+the interface's PRIVATE key and never its public one, so the console derives
+the public half and puts it in every client config. Strip it and every issued
+config names no server.
 
 ```rust
 "private_key" => {
@@ -71,27 +69,81 @@ config. Strip the private key and every issued config names no server.
     // comes out empty and every issued config names no peer to connect to.
 ```
 
-So the fix is a swap, not a strip:
+The answer is a **substitution**, and it costs one match arm. The relay replaces
 
-- the daemon side derives the public half **once, at startup**, from the key it
-  already holds, and publishes it as configuration
-- the console reads the server's public key from that configuration instead of
-  deriving it
-- the relay then strips `private_key=` from every response, and nothing breaks
+```
+private_key=<64 hex chars of the server's private key>
+```
 
-The result is stronger than where we are today: **a fully compromised console
-cannot learn the server's private key**, because it never receives it. That is
-not true right now, with a unix socket, where the private key crosses on every
-`get=1`. Measured on the live cluster today:
+with
+
+```
+interface_public_key=<64 hex chars of its public half>
+```
+
+and the parser gains one arm that sets `public_key_hex` from it directly. The
+`private_key` arm stays untouched, so the unix path and every existing test
+keep working unchanged.
+
+Three things make this cheap rather than clever:
+
+- the daemon side **already computes the public key**: `wg.Dockerfile`'s
+  entrypoint runs `SERVER_PUB="$(wg show "$IFACE" public-key)"` as a readiness
+  assertion and then does nothing further with it
+- the struct **already accepts being told**: `parse_wg_dump`, the `Shell`
+  backend, reads the public key off `wg show` output and skips field 0 with the
+  comment "the interface's PRIVATE key and is deliberately not read: nothing
+  here needs it". This change makes the UAPI backend converge on what the other
+  backend already does, rather than introducing a new pattern.
+- there is no extra round trip and no configuration handoff to keep in step
+
+The result is stronger than today: **a fully compromised console cannot learn
+the server's private key**, because it never receives one. Measured on the live
+cluster this morning, through the current unix relay:
 
 ```
 консоль ПРОЧИТАЛА стан демона через реле
 бачить: errno, listen_port, private_key
 ```
 
-The parser already discards it (`the_interface_private_key_is_never_carried_out_of_the_parser`),
-which is careful, but discarding after receipt and never receiving are
-different guarantees.
+The parser discards it, which is careful. Discarding after receipt and never
+receiving are different guarantees.
+
+### 2b. What else the transport change touches
+
+Found by enumerating callers rather than assuming. `UapiSocket` has a small
+public surface and exactly two consumers outside its own file, but two of its
+methods are **filesystem-shaped** and stop meaning anything over TCP:
+
+| method | callers outside | what breaks over TCP |
+|---|---|---|
+| `exists()` | `resolve_backend`, and `request()` internally | `Path::exists` on a `host:port` is always false |
+| `path()` | one error message | nothing to display |
+
+`exists()` is the dangerous one. `resolve_backend` reads:
+
+```rust
+if sock.exists() { return Ok(PeerBackend::Uapi(sock)); }
+if Command::new("wg").arg("--version").output().is_ok() {
+    return Ok(PeerBackend::Shell { iface });
+}
+```
+
+so a TCP endpoint would silently fail the first test and **fall through to the
+`Shell` backend**, which shells out to `wg` against a kernel interface that
+does not exist in the pod. The failure would surface as "no WireGuard server
+this console can reach", naming a socket path nobody configured.
+
+So the change is: `exists()` becomes "configured and reachable" (a connect
+probe for TCP, `Path::exists` for unix), and `path()` becomes a `describe()`
+that renders either form for the error text. Both are internal to the enum.
+
+Not affected, checked: `RemoteEnvironmentConfig::wg_listen_port` in
+`remote/state.rs` belongs to the OUTBOUND tunnel feature (this console dialling
+a remote box), a different direction with no shared code.
+
+Tests: 18 in `wg_uapi.rs`, 7 in `wg_operator.rs`. The unix path is untouched,
+so they keep passing; the new arm and the TCP branch need their own.
 
 ### 3. Authentication
 
@@ -111,6 +163,14 @@ observed, so it depends entirely on TLS being right.
 **mTLS.** Stronger, and `crates/relay` already carries `tls.rs`. Weakness: a
 certificate lifecycle nobody asked for, in a component whose whole appeal is
 that it is small.
+
+**The filtering requirement decides this, not preference.** The relay today is
+one `socat` line. socat can do mTLS natively (`OPENSSL-LISTEN` with `verify=1`)
+and cannot do bearer auth at all. But socat also cannot look inside the
+protocol, and this design needs it to: substituting the key field and refusing
+`replace_peers` are both content decisions. So a small program is required
+either way, and once it exists both auth options cost the same. Go is already
+in the image's build stage, where `wireguard-go` itself is built.
 
 **Recommendation: bearer over TLS, with the daemon side refusing plaintext.**
 The bearer matches the stack's existing shape, and the operations it guards are
