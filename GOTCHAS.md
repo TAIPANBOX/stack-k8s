@@ -1880,6 +1880,26 @@ password". Two of the three parsed.
 3. Reword. Cheap, and the least honest of the three: the next person adds an
    apostrophe back.
 
+**And the same character, one layer down.** An apostrophe in the DEFAULT of a
+parameter expansion breaks it too, with a different message and at a different
+time:
+
+```bash
+echo "${ADDR:-<that node's address>}"
+```
+```
+bad substitution: no closing `}' in ...
+```
+
+This one `bash -n` cannot catch, because it is a RUNTIME error rather than a
+parse error. It sat in `deploy.sh` for days, in the last block of the script, and
+every syntax check passed. It surfaced only when somebody ran the whole thing to
+completion for the first time, and it had been masked before that by an earlier
+failure that stopped the script sooner.
+
+Neither `bash -n` nor `shellcheck` is a substitute for running the last line.
+
 **The general form:** a heredoc inside a command substitution is parsed twice,
 and the first pass does not know it is looking at prose. `$'...'`, backticks and
-unbalanced parentheses in the body are the same hazard.
+unbalanced parentheses in the body are the same hazard. So is an apostrophe in
+`${VAR:-...}`, anywhere.

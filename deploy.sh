@@ -469,18 +469,29 @@ else
     "$RESET_CMD"
 fi
 
+# The last thing an operator reads must not contradict what they were just
+# handed. Step 6 gives them a WireGuard config, a QR and an address; telling
+# them in the next breath to set up an ssh -L instead is how a reader decides
+# the tooling does not know what it is doing.
+if [ "$TUNNEL_DONE" = 1 ]; then
+  printf -v WAY_IN '%s\n%s\n' \
+    "  Your way in is the tunnel above: import that .conf, connect, then open" \
+    "  the console. There is no public entry point, by design."
+else
+  printf -v WAY_IN '%s\n%s\n%s\n\n%s\n%s\n' \
+    "  Reach the console over YOUR tunnel. There is no public entry point by" \
+    "  design, and the tunnel has to land on the node running the console pod" \
+    "  (GOTCHAS.md item 13)${CONSOLE_NODE:+, currently $CONSOLE_NODE}:" \
+    "      ssh -L 17420:${CONSOLE_IP:-<console-clusterIP>}:7420 root@${CONSOLE_ADDR:-<the address of that node>}" \
+    "      open http://localhost:17420"
+fi
+
 cat <<EOF
 
 $(printf '\033[1m')Done.$(printf '\033[0m')
 
 ${SIGNIN_BLOCK}
-  Reach the console over YOUR tunnel. There is no public entry point by
-  design, and the tunnel has to land on the node running the console pod
-  (GOTCHAS.md item 13)${CONSOLE_NODE:+, currently $CONSOLE_NODE}:
-
-      ssh -L 17420:${CONSOLE_IP:-<console-clusterIP>}:7420 root@${CONSOLE_ADDR:-<that node's address>}
-      open http://localhost:17420
-
+${WAY_IN}
   Re-check any time:
 
       ssh root@$FIRST 'KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/verify.sh --freeze'
