@@ -18,3 +18,7 @@ tunnel/site.yaml
 # it carries that device's PRIVATE key. Committing one hands a way in to
 # everyone who can read the repository.
 *.conf
+
+# Terraform writes this while it holds a state lock. It is a lock, not state.
+cloud/**/.terraform.tfstate.lock.info
+cloud/**/.terraform.lock.hcl
