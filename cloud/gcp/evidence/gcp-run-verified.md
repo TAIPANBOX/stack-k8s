@@ -251,3 +251,55 @@ reading the content through gives the truth.
 
 Any measurement of "how fast does this file grow" on an RWX volume has to read
 bytes, not ask for a size.
+
+---
+
+## Secrets encryption at rest, verified at last, 2026-07-27
+
+`ДАНІ-K8S-ПРОГОН-2026-07-25.md` named this the first thing to check on a fresh
+cluster, and four fresh clusters went past it because `security-tests.sh`
+answered `encryption at rest UNVERIFIED` every time: the check wants `etcdctl`,
+and no cloud image has it.
+
+So it was checked properly, on one small node per cloud, both at once. The
+question is not "does k3s say it is on" but "is a known value absent from the
+bytes on disk", and the difference matters.
+
+```
+== 1. what k3s says about itself
+Encryption Status: Enabled
+Current Rotation Stage: start
+Server Encryption Hashes: All hashes match
+Active  Key Type  Name
+ *      AES-CBC   aescbckey
+
+== 2. a Secret whose value is a unique marker
+   created, marker is ENCRYPTION-CANARY-020252-16633
+
+== 3. kubectl reads it back
+   kubectl returns: ENCRYPTION-CANARY-020252-16633
+
+== 4. is that plaintext anywhere in the datastore on disk
+   datastore: 130M
+   occurrences of the marker in the raw datastore: 0
+   VERDICT: encrypted at rest. The value kubectl returns is not on disk.
+
+== 5. control: does the search reach the datastore at all
+   occurrences of the secret NAME (not its value) on disk: 22
+   control passed: names are not encrypted, only values.
+```
+
+**AWS returned the same five results, marker `ENCRYPTION-CANARY-020313-10640`,
+the same 0 and the same 22.**
+
+Step 5 is what makes this evidence rather than an absence. A zero in step 4 with
+nothing found in step 5 would mean the search reached nothing, which is exactly
+how a security check comes to report a pass it did not earn.
+
+**Fixed in `security-tests.sh`:** when `etcdctl` is missing, the check now reads
+the datastore under `/var/lib/rancher/k3s/server/db` directly, after a `sync`,
+with the control grep for the Secret's name. A cluster that cannot answer still
+says UNVERIFIED, but a cluster that can now answers.
+
+Cost of the whole exercise: two single-node clusters, about 20 minutes, roughly
+USD 0.07.

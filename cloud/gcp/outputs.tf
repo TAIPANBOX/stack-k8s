@@ -77,6 +77,7 @@ locals {
     "c2d-highcpu-8"  = 0.38630400 # 8 x 0.038088        + 16 x 0.0051
     "c2d-standard-8" = 0.46790400 # 8 x 0.038088        + 32 x 0.0051
     "n4-highcpu-8"   = 0.36126880 # 8 x 0.0368042       + 16 x 0.0041772
+    "c2d-highcpu-2"  = 0.09657600 # 2 x 0.038088        + 4 x 0.0051, the smallest useful test node
   }
   machine_rate = lookup(local.machine_rates, var.machine_type, -1)
   hourly_total = (

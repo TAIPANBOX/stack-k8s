@@ -335,9 +335,38 @@ etcd_grep() {  # key pattern -> prints match count, or nothing if it could not l
   fi
 }
 raw="$(etcd_grep "/registry/secrets/$NS/$canary" CANARY-VALUE-CHECK)"
+
+# etcdctl is not on the node in any of the three cloud images this repo has
+# run on, so the branch above answered "could not look" on every live cluster
+# from 2026-07-25 to 2026-07-26 inclusive: four fresh clusters, four notes, no
+# answer. A check that cannot run is a check that is not there.
+#
+# So when etcdctl is missing, ask the datastore directly. k3s keeps its embedded
+# etcd under /var/lib/rancher/k3s/server/db, and a value that is encrypted at
+# rest simply is not in those bytes. Two things make this evidence rather than a
+# guess: `sync` first, so the write is on disk and not only in memory, and a
+# CONTROL grep for the secret's NAME, which must be found. If the name is not
+# there either, the search reached nothing and a clean result proves nothing.
+if [ -z "$raw" ]; then
+  db=/var/lib/rancher/k3s/server/db
+  probe() {  # runs locally on a server, or over ssh to the first node
+    if [ -d "$db" ]; then bash -c "$1" 2>/dev/null
+    elif [ -n "$NODES" ]; then
+      ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 \
+        ${SSH_KEY:+-i "$SSH_KEY"} "root@${NODES%%,*}" "$1" 2>/dev/null
+    fi
+  }
+  hits="$(probe "sync; sleep 1; grep -rc CANARY-VALUE-CHECK $db 2>/dev/null | awk -F: '{s+=\$2} END{print s+0}'")"
+  ctrl="$(probe "grep -rc $canary $db 2>/dev/null | awk -F: '{s+=\$2} END{print s+0}'")"
+  if [ -n "$hits" ] && [ "${ctrl:-0}" -gt 0 ] 2>/dev/null; then
+    raw="$hits"
+    [ "$raw" = 0 ] && note "read the datastore on disk directly (no etcdctl on this node); control: the Secret's NAME appears $ctrl times, its VALUE none"
+  fi
+fi
+
 case "$raw" in
   0) ok "a freshly written Secret is NOT plaintext in etcd (an encryption provider is active)" ;;
-  "") note "could not read etcd (needs etcdctl on a server, or --nodes with ssh): encryption at rest UNVERIFIED" ;;
+  "") note "could not read etcd or the datastore on disk: encryption at rest UNVERIFIED" ;;
   *) bad "the Secret is plaintext in etcd, so an etcd snapshot IS the credential set: install the servers with --secrets-encryption (GOTCHAS 18)" ;;
 esac
 kc delete secret "$canary" --wait=false >/dev/null 2>&1
