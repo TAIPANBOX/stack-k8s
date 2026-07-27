@@ -172,9 +172,11 @@ Every one of them is idempotent, and that is now true rather than merely
 claimed: the first time anyone ran this twice on the same machine it broke six
 times, each a step correct once and impossible the second time. GOTCHAS 56-62.
 
-The open stack needs no credentials at all: wardryx, idryx, qryx, mockryx,
-tokenfuse, verdryx and engram are public. `--console-token <github-token>` adds
-the Genaryx console, which is the one closed piece.
+Nothing here needs a credential. Every repository this pulls is public and
+Apache-2.0, the Genaryx console included since 2026-07-27, so the console comes
+up by default rather than on production of a token. `--console-token` survives
+for the one case it is still good for: building the console from a private fork
+of your own.
 
 Then reach the console over your own tunnel (`20-console.yaml` explains why
 there is no public entry point by default), and check the deployment with

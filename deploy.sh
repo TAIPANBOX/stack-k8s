@@ -22,12 +22,12 @@
 #   4. verify.sh         proves the stack is running: ten checks
 #   5. security-tests.sh proves it is contained: seventeen checks
 #
-# The open stack needs NO credentials: wardryx, idryx, qryx, mockryx, tokenfuse,
-# verdryx and engram are public. The Genaryx console is the one paid, closed
-# piece, so `--console-token <github-token-with-access>` is what adds it. Leave
-# it out and you get the governed stack without the control room, which is a
-# real deployment and not a crippled one: the planes enforce with or without a
-# UI in front of them.
+# Nothing here needs a credential. Every repository this pulls is public and
+# Apache-2.0, the Genaryx console included since 2026-07-27.
+# `--console-token` survives for the one case it is still good for: building
+# the console from a private fork of your own. Without the console you get the
+# governed stack and no control room, which is a real deployment and not a
+# crippled one: the planes enforce with or without a UI in front of them.
 #
 # `--console-ref <branch>` builds the console from a branch instead of main.
 # The console is a separate repository, so a change proven on a branch there
@@ -119,7 +119,7 @@ else
   say "fetching stack-k8s@$REF into $ROOT"
   auth=(); [ -n "$CONSOLE_TOKEN" ] && auth=(-H "Authorization: Bearer $CONSOLE_TOKEN")
   curl -fsSL "${auth[@]}" "$REPO_TARBALL/$REF" | tar -xz -C "$ROOT" --strip-components=1 \
-    || die "could not fetch the repo. It is private today: pass --console-token, or clone it and run ./deploy.sh"
+    || die "could not fetch the repo; check the network, or clone it and run ./deploy.sh"
 fi
 [ -d "$ROOT/manifests" ] || die "no manifests/ in $ROOT"
 
@@ -280,19 +280,24 @@ else
   done
 
   WITH_CONSOLE=0
-  if [ -n "$CONSOLE_TOKEN" ]; then
+  # The console is public now, so the URL carries a token only when one was
+  # given (a private fork). An empty CONSOLE_TOKEN must not produce
+  # `https://x-access-token:@github.com/...`, which git treats as an empty
+  # credential and fails on rather than falling back to anonymous.
+  if [ -n "$CONSOLE_TOKEN" ]; then CONSOLE_AUTH="x-access-token:$CONSOLE_TOKEN@"; else CONSOLE_AUTH=""; fi
+  if true; then
     # `--branch` on both paths, and a hard reset rather than a pull on the
     # second: `git pull --ff-only` on a checkout sitting on a DIFFERENT branch
     # fails, gets swallowed by `|| true`, and the build then quietly produces
     # the previous branch's console while reporting success.
     if sh_ "$BUILDER" "cd /root/src && \
        if [ -d genaryx-a360/.git ]; then \
-         git -C genaryx-a360 remote set-url origin https://x-access-token:$CONSOLE_TOKEN@github.com/TAIPANBOX/genaryx.git && \
+         git -C genaryx-a360 remote set-url origin https://${CONSOLE_AUTH}github.com/TAIPANBOX/genaryx.git && \
          git -C genaryx-a360 fetch -q --depth 1 origin '$CONSOLE_REF' && \
          git -C genaryx-a360 checkout -q -B '$CONSOLE_REF' FETCH_HEAD; \
        else \
          rm -rf genaryx-a360 && \
-         git clone -q --depth 1 --branch '$CONSOLE_REF' https://x-access-token:$CONSOLE_TOKEN@github.com/TAIPANBOX/genaryx.git genaryx-a360; \
+         git clone -q --depth 1 --branch '$CONSOLE_REF' https://${CONSOLE_AUTH}github.com/TAIPANBOX/genaryx.git genaryx-a360; \
        fi && \
        git -C genaryx-a360 remote set-url origin https://github.com/TAIPANBOX/genaryx.git && \
        echo \"   genaryx (console) ok, at \$(git -C genaryx-a360 rev-parse --short HEAD) on $CONSOLE_REF\""; then
