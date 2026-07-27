@@ -104,7 +104,9 @@ install.sh      the cluster itself: k3s, Calico, Longhorn, the storage classes,
                 the cloud controller. Hetzner-specific by design.
 build.sh        build the images and import them into every node over ssh
 verify.sh       prove a cluster is running this stack, not merely green
-security-tests.sh  attack it: 24 checks, from a forged pod label to etcd at rest
+security-tests.sh  attack it: every fix below re-run as a standing check, from
+                a forged pod label to the bytes in etcd. Two dozen of them, and
+                the exact count varies with what a given cloud exposes
 tunnel/         the operator's way in: WireGuard, TLS, and the console behind
                 both. Nothing here is published; see tunnel/README.md
 manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm)
@@ -199,10 +201,52 @@ All of that is closed in these files now, and `security-tests.sh` re-runs each
 attack as a standing check: **23 passed, 0 failed, 1 noted** (the note is the
 neighbouring namespace, which no manifest here can harden - see GOTCHAS 23).
 
-The command output behind every sentence above is in `evidence/`. Sixteen traps
-found across the two runs are written up in `GOTCHAS.md` (items 9-24), each
-already fixed here - which is the whole point: the next person to run this
-should not meet any of them.
+### Then the same thing on AWS and GCP
+
+**Six clusters across three clouds, 25 to 27 July 2026.** The same manifests,
+the same k3s, the same Calico and Longhorn, the same `verify.sh` and
+`security-tests.sh`, so the three runs are compared on identical proofs rather
+than on impressions. All of it destroyed afterwards and both cloud accounts
+verified empty by direct API query. Written up in `PORTABILITY.md`, priced in
+`cloud/COSTS.md`, command output in `cloud/{aws,gcp}/evidence/`.
+
+| | Hetzner | AWS | GCP |
+|---|---|---|---|
+| `verify.sh --freeze` | 10 passed, 0 failed | 10 passed, 0 failed | 10 passed, 0 failed |
+| `security-tests.sh` | 23 passed, 1 noted | 22 passed, 0 failed, 2 noted | 24 passed, 0 failed, 2 noted |
+
+Four things the runs settled, each of which changed something we had written
+down:
+
+- **Exactly one line of Kubernetes configuration differs between the three
+  clouds.** Calico runs `VXLANCrossSubnet` on Hetzner and AWS; a GCE VPC has no
+  layer 2 at all, every packet is routed by destination, a pod address matches
+  no route, and no instance flag changes that, so on GCP the encapsulation
+  becomes unconditional. On AWS the equivalent fix was one Terraform line
+  (`source_dest_check = false`) and the Kubernetes side stayed byte for byte
+  identical to Hetzner.
+- **The throughput collapse past 64 concurrent callers, recorded here on 25
+  July as a design limit, was wrong.** On both dedicated-core clouds there is
+  no cliff out to 256 concurrent, on two chip generations: only latency rises.
+  It was a property of a shared-vCPU instance. `PORTABILITY.md` carries the
+  retraction next to the claim it replaces.
+- **On identical silicon the two hyperscalers are the same machine.** 2,449
+  decisions/s on AWS `c6a` against 2,479 on GCP `c2d`, a difference of 1.2%,
+  with p50 apart by a hundredth of a millisecond. The first comparison put AWS
+  62% ahead, and that was a chip generation wearing a cloud costume.
+- **Secrets encryption at rest is now verified rather than asserted.** Four
+  clusters went past this check because it wanted `etcdctl` and no cloud image
+  has it. Checked properly on one small node per cloud: a Secret with a unique
+  marker, absent from 130 MB of raw datastore on disk, with a control step
+  confirming the search reaches the datastore at all (the secret's NAME is
+  found 22 times, because names are not encrypted, only values). AWS and GCP
+  returned identical results. That is a property of k3s installed with the
+  right flag, not of either cloud.
+
+The command output behind every sentence above is in `evidence/` and
+`cloud/*/evidence/`. Every trap the runs cost us is written up in
+`GOTCHAS.md`, now **70 items**, each already fixed here, which is the whole
+point: the next person to run this should not meet any of them.
 
 ## License
 

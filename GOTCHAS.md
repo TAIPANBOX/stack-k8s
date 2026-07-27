@@ -5,31 +5,43 @@ cluster up, not a theoretical warning. Each one is FIXED in the files here, so
 following the README should not reproduce any of them. They are written down
 anyway, because a fix you cannot see is a fix you will undo by accident.
 
-Each item says which KIND of trap it is, because the three kinds are worth very
-different amounts to you:
+**There are 70 of them.** Most carry a line saying which KIND of trap it is,
+because the three kinds are worth very different amounts to you:
 
-- **Platform** (20 of 40). Kubernetes, Docker, k3s, WireGuard or the distro
-  behaves this way for everyone. These are the ones worth reading even if you
-  never run this stack, because the next thing you deploy will hit them too.
-- **The stack's own contract** (10 of 40). A default or a coupling in our
-  services. Not bugs, properties: the money plane binds loopback, the planes
-  talk through a shared file, the gateway asks the policy plane only if you
-  wire it to. Invisible until they bite, so they are written down.
-- **Ours, and fixed** (10 of 40). We wrote it wrong in this repository. A
-  missing Secret generator, a script that died silently, a check that reported
-  FAIL on a healthy stack, an audit line written to a directory nobody reads.
-  They stay in the list rather than being quietly deleted, because the honest
-  count of your own mistakes is the only reason to trust the other thirty.
+- **Platform.** Kubernetes, Docker, k3s, WireGuard or the distro behaves this
+  way for everyone, and this is the largest group by some margin. These are the
+  ones worth reading even if you never run this stack, because the next thing
+  you deploy will hit them too.
+- **The stack's own contract.** A default or a coupling in our services. Not
+  bugs, properties: the money plane binds loopback, the planes talk through a
+  shared file, the gateway asks the policy plane only if you wire it to.
+  Invisible until they bite, so they are written down.
+- **Ours, and fixed.** We wrote it wrong in this repository. A missing Secret
+  generator, a script that died silently, a check that reported FAIL on a
+  healthy stack, an audit line written to a directory nobody reads. They stay
+  in the list rather than being quietly deleted, because the honest count of
+  your own mistakes is the only reason to trust the rest.
 
 If you are here to learn rather than to deploy, read the platform ones. If you
 are here because something broke, the symptom lines are ordered the way you
 will meet them: build, install, wire, run, attack.
 
-Items 31 to 40 came from one day of bringing up the operator's WireGuard
-tunnel, TLS and the audit trail on a live box. Four of them were invisible to
-a green install run and to every test: the checks passed, each command reported
-success, and the damage only showed when a human opened the console and looked
-at it. That ratio is the reason this file exists.
+Where they came from, because the provenance says what each group is worth:
+
+| Items | Where |
+|---|---|
+| 1 to 30 | the first five-node cluster on Hetzner, brought up and then attacked |
+| 31 to 40 | one day of the operator's WireGuard tunnel, TLS and the audit trail |
+| 41 to 55 | hardening, and the first AWS cluster |
+| 56 to 62 | running the installer a SECOND time on a machine that already had state |
+| 63 to 70 | the AWS and GCP runs, and the reruns that made the comparison honest |
+
+Two of those groups are worth more than their size. Four of items 31 to 40 were
+invisible to a green install run and to every test: the checks passed, each
+command reported success, and the damage only showed when a human opened the
+console and looked at it. And every one of 56 to 62 was a step that is correct
+once and impossible the second time, sitting under a script whose own preflight
+printed "this script is idempotent". Nobody had ever run it twice.
 
 ## 1. The Go builder image is older than the code
 
