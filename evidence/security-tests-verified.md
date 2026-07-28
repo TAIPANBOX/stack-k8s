@@ -78,12 +78,16 @@ Budget enforcement, same path: a per-run budget below the call's cost returns
 ## 3. Secrets in etcd (GOTCHAS 18)
 
     /registry/secrets/agent-stack/stack-policy-db
-      dsn      postgres://wardryx:fb288c5a...@policy-db:5432/wardryx?sslmode=disable
-      password fb288c5a4c2ee533954f9a0ff3b0d1372112266d550d8213
+      dsn      postgres://wardryx:<48 hex chars>@policy-db:5432/wardryx?sslmode=disable
+      password <48 hex chars, redacted: the point is that etcdctl returned
+               them in the clear, as a readable string with no decoding step>
 
-Read with `etcdctl get`, as ordinary text. Enabling encryption and rewriting all
-20 Secrets made the same query return `k8s:enc:`, and a canary Secret was
-unfindable in the clear.
+Read with `etcdctl get`, as ordinary text: a URL a client could paste, and a
+password next to it. The hex itself is masked here because this repository is
+public and secret scanners flag the raw value; the cluster it belonged to was
+destroyed on 2026-07-25, the same night as the test, so the credential is dead
+and opens nothing. Enabling encryption and rewriting all 20 Secrets made the
+same query return `k8s:enc:`, and a canary Secret was unfindable in the clear.
 
 **Then the retrofit destroyed those Secrets, and that is the more useful
 result.** k3s keeps its own copy of the encryption config in the datastore and
