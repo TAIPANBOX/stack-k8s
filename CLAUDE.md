@@ -72,6 +72,17 @@ There is no CI in this repo, so the local gate is the only gate.
 Anything that provisions real infrastructure is not a gate and never runs
 unattended: see the money rule at the bottom.
 
+## Running the gates
+
+```sh
+git config core.hooksPath .githooks   # once, per clone
+```
+
+There is no CI in this repository, so `.githooks/pre-push` is the ONLY thing
+that runs the gates above. Without that one line they are scripts nobody calls,
+which is a comment with an exit code. `git push --no-verify` skips them, and
+should be rare enough to be worth explaining.
+
 ## Hard invariants
 
 Each one carries how it is held today. Use `(gate: ...)`, `(test: ...)`,

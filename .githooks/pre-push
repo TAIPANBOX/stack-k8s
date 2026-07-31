@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# Local gate before anything leaves this machine.
+#
+# This repository has no CI, so this hook is the ONLY thing that runs the gates.
+# A gate nothing calls is a comment with an exit code.
+#
+# Install (once):  git config core.hooksPath .githooks
+# Skip (rarely):   git push --no-verify
+
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+pass=0
+fail=0
+
+step() {
+  local name="$1"
+  shift
+  printf '  %-44s' "$name"
+  if out=$(eval "$@" 2>&1); then
+    printf 'ok\n'
+    pass=$((pass + 1))
+  else
+    printf 'FAIL\n'
+    printf '%s\n' "$out" | sed 's/^/      /'
+    fail=$((fail + 1))
+  fi
+}
+
+echo "pre-push gate"
+step "every gotcha is classified" "./scripts/gotchas-classified.sh"
+step "the stack comes up closed" "./scripts/closed-by-default.sh"
+
+echo
+if [ "$fail" -ne 0 ]; then
+  echo "pre-push: $fail of $((pass + fail)) checks failed. Nothing pushed."
+  exit 1
+fi
+echo "pre-push: all $pass checks passed."
