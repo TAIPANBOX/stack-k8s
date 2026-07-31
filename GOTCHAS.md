@@ -1435,6 +1435,9 @@ it every fresh cluster hands its operator a login they cannot use.
 
 ## 51. Dropping ALL drops CAP_CHOWN, and root does not get it back
 
+> **Platform.** Linux capability semantics: `drop: ["ALL"]` removes
+> CAP_CHOWN and uid 0 does not get it back.
+
 `securityContext: { runAsUser: 0, capabilities: { drop: ["ALL"], add: ["NET_ADMIN"] } }`
 reads like "root, with one extra power". It is the opposite: root with exactly
 one power and none of the fifteen it normally has. `chown`, `chgrp`, and
@@ -1469,6 +1472,10 @@ on that list, now fails.
 
 ## 52. A readiness probe is a client, and a silent one
 
+> **Ours, meeting a platform fact.** A `tcpSocket` probe opening and closing
+> a port is normal Kubernetes behaviour; logging every empty connection as a
+> refusal was ours.
+
 Adding a `tcpSocket` readiness probe to the tunnel fixed a real problem: without
 it `rollout status` reported success on a container that was already dying
 (item 43, in a new place). It created a quieter one.
@@ -1500,6 +1507,9 @@ a proxy that logged nothing at all.
 
 ## 53. A test that follows the namespace stops following the thing
 
+> **Ours, and fixed.** Test 5b audited a namespace rather than the thing, so
+> it passed by not looking.
+
 Item 46 added test 5b to `security-tests.sh` because tests 4 and 5 scan one
 namespace, and when the console moved out of it both kept passing purely by not
 looking. 5b was written to audit "the console's namespace".
@@ -1528,6 +1538,9 @@ about today's layout; a capability is the thing worth auditing, and it can move
 without anybody editing the test that claims to cover it.
 
 ## 54. Let's Encrypt backdates notBefore, so counting by it counts wrong
+
+> **Upstream.** Let's Encrypt backdates `notBefore`, so counting rate-limit
+> usage by it counts wrong.
 
 The duplicate-certificate rate limit is five per identical name set per seven
 days, and hitting it makes the console unreachable in a way that reads like a
@@ -1563,6 +1576,9 @@ says nothing about rate limits. Retry, and check the body starts with `[`.
 
 ## 55. The process printing to your terminal is not the one that can see it
 
+> **Platform.** `kubectl exec` without `-t` gives a pipe, so an is-a-
+> terminal check answers no exactly when a human is watching.
+
 `kubectl exec` without `-t` gives the container a pipe. So a program that
 decides how to format its output by asking "am I on a terminal" gets the answer
 `no` in exactly the case where a human is watching, and `yes` never.
@@ -1594,6 +1610,9 @@ a guess about a terminal it cannot see. Environment-based colour detection has
 the same hole. Let the outermost caller decide and pass it down.
 
 ## 56. k3s-uninstall.sh hangs forever on a Longhorn RWX volume
+
+> **Platform.** The k3s uninstall script kills the Longhorn share-manager
+> pod before unmounting the NFS share it serves.
 
 Uninstalling k3s from a cluster that ran Longhorn with an RWX class stops dead,
 with no error and no timeout. The last thing on screen is an ordinary-looking
@@ -1640,6 +1659,9 @@ match the interpreter's argument precisely.
 
 ## 57. Apply-then-patch deadlocks a hostNetwork Deployment
 
+> **Ours, and fixed.** Our install order applied the manifest and patched
+> afterwards, which deadlocks a hostNetwork Deployment.
+
 `install.sh` applied the upstream hcloud CCM manifest and then patched its
 arguments, because the default `--secure-port=10258` collides with k3s's own
 listener (item 4). The patch is correct. The ORDER made it unreachable.
@@ -1684,6 +1706,9 @@ breaks that assumption, and the failure is a deadlock rather than an error.
 
 ## 58. A Hetzner token is project-wide, so "all servers" is not "your cluster"
 
+> **Ours, and fixed.** The installer is told which machines it owns and
+> asked the project-wide API instead.
+
 The firewall step read the server list from the API:
 
 ```python
@@ -1721,6 +1746,9 @@ for a bigger one. The token's scope and the task's scope are different
 questions, and cloud APIs answer the first.
 
 ## 59. A fresh random k3s token makes the installer unrepeatable
+
+> **Ours, and fixed.** A freshly generated k3s token is correct exactly
+> once, which makes the installer unrepeatable.
 
 `install.sh` generated the cluster token like this:
 
@@ -1764,6 +1792,9 @@ property, it is a claim that has to be true of every line under it.
 
 ## 60. multipathd arrives with open-iscsi and takes every Longhorn volume
 
+> **Platform.** `open-iscsi` pulls in `multipath-tools` on Ubuntu, and
+> multipathd claims every Longhorn volume.
+
 Longhorn needs `open-iscsi` on the host, so `install.sh` installs it. On Ubuntu
 that pulls in `multipath-tools`, which nobody asked for and which starts
 `multipathd` by default.
@@ -1802,6 +1833,9 @@ Longhorn devices and leaves a genuine multipath configuration working.
 
 ## 61. verify.sh had a check a single-node cluster could never pass
 
+> **Ours, and fixed.** `verify.sh` asserted a topology the installer itself
+> offers cannot satisfy, so it was a permanent red.
+
 `install.sh` supports one server and says so out loud: "one server means one
 etcd member. Fine for a demo, not HA." `verify.sh` then asserted the workload
 was spread over more than one node, and reported:
@@ -1824,6 +1858,9 @@ mirror image, and it costs more: a check that cannot go green teaches people to
 ignore red.
 
 ## 62. Editing a shell script while it is running corrupts the running copy
+
+> **Platform.** bash reads a script lazily and remembers a byte offset, so
+> editing it mid-run corrupts the running copy.
 
 A deploy was in its last step when its own file was edited on disk. It ended:
 
@@ -1857,6 +1894,9 @@ Same hazard, same reason: `git pull` or `git checkout` in a repository whose
 script is currently running.
 
 ## 63. An apostrophe inside a heredoc inside `$( )` breaks bash
+
+> **Platform.** bash tokenises the whole `$( ... )` before it knows the
+> heredoc body is data, so an apostrophe opens a quote.
 
 This is a syntax error:
 
@@ -2003,6 +2043,9 @@ run.
 
 ## 65. A Terraform output that assumes success blocks the fix for a failure
 
+> **Ours, and fixed.** Our outputs sliced by the counts requested rather
+> than the instances that exist, and a broken output breaks destroy.
+
 **Symptom:** after the partial apply above, EVERY Terraform command fails,
 including the destroy that would stop the billing:
 
@@ -2025,6 +2068,9 @@ a healthy cluster, it will be useless at the exact moment it is needed.
 
 ## 66. A GCE instance is RUNNING before it will accept your ssh key
 
+> **Platform.** GCE reports RUNNING before the guest agent has installed the
+> key from instance metadata.
+
 **Symptom:** `terraform apply` finishes, the installer starts, and one node
 refuses ssh while its siblings answer:
 
@@ -2044,6 +2090,9 @@ giving up, and only then suggests the other cause, which is OS Login being on.
 
 ## 67. GCE registers a node under its FULL internal name
 
+> **Ours, meeting a platform fact.** GCE sets the fully qualified internal
+> hostname; our lookup used the short name and never matched.
+
 **Symptom:** nothing fails. Each server join simply takes 200 seconds longer
 than it should, silently, and the install looks hung.
 
@@ -2062,6 +2111,9 @@ of a five-node cluster, for nothing.
 
 ## 68. A rebuilt cluster gets the old addresses, and ssh refuses every node
 
+> **Platform.** The cloud recycles ephemeral addresses, so a rebuilt cluster
+> inherits host keys `known_hosts` already refuses.
+>
 > **Second-run only.** The first run of a deployment cannot see this, which is
 > why it survived a full clean run and killed the next one.
 
@@ -2108,6 +2160,9 @@ first because it fails closed.
 
 ## 69. A GCP load balancer with a healthy backend that carries nothing
 
+> **Platform.** Every GCP-side object checked out correct, so the fault sits
+> below anything this repo configures.
+>
 > **Open.** This one is recorded because it was measured, not because it was
 > solved. Anybody repeating the GCP run will meet it and should not spend the
 > hour again before reading this.
@@ -2165,6 +2220,9 @@ to fall back to the tunnel.
 0.030/hour whether or not it forwards anything.
 
 ## 70. A file on an RWX volume lies about its size to every reader but one
+
+> **Platform.** Longhorn serves RWX over NFS, and NFS caches file
+> attributes, so a reader is told a stale size.
 
 **Symptom:** a benchmark that measures how fast the audit trail grows reports
 **0 bytes over 18,500 decisions**, on a cluster that is writing the trail
