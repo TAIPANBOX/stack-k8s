@@ -67,6 +67,7 @@ There is no CI in this repo, so the local gate is the only gate.
 ```sh
 ./scripts/gotchas-classified.sh
 ./scripts/closed-by-default.sh
+./scripts/portability-claims.sh
 ```
 
 Anything that provisions real infrastructure is not a gate and never runs
@@ -110,14 +111,17 @@ an absent invariant.
    healthy without a companion case proving the same check catches an unhealthy
    stack is reporting silence, not health. *(not enforced)*
 6. **Never claim a cloud is validated without a run.** `PORTABILITY.md` states
-   what differs per provider; anything not actually run there is marked as not
-   run, not inferred from a sibling. *(not enforced)*
+   what differs per provider, and marks its GCP column apart: bold was measured
+   on a live cluster, italics was established at a desk with nothing spent,
+   blank means it needs the run.
+   *(gate: `scripts/portability-claims.sh`, which also requires each provider
+   column to carry a dated provenance line)*
 
 ## Decisions that have no gate yet
 
 This list is debt, and it is here to stay visible rather than to be tidy.
 
-**Held by this file alone: invariants 2, 4, 5 and 6.**
+**Held by this file alone: invariants 2, 4 and 5.**
 
 Invariants 4 and 5 both need a real cluster and therefore real money, so they
 stay disciplines rather than gates, and the honest place for their results is
@@ -125,9 +129,21 @@ stay disciplines rather than gates, and the honest place for their results is
 not checkable at all: nothing can tell a commit that should have carried a
 gotcha from one that should not.
 
-Invariant 6 is partly checkable and is the one worth doing next: fail if
-`PORTABILITY.md` claims a provider works without a dated line saying when it was
-actually run there.
+Invariant 6 is now `scripts/portability-claims.sh`, and the document turned out
+to have the discipline already. It says so itself: bold was measured on a live
+cluster, italics was established at a desk with nothing spent, blank needs the
+run. All 37 GCP claims obey it, the Hetzner column is the baseline, and the AWS
+column carries a run date and an evidence file.
+
+What was missing is anything keeping that true. A row added as plain text reads
+as measured to everyone who skims, and skimming is what a comparison sheet is
+for. A formatting convention nothing enforces is a number in a document with
+fewer characters.
+
+Header rows are found exactly, as the row above the `|---|` delimiter, not
+guessed. The first draft guessed by looking for provider names and reported the
+silicon-comparison header as an unmarked claim, because its cells name machine
+types.
 
 ## Standing rule
 
