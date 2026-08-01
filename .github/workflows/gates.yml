@@ -1,0 +1,26 @@
+# These checks used to run only through .githooks/pre-push, which is local
+# configuration: `core.hooksPath` is not committed and does not travel with a
+# clone, so they enforced nothing for anybody else. The scripts are the ONE
+# copy; the hook and this workflow both call them. Public repo, so standard
+# runners cost nothing.
+name: gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: every gotcha is classified
+        run: ./scripts/gotchas-classified.sh
+
+      - name: the cluster comes up closed
+        run: ./scripts/closed-by-default.sh
+
+      - name: every cloud claim is marked and dated
+        run: ./scripts/portability-claims.sh

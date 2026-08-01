@@ -60,7 +60,8 @@ cannot tell a correct label from a self-serving one, and it says so.
    trailer.
 5. Open a PR with `gh`. **Ask the user before merging.**
 
-There is no CI in this repo, so the local gate is the only gate.
+Two callers, one copy of each check: `.github/workflows/gates.yml` and
+`.githooks/pre-push`. Never inline a check into either.
 
 ## Gates
 
@@ -79,10 +80,12 @@ unattended: see the money rule at the bottom.
 git config core.hooksPath .githooks   # once, per clone
 ```
 
-There is no CI in this repository, so `.githooks/pre-push` is the ONLY thing
-that runs the gates above. Without that one line they are scripts nobody calls,
-which is a comment with an exit code. `git push --no-verify` skips them, and
-should be rare enough to be worth explaining.
+**Until 2026-08-01 the hook was the only caller, and that was a hole.**
+`core.hooksPath` is local configuration: it is not committed and does not travel
+with a clone, so these gates enforced nothing for anybody who cloned this repo.
+`.github/workflows/gates.yml` calls the same scripts, one copy each, and is what
+makes them travel. This repo is public, so standard runners cost nothing.
+`git push --no-verify` still skips the local half.
 
 ## Hard invariants
 
