@@ -78,6 +78,15 @@ spec:
             - { name: HERALDYX_EVENTS, value: "/var/lib/stack/events" }
             - { name: HERALDYX_STATE, value: "/var/lib/stack/heraldyx/state.json" }
             - { name: HERALDYX_MIN_SEVERITY, value: "high" }
+            # Who is answerable for an agent. The event envelope cannot say:
+            # `agent_id` is which agent acted and `on_behalf_of` is who it acted
+            # for at that moment, while `owner` is a required field of the
+            # PASSPORT (agent-passport SPEC.md section 4), which lives on disk.
+            # With passports present an alert names the team to call and links
+            # to everything else they run; without them it says nothing rather
+            # than guessing, and an alert naming the wrong team at three in the
+            # morning is worse than one naming none.
+            - { name: HERALDYX_PASSPORTS, value: "/var/lib/stack/passports" }
           envFrom:
             # optional: true is load-bearing. Applied without the Secret, this
             # pod must still start: a notifier that CrashLoops because nobody
@@ -90,6 +99,10 @@ spec:
             # it applies is a limit on MESSAGES, never on evidence.
             - { name: events, mountPath: /var/lib/stack/events, readOnly: true }
             - { name: state, mountPath: /var/lib/stack/heraldyx }
+            # Read-only for the same reason as the log: this process reads a
+            # passport to learn one field and has no business editing the
+            # document that says who is accountable for an agent.
+            - { name: passports, mountPath: /var/lib/stack/passports, readOnly: true }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -108,6 +121,18 @@ spec:
       volumes:
         - name: events
           persistentVolumeClaim: { claimName: stack-events }
+        # optional: true, so a cluster with no passports yet mounts an empty
+        # directory and the alert simply carries no owner line. Create it when
+        # there are passports to put in it:
+        #
+        #   kubectl -n agent-stack create configmap heraldyx-passports \
+        #     --from-file=./passports/ --dry-run=client -o yaml | kubectl apply -f -
+        #
+        # Each file is one passport document. Only `id` and `owner` are ever
+        # read: a passport also carries policy, labels and a delegation chain,
+        # none of which belongs in mail that leaves the perimeter.
+        - name: passports
+          configMap: { name: heraldyx-passports, optional: true }
         - name: state
           persistentVolumeClaim: { claimName: heraldyx-state }
 ---
