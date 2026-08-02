@@ -1,0 +1,149 @@
+# The notifier: the part of the box that writes to the operator.
+#
+# NOT in the default `apply -k` set, and the reason is the same shape as
+# 50-loadbalancer.yaml's: this is the one workload in the stack that is allowed
+# to open a connection to something outside the cluster. An install that grants
+# that without being asked is a security decision made on somebody else's
+# behalf. `deploy.sh` applies this file when the operator answers the
+# notifications question, or apply it yourself:
+#
+#   kubectl apply -f manifests/45-heraldyx.yaml
+#   kubectl -n agent-stack create secret generic heraldyx-mail \
+#     --from-literal=HERALDYX_TO=ops@example.com \
+#     --from-literal=HERALDYX_SMTP_HOST=smtp.example.com:587 \
+#     --from-literal=HERALDYX_SMTP_FROM=box@example.com \
+#     --from-literal=HERALDYX_CONSOLE_URL=https://box.example.com
+#
+# Without that Secret this Deployment runs, stays healthy, watches the log and
+# sends nothing. That is deliberate (heraldyx invariant 4): not having mail is
+# a choice an operator makes, not a broken deployment.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: heraldyx-state
+  namespace: agent-stack
+spec:
+  # RWO, one writer, ordinary. It holds two things: how far into each event
+  # file this process has read, and which conditions it has already mailed
+  # about. An emptyDir would lose both on every rollout, and losing them means
+  # re-reading the log and re-sending alerts that already went out, which is
+  # how an operator learns to filter this sender to trash.
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heraldyx
+  namespace: agent-stack
+  labels: { app: heraldyx, plane: notify }
+spec:
+  replicas: 1
+  # Recreate, not RollingUpdate. The state volume is RWO and a second pod would
+  # not get it; worse, two pods reading the same log would both decide the same
+  # event is worth mailing, and the operator would get everything twice for the
+  # length of the rollout.
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: heraldyx } }
+  template:
+    metadata:
+      labels: { app: heraldyx, plane: notify }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: heraldyx
+          image: stack/heraldyx:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            # The deployment's own shape. What the OPERATOR chooses (who to
+            # write to, which mail server, the console address, the name of
+            # this box) lives in the Secret below instead, so that changing any
+            # of it is one `kubectl create secret` and a restart rather than an
+            # edit to a file in git.
+            - { name: HERALDYX_EVENTS, value: "/var/lib/stack/events" }
+            - { name: HERALDYX_STATE, value: "/var/lib/stack/heraldyx/state.json" }
+            - { name: HERALDYX_MIN_SEVERITY, value: "high" }
+          envFrom:
+            # optional: true is load-bearing. Applied without the Secret, this
+            # pod must still start: a notifier that CrashLoops because nobody
+            # configured mail turns an unconfigured feature into a broken
+            # deployment, and the whole stack's rollout status goes red for it.
+            - secretRef: { name: heraldyx-mail, optional: true }
+          volumeMounts:
+            # Read-only, and this mount is the invariant made physical: this
+            # process reads the log and can do nothing else to it. Every limit
+            # it applies is a limit on MESSAGES, never on evidence.
+            - { name: events, mountPath: /var/lib/stack/events, readOnly: true }
+            - { name: state, mountPath: /var/lib/stack/heraldyx }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            # It reads a file every two seconds and occasionally opens a socket.
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          # No probes, deliberately, rather than a probe that proves nothing.
+          # heraldyx serves no HTTP: there is no port to ask. The honest
+          # readiness signal would be "did it read the log recently", which
+          # needs an endpoint this process does not have and does not want,
+          # since an endpoint is an attack surface on the one pod with a way
+          # out. A crash is still caught: the kubelet restarts it, and the
+          # state volume means it resumes where it stopped.
+      volumes:
+        - name: events
+          persistentVolumeClaim: { claimName: stack-events }
+        - name: state
+          persistentVolumeClaim: { claimName: heraldyx-state }
+---
+# The one hole in a default-deny egress, made as narrow as a NetworkPolicy can
+# express, and stated plainly rather than hidden in a wide rule.
+#
+# What this permits: TCP to the three mail submission ports, to addresses that
+# are NOT inside the cluster or the private network. What it therefore refuses:
+# every other port, and every internal address on any port, so this pod cannot
+# reach another plane, the API server, the node's metadata service, or the
+# policy database. It is the only pod in the namespace with any egress beyond
+# DNS.
+#
+# What it does NOT do is restrict WHICH outside host. A NetworkPolicy selects
+# on addresses, not names, and a mail server's address changes without warning:
+# pinning the resolved IP at install time produces a deployment that mails
+# correctly for six weeks and then silently stops. So the residual risk is
+# stated instead of pretended away: a compromised heraldyx could speak to an
+# attacker's machine, provided the attacker runs an SMTP listener on 25, 465 or
+# 587. If your mail server has a stable address and you want that closed,
+# replace the `except:` block below with your own `cidr:` for that host, and
+# accept that you now own re-pinning it when it moves.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: heraldyx-mail-egress
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: heraldyx } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              # RFC1918 plus link-local. Covers k3s's pod (10.42/16) and
+              # service (10.43/16) networks, Hetzner's private network
+              # (10.10/16 on the cluster this was built for), and the cloud
+              # metadata address every provider parks on 169.254.169.254.
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - { protocol: TCP, port: 587 } # submission, the one you want
+        - { protocol: TCP, port: 465 } # implicit TLS, still common
+        - { protocol: TCP, port: 25 }  # a relay on the operator's own network
+---
+# Ingress is deliberately absent. The namespace's default-deny already refuses
+# everything inbound, and heraldyx listens on nothing, so there is no rule to
+# write. Said out loud because the absence of a policy usually means somebody
+# forgot one.

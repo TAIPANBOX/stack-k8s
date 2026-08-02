@@ -3,10 +3,23 @@
 #
 #   kubectl apply -k manifests/
 #
-# Two files are deliberately NOT in resources:
+# Three files are deliberately NOT in resources:
 #
 # secrets.example.yaml holds placeholders, and applying placeholders is how a
 # cluster ends up authenticating with the word REPLACE_ME.
+#
+# 45-heraldyx.yaml is the notifier, and it carries the only egress rule in this
+# namespace that reaches past DNS: it is the one workload allowed to open a
+# connection to something outside the cluster. Granting that without asking is
+# the same class of decision as publishing the console, so it is the same kind
+# of opt-in. `deploy.sh` applies it when the operator answers the notifications
+# question; by hand it is:
+#
+#   kubectl apply -f manifests/45-heraldyx.yaml
+#
+# Note this file is opt-in for what it is ALLOWED to do, not for what it does
+# by default: with no `heraldyx-mail` Secret it watches the log and sends
+# nothing at all.
 #
 # 50-loadbalancer.yaml publishes the console on a public address AND starts a
 # meter (a Hetzner lb11 is EUR 7.49/month net, billed hourly). Neither belongs

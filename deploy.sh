@@ -57,6 +57,17 @@ ENDPOINT_HOST="${ENDPOINT_HOST:-}"
 CONSOLE_USER="${CONSOLE_USER:-ops}"
 CONSOLE_PASSWORD=""
 CONSOLE_PASSWORD_CHOSEN=0
+# Notifications. Empty ALERT_TO means "ask, if there is a terminal to ask on",
+# and a blank answer means no notifier is installed at all. There is
+# deliberately no --smtp-password, for the same reason there is no
+# --console-password: a secret on a command line is in `ps` for every user on
+# the machine for as long as this runs, and in the shell history afterwards.
+ALERT_TO="${ALERT_TO:-}"
+ALERT_ASKED=0
+SMTP_HOST="${SMTP_HOST:-}"
+SMTP_FROM="${SMTP_FROM:-}"
+SMTP_USER="${SMTP_USER:-}"
+SMTP_PASS=""
 REF="${REF:-main}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/TAIPANBOX/stack-k8s}"
@@ -74,6 +85,11 @@ while [ $# -gt 0 ]; do
     --endpoint-host)  ENDPOINT_HOST="$2";  WANT_TUNNEL=1; shift 2 ;;
     --no-tunnel)      WANT_TUNNEL=0; shift ;;
     --console-user)   CONSOLE_USER="$2"; shift 2 ;;
+    --alert-to)       ALERT_TO="$2"; ALERT_ASKED=1; shift 2 ;;
+    --no-alerts)      ALERT_TO=""; ALERT_ASKED=1; shift ;;
+    --smtp-host)      SMTP_HOST="$2"; shift 2 ;;
+    --smtp-from)      SMTP_FROM="$2"; shift 2 ;;
+    --smtp-user)      SMTP_USER="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     -h|--help)       awk 'NR>1 && /^#/ {print; next} NR>1 {exit}' "$0" | sed -E 's/^# ?//'; exit 0 ;;
@@ -229,6 +245,73 @@ TXT
   fi
 fi
 
+# ---- 0d. notifications, asked here and installed at step 3b ----------------
+# Third and last question in the one conversation at the top, for the same
+# reason as the other two: everything the operator has to decide is decided
+# before fifteen minutes of installing, not after.
+#
+# Blank is a real answer and the default one. A box with no address configured
+# installs no notifier at all: no pod, no egress rule, nothing.
+if [ "$ALERT_ASKED" = 0 ] && [ -z "$ALERT_TO" ]; then
+  if { exec 4<>/dev/tty; } 2>/dev/null; then
+    cat >&4 <<'TXT'
+
+   Notifications. This box can write to you when one of your own agents
+   crosses a line: a budget gone, a policy denial, a run killed, an agent
+   behaving unlike itself. The mail comes from this box, it carries a link
+   into this console, and it never carries a button that acts.
+
+   Mail is the only thing in this deployment that reaches outside the
+   cluster, so answering this grants exactly one pod exactly one way out,
+   on the mail ports and nowhere else.
+
+   Leave the address blank for no notifications. Nothing is installed then.
+
+TXT
+    printf '   address for alerts (blank = none): ' >&4
+    IFS= read -r ans <&4 || ans=""
+    ALERT_TO="$(printf '%s' "$ans" | tr -d '[:space:]')"
+
+    if [ -n "$ALERT_TO" ]; then
+      # A mail server is not guessable and a wrong one is the whole failure
+      # mode this question exists to prevent, so it is asked, not defaulted.
+      while [ -z "$SMTP_HOST" ]; do
+        printf '   mail server as host:port (e.g. smtp.example.com:587): ' >&4
+        IFS= read -r ans <&4 || ans=""
+        ans="$(printf '%s' "$ans" | tr -d '[:space:]')"
+        case "$ans" in
+          "") printf '   without one, this box has nothing to hand the mail to.\n' >&4 ;;
+          *:*) SMTP_HOST="$ans" ;;
+          *) printf '   needs a port too: %s:587 for submission, :465 for implicit TLS.\n' "$ans" >&4 ;;
+        esac
+      done
+
+      # Defaulted to the recipient, which is right far more often than it is
+      # wrong: most operators send from the same domain they read.
+      printf '   sender address [%s]: ' "$ALERT_TO" >&4
+      IFS= read -r ans <&4 || ans=""
+      ans="$(printf '%s' "$ans" | tr -d '[:space:]')"
+      SMTP_FROM="${ans:-$ALERT_TO}"
+
+      printf '   username (blank = server wants no authentication): ' >&4
+      IFS= read -r ans <&4 || ans=""
+      SMTP_USER="$(printf '%s' "$ans" | tr -d '[:space:]')"
+      if [ -n "$SMTP_USER" ]; then
+        # No echo, and not typed twice: unlike the console password, a wrong
+        # one here is caught within the minute by the test message at step 3b,
+        # which is a better check than typing it again.
+        printf '   password: ' >&4
+        IFS= read -rs SMTP_PASS <&4 || SMTP_PASS=""; printf '\n' >&4
+      fi
+    fi
+    exec 4>&-
+  else
+    echo "   no terminal to ask on: SKIPPING notifications. Add them later with"
+    echo "   kubectl apply -f manifests/45-heraldyx.yaml and a heraldyx-mail Secret,"
+    echo "   or pass --alert-to and --smtp-host here."
+  fi
+fi
+
 if [ "$WANT_TUNNEL" = 1 ]; then
   cfg=("$ROOT/tunnel/configure.sh")
   [ -n "$CONSOLE_DOMAIN" ] && cfg+=(--console-domain "$CONSOLE_DOMAIN")
@@ -261,7 +344,7 @@ fi
 # Dockerfile refers to it by that path, which is the name it has in the
 # development tree these images were first built from. Renaming it is a change
 # to every Dockerfile and every build script, so the clone is named to match.
-OPEN_REPOS="wardryx idryx qryx mockryx tokenfuse verdryx engram"
+OPEN_REPOS="wardryx idryx qryx mockryx heraldyx tokenfuse verdryx engram"
 if [ "$SKIP_IMAGES" = 1 ]; then
   say "skipping the image build (--skip-images)"
 else
@@ -312,7 +395,7 @@ else
   say "building images (the console build is four languages and takes the longest)"
   sh_ "$BUILDER" "set -e
     cd /root/src
-    for pair in wardryx:wardryx idryx:idryx qryx:qryx mockryx:mockryx; do
+    for pair in wardryx:wardryx idryx:idryx qryx:qryx mockryx:mockryx heraldyx:heraldyx; do
       name=\${pair%%:*}; repo=\${pair##*:}
       docker build -q -f stack-k8s/images/go-service.Dockerfile \
         --build-arg SERVICE=\$name --build-arg SRC=./\$repo -t stack/\$name:dev . >/dev/null
@@ -335,7 +418,7 @@ else
     fi"
 
   say "importing images into every node's containerd"
-  IMAGES="stack/wardryx:dev stack/idryx:dev stack/qryx:dev stack/mockryx:dev stack/tokenfuse:dev"
+  IMAGES="stack/wardryx:dev stack/idryx:dev stack/qryx:dev stack/mockryx:dev stack/heraldyx:dev stack/tokenfuse:dev"
   IMAGES="$IMAGES stack/wg:dev stack/caddy:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
   PRIVS=""
@@ -360,6 +443,56 @@ for d in $(k_ "-n agent-stack get deploy -o name"); do
   k_ "-n agent-stack rollout status $d --timeout=300s" || true
 done
 k_ "-n agent-stack rollout status statefulset/policy-db --timeout=300s" || true
+
+# ---- 3b. notifications ------------------------------------------------------
+# Only if the operator gave an address at the top. No address, no notifier pod
+# and no egress rule: the cluster stays exactly as closed as it was.
+if [ -n "$ALERT_TO" ]; then
+  say "step 3b: notifications"
+  # Built here and piped over stdin, never passed as an argument. `k_`
+  # interpolates what it is given into a shell command line on the node, where
+  # a mail password would sit in `ps` for every process on that machine for as
+  # long as the call runs. Values are base64 for a second reason: a password
+  # containing a quote, a colon or a backslash breaks the YAML it travels in,
+  # and it would break it at 2am on somebody else's cluster.
+  b64_() { printf '%s' "$1" | base64 | tr -d '\n'; }
+  {
+    printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: heraldyx-mail\n  namespace: agent-stack\ntype: Opaque\ndata:\n'
+    printf '  HERALDYX_TO: %s\n'        "$(b64_ "$ALERT_TO")"
+    printf '  HERALDYX_SMTP_HOST: %s\n' "$(b64_ "$SMTP_HOST")"
+    printf '  HERALDYX_SMTP_FROM: %s\n' "$(b64_ "$SMTP_FROM")"
+    printf '  HERALDYX_BOX: %s\n'       "$(b64_ "${CONSOLE_DOMAIN:-agent stack}")"
+    if [ -n "$SMTP_USER" ]; then printf '  HERALDYX_SMTP_USER: %s\n' "$(b64_ "$SMTP_USER")"; fi
+    if [ -n "$SMTP_PASS" ]; then printf '  HERALDYX_SMTP_PASS: %s\n' "$(b64_ "$SMTP_PASS")"; fi
+    # The deep link needs a name the operator's browser can resolve. Without a
+    # tunnel there is none, and the mail says so in a sentence rather than
+    # carrying a link to a cluster IP nobody can reach.
+    if [ -n "$CONSOLE_DOMAIN" ]; then printf '  HERALDYX_CONSOLE_URL: %s\n' "$(b64_ "https://$CONSOLE_DOMAIN")"; fi
+  } | k_ "-n agent-stack apply -f -" >/dev/null \
+    || die "the stack is up; only the notification Secret failed to apply."
+  # Out of this shell's memory the moment it has been delivered.
+  SMTP_PASS=""
+
+  k_ "apply -f /root/stack-k8s/manifests/45-heraldyx.yaml" >/dev/null \
+    || die "the stack is up; only the notifier failed to apply."
+  k_ "-n agent-stack rollout status deploy/heraldyx --timeout=180s" || true
+
+  # The test message, sent from INSIDE the pod, which is the point: it proves
+  # the pod's own network path, its own egress policy and its own credentials,
+  # not this laptop's. A wrong mail setting found here costs a minute. Found
+  # the way it is otherwise found, through an alert that never arrived, it
+  # costs whatever the alert was about.
+  if k_ "-n agent-stack exec deploy/heraldyx -- /usr/local/bin/service --test-mail" 2>&1 | sed 's/^/   /'; then
+    echo "   if that message does not arrive, the address or the server is wrong,"
+    echo "   and nothing else in this install depends on it."
+  else
+    echo "   the test message did NOT go out. The stack is fine and unaffected;"
+    echo "   notifications are not. Check the address, the server and the"
+    echo "   credentials, then:"
+    echo "       kubectl -n agent-stack logs deploy/heraldyx"
+    echo "       kubectl -n agent-stack exec deploy/heraldyx -- /usr/local/bin/service --test-mail"
+  fi
+fi
 
 # ---- 4 and 5. proof, not vibes ---------------------------------------------
 tar -cz -C "$ROOT" verify.sh security-tests.sh | sh_ "$FIRST" 'tar -xz -C /root/stack-k8s'
