@@ -29,6 +29,15 @@ SERVERS=""; AGENTS=""
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/stack-k8s-aws}"
 SSH_USER="${SSH_USER:-ubuntu}"
 CONSOLE_TOKEN="${CONSOLE_TOKEN:-}"
+# Notifications, exactly as ../../deploy.sh asks for them. There is deliberately
+# no --smtp-password: a secret on a command line is in `ps` for every user on
+# the machine for as long as this runs, and in the shell history afterwards.
+ALERT_TO="${ALERT_TO:-}"
+ALERT_ASKED=0
+SMTP_HOST="${SMTP_HOST:-}"
+SMTP_FROM="${SMTP_FROM:-}"
+SMTP_USER="${SMTP_USER:-}"
+SMTP_PASS=""
 SKIP_INSTALL=0; SKIP_IMAGES=0
 
 while [ $# -gt 0 ]; do
@@ -37,6 +46,11 @@ while [ $# -gt 0 ]; do
     --agents)        AGENTS="$2"; shift 2 ;;
     --ssh-key)       SSH_KEY="$2"; shift 2 ;;
     --console-token) CONSOLE_TOKEN="$2"; shift 2 ;;
+    --alert-to)      ALERT_TO="$2"; ALERT_ASKED=1; shift 2 ;;
+    --no-alerts)     ALERT_TO=""; ALERT_ASKED=1; shift ;;
+    --smtp-host)     SMTP_HOST="$2"; shift 2 ;;
+    --smtp-from)     SMTP_FROM="$2"; shift 2 ;;
+    --smtp-user)     SMTP_USER="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     -h|--help)       sed -n '2,26p' "$0" | sed -E 's/^# ?//'; exit 0 ;;
@@ -44,6 +58,94 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$SERVERS" ] || { echo "--servers is required (comma-separated public IPs)" >&2; exit 1; }
+
+ask_alerts() {
+  # Asked before anything is built, for the reason the Hetzner script gives:
+  # everything an operator must decide is decided before fifteen minutes of
+  # installing, not after. Blank is a real answer and the default one.
+  [ "$ALERT_ASKED" = 0 ] && [ -z "$ALERT_TO" ] || return 0
+  { exec 4<>/dev/tty; } 2>/dev/null || {
+    echo "   no terminal to ask on: SKIPPING notifications. Pass --alert-to and"
+    echo "   --smtp-host, or apply manifests/45-heraldyx.yaml yourself later."
+    return 0
+  }
+  cat >&4 <<'TXT'
+
+   Notifications. This box can write to you when one of your own agents
+   crosses a line: a budget gone, a policy denial, a run killed, an agent
+   behaving unlike itself. The mail comes from this box, and it carries a
+   link into this console, never a button that acts.
+
+   Mail is the only thing in this deployment that reaches outside the
+   cluster, so answering this grants exactly one pod exactly one way out,
+   on the mail ports and nowhere else.
+
+   Leave the address blank for no notifications. Nothing is installed then.
+
+TXT
+  printf '   address for alerts (blank = none): ' >&4
+  IFS= read -r ans <&4 || ans=""
+  ALERT_TO="$(printf '%s' "$ans" | tr -d '[:space:]')"
+  if [ -n "$ALERT_TO" ]; then
+    while [ -z "$SMTP_HOST" ]; do
+      printf '   mail server as host:port (e.g. smtp.example.com:587): ' >&4
+      IFS= read -r ans <&4 || ans=""
+      ans="$(printf '%s' "$ans" | tr -d '[:space:]')"
+      case "$ans" in
+        "")  printf '   without one, this box has nothing to hand the mail to.\n' >&4 ;;
+        *:*) SMTP_HOST="$ans" ;;
+        *)   printf '   needs a port too: %s:587 for submission, :465 for implicit TLS.\n' "$ans" >&4 ;;
+      esac
+    done
+    printf '   sender address [%s]: ' "$ALERT_TO" >&4
+    IFS= read -r ans <&4 || ans=""
+    ans="$(printf '%s' "$ans" | tr -d '[:space:]')"
+    SMTP_FROM="${ans:-$ALERT_TO}"
+    printf '   username (blank = server wants no authentication): ' >&4
+    IFS= read -r ans <&4 || ans=""
+    SMTP_USER="$(printf '%s' "$ans" | tr -d '[:space:]')"
+    if [ -n "$SMTP_USER" ]; then
+      printf '   password: ' >&4
+      IFS= read -rs SMTP_PASS <&4 || SMTP_PASS=""; printf '\n' >&4
+    fi
+  fi
+  exec 4>&-
+}
+
+install_alerts() {
+  [ -n "$ALERT_TO" ] || return 0
+  say "notifications"
+  # Piped over stdin, never passed as an argument: `k_` interpolates what it is
+  # given into a shell command line on the node, where a mail password would sit
+  # in `ps`. Base64 for a second reason: a password with a quote or a colon in it
+  # breaks the YAML it travels in.
+  b64_() { printf '%s' "$1" | base64 | tr -d '\n'; }
+  {
+    printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: heraldyx-mail\n  namespace: agent-stack\ntype: Opaque\ndata:\n'
+    printf '  HERALDYX_TO: %s\n'        "$(b64_ "$ALERT_TO")"
+    printf '  HERALDYX_SMTP_HOST: %s\n' "$(b64_ "$SMTP_HOST")"
+    printf '  HERALDYX_SMTP_FROM: %s\n' "$(b64_ "$SMTP_FROM")"
+    printf '  HERALDYX_BOX: %s\n'       "$(b64_ "aws")"
+    if [ -n "$SMTP_USER" ]; then printf '  HERALDYX_SMTP_USER: %s\n' "$(b64_ "$SMTP_USER")"; fi
+    if [ -n "$SMTP_PASS" ]; then printf '  HERALDYX_SMTP_PASS: %s\n' "$(b64_ "$SMTP_PASS")"; fi
+    # No tunnel on this path, so no console name a browser could resolve. The
+    # mail says it carries no link rather than carrying a dead one.
+  } | k_ "-n agent-stack apply -f -" >/dev/null \
+    || die "the stack is up; only the notification Secret failed to apply."
+  SMTP_PASS=""
+
+  k_ "apply -f /root/stack-k8s/manifests/45-heraldyx.yaml" >/dev/null \
+    || die "the stack is up; only the notifier failed to apply."
+  k_ "-n agent-stack rollout status deploy/heraldyx --timeout=180s" || true
+
+  if k_ "-n agent-stack exec deploy/heraldyx -- /usr/local/bin/service --test-mail" 2>&1 | sed 's/^/   /'; then
+    echo "   if that message does not arrive, the address or the server is wrong,"
+    echo "   and nothing else in this install depends on it."
+  else
+    echo "   the test message did NOT go out. The stack is fine and unaffected."
+    echo "       kubectl -n agent-stack logs deploy/heraldyx"
+  fi
+}
 
 say() { printf '\n\033[1m>> %s\033[0m\n' "$*"; }
 die() { EXPLAINED=1; printf '\n!! %s\n' "$*" >&2; exit 1; }
@@ -78,6 +180,10 @@ for n in "${ALL_NODES[@]}"; do
   ssh-keygen -R "$n" >/dev/null 2>&1 || true
 done
 
+# Asked before anything is created or built, so a missing answer costs ten
+# seconds rather than the fifteen minutes of installing that follow.
+ask_alerts
+
 # ---- 1. the cluster ---------------------------------------------------------
 if [ "$SKIP_INSTALL" = 1 ]; then
   say "skipping install-aws.sh (--skip-install)"
@@ -92,7 +198,7 @@ fi
 # because one image (the console) legitimately spans five of them. The clone of
 # `genaryx` is named `genaryx-a360` because the console's Dockerfile refers to
 # it by that path.
-OPEN_REPOS="wardryx idryx qryx mockryx tokenfuse verdryx engram"
+OPEN_REPOS="wardryx idryx qryx mockryx heraldyx tokenfuse verdryx engram"
 if [ "$SKIP_IMAGES" = 1 ]; then
   say "skipping the image build (--skip-images)"
 else
@@ -151,7 +257,7 @@ else
   say "building images (the console build is four languages and takes the longest)"
   su_ "$BUILDER" "sh -c \"set -e
     cd /root/src
-    for pair in wardryx:wardryx idryx:idryx qryx:qryx mockryx:mockryx; do
+    for pair in wardryx:wardryx idryx:idryx qryx:qryx mockryx:mockryx heraldyx:heraldyx; do
       name=\\\${pair%%:*}; repo=\\\${pair##*:}
       docker build -q -f stack-k8s/images/go-service.Dockerfile --build-arg SERVICE=\\\$name --build-arg SRC=./\\\$repo -t stack/\\\$name:dev . >/dev/null
       echo '   built stack/'\\\$name':dev'
@@ -188,7 +294,7 @@ else
     sh_ "$n" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qF '$DIST_PUB' ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '$DIST_PUB' >> ~/.ssh/authorized_keys"
   done
 
-  IMAGES="stack/wardryx:dev stack/idryx:dev stack/qryx:dev stack/mockryx:dev stack/tokenfuse:dev"
+  IMAGES="stack/wardryx:dev stack/idryx:dev stack/qryx:dev stack/mockryx:dev stack/heraldyx:dev stack/tokenfuse:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
   su_ "$BUILDER" "sh -c \"for img in $IMAGES; do
       docker save \\\$img | k3s ctr images import - >/dev/null 2>&1 && echo '   '\\\$img' -> builder' || echo '   '\\\$img' -> builder FAILED'
@@ -216,6 +322,8 @@ for d in $(k_ "-n agent-stack get deploy -o name"); do
   k_ "-n agent-stack rollout status $d --timeout=300s" || true
 done
 k_ "-n agent-stack rollout status statefulset/policy-db --timeout=300s" || true
+
+install_alerts
 
 # ---- 4 and 5. proof, not vibes ---------------------------------------------
 tar -cz -C "$ROOT" verify.sh security-tests.sh | su_ "$FIRST" 'tar -xz -C /root/stack-k8s'
