@@ -56,7 +56,15 @@ spec:
     metadata:
       labels: { app: heraldyx, plane: notify }
     spec:
-      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      # fsGroup for the reason 10-planes.yaml and 20-console.yaml already give:
+      # a freshly provisioned volume comes up root-owned and 0755, and a process
+      # that runs as 65532 cannot write a file in it. Without this the state
+      # volume is readable and not writable, which fails in the least visible
+      # way available: nothing is written until the first event arrives, so a
+      # deployment looks healthy for as long as nothing happens, and then loses
+      # its read offset and its dedup counters on every restart. Both halves of
+      # that state are invariant 5 in heraldyx's own CLAUDE.md.
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: heraldyx
           image: stack/heraldyx:dev

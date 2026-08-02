@@ -71,6 +71,11 @@ data:
   IDRYX_URL: "http://idryx:8081"
   EVENTS_DIR: "/var/lib/stack/events"
   TOKENFUSE_EVENTS_PATH: "/var/lib/stack/events/tokenfuse.ndjson"
+  # The control plane writes its own file: it emits incidents, the gateway
+  # emits one event per call, and the two have nothing to do with each other in
+  # volume or in meaning. idryx loads the gateway's file by name to build an
+  # identity graph; heraldyx reads the directory and picks up both.
+  TOKENFUSE_CLOUD_EVENTS_PATH: "/var/lib/stack/events/tokenfuse-cloud.ndjson"
   WARDRYX_EVENTS_PATH: "/var/lib/stack/events/wardryx.ndjson"
 ---
 # The environment descriptor, which is the piece a Kubernetes deployment has
