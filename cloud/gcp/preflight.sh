@@ -31,10 +31,25 @@ MACHINE_TYPE="${MACHINE_TYPE:-c3d-highcpu-8}"
 IMAGE_FAMILY="${IMAGE_FAMILY:-ubuntu-2604-lts-amd64}"
 IMAGE_PROJECT="${IMAGE_PROJECT:-ubuntu-os-cloud}"
 PROJECT="${GCP_PROJECT:-${CLOUDSDK_CORE_PROJECT:-}}"
-SERVERS_WANTED="${SERVERS_WANTED:-3}"
-AGENTS_WANTED="${AGENTS_WANTED:-2}"
 DISK_GB="${DISK_GB:-100}"
 TFVARS="terraform.tfvars"
+
+# What the run will actually be. Read from terraform.tfvars when it exists, so
+# the quota this script checks is the quota the apply will need.
+#
+# It used to assume 3 servers and 2 agents no matter what the file said, and it
+# rewrote the file without those counts. So an operator who chose three nodes
+# was told they needed 40 vCPU, refused by a ceiling of 24, and had no way to
+# pass a gate that was measuring a cluster they were not building. Measured
+# 2026-08-02 in europe-west3, where the C3D per-family ceiling is exactly 24.
+tfvar_() {
+  [ -f "$TFVARS" ] || return 1
+  sed -nE "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"?([^\"[:space:]]+)\"?.*/\1/p" "$TFVARS" | tail -1
+}
+SERVERS_WANTED="${SERVERS_WANTED:-$(tfvar_ server_count || true)}"
+SERVERS_WANTED="${SERVERS_WANTED:-3}"
+AGENTS_WANTED="${AGENTS_WANTED:-$(tfvar_ agent_count || true)}"
+AGENTS_WANTED="${AGENTS_WANTED:-2}"
 ENABLE_APIS=0
 
 while [ $# -gt 0 ]; do
@@ -329,18 +344,33 @@ fi
 # ---- 10. write terraform.tfvars -------------------------------------------
 say "terraform.tfvars"
 if [ -n "$MYIP" ] && [ -n "$PROJECT" ]; then
-  cat > "$TFVARS" <<EOF
-# Written by preflight.sh. Not committed: .gitignore excludes *.tfvars, and this
-# file records where you were.
-project_id          = "$PROJECT"
-operator_cidr       = "$MYIP/32"
-ssh_public_key_path = "$KEY.pub"
-region              = "$REGION"
-machine_type        = "$MACHINE_TYPE"
-disk_gb             = $DISK_GB
-EOF
+  # Written, not clobbered: anything else already in the file is carried
+  # through. And the node counts this run CHECKED are written into it, so the
+  # apply cannot quietly build a different cluster than the one that passed.
+  MANAGED='^[[:space:]]*(project_id|operator_cidr|ssh_public_key_path|region|machine_type|disk_gb|server_count|agent_count)[[:space:]]*='
+  KEPT=""
+  if [ -f "$TFVARS" ]; then
+    KEPT="$(grep -vE "$MANAGED" "$TFVARS" | grep -vE '^[[:space:]]*#' | grep -E '=' || true)"
+  fi
+  {
+    printf '# Written by preflight.sh. Not committed: .gitignore excludes *.tfvars,\n'
+    printf '# and this file records where you were.\n'
+    printf '#\n'
+    printf '# The counts below are the ones this run checked the quota against.\n'
+    printf 'project_id          = "%s"\n' "$PROJECT"
+    printf 'operator_cidr       = "%s/32"\n' "$MYIP"
+    printf 'ssh_public_key_path = "%s.pub"\n' "$KEY"
+    printf 'region              = "%s"\n' "$REGION"
+    printf 'machine_type        = "%s"\n' "$MACHINE_TYPE"
+    printf 'disk_gb             = %s\n' "$DISK_GB"
+    printf 'server_count        = %s\n' "$SERVERS_WANTED"
+    printf 'agent_count         = %s\n' "$AGENTS_WANTED"
+    if [ -n "$KEPT" ]; then
+      printf '\n# Yours, carried through untouched.\n%s\n' "$KEPT"
+    fi
+  } > "$TFVARS.new" && mv "$TFVARS.new" "$TFVARS"
   ok "wrote $TFVARS"
-  note "project $PROJECT, operator $MYIP/32, $MACHINE_TYPE, ${DISK_GB} GB disks"
+  note "project $PROJECT, operator $MYIP/32, $MACHINE_TYPE, ${DISK_GB} GB disks, ${SERVERS_WANTED}+${AGENTS_WANTED} nodes"
 else
   bad "missing the project or your address, so no tfvars was written"
 fi

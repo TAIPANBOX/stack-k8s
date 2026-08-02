@@ -126,20 +126,40 @@ else
 fi
 
 # ---- 6. write terraform.tfvars --------------------------------------------
+# Only the operator's OWN address, key and region are written here, and any
+# other setting already in the file is carried through untouched.
+#
+# It used to `cat >` the whole file. An operator who had set `instance_type`,
+# `server_count` or `disk_gb` lost them silently on the next run, and the loss
+# showed up as a cluster of the wrong size or shape with no message anywhere
+# saying why. Measured 2026-08-02: a five-node c7i.2xlarge setting was reduced
+# to three lines by one preflight run.
+#
+# A preflight that creates nothing must also destroy nothing.
 say "terraform.tfvars"
 if [ -n "$MYIP" ]; then
-  if [ -f "$TFVARS" ] && grep -q "$MYIP/32" "$TFVARS" 2>/dev/null; then
-    ok "already current for $MYIP/32"
-  else
-    cat > "$TFVARS" <<EOF
-# Written by preflight.sh. Safe to commit? No: it records where you were.
-# .gitignore already excludes it.
-operator_cidr       = "$MYIP/32"
-ssh_public_key_path = "$KEY.pub"
-region              = "$REGION"
-EOF
-    ok "wrote $TFVARS"
-    note "operator_cidr = $MYIP/32"
+  MANAGED='^[[:space:]]*(operator_cidr|ssh_public_key_path|region)[[:space:]]*='
+  KEPT=""
+  if [ -f "$TFVARS" ]; then
+    KEPT="$(grep -vE "$MANAGED" "$TFVARS" | grep -vE '^[[:space:]]*#' | grep -E '=' || true)"
+  fi
+  {
+    printf '# Written by preflight.sh. Safe to commit? No: it records where you were.\n'
+    printf '# .gitignore already excludes it.\n'
+    printf '#\n'
+    printf '# Only the three lines below are managed here. Anything else you set is\n'
+    printf '# kept as it was, every run.\n'
+    printf 'operator_cidr       = "%s/32"\n' "$MYIP"
+    printf 'ssh_public_key_path = "%s.pub"\n' "$KEY"
+    printf 'region              = "%s"\n' "$REGION"
+    if [ -n "$KEPT" ]; then
+      printf '\n# Yours, carried through untouched.\n%s\n' "$KEPT"
+    fi
+  } > "$TFVARS.new" && mv "$TFVARS.new" "$TFVARS"
+  ok "wrote $TFVARS"
+  note "operator_cidr = $MYIP/32"
+  if [ -n "$KEPT" ]; then
+    note "kept $(printf '%s\n' "$KEPT" | grep -c '=') setting(s) you had already chosen"
   fi
 else
   bad "no address, so no tfvars. Pass -var operator_cidr=... by hand."

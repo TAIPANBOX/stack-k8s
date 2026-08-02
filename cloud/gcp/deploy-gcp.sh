@@ -42,6 +42,11 @@ SMTP_HOST="${SMTP_HOST:-}"
 SMTP_FROM="${SMTP_FROM:-}"
 SMTP_USER="${SMTP_USER:-}"
 SMTP_PASS=""
+# Where the operator opens their own console. The link in the mail goes here
+# and nowhere else, and the default is what this script's own closing screen
+# tells them to run.
+ALERT_CONSOLE_DEFAULT="http://localhost:17420"
+ALERT_CONSOLE_URL="${ALERT_CONSOLE_URL:-}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 
 while [ $# -gt 0 ]; do
@@ -56,6 +61,7 @@ while [ $# -gt 0 ]; do
     --smtp-host)     SMTP_HOST="$2"; shift 2 ;;
     --smtp-from)     SMTP_FROM="$2"; shift 2 ;;
     --smtp-user)     SMTP_USER="$2"; shift 2 ;;
+    --console-url)   ALERT_CONSOLE_URL="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     -h|--help)       sed -n '2,26p' "$0" | sed -E 's/^# ?//'; exit 0 ;;
@@ -88,7 +94,7 @@ ask_alerts() {
    Leave the address blank for no notifications. Nothing is installed then.
 
 TXT
-  printf '   address for alerts (blank = none): ' >&4
+  printf '   address for alerts, several separated by commas (blank = none): ' >&4
   IFS= read -r ans <&4 || ans=""
   ALERT_TO="$(printf '%s' "$ans" | tr -d '[:space:]')"
   if [ -n "$ALERT_TO" ]; then
@@ -113,6 +119,25 @@ TXT
       printf '   password: ' >&4
       IFS= read -rs SMTP_PASS <&4 || SMTP_PASS=""; printf '\n' >&4
     fi
+    cat >&4 <<'TXT'
+
+   Last one. Where do YOU open this console? The mail carries a link there
+   and nowhere else, so the answer has to be the entry point you actually
+   use: this cluster has none that is public, by design.
+
+   That privacy is the point rather than a limitation. A link that only
+   resolves once you are on your own tunnel is worth nothing to anyone else
+   who reads, forwards or intercepts the message.
+
+   This install hands you an SSH tunnel that lands the console on
+   http://localhost:17420. If you reach the cluster over WireGuard or your
+   own VPN instead, give that address.
+
+TXT
+    printf '   console address [%s]: ' "${ALERT_CONSOLE_URL:-$ALERT_CONSOLE_DEFAULT}" >&4
+    IFS= read -r ans <&4 || ans=""
+    ans="$(printf '%s' "$ans" | tr -d '[:space:]')"
+    ALERT_CONSOLE_URL="${ans:-${ALERT_CONSOLE_URL:-$ALERT_CONSOLE_DEFAULT}}"
   fi
   exec 4>&-
 }
@@ -133,8 +158,13 @@ install_alerts() {
     printf '  HERALDYX_BOX: %s\n'       "$(b64_ "gcp")"
     if [ -n "$SMTP_USER" ]; then printf '  HERALDYX_SMTP_USER: %s\n' "$(b64_ "$SMTP_USER")"; fi
     if [ -n "$SMTP_PASS" ]; then printf '  HERALDYX_SMTP_PASS: %s\n' "$(b64_ "$SMTP_PASS")"; fi
-    # No tunnel on this path, so no console name a browser could resolve. The
-    # mail says it carries no link rather than carrying a dead one.
+    # The operator's own entry point, asked for rather than guessed. This used
+    # to be omitted on the cloud paths, on the reasoning that a cluster with no
+    # tunnel plane has no name a browser could resolve. It was wrong twice: the
+    # install hands out an SSH tunnel two screens further down, and an operator
+    # on WireGuard or a corporate VPN has a name we could never have derived.
+    # An alert with no coordinate is the feature missing its point.
+    if [ -n "$ALERT_CONSOLE_URL" ]; then printf '  HERALDYX_CONSOLE_URL: %s\n' "$(b64_ "$ALERT_CONSOLE_URL")"; fi
   } | k_ "-n agent-stack apply -f -" >/dev/null \
     || die "the stack is up; only the notification Secret failed to apply."
   SMTP_PASS=""

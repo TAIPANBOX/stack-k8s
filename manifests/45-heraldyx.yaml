@@ -12,7 +12,12 @@
 #     --from-literal=HERALDYX_TO=ops@example.com \
 #     --from-literal=HERALDYX_SMTP_HOST=smtp.example.com:587 \
 #     --from-literal=HERALDYX_SMTP_FROM=box@example.com \
-#     --from-literal=HERALDYX_CONSOLE_URL=https://box.example.com
+#     --from-literal=HERALDYX_CONSOLE_URL=http://localhost:17420
+#
+# HERALDYX_CONSOLE_URL is the address YOU open the console at, over your own
+# tunnel: this cluster has no public entry point by design, and a link that
+# resolves only on your tunnel is worth nothing to anyone else who reads the
+# mail. Leave it out and the alert carries no link rather than a dead one.
 #
 # Without that Secret this Deployment runs, stays healthy, watches the log and
 # sends nothing. That is deliberate (heraldyx invariant 4): not having mail is
@@ -108,6 +113,17 @@ spec:
 # policy database. It is the only pod in the namespace with any egress beyond
 # DNS.
 #
+# 2525 is here because of a live run rather than a list in a document. The
+# policy first allowed 587, 465 and 25, and a probe on a real cluster showed
+# what that costs: an operator whose provider hands them 2525, which SendGrid,
+# Mailgun and others offer precisely for networks where 25 and 587 are closed,
+# hits this policy and gets a timeout with nothing anywhere saying why.
+#
+# The same run showed the other half: on AWS, outbound 25 is blocked by the
+# cloud itself, by default, against spam. So the allowance on 25 is honest but
+# decorative there, and an operator who reads this file should know that before
+# they spend an afternoon on it.
+#
 # What it does NOT do is restrict WHICH outside host. A NetworkPolicy selects
 # on addresses, not names, and a mail server's address changes without warning:
 # pinning the resolved IP at install time produces a deployment that mails
@@ -139,9 +155,10 @@ spec:
               - 192.168.0.0/16
               - 169.254.0.0/16
       ports:
-        - { protocol: TCP, port: 587 } # submission, the one you want
-        - { protocol: TCP, port: 465 } # implicit TLS, still common
-        - { protocol: TCP, port: 25 }  # a relay on the operator's own network
+        - { protocol: TCP, port: 587 }  # submission, the one you want
+        - { protocol: TCP, port: 465 }  # implicit TLS, still common
+        - { protocol: TCP, port: 2525 } # the alternate submission port
+        - { protocol: TCP, port: 25 }   # a relay on the operator's own network
 ---
 # Ingress is deliberately absent. The namespace's default-deny already refuses
 # everything inbound, and heraldyx listens on nothing, so there is no rule to
