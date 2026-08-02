@@ -248,6 +248,74 @@ else
   # console image, and this check fails with
   # `exec: "/usr/local/bin/service": no such file or directory`, which reads
   # like the notifier is broken. Measured on a live cluster 2026-08-02.
+  # Does this notifier have an INPUT at all. Asked as a configuration
+  # question, not by looking at the log, because an empty log is ambiguous on
+  # purpose: a fresh box that nothing has happened on yet looks exactly like a
+  # box whose producers write nowhere. Measured on a live cluster 2026-08-02,
+  # where the second was true and had been since the first deploy: the control
+  # plane holds every detector worth mailing about and its exporter was never
+  # given a path, so it wrote its incidents nowhere and heraldyx read an empty
+  # directory for hours. Nothing here reported it.
+  #
+  # The state volume is the other half. It comes up root-owned, and without
+  # fsGroup a process running as 65532 cannot write a file in it, which stays
+  # invisible until the first event arrives and then costs the read offset and
+  # the dedup counters on every restart.
+  exporters=0
+  for d in tokenfuse-cloud tokenfuse-gateway wardryx; do
+    kc get deploy "$d" >/dev/null 2>&1 || continue
+    # Three ways a plane can be told, and all three are read from the LIVE,
+    # EFFECTIVE fields: a variable of its own, a serve flag (wardryx takes the
+    # path as an argument), or `envFrom` the stack-wiring ConfigMap, which is
+    # how the gateway gets it. Checking only a deployment's own env reports the
+    # gateway as silent when it is not, and a check that cries wolf teaches an
+    # operator to skip the section it lives in.
+    #
+    # Never `get -o yaml | grep`. That output carries
+    # kubectl.kubernetes.io/last-applied-configuration, which is the full text
+    # of a PREVIOUS manifest, so a variable that was applied once and removed
+    # since still matches and the check passes on configuration that is no
+    # longer there. Measured 2026-08-02: this check was written that way and
+    # reported the exporter wired seconds after it had been deleted from the
+    # deployment. See ../GOTCHAS.md, item 72.
+    wired=0
+    names="$(kc get deploy "$d" -o jsonpath='{range .spec.template.spec.containers[*].env[*]}{.name}{"\n"}{end}' 2>/dev/null)"
+    args="$(kc get deploy "$d" -o jsonpath='{.spec.template.spec.containers[*].args}' 2>/dev/null)"
+    froms="$(kc get deploy "$d" -o jsonpath='{range .spec.template.spec.containers[*].envFrom[*]}{.configMapRef.name}{"\n"}{end}' 2>/dev/null)"
+    case "$names" in *EVENTS_PATH*) wired=1 ;; esac
+    case "$args"  in *"/var/lib/stack/events/"*.ndjson*) wired=1 ;; esac
+    if [ "$wired" = 0 ]; then
+      case "$froms" in
+        *stack-wiring*)
+          kc get configmap stack-wiring -o jsonpath='{.data}' 2>/dev/null | grep -q 'EVENTS_PATH' && wired=1 ;;
+      esac
+    fi
+    if [ "$wired" = 1 ]; then
+      exporters=$((exporters + 1))
+    elif [ "$d" = tokenfuse-cloud ]; then
+      # Not a note. This is the plane every incident worth mailing about comes
+      # from: budget_exhausted, sustained_loop, fanout_explosion, spend_spike,
+      # budget_threshold. Unwired, the notifier is installed, healthy, mounted,
+      # authenticated to a mail server, and structurally incapable of ever
+      # sending an alert. That is the exact state this cluster shipped in.
+      bad "$d writes no agent-events: every incident the notifier exists for is detected there, so it can never send an alert"
+    else
+      note "$d writes no agent-events: nothing it detects can reach the notifier"
+    fi
+  done
+  if [ "$exporters" -ge 1 ]; then
+    ok "$exporters plane(s) are configured to write the shared event log"
+  else
+    bad "no plane writes the event log: the notifier has no input and will never send anything"
+  fi
+
+  fsg="$(kc get deploy heraldyx -o jsonpath='{.spec.template.spec.securityContext.fsGroup}' 2>/dev/null)"
+  if [ -n "$fsg" ]; then
+    ok "the notifier's state volume is writable by it (fsGroup $fsg)"
+  else
+    bad "heraldyx has no fsGroup: its state volume comes up root-owned, so read offsets and dedup counters cannot survive a restart"
+  fi
+
   hpod="$(kc get pod -l 'app=heraldyx,role!=security-probe' -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
   if [ -z "$hpod" ]; then
     bad "heraldyx has no pod outside the security probe"

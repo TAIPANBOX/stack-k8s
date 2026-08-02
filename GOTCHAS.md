@@ -2303,3 +2303,39 @@ quote.
 The construct is correct, the quoting is correct, and the next person writing a
 comment in a Python heredoc will do exactly the same thing. The two heredocs in
 `security-tests.sh` now carry a one-line note pointing here.
+
+---
+
+## 72. `kubectl get -o yaml` shows configuration that is no longer applied
+
+**Platform.** Every `kubectl apply` writes the manifest it applied into the
+annotation `kubectl.kubernetes.io/last-applied-configuration`, verbatim, as a
+string. `get -o yaml` prints it. So a `grep` over that output matches settings
+that were applied once and deleted since, and it matches them forever.
+
+Found while proving a new check in `verify.sh` actually fails on the defect it
+was written for. The check asked "is the control plane's event exporter
+configured", by grepping the deployment yaml for `EVENTS_PATH`. The variable
+was deleted, the pod restarted without it, the plane genuinely stopped
+exporting, and the check reported it wired. It was reading the ghost in the
+annotation.
+
+**What it costs:** the failure mode is a check that can only pass. It says the
+right thing on a healthy cluster, which is exactly when nobody looks, and keeps
+saying it after the setting is gone.
+
+**The rule:** for any assertion about live configuration, read the field, not
+the document:
+
+```
+kubectl get deploy X -o jsonpath='{range .spec.template.spec.containers[*].env[*]}{.name}{"\n"}{end}'
+```
+
+`jsonpath` addresses the object, so a removed field is absent. `get -o yaml`,
+`describe` and anything that greps their text are all downstream of the same
+annotation.
+
+**Why this is worth a ledger line:** the trap only appears when a check is
+tested against the broken state. A check written this way and never run against
+the defect looks correct in review, passes in CI, and passes on a cluster where
+the thing it guards is missing.
