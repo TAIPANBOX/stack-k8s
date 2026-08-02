@@ -2252,3 +2252,54 @@ It costs a pass over the file and it is the only number that is real.
 is suspect, including "is the disk filling up" dashboards that watch a file
 from a sidecar. The writer's own view is correct; every other pod's view is a
 cache with no invalidation you control.
+
+---
+
+## 71. An apostrophe in a comment stops a script parsing, three constructs down
+
+**Upstream.** Bash does this to everyone, and it does it silently until the
+script will not parse at all.
+
+Adding a probe to `security-tests.sh` produced
+
+```
+security-tests.sh: line 567: unexpected EOF while looking for matching `"'
+security-tests.sh: line 568: syntax error: unexpected end of file
+```
+
+pointing at the LAST line of a 560-line file. The actual cause was line 32 of
+the new block, and it was this, inside the Python body of a heredoc:
+
+```
+# Inward, on the planes' own ports and on a mail port: both must fail.
+```
+
+The construct is a heredoc, quoted (`<<'PY'`), inside a command substitution:
+
+```sh
+out="$(kubectl exec -i pod -- python3 - <<'PY' 2>/dev/null
+...body...
+PY
+)"
+```
+
+A quoted heredoc is supposed to be literal, and its body is. But bash tracks
+quotes across the WHOLE command substitution while it looks for the closing
+paren, and an unpaired `'` inside the heredoc body is counted by that scan. The
+block before it in the same file uses the identical construct and has always
+worked, because nothing in its Python body happens to contain an apostrophe.
+
+**What it costs:** the error names a line hundreds of lines away, in a
+different block, so the first three attempts at diagnosis are spent on the
+wrong code. Bisecting the new block with `head -n` and `bash -n` found it in
+under a minute; reading did not find it at all.
+
+**The rule:** no apostrophes in a heredoc body that sits inside `$( )`. Not in
+prose, not in comments. Write "the ports the planes serve" rather than "the
+planes' own ports". The same applies to a lone backtick or an unpaired double
+quote.
+
+**Why this is worth a ledger line rather than a fix:** there is nothing to fix.
+The construct is correct, the quoting is correct, and the next person writing a
+comment in a Python heredoc will do exactly the same thing. The two heredocs in
+`security-tests.sh` now carry a one-line note pointing here.

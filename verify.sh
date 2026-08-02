@@ -186,6 +186,39 @@ print(r['decision'])
   fi
 fi
 
+head_ "the notifier"
+# Opt-in, so "not deployed" is a correct deployment and not a failure: the
+# operator was asked at install time and blank is a real answer.
+if ! kc get deploy heraldyx >/dev/null 2>&1; then
+  note "heraldyx is not deployed: this box was not asked to write to anyone"
+else
+  hready="$(kc get deploy heraldyx -o jsonpath='{.status.readyReplicas}' 2>/dev/null)"
+  if [ "${hready:-0}" -ge 1 ]; then ok "the notifier is running"; else bad "heraldyx has no ready replica"; fi
+
+  # The invariant made physical. heraldyx limits MESSAGES and never evidence,
+  # and what holds that is not a promise in a README, it is this mount option.
+  # Read off the LIVE spec rather than the file in git, because the cluster is
+  # what an operator actually has.
+  ro="$(kc get deploy heraldyx -o jsonpath='{.spec.template.spec.containers[0].volumeMounts[?(@.name=="events")].readOnly}' 2>/dev/null)"
+  if [ "$ro" = "true" ]; then
+    ok "the notifier mounts the event log read-only"
+  else
+    bad "heraldyx's events mount is not readOnly (got '${ro:-unset}'): it could write to the trail it reads"
+  fi
+
+  # Its own record, read by the process that owns it. The image has no shell,
+  # so this is the only way to see the file without copying a volume out, and
+  # the binary exits non-zero on a broken chain. An empty journal exits 0, so
+  # reaching the failure branch means a real break rather than a quiet box.
+  if jout="$(kc exec deploy/heraldyx -- /usr/local/bin/service --journal 2>&1)"; then
+    echo "$jout" | sed 's/^/    /'
+    ok "the dispatch record is intact"
+  else
+    echo "$jout" | sed 's/^/    /'
+    bad "heraldyx reports its own record is not intact"
+  fi
+fi
+
 head_ "result"
 if [ "${warn:-0}" -gt 0 ]; then
   printf '  %d passed, %d failed, %d noted\n\n' "$pass" "$fail" "$warn"
