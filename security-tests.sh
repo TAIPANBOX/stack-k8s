@@ -79,6 +79,65 @@ connect_test() {  # host port expect(open|blocked) label
   if [ "$got" = "$expect" ]; then ok "$label ($got, as designed)"; else bad "$label: expected $expect, got ${got:-no answer}"; fi
 }
 
+head_ "0. the notifier's way out goes outward only"
+# heraldyx is the one workload here allowed to open a connection beyond the
+# cluster, and its policy narrows that to three mail ports on addresses OUTSIDE
+# the private ranges. The claim worth testing is not that mail works, it is
+# that the hole does not point INWARD.
+#
+# The probe wears `app: heraldyx`, because NetworkPolicy selects on labels and
+# that is exactly what an attacker with pod-create in this namespace would try.
+# If wearing the label were enough to reach a plane, the narrow rule would be
+# decoration.
+if kc get networkpolicy heraldyx-mail-egress >/dev/null 2>&1; then
+  kc delete pod sec-probe-notify --ignore-not-found >/dev/null 2>&1
+  cat <<'YAML' | kc apply -f - >/dev/null 2>&1
+apiVersion: v1
+kind: Pod
+metadata: { name: sec-probe-notify, labels: { app: heraldyx, role: security-probe } }
+spec:
+  restartPolicy: Never
+  securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+  containers:
+    - name: probe
+      image: stack/genaryx-console:dev
+      imagePullPolicy: IfNotPresent
+      command: ["sleep", "300"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: ["ALL"] }
+YAML
+  if kc wait --for=condition=Ready pod/sec-probe-notify --timeout=90s >/dev/null 2>&1; then
+    notify_out="$(kc exec -i sec-probe-notify -- python3 - <<'PY' 2>/dev/null
+import socket
+# Inward, on the ports the planes serve and on a mail port: both must fail.
+# The second is the interesting one, since the policy allows 587 by PORT, and
+# the except block is what stops it reaching a private address on that port.
+# NOTE: no apostrophes in this heredoc, see GOTCHAS 71.
+targets = [("tokenfuse-cloud",8080),("wardryx",8090),("idryx",8081),
+           ("policy-db",5432),("genaryx-console",7420),("wardryx",587)]
+for host, port in targets:
+    s = socket.socket(); s.settimeout(5)
+    try:
+        s.connect((host, port)); print(f"REACHED {host}:{port}")
+    except Exception:
+        print(f"blocked {host}:{port}")
+PY
+)"
+    echo "$notify_out" | sed 's/^/    /'
+    if echo "$notify_out" | grep -q REACHED; then
+      bad "a pod wearing the notifier's label reached inside the cluster: the egress rule points inward"
+    else
+      ok "the notifier's egress reaches nothing inside the cluster, on any port"
+    fi
+    kc delete pod sec-probe-notify --wait=false >/dev/null 2>&1
+  else
+    note "could not start the notifier probe pod; skipping"
+  fi
+else
+  note "heraldyx is not deployed: no egress rule to test"
+fi
+
 head_ "1. a compromised pod in this namespace reaches nothing"
 # The strongest containment claim there is: put an attacker INSIDE the trust
 # boundary and show the boundary is not the namespace. This pod carries no
@@ -103,6 +162,7 @@ YAML
 if kc wait --for=condition=Ready pod/sec-probe --timeout=90s >/dev/null 2>&1; then
   probe_out="$(kc exec -i sec-probe -- python3 - <<'PY' 2>/dev/null
 import socket
+# NOTE: no apostrophes in this heredoc, see GOTCHAS 71.
 targets = [("tokenfuse-cloud",8080),("tokenfuse-gateway",4100),("wardryx",8090),
            ("idryx",8081),("genaryx-console",7420),("policy-db",5432)]
 for host, port in targets:
