@@ -182,6 +182,26 @@ Then reach the console over your own tunnel (`20-console.yaml` explains why
 there is no public entry point by default), and check the deployment with
 `./verify.sh --freeze` and `./security-tests.sh`.
 
+### Being told, rather than watching
+
+`deploy.sh` asks for an address for alerts alongside the tunnel and the console
+account. Answer it and the box mails you when one of your own agents crosses a
+line: a budget gone, a policy denial, a run killed, an agent behaving unlike
+itself. The mail comes from the box, and it carries a link into your console,
+never a button that acts.
+
+Leave it blank and nothing is installed for it. This is the one workload in the
+stack allowed to open a connection to something outside the cluster, so it is
+opt-in the same way the load balancer is, and for the same kind of reason:
+
+```bash
+kubectl apply -f manifests/45-heraldyx.yaml
+```
+
+Read that file's header before you do. It carries the only egress rule in the
+namespace that reaches past DNS, it says exactly how narrow that rule is, and
+it says what it leaves open.
+
 ## Status
 
 **Proven on a live five-node cluster, 2026-07-25.** Five Hetzner CPX42 in

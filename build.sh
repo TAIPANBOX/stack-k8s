@@ -17,7 +17,7 @@ NODES=("$@")
 say() { printf '\n== %s\n' "$*"; }
 
 say "go planes"
-for svc in wardryx:wardryx idryx:idryx qryx:qryx mockryx:mockryx; do
+for svc in wardryx:wardryx idryx:idryx qryx:qryx mockryx:mockryx heraldyx:heraldyx; do
   name="${svc%%:*}"; repo="${svc##*:}"
   docker build -f images/go-service.Dockerfile \
     --build-arg SERVICE="$name" --build-arg SRC="./$repo" \
@@ -30,7 +30,7 @@ docker build -f images/tokenfuse.Dockerfile -t "stack/tokenfuse:$TAG" "$DEV/toke
 say "console (four languages, because it hosts the tools it spawns)"
 docker build -f images/console.Dockerfile -t "stack/genaryx-console:$TAG" "$DEV"
 
-IMAGES=(stack/wardryx stack/idryx stack/qryx stack/mockryx stack/tokenfuse stack/genaryx-console)
+IMAGES=(stack/wardryx stack/idryx stack/qryx stack/mockryx stack/heraldyx stack/tokenfuse stack/genaryx-console)
 
 if [ ${#NODES[@]} -eq 0 ]; then
   say "built: ${IMAGES[*]} (no nodes given, nothing imported)"
