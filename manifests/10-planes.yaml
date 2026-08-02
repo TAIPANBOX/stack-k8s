@@ -70,6 +70,25 @@ spec:
             # Without it every restart is a factory reset of the money plane
             # (see the cloud-state claim in 00-base.yaml).
             - { name: TOKENFUSE_CLOUD_DATA, value: "/var/lib/stack/cloud/state.json" }
+            # The incident exporter, and the reason the notification plane had
+            # nothing to read until 2026-08-02. This plane is where the
+            # detectors live: budget_exhausted, sustained_loop,
+            # fanout_explosion, spend_spike, budget_threshold. Without a path
+            # the exporter is disabled by design (zero cost on the ingest hot
+            # path), so every one of those incidents reached the console's
+            # stream and its own API, and NOTHING reached the shared event log.
+            # heraldyx read an empty directory and stayed silent, correctly and
+            # uselessly, and the install gave no sign: the file existed, owned
+            # and zero bytes, because the GATEWAY creates it and no call had
+            # gone through the gateway either.
+            #
+            # Its own file rather than the gateway's. Both would be appending
+            # to one log, which is safe for lines under a page and unclear
+            # above it, and idryx loads `tokenfuse.ndjson` specifically to
+            # build an identity graph from per-call events. heraldyx reads the
+            # whole directory, so it sees both without being told.
+            - name: TOKENFUSE_EVENTS_PATH
+              valueFrom: { configMapKeyRef: { name: stack-wiring, key: TOKENFUSE_CLOUD_EVENTS_PATH } }
           ports: [{ name: http, containerPort: 8080 }]
           volumeMounts:
             - { name: events, mountPath: /var/lib/stack/events }
