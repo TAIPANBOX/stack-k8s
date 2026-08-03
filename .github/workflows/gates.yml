@@ -24,3 +24,6 @@ jobs:
 
       - name: every cloud claim is marked and dated
         run: ./scripts/portability-claims.sh
+
+      - name: every image is pinned or built here
+        run: ./scripts/pinned-images.sh

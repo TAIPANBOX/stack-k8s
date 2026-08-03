@@ -2,6 +2,16 @@
 # copied from `stack-up/up.sh`'s real invocations, not invented: wardryx takes
 # single-dash flags, idryx takes double-dash, and both tokenfuse binaries are
 # configured entirely through env.
+#
+# Five of the planes are PULLED, pinned to an immutable version tag, and two
+# are still built on the node: `stack/tokenfuse:dev` (Rust, not published) and
+# `stack/genaryx-console:dev` (built from source per install). The rule for
+# which is which is in ../CLAUDE.md, invariant 7.
+#
+# A pinned tag rather than `:latest` or `:dev`, deliberately: "which build is
+# running" has to have an answer that does not change under the operator. It
+# also means an upgrade is a visible edit to this file and a rollout somebody
+# ran, rather than a pod that quietly came back different.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -238,7 +248,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: wardryx
-          image: stack/wardryx:dev
+          image: ghcr.io/taipanbox/wardryx:v0.1.0
           imagePullPolicy: IfNotPresent
           # Single-dash flags, exactly as up.sh calls it.
           args:
@@ -313,7 +323,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: idryx
-          image: stack/idryx:dev
+          image: ghcr.io/taipanbox/idryx:v0.3.0
           imagePullPolicy: IfNotPresent
           # Double-dash flags here, and :8081 because idryx's own default 8080
           # collides with the cloud plane. Both quirks are up.sh's, kept so the

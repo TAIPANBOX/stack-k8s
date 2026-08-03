@@ -102,7 +102,10 @@ deploy.sh       THE entry point. Asks what it needs, then: install.sh, images,
                 manifests, verify.sh, security-tests.sh, and your way in.
 install.sh      the cluster itself: k3s, Calico, Longhorn, the storage classes,
                 the cloud controller. Hetzner-specific by design.
-build.sh        build the images and import them into every node over ssh
+build.sh        build what is NOT published (tokenfuse, the console) and
+                import it into every node over ssh. BUILD_PLANES=1 also builds
+                the five Go planes, for an unreleased change or a cluster with
+                no way out to ghcr.io
 verify.sh       prove a cluster is running this stack, not merely green
 security-tests.sh  attack it: every fix below re-run as a standing check, from
                 a forged pod label to the bytes in etcd. Two dozen of them, and
@@ -121,7 +124,19 @@ evidence/       command output from the live cluster, not claims about it
 ## Running it
 
 One command. It asks what it needs BEFORE the long part, so a missing DNS
-record costs ten seconds rather than fifteen minutes of building images.
+record costs ten seconds rather than a quarter of an hour of building.
+
+**Five of the seven planes are pulled, not built.** `wardryx`, `idryx`, `qryx`,
+`mockryx` and `heraldyx` are published at `ghcr.io/taipanbox/<name>`, pinned in
+the manifests to an immutable version tag, and pulled by the kubelet. Only
+`tokenfuse` (Rust, not published) and the console (built from source per
+install) are still assembled on a node.
+
+That means **every node needs to reach `ghcr.io`**. These nodes already reach
+the internet for k3s, Longhorn and Calico, so it is one more host rather than a
+new requirement. A cluster that genuinely cannot: `BUILD_PLANES=1 ./build.sh`
+builds the five locally, and the manifests then need their image lines pointed
+at what you built.
 
 ```bash
 git clone https://github.com/TAIPANBOX/stack-k8s && cd stack-k8s

@@ -228,7 +228,15 @@ fi
 # because one image (the console) legitimately spans five of them. The clone of
 # `genaryx` is named `genaryx-a360` because the console's Dockerfile refers to
 # it by that path.
-OPEN_REPOS="wardryx idryx qryx mockryx heraldyx tokenfuse verdryx engram"
+# Cloned because something on the node still BUILDS from them: tokenfuse for
+# its own image, and qryx, mockryx, verdryx and engram because the console
+# image bundles those four tools inside itself (see images/console.Dockerfile).
+#
+# wardryx, idryx and heraldyx are gone from this list on purpose: their images
+# are pulled from ghcr.io now, so cloning their source on the node would be
+# fetching something nothing reads. Their policy and config come from the
+# manifests, not from their repositories.
+OPEN_REPOS="qryx mockryx tokenfuse verdryx engram"
 if [ "$SKIP_IMAGES" = 1 ]; then
   say "skipping the image build (--skip-images)"
 else
@@ -297,14 +305,22 @@ else
     echo "   will not be applied, so nothing waits on an image that is not coming"
   fi
 
-  say "building images (the console build is four languages and takes the longest)"
+  # The five Go planes are NOT built here any more: they are published, pinned
+  # by version in the manifests, and pulled by the kubelet from
+  # ghcr.io/taipanbox/{wardryx,idryx,qryx,mockryx,heraldyx}. That removes the
+  # slowest and most fragile part of a first install, and two of the defects a
+  # live run found on 2026-08-02 lived in that build path rather than in any
+  # service. What nobody builds, nobody breaks.
+  #
+  # Still built here because it is not published: tokenfuse (Rust) and the
+  # console (built from source per install).
+  #
+  # The trade is that every node needs to reach ghcr.io. These nodes already
+  # reach the internet for k3s, Longhorn and Calico, so this adds a host to
+  # that list rather than a requirement.
+  say "building what is not published (the console build is four languages and takes the longest)"
   su_ "$BUILDER" "sh -c \"set -e
     cd /root/src
-    for pair in wardryx:wardryx idryx:idryx qryx:qryx mockryx:mockryx heraldyx:heraldyx; do
-      name=\\\${pair%%:*}; repo=\\\${pair##*:}
-      docker build -q -f stack-k8s/images/go-service.Dockerfile --build-arg SERVICE=\\\$name --build-arg SRC=./\\\$repo -t stack/\\\$name:dev . >/dev/null
-      echo '   built stack/'\\\$name':dev'
-    done
     docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
     echo '   built stack/tokenfuse:dev'
     if [ '$WITH_CONSOLE' = '1' ]; then
@@ -337,7 +353,7 @@ else
     sh_ "$n" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qF '$DIST_PUB' ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '$DIST_PUB' >> ~/.ssh/authorized_keys"
   done
 
-  IMAGES="stack/wardryx:dev stack/idryx:dev stack/qryx:dev stack/mockryx:dev stack/heraldyx:dev stack/tokenfuse:dev"
+  IMAGES="stack/tokenfuse:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
   su_ "$BUILDER" "sh -c \"for img in $IMAGES; do
       docker save \\\$img | k3s ctr images import - >/dev/null 2>&1 && echo '   '\\\$img' -> builder' || echo '   '\\\$img' -> builder FAILED'

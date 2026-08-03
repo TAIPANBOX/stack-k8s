@@ -32,6 +32,7 @@ echo "pre-push gate"
 step "every gotcha is classified" "./scripts/gotchas-classified.sh"
 step "the stack comes up closed" "./scripts/closed-by-default.sh"
 step "cloud claims are dated and marked" "./scripts/portability-claims.sh"
+step "every image is pinned or built here" "./scripts/pinned-images.sh"
 
 echo
 if [ "$fail" -ne 0 ]; then
