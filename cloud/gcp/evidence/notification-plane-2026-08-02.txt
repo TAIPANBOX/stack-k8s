@@ -1,0 +1,61 @@
+
+[1mnodes[0m
+NAME                                                         READY   PROVIDER                                                IP
+stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal   Ready   gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-1   10.10.0.2
+stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   Ready   gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-2   10.10.0.4
+stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   Ready   gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-3   10.10.0.3
+  [32mok[0m   every node Ready
+
+[1mpods[0m
+POD                                NODE                                                         READY   STATUS
+genaryx-console-75b9b5fdcc-22vq8   stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   false   Pending
+heraldyx-6696b6c5fd-vxnr9          stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal   true    Running
+idryx-577c9b775b-q47fh             stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   true    Running
+policy-db-0                        stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   true    Running
+sec-forged                         stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   false   Pending
+sec-probe                          stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   false   Pending
+sec-probe-notify                   stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   false   Pending
+tokenfuse-cloud-59c4555545-xtd2h   stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   true    Running
+tokenfuse-gateway-64755559-7s4k2   stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   true    Running
+wardryx-cc8f4fc75-xf7xs            stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   true    Running
+  [31mFAIL[0m 4 pod(s) neither Running nor Completed
+  [32mok[0m   workload spread over 3 nodes
+
+[1mstorage[0m
+CLAIM              MODE              CLASS       STATUS   SIZE
+cloud-state        [ReadWriteOnce]   longhorn    Bound    2Gi
+console-state      [ReadWriteOnce]   longhorn    Bound    2Gi
+data-policy-db-0   [ReadWriteOnce]   longhorn    Bound    5Gi
+heraldyx-state     [ReadWriteOnce]   longhorn    Bound    1Gi
+stack-events       [ReadWriteMany]   stack-rwx   Bound    5Gi
+  [32mok[0m   the RWX event volume is Bound
+  [32mok[0m   1 default StorageClass
+
+[1mnetwork policy is actually enforced[0m
+  [32mok[0m   9 NetworkPolicies present
+  [33mnote[0m no console pod: cannot probe the policy store from inside the namespace
+
+[1mevery plane answers[0m
+  
+  [32mok[0m   all five planes answer 200
+
+[1mthe data the console governs[0m
+  [31mFAIL[0m the console could not be asked what it governs at all: no output from the probe
+
+[1mthe console is reading a real environment, not fixtures[0m
+  [32mok[0m   an environment descriptor is mounted
+
+[1mthe notifier[0m
+  [32mok[0m   the notifier is running
+  [32mok[0m   the notifier mounts the event log read-only
+  [32mok[0m   3 plane(s) are configured to write the shared event log
+  [32mok[0m   the notifier's state volume is writable by it (fsGroup 65532)
+    journal: /var/lib/stack/heraldyx/sent.ndjson
+    records: 0 (none)
+    outcome: 0 accepted, 0 refused
+    chain:   nothing to verify yet: 0 record(s), and a chain of one binds nothing
+  [32mok[0m   the dispatch record is intact
+
+[1mresult[0m
+  12 passed, 2 failed, 1 noted
+
