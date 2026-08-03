@@ -262,39 +262,39 @@ else
   # credential is in no file that leaves this machine.
   WITH_CONSOLE=0
   # The console has been public and Apache-2.0 since 2026-07-27, and the root
-  # deploy.sh was taught that the same day. This one was not, so every AWS
-  # deployment since has built the stack WITHOUT a console while still applying
+  # deploy.sh was taught that the same day. The cloud scripts were not, so every
+  # deployment since built the stack WITHOUT a console while still applying
   # 20-console.yaml, leaving a pod in ImagePullBackOff and verify.sh reporting a
-  # failure nobody could explain. Measured on a live cluster 2026-08-02.
+  # failure nobody could explain. Measured on live clusters 2026-08-02, on both
+  # clouds: AWS was fixed first and GCP kept the fault for another hour, which
+  # is the same "one path learned, the other did not" that put this whole
+  # section here in the first place.
   #
-  # CONSOLE_TOKEN survives for the one case it is still good for: building from
-  # a private fork of your own.
+  # So the clone is unconditional now. CONSOLE_TOKEN survives for the one case
+  # it is still good for: building from a private fork of your own.
   if [ -n "$CONSOLE_TOKEN" ]; then
     CONSOLE_AUTH="x-access-token:$CONSOLE_TOKEN@"
   else
     CONSOLE_AUTH=""
   fi
-  if true; then
-    say "fetching the console source here, so the token stays on this machine"
-    TMP="$(mktemp -d)"
-    if git -c credential.helper= clone -q --depth 1 \
-         "https://${CONSOLE_AUTH}github.com/TAIPANBOX/genaryx.git" \
-         "$TMP/genaryx-a360" 2>/dev/null; then
-      git -C "$TMP/genaryx-a360" remote set-url origin https://github.com/TAIPANBOX/genaryx.git
-      BUILT_FROM="$(git -C "$TMP/genaryx-a360" rev-parse --short HEAD)"
-      grep -rl 'x-access-token' "$TMP/genaryx-a360/.git" >/dev/null 2>&1 \
-        && { rm -rf "$TMP"; die "the token is still in .git after rewriting the remote; refusing to ship it"; }
-      echo "   console source at $BUILT_FROM, uploading to the builder"
-      tar -cz -C "$TMP" genaryx-a360 | su_ "$BUILDER" 'tar -xz -C /root/src'
-      rm -rf "$TMP"
-      WITH_CONSOLE=1
-      echo "   genaryx (console) staged, no credential on any node"
-    else
-      rm -rf "$TMP"
-      echo "   could not clone the console with that token: continuing WITHOUT it"
-    fi
+  say "fetching the console source here, so any token stays on this machine"
+  TMP="$(mktemp -d)"
+  if git -c credential.helper= clone -q --depth 1 \
+       "https://${CONSOLE_AUTH}github.com/TAIPANBOX/genaryx.git" \
+       "$TMP/genaryx-a360" 2>/dev/null; then
+    git -C "$TMP/genaryx-a360" remote set-url origin https://github.com/TAIPANBOX/genaryx.git
+    BUILT_FROM="$(git -C "$TMP/genaryx-a360" rev-parse --short HEAD)"
+    grep -rl 'x-access-token' "$TMP/genaryx-a360/.git" >/dev/null 2>&1 \
+      && { rm -rf "$TMP"; die "the token is still in .git after rewriting the remote; refusing to ship it"; }
+    echo "   console source at $BUILT_FROM, uploading to the builder"
+    tar -cz -C "$TMP" genaryx-a360 | su_ "$BUILDER" 'tar -xz -C /root/src'
+    rm -rf "$TMP"
+    WITH_CONSOLE=1
+    echo "   genaryx (console) staged, no credential on any node"
   else
-    echo "   no --console-token: deploying the open stack without the Genaryx console"
+    rm -rf "$TMP"
+    echo "   could not clone the console: continuing WITHOUT it, and 20-console.yaml"
+    echo "   will not be applied, so nothing waits on an image that is not coming"
   fi
 
   say "building images (the console build is four languages and takes the longest)"
