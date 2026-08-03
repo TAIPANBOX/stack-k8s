@@ -8,6 +8,12 @@ Nothing here is a rewrite. It is a translation, and the translation is where
 the interesting part lives: putting the stack on Kubernetes forces two facts
 about its architecture into the open, and both are load-bearing.
 
+<div align="center">
+
+<img src="assets/diagram.svg" alt="The planes couple through one ReadWriteMany event volume rather than through APIs, the console pod hosts five tools rather than being a client of four services, egress is denied by default, and heraldyx is the one hole: applied from its own manifest, permitted only TCP 587, 465 and 25, and only to addresses outside the cluster and the private network" width="960">
+
+</div>
+
 ## Fact 1: the planes couple through an event log, not through APIs
 
 On one machine that coupling is invisible, because everything shares a
