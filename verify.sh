@@ -353,6 +353,28 @@ else
   fi
 
   hpod="$(kc get pod -l 'app=heraldyx,role!=security-probe' -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
+
+  # Its own view of its input, against what is actually on the volume. Both
+  # halves matter: a notifier watching nothing looks exactly like a quiet fleet
+  # from every other angle, and this deployment has now produced that state
+  # twice for two unrelated reasons (nothing writing the log, GOTCHAS earlier
+  # today; and a shared volume failing stat on its own mount point while
+  # listing its contents, GOTCHAS 74).
+  if [ -n "$hpod" ] && [ "$CONSOLE_READY" = 1 ]; then
+    watching="$(kc logs "$hpod" --tail=50 2>/dev/null | grep -o 'watching [0-9]* file(s)' | tail -1 | awk '{print $2}')"
+    present="$(inpod "import glob; print(len(glob.glob('/var/lib/stack/events/*.ndjson')))")"
+    case "${watching:-}${present:-}" in
+      "") note "the notifier's build does not report what it watches: cannot compare" ;;
+      *)
+        if [ "${watching:-0}" = 0 ] && [ "${present:-0}" -gt 0 ]; then
+          bad "the notifier sees none of the ${present} event log(s) that exist: its mount answers but its directory does not (GOTCHAS 74)"
+        elif [ "${watching:-0}" -lt "${present:-0}" ]; then
+          note "the notifier watches ${watching} of ${present} event log(s): a file may have appeared since it last resolved"
+        else
+          ok "the notifier watches all ${present} event log(s) that exist"
+        fi ;;
+    esac
+  fi
   if [ -z "$hpod" ]; then
     bad "heraldyx has no pod outside the security probe"
   elif jout="$(kc exec "$hpod" -- /usr/local/bin/service --journal 2>&1)"; then
