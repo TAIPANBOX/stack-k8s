@@ -35,16 +35,18 @@ The honest count of our own mistakes is what makes the platform classifications
 worth believing. A ledger where everything is somebody else's fault is
 marketing.
 
-**Measured 2026-08-03, not estimated: 75 entries, 37 platform, 25 ours, 10 the
+**Measured 2026-08-03, not estimated: 77 entries, 37 platform, 27 ours, 10 the
 stack's own contract, 3 upstream. Nothing unclassified.** (70 on 2026-07-31;
-the five added since are 71, bash counting quotes inside a heredoc it was told
+the seven added since are 71, bash counting quotes inside a heredoc it was told
 to treat literally; 72, `kubectl get -o yaml` printing configuration that was
 deleted, which made a new check pass on the very defect it was written to
 catch; 73, a whole verify.sh section rendering as an empty heading while the
 run reported everything passing; 74, an RWX volume failing `stat` on its own mount
 point while listing the files inside it, which left the notifier deaf with a
-readable log underneath it; and 75, a check reading an absent answer as a zero
-and failing the run on a notifier that was working.)
+readable log underneath it; 75, a check reading an absent answer as a zero and failing the run on a
+notifier that was working; 76, a CronJob sharing a ReadWriteOnce volume
+with a Deployment and waiting forever; and 77, three scheduled routines
+that had never once run, two of them broken in more than one way.)
 
 A note on how that number was arrived at, because it is the point of this whole
 file. The first version of the gate knew only `Platform` and `Ours`, reported

@@ -165,3 +165,45 @@ spec:
               - 169.254.0.0/16
       ports:
         - { protocol: TCP, port: 443 }
+---
+# The weekly drill, and nothing else it might want.
+#
+# `mockryx` rehearses hostile scenarios against the gateway, which means it has
+# to reach the gateway: a pod with no `plane` label matches none of the rules
+# above, so its packets were dropped and every scenario reported a timeout
+# rather than a verdict. Measured on a live cluster 2026-08-03, the first time
+# this routine had ever run: five scenarios, five "context deadline exceeded",
+# and a guardrail suite that could not observe a single guardrail.
+#
+# Two rules because a drop is symmetrical: the drill needs egress to the
+# gateway, and the gateway needs ingress from the drill. One port, one peer,
+# one direction each. It is deliberately NOT added to `planes-ingress`, which
+# would have opened the money, policy and identity planes on four ports to a
+# job whose whole purpose is to send hostile traffic.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: drills-egress-gateway
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { role: drills } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: tokenfuse-gateway } }
+      ports:
+        - { protocol: TCP, port: 4100 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-ingress-drills
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-gateway } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { role: drills } }
+      ports:
+        - { protocol: TCP, port: 4100 }
