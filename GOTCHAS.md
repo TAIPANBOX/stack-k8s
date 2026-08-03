@@ -2339,3 +2339,39 @@ annotation.
 tested against the broken state. A check written this way and never run against
 the defect looks correct in review, passes in CI, and passes on a cluster where
 the thing it guards is missing.
+
+---
+
+## 73. A whole verification section can disappear and still be counted as passing
+
+**Ours, and fixed.** `verify.sh` printed a heading called "the data the console
+governs" with nothing under it, and ended the run with "14 passed, 0 failed".
+
+The section ran one Python program inside the console pod that fetched five
+things and printed three lines at the end. Two of the five fetches had been
+returning 401 for as long as the section existed, because it asked the policy
+plane with the MONEY plane's admin key, and the two planes do not share one.
+The first 401 raised, the program died before any print, `inpod` sends stderr
+to /dev/null, and the section rendered as a bare heading.
+
+**What it costs:** nothing about it looks wrong. There is no red, no missing
+count, no exit code. The section that reports what the console can actually see
+was the section that could no longer report anything, and the summary line said
+everything passed. Both facts were true at once for weeks.
+
+**The rule, which is this repo's invariant 5 written out:** a check produces a
+verdict or it fails the run. Not a print. Specifically:
+
+- one probe, many questions: gather each answer independently and name the ones
+  that failed, rather than letting the first exception end the program;
+- empty output is a failure, not a pass, and says so;
+- a section that ends without `ok`, `bad` or `note` is invisible, and invisible
+  is the same as absent.
+
+Proven by pointing the fixed check at the wrong credential on a live cluster:
+two `UNREACHABLE` lines and a FAIL, where the old shape printed a heading and
+moved on.
+
+**Why this is worth a ledger line:** the same shape is available to every check
+that prints instead of judging, and this file has had two of them this week
+(item 71's sibling in the notifier section, and this one).
