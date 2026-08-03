@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-18 -18 996 446" width="996" height="446" role="img" aria-label="stack-k8s is the same stack as a Kubernetes workload, and the translation forces two architectural facts into the open: the planes couple through a shared read-write-many event volume rather than through APIs, and the console hosts five tools rather than being a client of four services. Egress is default-deny, and heraldyx is the one hole, applied from its own manifest and permitted only TCP 587, 465 and 25 to addresses outside the cluster and the private network">
+  <title>stack-k8s: the same stack as manifests, where two facts about it stop being invisible</title>
+  <rect x="-18" y="-18" width="996" height="446" rx="16" fill="#0A0E13"/>
+  <rect x="-17.5" y="-17.5" width="995" height="445" rx="15.5" fill="none" stroke="rgba(255,255,255,.09)"/>
+
+  <defs>
+    <marker id="sk-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#5A6675"/>
+    </marker>
+    <marker id="sk-b" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#4493F8"/>
+    </marker>
+  </defs>
+
+  <g font-family="ui-monospace,Menlo" text-anchor="middle">
+
+    <text x="480" y="24" fill="#E9EFF6" font-size="13" font-weight="700">not a rewrite, a translation, and the translation is where it gets interesting</text>
+    <text x="480" y="41" fill="#5A6675" font-size="10">the same binaries, the same ports, the same wiring. Putting it on Kubernetes forces two facts about the architecture into the open</text>
+
+    <!-- the cluster -->
+    <rect x="8" y="56" width="676" height="236" rx="13" fill="none" stroke="#4493F8" stroke-dasharray="6 4" stroke-width="1.3">
+      <animate attributeName="stroke-opacity" values="1;.45;1" dur="3.6s" repeatCount="indefinite"/>
+    </rect>
+    <text x="346" y="76" fill="#4493F8" font-size="10.5" font-weight="700">the cluster, and its egress is default-deny</text>
+
+    <!-- fact 1 -->
+    <text x="165" y="99" fill="#8A97A6" font-size="9.5" font-weight="700">FACT 1  they couple through a log, not APIs</text>
+
+    <rect x="24" y="108" width="122" height="30" rx="7" fill="#141C27" stroke="#2a3547"/>
+    <text x="85" y="127" fill="#E9EFF6" font-size="10">tokenfuse</text>
+    <rect x="24" y="144" width="122" height="30" rx="7" fill="#141C27" stroke="#2a3547"/>
+    <text x="85" y="163" fill="#E9EFF6" font-size="10">wardryx</text>
+    <rect x="24" y="180" width="122" height="30" rx="7" fill="#141C27" stroke="#2a3547"/>
+    <text x="85" y="199" fill="#E9EFF6" font-size="10">idryx</text>
+    <rect x="24" y="216" width="122" height="30" rx="7" fill="#141C27" stroke="#2a3547"/>
+    <text x="85" y="235" fill="#E9EFF6" font-size="10">verdryx</text>
+    <rect x="24" y="252" width="122" height="30" rx="7" fill="#141C27" stroke="#2a3547"/>
+    <text x="85" y="271" fill="#E9EFF6" font-size="10">mockryx</text>
+
+    <path d="M150 123 L172 123" stroke="#5A6675" stroke-width="1.1" marker-end="url(#sk-a)" fill="none"/>
+    <path d="M150 159 L172 159" stroke="#5A6675" stroke-width="1.1" marker-end="url(#sk-a)" fill="none"/>
+    <path d="M150 195 L172 195" stroke="#5A6675" stroke-width="1.1" marker-end="url(#sk-a)" fill="none"/>
+    <path d="M150 231 L172 231" stroke="#5A6675" stroke-width="1.1" marker-end="url(#sk-a)" fill="none"/>
+    <path d="M150 267 L172 267" stroke="#5A6675" stroke-width="1.1" marker-end="url(#sk-a)" fill="none"/>
+
+    <rect x="176" y="108" width="130" height="174" rx="10" fill="#10161F" stroke="#4493F8"/>
+    <text x="241" y="131" fill="#4493F8" font-size="10.5" font-weight="700">one volume</text>
+    <text x="241" y="147" fill="#8A97A6" font-size="9.5">ReadWriteMany</text>
+    <text x="241" y="163" fill="#8A97A6" font-size="9">on one machine this</text>
+    <text x="241" y="175" fill="#8A97A6" font-size="9">coupling is hidden,</text>
+    <text x="241" y="187" fill="#8A97A6" font-size="9">because everything</text>
+    <text x="241" y="199" fill="#8A97A6" font-size="9">shares a filesystem</text>
+    <rect x="192" y="212" width="98" height="8" rx="2" fill="#1d2735"/>
+    <rect x="192" y="224" width="98" height="8" rx="2" fill="#1d2735"/>
+    <rect x="192" y="236" width="98" height="8" rx="2" fill="#1d2735"/>
+    <text x="241" y="262" fill="#8A97A6" font-size="9">a cluster makes you</text>
+    <text x="241" y="274" fill="#8A97A6" font-size="9">say it out loud</text>
+
+    <!-- fact 2 -->
+    <text x="495" y="99" fill="#8A97A6" font-size="9.5" font-weight="700">FACT 2  the console HOSTS its tools</text>
+
+    <rect x="322" y="108" width="346" height="90" rx="10" fill="#10161F" stroke="#2a3547"/>
+    <text x="495" y="129" fill="#E9EFF6" font-size="10.5" font-weight="700">the console pod</text>
+    <rect x="338" y="140" width="60" height="24" rx="6" fill="#141C27" stroke="#2a3547"/>
+    <text x="368" y="156" fill="#C8D3E0" font-size="9">money</text>
+    <rect x="404" y="140" width="60" height="24" rx="6" fill="#141C27" stroke="#2a3547"/>
+    <text x="434" y="156" fill="#C8D3E0" font-size="9">policy</text>
+    <rect x="470" y="140" width="66" height="24" rx="6" fill="#141C27" stroke="#2a3547"/>
+    <text x="503" y="156" fill="#C8D3E0" font-size="9">identity</text>
+    <rect x="542" y="140" width="60" height="24" rx="6" fill="#141C27" stroke="#2a3547"/>
+    <text x="572" y="156" fill="#C8D3E0" font-size="9">crypto</text>
+    <rect x="608" y="140" width="46" height="24" rx="6" fill="#141C27" stroke="#2a3547"/>
+    <text x="631" y="156" fill="#C8D3E0" font-size="9">drills</text>
+    <text x="495" y="182" fill="#8A97A6" font-size="9.5">five tools in one place, which is a different thing from</text>
+    <text x="495" y="192" fill="#8A97A6" font-size="9.5">four network calls that can each fail on their own</text>
+
+    <!-- heraldyx in the cluster -->
+    <rect x="322" y="212" width="346" height="70" rx="10" fill="#141C27" stroke="#5BC8F5"/>
+    <text x="495" y="233" fill="#5BC8F5" font-size="10.5" font-weight="700">heraldyx: manifests/45-heraldyx.yaml</text>
+    <text x="495" y="250" fill="#8A97A6" font-size="9.5">applied on its own, outside the default apply</text>
+    <text x="495" y="264" fill="#8A97A6" font-size="9.5">sending no mail is a choice, not a broken install</text>
+    <text x="495" y="277" fill="#8A97A6" font-size="9">the event volume is mounted here READ-ONLY</text>
+
+    <!-- the wall and the one hole -->
+    <path d="M672 247 L706 247" stroke="#4493F8" stroke-width="1.4" marker-end="url(#sk-b)" fill="none"/>
+    <circle cx="674" cy="247" r="2.8" fill="#4493F8">
+      <animate attributeName="cx" values="674;703" dur="2.6s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;1;0" dur="2.6s" repeatCount="indefinite"/>
+    </circle>
+
+    <rect x="712" y="56" width="240" height="146" rx="12" fill="#141C27" stroke="#F0544C"/>
+    <text x="832" y="77" fill="#F0544C" font-size="10.5" font-weight="700">30-network-policy.yaml</text>
+    <text x="832" y="95" fill="#8A97A6" font-size="9.5">egress is denied by default, and</text>
+    <text x="832" y="109" fill="#8A97A6" font-size="9.5">the comment in that file sells it</text>
+    <text x="832" y="123" fill="#8A97A6" font-size="9.5">as the product argument at the</text>
+    <text x="832" y="137" fill="#8A97A6" font-size="9.5">packet layer, not as hardening</text>
+    <text x="832" y="160" fill="#8A97A6" font-size="9.5">a plane with no way out cannot</text>
+    <text x="832" y="174" fill="#8A97A6" font-size="9.5">quietly become a client of</text>
+    <text x="832" y="188" fill="#8A97A6" font-size="9.5">something on the internet</text>
+
+    <rect x="712" y="212" width="240" height="112" rx="12" fill="#10161F" stroke="#3FB950"/>
+    <text x="832" y="233" fill="#3FB950" font-size="10.5" font-weight="700">the one hole, stated plainly</text>
+    <text x="832" y="252" fill="#C8D3E0" font-size="9.5">TCP 587, 465, 25</text>
+    <text x="832" y="268" fill="#8A97A6" font-size="9.5">and only to addresses that are</text>
+    <text x="832" y="282" fill="#8A97A6" font-size="9.5">NOT in the cluster and NOT in</text>
+    <text x="832" y="296" fill="#8A97A6" font-size="9.5">the private network</text>
+    <text x="832" y="315" fill="#5A6675" font-size="9">as narrow as a NetworkPolicy can say it</text>
+
+    <rect x="8" y="336" width="944" height="56" rx="11" fill="#141C27" stroke="#2a3547"/>
+    <text x="480" y="356" fill="#E9EFF6" font-size="10.5" font-weight="700">GOTCHAS.md: 77 traps, each one labelled with whose fault it was</text>
+    <text x="480" y="372" fill="#8A97A6" font-size="9.5">37 platform, 27 ours, 10 the stack's own contract, 3 upstream, nothing unclassified</text>
+    <text x="480" y="386" fill="#5A6675" font-size="9">a ledger where everything is somebody else's fault is marketing, so the count of our own is the one that matters</text>
+
+    <text x="860" y="412" fill="#5A6675" font-size="9.5">github.com/TAIPANBOX/stack-k8s</text>
+    <text x="230" y="412" fill="#5A6675" font-size="9.5">the same stack, three shapes: your machine, one box, a cluster</text>
+  </g>
+</svg>
