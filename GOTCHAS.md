@@ -2415,3 +2415,99 @@ on the volume and fails the run when it watches zero of a non-zero number.
 fix on this side. The volume is doing something intermittent that the CSI layer
 does not surface, and the durable defence is in how a consumer asks the
 question, not in the storage class.
+
+---
+
+## 75. A check read an ABSENT answer as a zero, and failed the run on it
+
+**Ours, and fixed.** `verify.sh` compares what the notifier says it watches
+against what is on the volume. It found no "watching" line in the pod's log,
+treated that as "watches zero", and reported:
+
+```
+FAIL  the notifier sees none of the 3 event log(s) that exist
+```
+
+It was watching all three. The line was missing because that notifier had been
+installed deliberately without mail, and in that case its build printed
+"notifications are OFF" INSTEAD of the line naming its input.
+
+**What it costs:** the same as item 73's, and this check was written the same
+day as the fix for 73. A run that reports a failure nobody can reproduce is
+worse than a run that says nothing: somebody spends an hour on a healthy
+component, and everybody trusts the suite a little less afterwards.
+
+**The rule, which this repo now has three entries about:** an ABSENT answer and
+an answer of zero are different, and a check must not convert one into the
+other. `${x:-0}` is exactly that conversion, which is why the fix is a case on
+the raw value before any default is applied.
+
+**Fixed on both sides.** Here, a missing line is a `note` naming what could not
+be compared. In heraldyx, the process now reports what it reads and whether it
+can send as two separate lines, because those are two facts and an operator
+debugging silence needs both (TAIPANBOX/heraldyx#16).
+
+**Why this is worth a ledger line rather than a one-word fix:** the pattern is
+not about this line. Any check that greps for evidence of health has to decide
+what silence means, and silence is not a measurement.
+
+---
+
+## 76. A CronJob sharing a ReadWriteOnce volume with a Deployment waits forever
+
+**Ours, meeting a platform fact.** The nightly crypto scan mounts
+`console-state` to read what the console keeps there. That claim is
+ReadWriteOnce, and the console holds it for as long as it runs.
+
+A ReadWriteOnce volume can be mounted by several pods on ONE node and by no pod
+anywhere else. So the Job does not fail fast when the scheduler puts it
+elsewhere: it sits `Pending` with
+
+```
+Multi-Attach error for volume "pvc-...": Volume is already used by pod(s) genaryx-console-...
+```
+
+and stays there. On a three-node cluster that is a two-in-three chance, every
+night, of a scan that silently does not happen.
+
+**What it costs:** a routine that fails loudly gets fixed. One that waits gets
+noticed the day somebody asks for the report and finds none, which was
+2026-08-03, the first time this job had ever been run at all.
+
+**The fix:** `requiredDuringSchedulingIgnoredDuringExecution` pod affinity onto
+the console's node. Required rather than preferred, because landing elsewhere is
+not a degraded run, it is no run.
+
+**The rule:** a Job that shares a volume with a long-running workload has to say
+where it runs. RWO is not a hint, and "the scheduler will probably co-locate
+them" is not a plan.
+
+---
+
+## 77. Three scheduled routines, none of which had ever run
+
+**Ours, and fixed.** The stack ships three CronJobs. On 2026-08-03 all three
+were triggered by hand for the first time, and only one worked.
+
+`identity-sweep` ran and reported. `crypto-trend` was stuck on item 76, and
+once that was fixed it exited immediately with `open /var/lib/stack/scan: no
+such file or directory`: it scanned a subdirectory of its volume that nothing
+creates. Two independent faults, and the first hid the second.
+
+`drills` had three. Its image carried no scenarios, so `mockryx run` refused
+before doing anything (fixed in that repo: the scenarios now ship inside the
+image). Its pod carried no label any NetworkPolicy admits, so once it could
+start, every request to the gateway was dropped and every scenario reported a
+timeout instead of a verdict. And a drop is symmetrical, so it needed both an
+egress rule of its own and an ingress rule on the gateway, each one port wide.
+
+**What it costs:** each fault hides the ones behind it, so the count of what is
+broken is never known until the first one is fixed. Three fixes in, the drill
+finally reported something real: one guardrail proven (a forged delegation
+chain refused), two reported as not configured on this deployment, and two
+genuine gaps.
+
+**The rule this repo keeps relearning:** a scheduled job that has never been
+run once by hand is not a feature, it is an intention. Trigger every CronJob
+manually on the first cluster that has them, because the schedule will not tell
+you and a weekly job leaves nothing behind but a `Failed` pod that ages out.

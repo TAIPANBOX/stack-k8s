@@ -363,8 +363,15 @@ else
   if [ -n "$hpod" ] && [ "$CONSOLE_READY" = 1 ]; then
     watching="$(kc logs "$hpod" --tail=50 2>/dev/null | grep -o 'watching [0-9]* file(s)' | tail -1 | awk '{print $2}')"
     present="$(inpod "import glob; print(len(glob.glob('/var/lib/stack/events/*.ndjson')))")"
-    case "${watching:-}${present:-}" in
-      "") note "the notifier's build does not report what it watches: cannot compare" ;;
+    # An ABSENT count and a count of zero are different answers, and this
+    # check treated them as one. Measured on a live cluster 2026-08-03: a
+    # notifier deliberately installed without mail printed no "watching" line
+    # at all (fixed in heraldyx, which now reports what it reads whether or not
+    # it can send), and this said it "sees none of the 3 event logs that
+    # exist". It saw all three. A check must not report a state it did not
+    # observe, which is GOTCHAS 73's rule pointed the other way.
+    case "${watching:-}" in
+      "") note "this notifier build does not report what it watches: nothing to compare against the ${present:-0} log(s) on the volume" ;;
       *)
         if [ "${watching:-0}" = 0 ] && [ "${present:-0}" -gt 0 ]; then
           bad "the notifier sees none of the ${present} event log(s) that exist: its mount answers but its directory does not (GOTCHAS 74)"
