@@ -144,20 +144,56 @@ echo "$out" | sed 's/^/  /'
 echo "$out" | grep -q FAIL && bad "a plane did not answer" || ok "all five planes answer 200"
 
 head_ "the data the console governs"
-inpod "
+# Each plane with ITS OWN credential. The money plane and the policy plane do
+# not share one, and asking wardryx with the cloud's admin key gets a 401.
+#
+# This section used to do exactly that, and the way it failed is the reason it
+# now reports a verdict. One raised exception ended the whole script before any
+# print, `inpod` swallowed stderr, and the section rendered as a heading with
+# nothing under it while the run still ended in "14 passed, 0 failed". Silence
+# from a check reads as success to everyone including the person who wrote it.
+# Measured on a live cluster 2026-08-02, where two of the five calls had been
+# 401 for as long as the section has existed.
+#
+# So: every call is attempted, each failure is named, and the section fails the
+# run instead of disappearing from it. That is invariant 5 of this repo, which
+# says a verification check must be able to fail.
+gov="$(inpod "
 import os, urllib.request, json
-def g(host, path, key=True):
-    h = {'Authorization': 'Bearer ' + os.environ.get('TOKENFUSE_CLOUD_ADMIN_KEY','')} if key else {}
+def g(host, path, key=''):
+    h = {'Authorization': 'Bearer ' + os.environ.get(key,'')} if key else {}
     return json.loads(urllib.request.urlopen(urllib.request.Request(host+path, headers=h), timeout=30).read())
-runs = g('http://tokenfuse-cloud:8080', '/v1/runs')
-al   = g('http://tokenfuse-cloud:8080', '/v1/alerts')
-pol  = g('http://wardryx:8090', '/v1/policies')
-apr  = g('http://wardryx:8090', '/v1/approvals') or []
-ids  = g('http://idryx:8081', '/api/identities', False)
-print('  money    %d runs, \$%.2f settled, %d budget alerts' % (len(runs), sum(r.get('spent_microusd',0) for r in runs)/1e6, len(al)))
-print('  policy   %d policies (%d console blocks), %d approvals' % (len(pol), sum(1 for p in pol if p['id'].startswith('console-block')), len(apr)))
-print('  identity %d identities' % len(ids))
-"
+CLOUD, POLICY = 'TOKENFUSE_CLOUD_ADMIN_KEY', 'WARDRYX_ADMIN_KEY'
+got, bad = {}, []
+for name, host, path, key in [
+        ('runs',      'http://tokenfuse-cloud:8080', '/v1/runs',       CLOUD),
+        ('alerts',    'http://tokenfuse-cloud:8080', '/v1/alerts',     CLOUD),
+        ('policies',  'http://wardryx:8090',         '/v1/policies',   POLICY),
+        ('approvals', 'http://wardryx:8090',         '/v1/approvals',  POLICY),
+        ('identities','http://idryx:8081',           '/api/identities', '')]:
+    try:
+        got[name] = g(host, path, key) or []
+    except Exception as e:
+        bad.append('%s: %s' % (name, e))
+if 'runs' in got and 'alerts' in got:
+    print('  money    %d runs, \$%.2f settled, %d budget alerts' % (len(got['runs']), sum(r.get('spent_microusd',0) for r in got['runs'])/1e6, len(got['alerts'])))
+if 'policies' in got:
+    print('  policy   %d policies (%d console blocks), %d approvals' % (len(got['policies']), sum(1 for p in got['policies'] if p['id'].startswith('console-block')), len(got.get('approvals', []))))
+if 'identities' in got:
+    print('  identity %d identities' % len(got['identities']))
+for b in bad:
+    print('  UNREACHABLE ' + b)
+")"
+if [ -z "$gov" ]; then
+  bad "the console could not be asked what it governs at all: no output from the probe"
+else
+  echo "$gov" | sed 's/^/  /' | sed 's/^  //'
+  if echo "$gov" | grep -q UNREACHABLE; then
+    bad "the console cannot read one of the planes it governs"
+  else
+    ok "the console can read all three planes it governs"
+  fi
+fi
 
 head_ "the console is reading a real environment, not fixtures"
 # GOTCHAS 16: with no descriptor the bus serves DEMO fixtures and the Graph

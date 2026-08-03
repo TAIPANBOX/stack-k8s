@@ -35,12 +35,13 @@ The honest count of our own mistakes is what makes the platform classifications
 worth believing. A ledger where everything is somebody else's fault is
 marketing.
 
-**Measured 2026-08-02, not estimated: 72 entries, 36 platform, 23 ours, 10 the
+**Measured 2026-08-03, not estimated: 73 entries, 36 platform, 24 ours, 10 the
 stack's own contract, 3 upstream. Nothing unclassified.** (70 on 2026-07-31;
-the two added since are 71, bash counting quotes inside a heredoc it was told
-to treat literally, and 72, `kubectl get -o yaml` printing configuration that
-was deleted, which made a new check pass on the very defect it was written to
-catch.)
+the three added since are 71, bash counting quotes inside a heredoc it was told
+to treat literally; 72, `kubectl get -o yaml` printing configuration that was
+deleted, which made a new check pass on the very defect it was written to
+catch; and 73, a whole verify.sh section rendering as an empty heading while
+the run reported everything passing.)
 
 A note on how that number was arrived at, because it is the point of this whole
 file. The first version of the gate knew only `Platform` and `Ours`, reported
