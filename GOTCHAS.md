@@ -2375,3 +2375,43 @@ moved on.
 **Why this is worth a ledger line:** the same shape is available to every check
 that prints instead of judging, and this file has had two of them this week
 (item 71's sibling in the notifier section, and this one).
+
+---
+
+## 74. An RWX volume can fail `stat` on its own mount point and list its files anyway
+
+**Platform.** The shared event volume answered `Remote I/O error` for the
+directory itself while listing the three logs inside it in the same command:
+
+```
+ls: /var/lib/stack/events/.: Remote I/O error
+-rw-r--r--  1 10001 10001  5019  tokenfuse-cloud.ndjson
+-rw-r--r--  1 10001 10001     0  tokenfuse.ndjson
+-rw-r--r--  1 65532 65532     0  wardryx.ndjson
+```
+
+Same node, same claim, same read-only mount: a busybox pod started a minute
+earlier saw everything, and a pod mirroring the notifier's exact mounts got the
+error. It is intermittent, per-mount, and it does not stop the pod: the kubelet
+mounted the volume, the container is Running, and the files are readable.
+
+**What it costs:** any process that decides "is there anything to read here" by
+stat'ing the directory concludes there is nothing, forever, with a fully
+readable log underneath it. The notifier did exactly that: up, mounted,
+authenticated to a mail server, input silently zero. Nothing in the deployment
+said so, because from every other angle a notifier watching nothing looks like
+a notifier watching a quiet fleet.
+
+**The rule:** never let one `stat` decide whether a shared volume has content.
+`ENOENT` is absence; anything else is a failure to answer, and a failure to
+answer is not a "no". Read the directory. heraldyx now does, and reports the
+count of logs it actually found at startup rather than the paths it was
+configured with, which is the only reason this was visible at all.
+
+**In this repo:** `verify.sh` compares the notifier's own count against what is
+on the volume and fails the run when it watches zero of a non-zero number.
+
+**Why this is worth a ledger line rather than a fix here:** there is nothing to
+fix on this side. The volume is doing something intermittent that the CSI layer
+does not surface, and the durable defence is in how a consumer asks the
+question, not in the storage class.
