@@ -76,6 +76,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/gotchas-classified.sh
 ./scripts/closed-by-default.sh
 ./scripts/portability-claims.sh
+./scripts/pinned-images.sh
 ```
 
 Anything that provisions real infrastructure is not a gate and never runs
@@ -126,6 +127,25 @@ an absent invariant.
    blank means it needs the run.
    *(gate: `scripts/portability-claims.sh`, which also requires each provider
    column to carry a dated provenance line)*
+
+7. **What runs is pinned, or built here from a checkout the deploy names.**
+   The five Go planes are pulled from `ghcr.io/taipanbox/<name>` at an
+   immutable version tag; `tokenfuse` and the console are built on the node
+   because neither is published. Nothing may use `:latest`, `:main` or any
+   other tag that moves.
+
+   The failure this refuses is silent by construction: a pod that comes back
+   different after a restart nobody ran, and a rollback that has nowhere to go
+   because there is no earlier tag. Upgrading is therefore a visible edit to a
+   manifest, which is also what makes the version somebody reported reproducible
+   a month later.
+
+   One upstream image is deliberately not pinned by digest and the gate says so
+   out loud rather than passing it in silence: `postgres:16-alpine` moves inside
+   the 16 series to pick up patch releases of the database holding what the
+   fleet is permitted to do.
+   *(gate: `scripts/pinned-images.sh`; verified by pointing a manifest at
+   `:latest`, which fails it)*
 
 ## Decisions that have no gate yet
 

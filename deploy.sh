@@ -344,7 +344,15 @@ fi
 # Dockerfile refers to it by that path, which is the name it has in the
 # development tree these images were first built from. Renaming it is a change
 # to every Dockerfile and every build script, so the clone is named to match.
-OPEN_REPOS="wardryx idryx qryx mockryx heraldyx tokenfuse verdryx engram"
+# Cloned because something on the node still BUILDS from them: tokenfuse for
+# its own image, and qryx, mockryx, verdryx and engram because the console
+# image bundles those four tools inside itself (see images/console.Dockerfile).
+#
+# wardryx, idryx and heraldyx are gone from this list on purpose: their images
+# are pulled from ghcr.io now, so cloning their source on the node would be
+# fetching something nothing reads. Their policy and config come from the
+# manifests, not from their repositories.
+OPEN_REPOS="qryx mockryx tokenfuse verdryx engram"
 if [ "$SKIP_IMAGES" = 1 ]; then
   say "skipping the image build (--skip-images)"
 else
@@ -392,15 +400,26 @@ else
     echo "   no --console-token: deploying the open stack without the Genaryx console"
   fi
 
-  say "building images (the console build is four languages and takes the longest)"
+  # The five Go planes are NOT built here any more. They are published, pinned
+  # by version in the manifests, and pulled by the kubelet:
+  #
+  #   ghcr.io/taipanbox/{wardryx,idryx,qryx,mockryx,heraldyx}
+  #
+  # That removes the slowest and most fragile part of a first install. Building
+  # them here meant a Go toolchain on the node, a clone of five repositories,
+  # and a docker save piped over ssh to every other node; two of the defects a
+  # live run found on 2026-08-02 lived in that path rather than in any service.
+  # What nobody builds, nobody breaks.
+  #
+  # What is still built is what is not published: tokenfuse (Rust) and the
+  # console (built from source per install), plus the two tiny tunnel images.
+  #
+  # The trade is that every node now needs to reach ghcr.io. These nodes
+  # already reach the internet to install k3s, Longhorn and Calico, so this
+  # adds a host to that list rather than a requirement.
+  say "building what is not published (the console build is four languages and takes the longest)"
   sh_ "$BUILDER" "set -e
     cd /root/src
-    for pair in wardryx:wardryx idryx:idryx qryx:qryx mockryx:mockryx heraldyx:heraldyx; do
-      name=\${pair%%:*}; repo=\${pair##*:}
-      docker build -q -f stack-k8s/images/go-service.Dockerfile \
-        --build-arg SERVICE=\$name --build-arg SRC=./\$repo -t stack/\$name:dev . >/dev/null
-      echo \"   built stack/\$name:dev\"
-    done
     docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
     echo '   built stack/tokenfuse:dev'
     # The operator tunnel needs these two, and nothing else builds them. Left
@@ -418,8 +437,7 @@ else
     fi"
 
   say "importing images into every node's containerd"
-  IMAGES="stack/wardryx:dev stack/idryx:dev stack/qryx:dev stack/mockryx:dev stack/heraldyx:dev stack/tokenfuse:dev"
-  IMAGES="$IMAGES stack/wg:dev stack/caddy:dev"
+  IMAGES="stack/tokenfuse:dev stack/wg:dev stack/caddy:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
   PRIVS=""
   for n in "${ALL_NODES[@]}"; do

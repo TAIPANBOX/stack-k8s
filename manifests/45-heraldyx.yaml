@@ -22,6 +22,16 @@
 # Without that Secret this Deployment runs, stays healthy, watches the log and
 # sends nothing. That is deliberate (heraldyx invariant 4): not having mail is
 # a choice an operator makes, not a broken deployment.
+#
+# Five of the planes are PULLED, pinned to an immutable version tag, and two
+# are still built on the node: `stack/tokenfuse:dev` (Rust, not published) and
+# `stack/genaryx-console:dev` (built from source per install). The rule for
+# which is which is in ../CLAUDE.md, invariant 7.
+#
+# A pinned tag rather than `:latest` or `:dev`, deliberately: "which build is
+# running" has to have an answer that does not change under the operator. It
+# also means an upgrade is a visible edit to this file and a rollout somebody
+# ran, rather than a pod that quietly came back different.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -67,7 +77,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: heraldyx
-          image: stack/heraldyx:dev
+          image: ghcr.io/taipanbox/heraldyx:v0.2.2
           imagePullPolicy: IfNotPresent
           env:
             # The deployment's own shape. What the OPERATOR chooses (who to
