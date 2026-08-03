@@ -2415,3 +2415,38 @@ on the volume and fails the run when it watches zero of a non-zero number.
 fix on this side. The volume is doing something intermittent that the CSI layer
 does not surface, and the durable defence is in how a consumer asks the
 question, not in the storage class.
+
+---
+
+## 75. A check read an ABSENT answer as a zero, and failed the run on it
+
+**Ours, and fixed.** `verify.sh` compares what the notifier says it watches
+against what is on the volume. It found no "watching" line in the pod's log,
+treated that as "watches zero", and reported:
+
+```
+FAIL  the notifier sees none of the 3 event log(s) that exist
+```
+
+It was watching all three. The line was missing because that notifier had been
+installed deliberately without mail, and in that case its build printed
+"notifications are OFF" INSTEAD of the line naming its input.
+
+**What it costs:** the same as item 73's, and this check was written the same
+day as the fix for 73. A run that reports a failure nobody can reproduce is
+worse than a run that says nothing: somebody spends an hour on a healthy
+component, and everybody trusts the suite a little less afterwards.
+
+**The rule, which this repo now has three entries about:** an ABSENT answer and
+an answer of zero are different, and a check must not convert one into the
+other. `${x:-0}` is exactly that conversion, which is why the fix is a case on
+the raw value before any default is applied.
+
+**Fixed on both sides.** Here, a missing line is a `note` naming what could not
+be compared. In heraldyx, the process now reports what it reads and whether it
+can send as two separate lines, because those are two facts and an operator
+debugging silence needs both (TAIPANBOX/heraldyx#16).
+
+**Why this is worth a ledger line rather than a one-word fix:** the pattern is
+not about this line. Any check that greps for evidence of health has to decide
+what silence means, and silence is not a measurement.
