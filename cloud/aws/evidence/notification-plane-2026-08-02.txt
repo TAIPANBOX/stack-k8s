@@ -1,0 +1,69 @@
+
+[1mnodes[0m
+NAME             READY   PROVIDER                                   IP
+ip-10-10-0-164   Ready   aws:///eu-central-1a/i-0bff118391dc3e421   10.10.0.164
+ip-10-10-0-20    Ready   aws:///eu-central-1a/i-0f32ee2c1c6d6dfbb   10.10.0.20
+ip-10-10-0-25    Ready   aws:///eu-central-1a/i-0ab65a69faafa72cf   10.10.0.25
+ip-10-10-0-60    Ready   aws:///eu-central-1a/i-094653d0cc9d90130   10.10.0.60
+ip-10-10-0-61    Ready   aws:///eu-central-1a/i-0051f0ebd24c9579c   10.10.0.61
+  [32mok[0m   every node Ready
+
+[1mpods[0m
+POD                                NODE             READY   STATUS
+genaryx-console-675f84b5b5-dngs9   ip-10-10-0-60    true    Running
+heraldyx-68c5489f6d-x5sn4          ip-10-10-0-20    true    Running
+idryx-577c9b775b-4qbks             ip-10-10-0-25    true    Running
+policy-db-0                        ip-10-10-0-25    true    Running
+tokenfuse-cloud-759cbdfdc9-c5pff   ip-10-10-0-164   true    Running
+tokenfuse-gateway-64755559-zxlmp   ip-10-10-0-164   true    Running
+wardryx-cc8f4fc75-9hx6p            ip-10-10-0-164   true    Running
+  [32mok[0m   every pod Running (finished Job pods ignored)
+  [32mok[0m   workload spread over 4 nodes
+
+[1mstorage[0m
+CLAIM              MODE              CLASS       STATUS   SIZE
+cloud-state        [ReadWriteOnce]   longhorn    Bound    2Gi
+console-state      [ReadWriteOnce]   longhorn    Bound    2Gi
+data-policy-db-0   [ReadWriteOnce]   longhorn    Bound    5Gi
+heraldyx-state     [ReadWriteOnce]   longhorn    Bound    1Gi
+stack-events       [ReadWriteMany]   stack-rwx   Bound    5Gi
+  [32mok[0m   the RWX event volume is Bound
+  [32mok[0m   1 default StorageClass
+
+[1mnetwork policy is actually enforced[0m
+  [32mok[0m   9 NetworkPolicies present
+  [32mok[0m   default-deny holds (the console cannot reach the policy store)
+
+[1mevery plane answers[0m
+  cloud 200
+  gateway 200
+  wardryx 200
+  idryx 200
+  console 200
+  [32mok[0m   all five planes answer 200
+
+[1mthe data the console governs[0m
+  money    15 runs, $34.84 settled, 11 budget alerts
+  policy   0 policies (0 console blocks), 0 approvals
+  identity 0 identities
+  [32mok[0m   the console can read all three planes it governs
+
+[1mthe console is reading a real environment, not fixtures[0m
+  [32mok[0m   an environment descriptor is mounted
+
+[1mthe notifier[0m
+  [32mok[0m   the notifier is running
+  [32mok[0m   the notifier mounts the event log read-only
+  [32mok[0m   3 plane(s) are configured to write the shared event log
+  [32mok[0m   the notifier's state volume is writable by it (fsGroup 65532)
+  [32mok[0m   the notifier watches all 3 event log(s) that exist
+    journal: /var/lib/stack/heraldyx/sent.ndjson
+    records: 19 (alert 19)
+    outcome: 19 accepted, 0 refused
+    chain:   verifies (18 chained, 1 head(s))
+    last:    2026-08-02T21:51:06Z  budget_exhausted:run-99 -> yukosemail@gmail.com, fedoraemail@gmail.com (accepted)
+  [32mok[0m   the dispatch record is intact
+
+[1mresult[0m
+  16 passed, 0 failed
+
