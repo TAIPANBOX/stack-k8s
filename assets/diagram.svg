@@ -7,6 +7,9 @@
     <marker id="sk-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
       <path d="M0 0 L8 4 L0 8 z" fill="#5A6675"/>
     </marker>
+    <marker id="sk-r" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#3FB950"/>
+    </marker>
     <marker id="sk-b" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
       <path d="M0 0 L8 4 L0 8 z" fill="#4493F8"/>
     </marker>
@@ -27,21 +30,23 @@
     <text x="165" y="99" fill="#8A97A6" font-size="9.5" font-weight="700">FACT 1  they couple through a log, not APIs</text>
 
     <rect x="24" y="108" width="122" height="30" rx="7" fill="#141C27" stroke="#2a3547"/>
-    <text x="85" y="127" fill="#E9EFF6" font-size="10">tokenfuse</text>
+    <text x="85" y="127" fill="#E9EFF6" font-size="10">tokenfuse-gateway</text>
     <rect x="24" y="144" width="122" height="30" rx="7" fill="#141C27" stroke="#2a3547"/>
-    <text x="85" y="163" fill="#E9EFF6" font-size="10">wardryx</text>
+    <text x="85" y="163" fill="#E9EFF6" font-size="10">tokenfuse-cloud</text>
     <rect x="24" y="180" width="122" height="30" rx="7" fill="#141C27" stroke="#2a3547"/>
-    <text x="85" y="199" fill="#E9EFF6" font-size="10">idryx</text>
+    <text x="85" y="199" fill="#E9EFF6" font-size="10">wardryx</text>
     <rect x="24" y="216" width="122" height="30" rx="7" fill="#141C27" stroke="#2a3547"/>
-    <text x="85" y="235" fill="#E9EFF6" font-size="10">verdryx</text>
-    <rect x="24" y="252" width="122" height="30" rx="7" fill="#141C27" stroke="#2a3547"/>
-    <text x="85" y="271" fill="#E9EFF6" font-size="10">mockryx</text>
+    <text x="85" y="235" fill="#E9EFF6" font-size="10">mockryx</text>
 
     <path d="M150 123 L172 123" stroke="#5A6675" stroke-width="1.1" marker-end="url(#sk-a)" fill="none"/>
     <path d="M150 159 L172 159" stroke="#5A6675" stroke-width="1.1" marker-end="url(#sk-a)" fill="none"/>
     <path d="M150 195 L172 195" stroke="#5A6675" stroke-width="1.1" marker-end="url(#sk-a)" fill="none"/>
     <path d="M150 231 L172 231" stroke="#5A6675" stroke-width="1.1" marker-end="url(#sk-a)" fill="none"/>
-    <path d="M150 267 L172 267" stroke="#5A6675" stroke-width="1.1" marker-end="url(#sk-a)" fill="none"/>
+
+    <text x="85" y="264" fill="#5A6675" font-size="9">and one that only reads:</text>
+    <rect x="24" y="270" width="122" height="26" rx="7" fill="#141C27" stroke="#3FB950"/>
+    <text x="85" y="287" fill="#E9EFF6" font-size="10">idryx</text>
+    <path d="M172 283 L150 283" stroke="#3FB950" stroke-width="1.1" marker-end="url(#sk-r)" fill="none"/>
 
     <rect x="176" y="108" width="130" height="174" rx="10" fill="#10161F" stroke="#4493F8"/>
     <text x="241" y="131" fill="#4493F8" font-size="10.5" font-weight="700">one volume</text>
