@@ -77,6 +77,12 @@ data:
   # identity graph; heraldyx reads the directory and picks up both.
   TOKENFUSE_CLOUD_EVENTS_PATH: "/var/lib/stack/events/tokenfuse-cloud.ndjson"
   WARDRYX_EVENTS_PATH: "/var/lib/stack/events/wardryx.ndjson"
+  # The drill harness writes here too, and until 2026-08-03 it did not write
+  # anywhere. It ran, it found gaps, and `sim_finding` reached nothing: the
+  # notifier has a sentence for that type and the operator was never going to
+  # see it. Same shape as the control plane's exporter being off, one plane
+  # over. Its own file for the same reason as the others.
+  MOCKRYX_EVENTS_PATH: "/var/lib/stack/events/mockryx.ndjson"
 ---
 # The environment descriptor, which is the piece a Kubernetes deployment has
 # no other way to produce.

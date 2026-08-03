@@ -2511,3 +2511,40 @@ genuine gaps.
 run once by hand is not a feature, it is an intention. Trigger every CronJob
 manually on the first cluster that has them, because the schedule will not tell
 you and a weekly job leaves nothing behind but a `Failed` pod that ages out.
+
+---
+
+## 78. The drill found real gaps and told nobody, because it had nowhere to write
+
+**Ours, and fixed.** Item 77 ends with the drill finally reporting something
+real: one guardrail proven, two not configured on this deployment, and two
+genuine gaps. Those two gaps reached a job log and stopped there.
+
+`mockryx` emits `sim_run`, `sim_finding` and `blast_radius_measured` only when
+`MOCKRYX_EVENTS_PATH` is set, and it is best-effort by design: an unset path is
+silence, not an error, because a pre-production rehearsal must never fail over
+its own telemetry. The `drills` CronJob set no such path and mounted no events
+volume at all, so the notifier had a sentence prepared for `sim_finding` and was
+never going to use it.
+
+Measured 2026-08-03 across the three deployment repositories, because one plane
+being unwired suggested asking about the rest:
+
+| plane | events destination wired |
+|---|---|
+| tokenfuse gateway | 3 of 3 |
+| tokenfuse cloud | 2 of 3 |
+| wardryx | 2 of 3 (env var here, a positional argument in stack-single) |
+| mockryx | 0 of 3 |
+| verdryx | 0 of 3 |
+
+**What it costs:** the shape is identical to item 14, where the control plane
+ran with its exporter off and the notifier read an empty directory in perfect
+silence. That was fixed for that one plane and never swept for the others, so
+the same defect sat in two more. A fix applied to the instance rather than to
+the class is a fix that will be found again, on a different plane, by a
+different person, on a different night.
+
+**The tell to look for:** a plane whose emitter is opt-in, and a deployment that
+does not opt in. Every emitter in this stack is opt-in on purpose, so this is a
+class, not an accident: nothing here defaults to writing.
