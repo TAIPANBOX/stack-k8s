@@ -76,10 +76,12 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | Deployment + Service | `wardryx` | 8090 |
 | Deployment + Service | `idryx` | 8081 |
 | Deployment + Service | `genaryx-console` (with qryx, verdryx, engram, mockryx inside) | 7420 |
+| StatefulSet + Service | the policy store: Postgres behind `wardryx`, holding its approvals and its runtime policy documents | 5432 |
 | PersistentVolumeClaim (RWX) | the shared event directory | |
 | PersistentVolumeClaim | `verdryx.db`, `engram.engram` stores | |
 | CronJob | the governance routines (`routines.sh`'s FinOps export, crypto trend, quality drift, identity sweep) | |
 | NetworkPolicy | default-deny, then exactly the paths above | |
+| Deployment + PVC + NetworkPolicy | `heraldyx`, the notifier. **Not in the default apply**, see "Being told, rather than watching" below. No Service and no port: it reads the event log and sends mail, so nothing calls it | |
 
 ## Keys stay yours
 
@@ -288,8 +290,21 @@ down:
 
 The command output behind every sentence above is in `evidence/` and
 `cloud/*/evidence/`. Every trap the runs cost us is written up in
-`GOTCHAS.md`, now **70 items**, each already fixed here, which is the whole
-point: the next person to run this should not meet any of them.
+`GOTCHAS.md`, now **78 items** (37 platform, 28 ours, 10 the stack's own
+contract, 3 upstream), each already fixed here, which is the whole point: the
+next person to run this should not meet any of them. The split matters more
+than the total: a ledger where everything is somebody else's fault is
+marketing, so the count of our own mistakes is what makes the other three
+columns worth believing.
+
+Both rows of numbers above are what those runs reported on those days, and
+`verify.sh` has grown since. A live run on 2026-08-02 found a whole section of
+it printing a heading with nothing under it while the summary still said
+everything passed: two of its five governance calls had been answering 401 for
+as long as the section existed, because it asked the policy plane with the
+money plane's admin key. That is GOTCHAS 73, and it is fixed, along with the
+shape that hid it: a check now produces a verdict or fails the run. So read
+"10 passed" as the suite of 25 to 27 July, not as today's.
 
 ## License
 
