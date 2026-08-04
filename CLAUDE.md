@@ -35,9 +35,10 @@ The honest count of our own mistakes is what makes the platform classifications
 worth believing. A ledger where everything is somebody else's fault is
 marketing.
 
-**Measured 2026-08-03, not estimated: 78 entries, 37 platform, 28 ours, 10 the
-stack's own contract, 3 upstream. Nothing unclassified.** (70 on 2026-07-31;
-the eight added since are 71, bash counting quotes inside a heredoc it was told
+**Measured 2026-08-04 by `./scripts/gotchas-classified.sh`, not estimated: 79
+entries, 37 platform, 28 ours, 10 the stack's own contract, 4 upstream. Nothing
+unclassified.** (70 on 2026-07-31;
+the nine added since are 71, bash counting quotes inside a heredoc it was told
 to treat literally; 72, `kubectl get -o yaml` printing configuration that was
 deleted, which made a new check pass on the very defect it was written to
 catch; 73, a whole verify.sh section rendering as an empty heading while the
@@ -46,9 +47,10 @@ point while listing the files inside it, which left the notifier deaf with a
 readable log underneath it; 75, a check reading an absent answer as a zero and failing the run on a
 notifier that was working; 76, a CronJob sharing a ReadWriteOnce volume
 with a Deployment and waiting forever; 77, three scheduled routines
-that had never once run, two of them broken in more than one way; and 78, the
+that had never once run, two of them broken in more than one way; 78, the
 drill from 77 finding real gaps and telling nobody, because its job had no
-events destination and no events volume at all.)
+events destination and no events volume at all; and 79, Longhorn reporting a
+volume attached before the mount it made can be stat'd.)
 
 A note on how that number was arrived at, because it is the point of this whole
 file. The first version of the gate knew only `Platform` and `Ours`, reported

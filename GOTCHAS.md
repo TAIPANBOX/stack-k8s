@@ -2551,6 +2551,9 @@ class, not an accident: nothing here defaults to writing.
 
 ## 79. Longhorn says the volume is attached before the mount is usable
 
+**Upstream.** Longhorn reports the attach complete before the mount it created can be stat'd, and
+it does that to every workload that uses it, not to ours specifically.
+
 `AttachVolume.Attach succeeded` is not the same event as "the path exists". A pod with a Longhorn
 PVC can fail container creation twice with
 
