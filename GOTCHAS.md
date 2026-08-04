@@ -2548,3 +2548,31 @@ different person, on a different night.
 **The tell to look for:** a plane whose emitter is opt-in, and a deployment that
 does not opt in. Every emitter in this stack is opt-in on purpose, so this is a
 class, not an accident: nothing here defaults to writing.
+
+## 79. Longhorn says the volume is attached before the mount is usable
+
+`AttachVolume.Attach succeeded` is not the same event as "the path exists". A pod with a Longhorn
+PVC can fail container creation twice with
+
+```
+failed to generate spec: failed to stat ".../volumes/kubernetes.io~csi/pvc-<id>/mount":
+remote I/O error
+```
+
+and start cleanly on the third attempt, with no intervention and nothing wrong.
+
+Measured 2026-08-04 on a fresh three-node AWS cluster: `wardryx` took two `CreateContainerError`
+retries before it came up, and the event sequence is unambiguous, attach reporting success 4
+seconds before the two stat failures.
+
+**Why it matters, given kubelet recovers on its own.** It is a race, and races get worse exactly
+where scale does. Seven pods cost a few seconds. A node coming back after a failure, an upgrade
+that restarts everything at once, or a cluster rebuilt from scratch all attach many volumes in the
+same instant, and the retry count grows with them.
+
+**So do not take a stateful pod's start time from a run on an idle cluster.** It is not a constant.
+Plan recovery-time estimates with room for retries, and if a start-up probe has a deadline, make
+sure the deadline is longer than a few CSI retries rather than a few seconds.
+
+Not our defect and nothing to fix in this repository. Written down because "it recovered by itself"
+and "it will always recover by itself" are different claims.

@@ -617,7 +617,7 @@ for ns in $($KUBECTL get ns -o jsonpath='{.items[*].metadata.name}'); do
   if [ "$pss" = "restricted" ] && [ "${nps:-0}" -gt 0 ]; then
     ok "namespace $ns: restricted Pod Security and $nps NetworkPolicies"
   else
-    note "namespace $ns: Pod Security '${pss:-none}', $nps NetworkPolicies - a privileged pod can run there"
+    note "namespace $ns: Pod Security '${pss:-none}', $nps NetworkPolicies - a privileged pod can run there (fix: kubectl apply -f manifests/60-harden-neighbours.yaml, read its header first)"
   fi
 done
 

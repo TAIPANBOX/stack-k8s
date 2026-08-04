@@ -1,0 +1,100 @@
+# Hardening for the namespaces this stack does NOT own.
+#
+#   kubectl apply -f manifests/60-harden-neighbours.yaml
+#
+# Deliberately not in kustomization.yaml, because it changes a namespace that
+# belongs to whoever runs the cluster rather than to this stack. Applying it is
+# their decision, and this file exists so that the decision is one command
+# rather than a research project.
+#
+# ---------------------------------------------------------------------------
+# What it is for
+# ---------------------------------------------------------------------------
+#
+# `security-tests.sh` check 12 reports, every run, that the `default` namespace
+# has Pod Security `none` and zero NetworkPolicies. Measured 2026-08-04 on a
+# fresh three-node cluster, and it is reported rather than asserted on purpose:
+# a suite that failed on somebody else's namespace would be claiming authority
+# it does not have.
+#
+# It is a note and not a failure for a reason worth stating: while this cluster
+# holds only `agent-stack`, nothing runs in `default` and the gap is
+# theoretical. The moment the cluster is shared, and sharing a cluster IS what
+# scaling one looks like, `default` becomes the cheapest way in: a privileged
+# pod runs there unopposed, reaches the node, and none of the twenty-five
+# checks that guard `agent-stack` are looking at it.
+#
+# The lesson generalises past this file: hardening has to travel with the
+# NAMESPACE, not with the cluster. A cluster is not hardened because one
+# namespace in it is.
+#
+# ---------------------------------------------------------------------------
+# What it does
+# ---------------------------------------------------------------------------
+#
+# 1. Pod Security `restricted` on `default`, enforced. Same admission profile
+#    `agent-stack` runs under. It refused a legitimate test pod during the
+#    2026-08-04 run for missing `allowPrivilegeEscalation=false`,
+#    `capabilities.drop=[ALL]`, `runAsNonRoot` and a seccomp profile, which is
+#    exactly the behaviour being asked for here.
+#
+# 2. Default-deny on both directions of pod traffic in `default`, minus DNS.
+#    A namespace nobody deploys into needs no connectivity, and one somebody
+#    starts deploying into should have to say what it needs.
+#
+# BEFORE APPLYING: if anything already runs in `default`, this WILL stop it.
+# That is the point, and it is why this is not applied for you. Check first:
+#
+#   kubectl -n default get pods
+#
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: default
+  labels:
+    # `enforce` rejects; `audit` and `warn` make the rejection legible in
+    # events and on the command line before it surprises somebody.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: default
+  annotations:
+    stack.it-rat.com/why: >-
+      An empty namespace with no policy is not empty of risk: it is a namespace
+      where the first pod anybody creates has the run of the cluster network.
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: default
+  annotations:
+    stack.it-rat.com/why: >-
+      The one exception to default-deny. Without DNS a pod fails in ways that
+      look like anything except a network policy, and the next person spends an
+      afternoon on it.
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
