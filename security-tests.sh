@@ -549,6 +549,63 @@ set -- $gw_env
 [ "${4:-unset}" != "unset" ] && ok "the gateway has a real upstream ($4)" \
   || bad "TOKENFUSE_UPSTREAM is unset: the gateway answers from a stub and meters invented tokens (GOTCHAS 22)"
 
+head_ "11b. the policy plane has actually decided something"
+# 11 reads four environment variables and passes when they are set correctly.
+# That is worth checking and it is not the same question as whether a verdict
+# was ever obtained. Measured on 2026-08-04: a deployment with all four
+# variables right answered every managed call with 403 because the decision
+# request was malformed, and 11 stayed green throughout. `failmode=closed`
+# turns that into total denial; `failmode=open` would turn the identical fault
+# into total bypass. Both look like "policy is working" from outside.
+#
+# So ask the gateway for one real ALLOW and one real DENY. Neither probe
+# reaches the model provider, so neither costs anything:
+#
+#   ALLOW: a budget smaller than any call. The PDP has to say allow before
+#          the ledger gets to say 402, so a 402 IS a positive verdict.
+#   DENY:  a tool the shipped policy forbids for agent://drill.local/*.
+#
+# Run from inside the gateway pod against its own port, because this is a
+# question about the gateway's decision path and not about who may reach it.
+# No curl in that image, so the request is spoken over bash's /dev/tcp.
+pdp_out="$(kc exec -i deploy/tokenfuse-gateway -- bash -s <<'PDPPROBE' 2>/dev/null
+ask() {
+  body="$1"; extra="$2"
+  exec 3<>/dev/tcp/127.0.0.1/4100 || { echo "unreachable"; return; }
+  printf 'POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nx-api-key: probe\r\nanthropic-version: 2023-06-01\r\ncontent-type: application/json\r\nx-fuse-run-id: sec-probe-pdp\r\nx-fuse-agent-id: agent://drill.local/sec-probe\r\n%sContent-Length: %d\r\nConnection: close\r\n\r\n%s' \
+    "$extra" "${#body}" "$body" >&3
+  timeout 8 cat <&3 2>/dev/null | tr -d '\r'
+  exec 3<&- 3>&-
+}
+tiny='{"model":"claude-haiku-4-5-20251001","max_tokens":8,"messages":[{"role":"user","content":"probe"}]}'
+tooled='{"model":"claude-haiku-4-5-20251001","max_tokens":8,"tools":[{"name":"shell_exec","description":"p","input_schema":{"type":"object"}}],"messages":[{"role":"user","content":"probe"}]}'
+echo "ALLOWPROBE $(ask "$tiny" 'x-fuse-budget-usd: 0.0000001
+' | head -1)"
+echo "DENYPROBE $(ask "$tooled" 'x-fuse-budget-usd: 5.0
+' | grep -iE '^HTTP/|^x-fuse-wardryx' | tr '\n' ' ')"
+PDPPROBE
+)"
+
+case "$pdp_out" in
+  *"ALLOWPROBE HTTP/1.1 402"*)
+    ok "the PDP returned a real ALLOW (a 402 means policy passed and the ledger stopped it)" ;;
+  *"ALLOWPROBE HTTP/1.1 403"*)
+    bad "every managed call is DENIED: the gateway is not getting verdicts, only failmode (check 11 cannot see this)" ;;
+  *unreachable*|"")
+    note "could not reach the gateway from its own pod: this check proved nothing" ;;
+  *)
+    note "unexpected allow-probe result, read it by hand: $(printf '%s' "$pdp_out" | head -1)" ;;
+esac
+
+case "$pdp_out" in
+  *"DENYPROBE"*"403"*"deny"*)
+    ok "the PDP returned a real DENY (forbidden tool refused with x-fuse-wardryx: deny)" ;;
+  *"DENYPROBE"*"200"*)
+    bad "a tool the policy forbids was ALLOWED: the PDP is answering but not enforcing" ;;
+  *)
+    note "deny-probe inconclusive, read it by hand: $(printf '%s' "$pdp_out" | grep DENYPROBE || echo none)" ;;
+esac
+
 head_ "12. the neighbouring namespaces"
 # GOTCHAS 23: this namespace is hardened; a neighbour is the platform's job.
 # Reported, not asserted: the suite cannot fix another namespace and must not
@@ -560,7 +617,7 @@ for ns in $($KUBECTL get ns -o jsonpath='{.items[*].metadata.name}'); do
   if [ "$pss" = "restricted" ] && [ "${nps:-0}" -gt 0 ]; then
     ok "namespace $ns: restricted Pod Security and $nps NetworkPolicies"
   else
-    note "namespace $ns: Pod Security '${pss:-none}', $nps NetworkPolicies - a privileged pod can run there"
+    note "namespace $ns: Pod Security '${pss:-none}', $nps NetworkPolicies - a privileged pod can run there (fix: kubectl apply -f manifests/60-harden-neighbours.yaml, read its header first)"
   fi
 done
 
