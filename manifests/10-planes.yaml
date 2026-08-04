@@ -150,6 +150,26 @@ spec:
             # enforce, not observe: an over-budget call gets a hard 402 rather
             # than a log line. This is the whole point of the gateway.
             - { name: TOKENFUSE_MODE, value: "enforce" }
+            # Two settings the gateway leaves OFF by default, and this stack
+            # must not, because they are the difference between a deployment
+            # that is governed and one that only looks governed.
+            #
+            # Measured on 2026-08-04 with real agents against the real
+            # provider: a call with no `x-fuse-run-id` reached Anthropic and
+            # was recorded in NO ledger, trace or event stream (all three
+            # NDJSON files stayed at 0 bytes), and secret scanning was off, so
+            # nothing looked at what the prompts contained. Both are correct
+            # defaults for a drop-in evaluation and wrong ones here: this
+            # stack's claim is that every call is accounted for.
+            - { name: TOKENFUSE_REQUIRE_RUN_ID, value: "1" }
+            # `block`, not `shadow`: shadow reports a leak it already let out.
+            # Note what this does and does not buy, so nobody reads more into
+            # it than is there. Measured the same day: a whole AWS key is
+            # stopped before the provider sees it, the 40-character secret
+            # half ALONE is not, and splitting a key across two phrases
+            # ("part one is AKIAIOSF and part two is ...") passes untouched.
+            # It catches carelessness. It does not stop intent.
+            - { name: TOKENFUSE_DLP, value: "block" }
             - { name: TOKENFUSE_DATA_DIR, value: "/var/lib/stack/traces/gateway" }
             # WHERE THE CALLS ACTUALLY GO. Leave this unset and the gateway does
             # not fail and does not warn: it answers every request itself from

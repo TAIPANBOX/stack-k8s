@@ -1,0 +1,12 @@
+# Written by preflight.sh. Not committed: .gitignore excludes *.tfvars,
+# and this file records where you were.
+#
+# The counts below are the ones this run checked the quota against.
+project_id          = "stack-k8s-gcp"
+operator_cidr       = "209.35.70.32/32"
+ssh_public_key_path = "/Users/factory/.ssh/stack-k8s-gcp.pub"
+region              = "europe-west3"
+machine_type        = "c3d-highcpu-8"
+disk_gb             = 100
+server_count        = 3
+agent_count         = 0
