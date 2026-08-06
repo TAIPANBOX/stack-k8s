@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-18 -18 996 446" width="996" height="446" role="img" aria-label="stack-k8s is the same stack as a Kubernetes workload, and the translation forces two architectural facts into the open: the planes couple through a shared read-write-many event volume rather than through APIs, and the console hosts five tools rather than being a client of four services. Egress is default-deny, and heraldyx is the one hole, applied from its own manifest and permitted only TCP 587, 465 and 25 to addresses outside the cluster and the private network">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-18 -18 996 446" width="996" height="446" role="img" aria-label="stack-k8s is the same stack as a Kubernetes workload, and the translation forces two architectural facts into the open: the planes couple through a shared read-write-many event volume rather than through APIs, and the console hosts five tools rather than being a client of four services. Egress is default-deny, and heraldyx is the one hole, applied from its own manifest and permitted only TCP 587, 465, 2525 and 25 to addresses outside the cluster and the private network">
   <title>stack-k8s: the same stack as manifests, where two facts about it stop being invisible</title>
   <rect x="-18" y="-18" width="996" height="446" rx="16" fill="#0A0E13"/>
   <rect x="-17.5" y="-17.5" width="995" height="445" rx="15.5" fill="none" stroke="rgba(255,255,255,.09)"/>
@@ -105,15 +105,15 @@
 
     <rect x="712" y="212" width="240" height="112" rx="12" fill="#10161F" stroke="#3FB950"/>
     <text x="832" y="233" fill="#3FB950" font-size="10.5" font-weight="700">the one hole, stated plainly</text>
-    <text x="832" y="252" fill="#C8D3E0" font-size="9.5">TCP 587, 465, 25</text>
+    <text x="832" y="252" fill="#C8D3E0" font-size="9.5">TCP 587, 465, 2525, 25</text>
     <text x="832" y="268" fill="#8A97A6" font-size="9.5">and only to addresses that are</text>
     <text x="832" y="282" fill="#8A97A6" font-size="9.5">NOT in the cluster and NOT in</text>
     <text x="832" y="296" fill="#8A97A6" font-size="9.5">the private network</text>
     <text x="832" y="315" fill="#5A6675" font-size="9">as narrow as a NetworkPolicy can say it</text>
 
     <rect x="8" y="336" width="944" height="56" rx="11" fill="#141C27" stroke="#2a3547"/>
-    <text x="480" y="356" fill="#E9EFF6" font-size="10.5" font-weight="700">GOTCHAS.md: 77 traps, each one labelled with whose fault it was</text>
-    <text x="480" y="372" fill="#8A97A6" font-size="9.5">37 platform, 27 ours, 10 the stack's own contract, 3 upstream, nothing unclassified</text>
+    <text x="480" y="356" fill="#E9EFF6" font-size="10.5" font-weight="700">GOTCHAS.md: 81 traps, each one labelled with whose fault it was</text>
+    <text x="480" y="372" fill="#8A97A6" font-size="9.5">37 platform, 30 ours, 10 the stack's own contract, 4 upstream, nothing unclassified</text>
     <text x="480" y="386" fill="#5A6675" font-size="9">a ledger where everything is somebody else's fault is marketing, so the count of our own is the one that matters</text>
 
     <text x="860" y="412" fill="#5A6675" font-size="9.5">github.com/TAIPANBOX/stack-k8s</text>

@@ -83,6 +83,15 @@ data:
   # see it. Same shape as the control plane's exporter being off, one plane
   # over. Its own file for the same reason as the others.
   MOCKRYX_EVENTS_PATH: "/var/lib/stack/events/mockryx.ndjson"
+  # quality-drift's own config, mirroring stack-up/routines.sh's
+  # ROUTINE_VERDRYX_BASELINE and ROUTINE_VERDRYX_WINDOW (see README under
+  # "Scheduled governance runs" there). Baseline is empty on purpose: it names
+  # which eval run counts as "before", which is a choice this repo cannot make
+  # for you, and there is no default that would not be a guess. Empty means
+  # the CronJob in 40-routines-and-secrets.yaml runs and skips, same as the
+  # routine it mirrors does when unset. Edit this ConfigMap to turn it on.
+  ROUTINE_VERDRYX_BASELINE: ""
+  ROUTINE_VERDRYX_WINDOW: "5"
 ---
 # The environment descriptor, which is the piece a Kubernetes deployment has
 # no other way to produce.
@@ -144,11 +153,23 @@ metadata:
 data:
   # The same starter policy `up.sh` seeds, scoped to fire-drill identities only
   # so a fresh cluster denies something real without touching a live fleet.
+  #
+  # agent://mockryx.local/*, not agent://drill.local/*: this repo and
+  # stack-single had drifted onto "drill.local" while stack-up and taipan both
+  # seed "mockryx.local" for the exact same rehearsal identity. Aligned here on
+  # mockryx.local because that is the name of the tool that actually generates
+  # this traffic (`mockryx`, "shells out to fire the hostile drills at the
+  # gateway" per this README's Fact 2), matching the convention every other
+  # `agent://<thing>.local/*` identity in this stack already follows (name the
+  # component, not a generic noun), and because it is the name taipan (the
+  # Genaryx orchestrator this policy shape was first written for) and stack-up
+  # (the public launcher) already agree on. security-tests.sh's check 11b
+  # probes this exact target and was updated in the same change.
   policy.yaml: |
     - name: stack-up-demo-require-human-approval
-      target: agent://drill.local/*
+      target: agent://mockryx.local/*
       require_human_above_usd: 1
     - name: stack-up-demo-deny-shell-exec
-      target: agent://drill.local/*
+      target: agent://mockryx.local/*
       deny_tool:
         - shell_exec
