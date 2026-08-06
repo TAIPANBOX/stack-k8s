@@ -563,7 +563,7 @@ head_ "11b. the policy plane has actually decided something"
 #
 #   ALLOW: a budget smaller than any call. The PDP has to say allow before
 #          the ledger gets to say 402, so a 402 IS a positive verdict.
-#   DENY:  a tool the shipped policy forbids for agent://drill.local/*.
+#   DENY:  a tool the shipped policy forbids for agent://mockryx.local/*.
 #
 # Run from inside the gateway pod against its own port, because this is a
 # question about the gateway's decision path and not about who may reach it.
@@ -572,7 +572,7 @@ pdp_out="$(kc exec -i deploy/tokenfuse-gateway -- bash -s <<'PDPPROBE' 2>/dev/nu
 ask() {
   body="$1"; extra="$2"
   exec 3<>/dev/tcp/127.0.0.1/4100 || { echo "unreachable"; return; }
-  printf 'POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nx-api-key: probe\r\nanthropic-version: 2023-06-01\r\ncontent-type: application/json\r\nx-fuse-run-id: sec-probe-pdp\r\nx-fuse-agent-id: agent://drill.local/sec-probe\r\n%sContent-Length: %d\r\nConnection: close\r\n\r\n%s' \
+  printf 'POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nx-api-key: probe\r\nanthropic-version: 2023-06-01\r\ncontent-type: application/json\r\nx-fuse-run-id: sec-probe-pdp\r\nx-fuse-agent-id: agent://mockryx.local/sec-probe\r\n%sContent-Length: %d\r\nConnection: close\r\n\r\n%s' \
     "$extra" "${#body}" "$body" >&3
   timeout 8 cat <&3 2>/dev/null | tr -d '\r'
   exec 3<&- 3>&-

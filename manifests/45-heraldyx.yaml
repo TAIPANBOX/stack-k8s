@@ -87,6 +87,20 @@ spec:
             # edit to a file in git.
             - { name: HERALDYX_EVENTS, value: "/var/lib/stack/events" }
             - { name: HERALDYX_STATE, value: "/var/lib/stack/heraldyx/state.json" }
+            # "high", not stack-up's "medium": deliberately different, and
+            # previously unstated anywhere, which is its own kind of trap. This
+            # is a real deployment on somebody's cluster, governing whatever
+            # fleet they actually run; stack-up is the local sandbox meant to
+            # show a newcomer what an alert looks like within a few minutes of
+            # `./up.sh`. A "high" default here means a real operator's inbox
+            # starts quiet rather than noisy from day one; a "medium" default
+            # there means the demo has something to show without the visitor
+            # tuning anything first. Same variable, opposite correct default,
+            # for two genuinely different audiences. This line, not the
+            # `heraldyx-mail` Secret below, is what sets it: edit the value
+            # here (it is a literal in `env:`, not sourced from that Secret)
+            # if your fleet is small enough that medium-severity signal is
+            # still worth reading.
             - { name: HERALDYX_MIN_SEVERITY, value: "high" }
             # Who is answerable for an agent. The event envelope cannot say:
             # `agent_id` is which agent acted and `on_behalf_of` is who it acted

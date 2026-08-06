@@ -2579,3 +2579,81 @@ sure the deadline is longer than a few CSI retries rather than a few seconds.
 
 Not our defect and nothing to fix in this repository. Written down because "it recovered by itself"
 and "it will always recover by itself" are different claims.
+
+## 80. heraldyx's mail egress needed a fourth port, and nobody wrote it down
+
+**Ours, and fixed.** `45-heraldyx.yaml`'s `heraldyx-mail-egress` NetworkPolicy
+was widened to allow port 2525 for outbound mail before this entry existed,
+which is exactly the gap invariant 2 exists to catch: a gotcha is written when
+it is found, not when it is convenient, and this one was found, fixed in the
+manifest, and left unwritten until a 2026-08-05 audit asked why the README
+still said three ports when the policy already granted four.
+
+**Symptom:** a probe on a real cluster found that the policy's original three
+ports, 587, 465 and 25, were not enough. An operator whose mail provider hands
+them 2525 (SendGrid, Mailgun and others offer it precisely for networks where
+25 and 587 are closed) hits this policy and gets a timeout, with nothing in
+the deployment saying why: not a refused connection, which would at least name
+itself, but silence until something times out.
+
+**The same run found the other half of the picture.** On AWS, outbound port
+25 is blocked by the cloud itself, by default, against spam. So the allowance
+on 25 is honest but decorative there, and an operator who reads only the
+policy and not this entry could spend an afternoon on a port that was never
+going to work on that cloud regardless of what this repo permits.
+
+**Fixed here:** `45-heraldyx.yaml`'s `heraldyx-mail-egress` NetworkPolicy
+lists `587`, `465`, `2525` and `25`. The README's diagram alt text, which
+still said "587, 465 and 25" after the manifest had already grown a fourth
+port, is corrected in the same change that adds this entry.
+
+**Why this is worth a ledger line rather than a silent diff:** the manifest
+explains WHY 2525 is there to a reader who opens it, but nothing pointed a
+reader at the manifest, and a future edit trimming an unfamiliar-looking port
+back down to the "obvious" three would reintroduce exactly this gap, this time
+for whoever depended on 2525 in the meantime.
+
+## 81. The gateway's own Parquet trace directory cannot back a CronJob
+
+**Ours, and unfixed in this shape.** stack-up runs five governance routines;
+this deployment now runs three of them as CronJobs, crypto-trend,
+identity-sweep and quality-drift (quality-drift added in the same change as
+this entry), plus the opt-in drills. The fifth, focus-export, is not here, and
+it is not an oversight.
+
+**Why:** `tokenfuse-gateway focus-export --traces <dir> --out <file>`
+(`tokenfuse/crates/gateway/src/focusexport.rs`) reads the gateway's own local
+Parquet trace directory straight off disk. It is a filesystem operation, not
+an HTTP call: there is no route on the gateway's own API that does the same
+job remotely. In this deployment that directory is `10-planes.yaml`'s
+`traces` volume on the `tokenfuse-gateway` Deployment, and it is an
+`emptyDir`: ephemeral, and by Kubernetes' own design mountable ONLY by
+containers inside that same pod. No affinity trick fixes this the way it
+fixes crypto-trend's and quality-drift's access to `console-state`: those work
+because `console-state` is a real PersistentVolumeClaim and `ReadWriteOnce`
+means "one node", so a second pod scheduled onto that same node can mount it
+too (item 76). An `emptyDir` is not a PVC. It has no claim a second pod could
+reference, on any node, ever.
+
+**What it costs:** an operator reading only the README's "What runs as what"
+table before this change would believe all four of stack-up's default
+routines run here. They do not, and the gap is invisible until someone goes
+looking for a FOCUS-format CSV that was never produced.
+
+**What would actually fix it, and why it is not done here:** giving the
+gateway's trace directory a PersistentVolumeClaim of its own (or moving it
+onto the existing `stack-events` RWX volume, which already crosses nodes)
+would let a `focus-export` CronJob mount the same claim, following
+quality-drift's pattern. That is a change to an already-deployed,
+already-measured Deployment (`10-planes.yaml`, proven on Hetzner, AWS and GCP,
+see `PORTABILITY.md`), not a CronJob addition, and it has a real side effect
+that deserves its own decision rather than riding in on this one: trace data
+would start surviving a gateway restart, which it does not today. Left as a
+documented gap rather than forced through in a change that was scoped to
+adding CronJobs.
+
+**The rule:** a routine that reads local files is portable to a CronJob only
+if those files live on a volume a second pod can also reach. Check what the
+tool actually opens. README Fact 2 already drew this line for the four tools
+the console spawns; it applies just as much to a tool the gateway spawns
+nothing to help with.

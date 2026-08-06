@@ -10,7 +10,7 @@ about its architecture into the open, and both are load-bearing.
 
 <div align="center">
 
-<img src="assets/diagram.svg" alt="The planes couple through one ReadWriteMany event volume rather than through APIs, the console pod hosts five tools rather than being a client of four services, egress is denied by default, and heraldyx is the one hole: applied from its own manifest, permitted only TCP 587, 465 and 25, and only to addresses outside the cluster and the private network" width="960">
+<img src="assets/diagram.svg" alt="The planes couple through one ReadWriteMany event volume rather than through APIs, the console pod hosts five tools rather than being a client of four services, egress is denied by default, and heraldyx is the one hole: applied from its own manifest, permitted only TCP 587, 465, 2525 and 25, and only to addresses outside the cluster and the private network" width="960">
 
 </div>
 
@@ -79,9 +79,11 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | StatefulSet + Service | the policy store: Postgres behind `wardryx`, holding its approvals and its runtime policy documents | 5432 |
 | PersistentVolumeClaim (RWX) | the shared event directory | |
 | PersistentVolumeClaim | `verdryx.db`, `engram.engram` stores | |
-| CronJob | the governance routines (`routines.sh`'s FinOps export, crypto trend, quality drift, identity sweep) | |
+| CronJob | three of `routines.sh`'s five governance routines: crypto trend, quality drift, identity sweep (`qryx-trend`, `verdryx-drift`, `idryx-detect`). FinOps export cannot run as a CronJob here, its data lives in a per-pod `emptyDir` (GOTCHAS 81); `drills` (`mockryx-drill`) is separate: opt-in, suspended below | |
 | NetworkPolicy | default-deny, then exactly the paths above | |
 | Deployment + PVC + NetworkPolicy | `heraldyx`, the notifier. **Not in the default apply**, see "Being told, rather than watching" below. No Service and no port: it reads the event log and sends mail, so nothing calls it | |
+| Patch (Deployment) | `55-copilot-cloud.yaml`: points the console's copilot, Felyx, at a real Anthropic model instead of the local Ollama default. **Not in the default apply, opt-in, and METERED**: every conversation is billed by the model provider to the key's owner, on a bill separate from the cluster, so it needs a Secret holding your own API key and a manual `kubectl patch` naming this file. See its own header before applying | |
+| Namespace labels + NetworkPolicy x2 | `60-harden-neighbours.yaml`: Pod Security `restricted` plus default-deny ingress and egress for the cluster's `default` namespace, i.e. hardening for a namespace this stack does not own (`security-tests.sh` check 12 reports on the gap this closes). **Not in the default apply**: it changes a namespace that belongs to whoever runs the cluster, and it WILL stop anything already running in `default`. Read its header before applying | |
 
 ## Keys stay yours
 
@@ -120,7 +122,12 @@ security-tests.sh  attack it: every fix below re-run as a standing check, from
                 the exact count varies with what a given cloud exposes
 tunnel/         the operator's way in: WireGuard, TLS, and the console behind
                 both. Nothing here is published; see tunnel/README.md
-manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm)
+manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm).
+                Three files are opt-in and outside the default apply, each
+                applied by hand: 45-heraldyx.yaml (notifications), 55-copilot-
+                cloud.yaml (a metered cloud copilot) and 60-harden-
+                neighbours.yaml (hardening for the cluster's other
+                namespaces). See "What runs as what" above
 images/         one Dockerfile per language family, plus the console's mixed build
 GOTCHAS.md      every trap this cost us, each with the fix that is already applied
 PORTABILITY.md  the measured Hetzner baseline, and what to compare AWS/GCP on
@@ -290,10 +297,12 @@ down:
 
 The command output behind every sentence above is in `evidence/` and
 `cloud/*/evidence/`. Every trap the runs cost us is written up in
-`GOTCHAS.md`, now **78 items** (37 platform, 28 ours, 10 the stack's own
-contract, 3 upstream), each already fixed here, which is the whole point: the
-next person to run this should not meet any of them. The split matters more
-than the total: a ledger where everything is somebody else's fault is
+`GOTCHAS.md`, now **81 items** (37 platform, 30 ours, 10 the stack's own
+contract, 4 upstream). Almost all are already fixed here, which is the whole
+point: the next person to run this should not meet any of them. A small
+number (69, 81) are recorded rather than solved, and say so plainly rather
+than letting the ledger look cleaner than the deployment is. The split matters
+more than the total: a ledger where everything is somebody else's fault is
 marketing, so the count of our own mistakes is what makes the other three
 columns worth believing.
 

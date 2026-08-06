@@ -35,10 +35,10 @@ The honest count of our own mistakes is what makes the platform classifications
 worth believing. A ledger where everything is somebody else's fault is
 marketing.
 
-**Measured 2026-08-04 by `./scripts/gotchas-classified.sh`, not estimated: 79
-entries, 37 platform, 28 ours, 10 the stack's own contract, 4 upstream. Nothing
+**Measured 2026-08-06 by `./scripts/gotchas-classified.sh`, not estimated: 81
+entries, 37 platform, 30 ours, 10 the stack's own contract, 4 upstream. Nothing
 unclassified.** (70 on 2026-07-31;
-the nine added since are 71, bash counting quotes inside a heredoc it was told
+the nine added between 70 and 79 are 71, bash counting quotes inside a heredoc it was told
 to treat literally; 72, `kubectl get -o yaml` printing configuration that was
 deleted, which made a new check pass on the very defect it was written to
 catch; 73, a whole verify.sh section rendering as an empty heading while the
@@ -50,7 +50,11 @@ with a Deployment and waiting forever; 77, three scheduled routines
 that had never once run, two of them broken in more than one way; 78, the
 drill from 77 finding real gaps and telling nobody, because its job had no
 events destination and no events volume at all; and 79, Longhorn reporting a
-volume attached before the mount it made can be stat'd.)
+volume attached before the mount it made can be stat'd. Two more added since,
+on 2026-08-06: 80, heraldyx's mail egress needing a fourth port, 2525, fixed
+in the manifest well before this entry was; and 81, the gateway's own Parquet
+trace directory being unable to back a `focus-export` CronJob the way
+`console-state` backs the new `quality-drift` one.)
 
 A note on how that number was arrived at, because it is the point of this whole
 file. The first version of the gate knew only `Platform` and `Ours`, reported
