@@ -52,6 +52,20 @@ while IFS= read -r line; do
   esac
 done < <(grep -rh "image: " manifests/*.yaml)
 
+# A count of zero is not a clean bill of health, it is a check that found
+# nothing to check. Until 2026-08-09 this printed "OK: 0 image references, all
+# pinned" and exited 0 on a tree where `manifests/*.yaml` matched no file, which
+# happens the moment somebody normalises the extension to .yml or moves the
+# manifests into a subdirectory. Neither is a strange thing to do, and nothing
+# else here would have said the images had stopped being checked.
+if [ "$count" = 0 ]; then
+  echo "FAIL: no image references found under manifests/*.yaml, so this check"
+  echo "      measured nothing. It cannot tell whether every image is pinned if"
+  echo "      it cannot find an image. If the manifests moved or were renamed,"
+  echo "      this check has to move with them; silence here is not health."
+  exit 1
+fi
+
 if [ "$fail" = 0 ]; then
   echo "OK: $count image references, all pinned, built here, or allowed by name."
 else
