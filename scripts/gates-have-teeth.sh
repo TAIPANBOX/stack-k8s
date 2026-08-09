@@ -243,6 +243,25 @@ run_case "portability-claims: the comparison sheet loses its section" fail \
 	"$(py 'edit("PORTABILITY.md", "## 3. The comparison sheet", "## 3bis. The comparison sheet")')" \
 	"has no section 3"
 
+# manifests-valid: the fault it exists for is a MISSPELLED FIELD, not an
+# invalid document. Kubernetes ignores an unknown key rather than rejecting it,
+# so `readOnlyRootFileSystem` with a capital S leaves a container an operator
+# believes is read-only writable, and the manifest reads correctly to a human.
+# That is why the gate passes --strict and why this case uses that exact typo
+# rather than a malformed document any parser would catch.
+run_case "manifests-valid: a misspelled field Kubernetes would silently ignore" fail \
+	'./scripts/manifests-valid.sh' \
+	"$(py 'edit("manifests/47-scopyx.yaml", "readOnlyRootFilesystem: true", "readOnlyRootFileSystem: true")')" \
+	"additional properties"
+
+# The other half: the exclusion list must not become a place to hide a
+# manifest. A patch that stops being listed as a patch is either dead or a
+# manifest, and both must stop being skipped.
+run_case "manifests-valid: a skipped patch is no longer listed as one" fail \
+	'./scripts/manifests-valid.sh' \
+	"$(py 'edit("tunnel/kustomization.yaml", "path: console-patch.yaml", "path: somewhere-else.yaml")')" \
+	"no longer lists it"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'

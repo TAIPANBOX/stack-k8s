@@ -21,6 +21,19 @@
 # by default: with no `heraldyx-mail` Secret it watches the log and sends
 # nothing at all.
 #
+# 47-scopyx.yaml is the web-egress enforcement point, and it carries the WIDEST
+# grant in the namespace: TCP 80 and 443 to the whole public internet, on behalf
+# of agents. heraldyx opens three mail ports; this opens the web. An install
+# that made that grant without being asked would be deciding the one thing an
+# operator most needs to have chosen, so it is opt-in for the same reason and
+# more strongly:
+#
+#   kubectl apply -f manifests/47-scopyx.yaml
+#
+# Unlike heraldyx, it does NOT run unconfigured: with no `scopyx-keys` Secret it
+# refuses to start, because a wide bind with no credentials is an
+# unauthenticated fetch proxy inside your cluster. The CrashLoop is the signal.
+
 # 50-loadbalancer.yaml publishes the console on a public address AND starts a
 # meter (a Hetzner lb11 is EUR 7.49/month net, billed hourly). Neither belongs
 # in a default `apply -k`: the console's own posture is that an operator

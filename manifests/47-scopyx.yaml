@@ -1,0 +1,262 @@
+# The web-egress enforcement point: the part of the box that lets an agent
+# reach the internet, and decides every destination before it does.
+#
+# NOT in the default `apply -k` set, for a stronger version of 45-heraldyx.yaml's
+# reason. heraldyx opens connections to three mail ports. This opens 80 and 443
+# to the whole public internet, on behalf of agents, which is the single widest
+# grant in the namespace. An install that made it without being asked would be
+# making a security decision on somebody else's behalf, and the box would ship
+# with the one thing an operator most needs to have chosen.
+#
+#   kubectl apply -f manifests/47-scopyx.yaml
+#   kubectl -n agent-stack create secret generic scopyx-keys \
+#     --from-literal=SCOPYX_KEYS='pick-a-long-secret=agent://acme.example/support-bot' \
+#     --from-literal=SCOPYX_WARDRYX_KEY="$(kubectl -n agent-stack get secret stack-keys -o jsonpath='{.data.wardryx_keys}' | base64 -d | cut -d, -f1)"
+#
+# WITHOUT THAT SECRET THIS POD REFUSES TO START, AND THAT IS THE POINT
+#
+# Unlike heraldyx, which runs happily unconfigured and simply sends nothing,
+# this one exits. `SCOPYX_ADDR` here is 0.0.0.0:4300, because a pod that binds
+# loopback is reachable by nothing, and a wide bind with no credentials is an
+# unauthenticated fetch proxy inside your cluster: anything that reaches the
+# port makes this plane fetch on its behalf, under your egress allowance and
+# with your name on the record. scopyx refuses that combination itself, at
+# startup, and the CrashLoop is the intended signal. A Deployment that came up
+# healthy with no credentials would be the failure.
+#
+# The identity in SCOPYX_KEYS is not decoration. The only authenticated fact
+# this service has is which credential was presented, so that is the only thing
+# an agent identity may be derived from; a header naming the agent would be the
+# caller telling us who it is. A credential given with no `=agent://...` still
+# authenticates and can never be spoken for: every fetch through it reaches
+# wardryx with no subject and is refused.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: scopyx-events
+  namespace: agent-stack
+spec:
+  # ITS OWN VOLUME, not the shared `stack-events`, and this is the whole reason
+  # the claim exists rather than reusing what is already mounted everywhere.
+  #
+  # A component that mounts the shared log writable is one that, once
+  # compromised, can corrupt the trail it was supposed to be adding to. This is
+  # the only workload in the namespace that reaches the public internet ON
+  # PURPOSE, which makes it the last one that should be able to rewrite anybody
+  # else's record. Same argument heraldyx makes, one plane over.
+  #
+  # RWO, one writer, ordinary.
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scopyx
+  namespace: agent-stack
+  labels: { app: scopyx, plane: egress-pep }
+spec:
+  replicas: 1
+  # Recreate, not RollingUpdate, for the reason heraldyx gives: the journal
+  # volume is RWO and a second pod would not get it. There is a second reason
+  # here. The chain in this journal is per file and per writer; two processes
+  # appending to one file would interleave `prev_hash` values computed from
+  # different predecessors, and the result verifies as tampered. A rollout that
+  # quietly broke tamper-evidence would be the worst possible way to learn this.
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: scopyx } }
+  template:
+    metadata:
+      labels: { app: scopyx, plane: egress-pep }
+    spec:
+      # fsGroup for the reason every other plane here gives: a freshly
+      # provisioned volume comes up root-owned and 0755, and a process running
+      # as 65532 cannot write in it. Here the failure would be quiet in a
+      # specific way: fetches keep working and the RECORD does not get written,
+      # so the plane looks healthy while producing no evidence. scopyx counts
+      # write failures and reports them at shutdown, which is the backstop, not
+      # a substitute for the volume being writable.
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: scopyx
+          image: ghcr.io/taipanbox/scopyx:v0.1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            # 0.0.0.0 because a pod binding loopback is reachable by nothing.
+            # Paired with the required credentials above; scopyx refuses to
+            # start with one and not the other.
+            - { name: SCOPYX_ADDR, value: "0.0.0.0:4300" }
+            - { name: SCOPYX_WARDRYX, value: "http://wardryx:8090" }
+            - { name: SCOPYX_EVENTS, value: "/var/lib/scopyx/events.ndjson" }
+            # passthrough: no vendor, no account, no token. An operator who
+            # already runs a fetching service points this at `external` and
+            # sets SCOPYX_EXTERNAL_ENDPOINT instead, and gains a decision, a
+            # bound and a record over the tool they already own.
+            - { name: SCOPYX_BACKEND, value: "passthrough" }
+            # Finite, and lower than the code's own default of 500. This is a
+            # real cluster governing somebody's fleet: an agent loop that
+            # discovers it can fetch will do so as fast as it is allowed, and
+            # the first anybody hears of it is a bill or a rate-limit from the
+            # site being fetched. Raise it deliberately.
+            - { name: SCOPYX_MAX_FETCHES_PER_HOUR, value: "200" }
+          envFrom:
+            # NOT optional, unlike heraldyx's mail Secret. Missing here is not
+            # an unconfigured feature, it is an open proxy, and the pod exits
+            # rather than starting without it.
+            - secretRef: { name: scopyx-keys }
+          ports: [{ name: mcp, containerPort: 4300 }]
+          volumeMounts:
+            - { name: journal, mountPath: /var/lib/scopyx }
+            # The shared event log is deliberately NOT mounted here, in any
+            # mode. Not read-only either: this plane has no reason to read
+            # anybody else's record, and a mount it does not need is a mount an
+            # attacker inherits.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            # It parses a URL, asks one question, opens one socket and appends
+            # a line. The memory limit is above the 32 MiB default body cap
+            # with room for the response being assembled.
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          # No probe, deliberately, and the reason is specific rather than
+          # inherited. scopyx serves HTTP, so a probe COULD be written, and the
+          # obvious one would ask the MCP endpoint. That endpoint requires a
+          # credential, so the probe would need one, which means either the
+          # kubelet holds a fetch credential or the service grows an
+          # unauthenticated path for probes to hit. The second is a hole in the
+          # door this component exists to have. A crash is caught by the
+          # kubelet regardless.
+      volumes:
+        - name: journal
+          persistentVolumeClaim: { claimName: scopyx-events }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: scopyx, namespace: agent-stack }
+spec:
+  selector: { app: scopyx }
+  ports: [{ name: mcp, port: 4300, targetPort: mcp }]
+---
+# The widest egress grant in this namespace, made as narrow as a NetworkPolicy
+# can express, and stated plainly rather than hidden in a wide rule.
+#
+# What this permits: TCP 80 and 443 to addresses that are NOT inside the cluster
+# or on a private network. What it therefore refuses: every other port, and
+# every internal address on any port, so this pod cannot reach another plane,
+# the API server, the node's metadata service or the policy database by
+# accident or by instruction.
+#
+# WHAT A NETWORKPOLICY CANNOT DO HERE, SAID OUT LOUD
+#
+# It cannot restrict WHICH outside host. It selects on addresses, not names, and
+# the whole point of this component is that an agent reaches sites nobody
+# enumerated in advance. So the network layer grants "the public internet on two
+# ports", and the decision about WHICH destination is made per fetch, by wardryx,
+# in the pod. That is the honest division: this policy bounds the blast radius,
+# the PDP makes the decision, and neither substitutes for the other.
+#
+# The residual risk that follows: a compromised scopyx could speak to an
+# attacker's machine on 80 or 443. What it could not do is reach anything inside
+# this namespace, and what it cannot hide is the attempt, because the refusal
+# and the fetch are both recorded in a chained journal on a volume it is the
+# only writer of.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: scopyx-web-egress
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: scopyx } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              # RFC1918 plus link-local. Covers k3s's pod (10.42/16) and
+              # service (10.43/16) networks, a provider's private network, and
+              # the cloud metadata address parked on 169.254.169.254.
+              #
+              # This duplicates a refusal scopyx already makes in code, and the
+              # duplication is deliberate: `decide.AddressRefused` refuses these
+              # ranges after resolving, and this refuses them at the packet. A
+              # bug in one is covered by the other, and the two disagree only if
+              # somebody removes one on purpose.
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 80 }
+---
+# The one internal connection it needs: the policy plane.
+#
+# Separate from the rule above rather than folded into it, because they are
+# different grants with different reasons, and a reader scanning for "what can
+# this pod reach inside the cluster" should find one short answer.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: scopyx-to-policy-plane
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: scopyx } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: wardryx } }
+      ports:
+        - { protocol: TCP, port: 8090 }
+---
+# wardryx must accept the connection the rule above allows.
+#
+# `planes-ingress` in 30-network-policy.yaml lets the console and the gateway
+# reach the planes and knows nothing about this one, correctly: that file is in
+# the default apply set and this component is opt-in. NetworkPolicies are
+# additive, so this grants the one extra source without editing a file that
+# ships to every install.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: policy-plane-accepts-scopyx
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: wardryx } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: scopyx } }
+      ports:
+        - { protocol: TCP, port: 8090 }
+---
+# Who may ask this plane to fetch.
+#
+# The broker in the money plane, and the console. NOT `podSelector: {}`: every
+# pod in the namespace being able to reach a fetch proxy would make the
+# credential the only control, and a credential in a Secret is readable by
+# anything with the service account to read Secrets.
+#
+# An agent running outside this namespace reaches scopyx through the broker,
+# which is the path the whole stack is arranged around. If you genuinely need a
+# workload in another namespace to call it directly, add a namespaceSelector
+# here rather than widening this to everything.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: scopyx-ingress
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: scopyx } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { plane: money } }
+        - podSelector: { matchLabels: { plane: console } }
+      ports:
+        - { protocol: TCP, port: 4300 }

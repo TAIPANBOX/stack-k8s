@@ -28,6 +28,24 @@ jobs:
       - name: every image is pinned or built here
         run: ./scripts/pinned-images.sh
 
+      # Pinned rather than left to whatever the runner ships. `go install` of a
+      # module built against a newer toolchain fails on an older one, and the
+      # error names a Go version rather than this step, which is a confusing
+      # way to learn the runner image changed under you.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+
+      # kubeconform validates against the real schemas without a cluster.
+      # `kubectl --dry-run=client` fetches its schema FROM a cluster, so a
+      # check built on it would fail here for want of one and would then be a
+      # check that never runs.
+      - name: install kubeconform
+        run: go install github.com/yannh/kubeconform/cmd/kubeconform@latest
+
+      - name: every manifest is a document Kubernetes would accept
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/manifests-valid.sh
+
       # Last, because it mutates tracked files and restores them. It needs a
       # clean tree and says so plainly, so it also reports any earlier step
       # that starts writing into the checkout.
