@@ -88,6 +88,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/closed-by-default.sh
 ./scripts/portability-claims.sh
 ./scripts/pinned-images.sh
+./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
 Anything that provisions real infrastructure is not a gate and never runs
@@ -156,7 +157,39 @@ an absent invariant.
    the 16 series to pick up patch releases of the database holding what the
    fleet is permitted to do.
    *(gate: `scripts/pinned-images.sh`; verified by pointing a manifest at
-   `:latest`, which fails it)*
+   `:latest`, which fails it, and by taking every manifest out of its reach,
+   which now fails it too. Until 2026-08-09 that second case PASSED: the script
+   printed "OK: 0 image references, all pinned, built here, or allowed by name"
+   and exited 0 when `manifests/*.yaml` matched no file. Renaming the manifests
+   to `.yml` or moving them into a subdirectory is ordinary housekeeping, and
+   either one turned a check on eleven images into a check on none while
+   printing a sentence that asserts the opposite. Found by writing invariant
+   9's harness, and this is the only real hole it has found anywhere in the
+   estate.)*
+
+9. **A check must be able to tell "did not fail" from "did not run", and every
+   gate here has been made to fail on purpose to prove it can.** This is the
+   repository that justifies the invariant rather than merely obeying it:
+   writing the harness found `pinned-images.sh` reporting a clean run over zero
+   images, which is recorded in invariant 7 above.
+
+   Two of the other three already refuse on an absent subject and say so in
+   their own words: no numbered gotcha sections, no section 3 in
+   `PORTABILITY.md`, no GCP cells inspected. Those sentences were true, were
+   established by hand once in the session that wrote each script, and nothing
+   re-ran them.
+   *(gate: `scripts/gates-have-teeth.sh`, 7 cases: three real faults, one
+   non-fault, and three subjects taken away entirely. The non-fault is the one
+   worth keeping: `postgres:16-alpine` is an upstream tag allowed BY NAME with
+   its reason in the script header, and a gate that flagged it would be
+   flagging a decision and would be edited out by whoever hit it.)*
+
+   **What it does not cover.** It cannot test itself. It proves each gate
+   catches the faults named in it, not every fault of that kind. `closed-by-
+   default.sh` has no absent-subject case here: its subject is
+   `manifests/kustomization.yaml`, and it already fails loudly on a missing or
+   empty `resources:` block, which is checked by reading it rather than by a
+   mutation.
 
 ## Decisions that have no gate yet
 
