@@ -2657,3 +2657,56 @@ if those files live on a volume a second pod can also reach. Check what the
 tool actually opens. README Fact 2 already drew this line for the four tools
 the console spawns; it applies just as much to a tool the gateway spawns
 nothing to help with.
+
+---
+
+## 82. Nothing here had ever schema-validated a manifest, and the obvious tool cannot
+
+**Ours, meeting a platform fact.** Adding `47-scopyx.yaml` meant writing a manifest
+with nobody to check it, and the check that should have existed did not.
+
+**Why it matters more here than in most repositories.** The API server does not
+reject an unknown field, it **ignores** it. `readOnlyRootFileSystem` with a
+capital S is silently dropped: the pod starts, the rollout is green, and a
+container an operator believes is read-only is writable. The manifest reads
+correctly to a human, which is the whole problem. Every other gate in
+`scripts/` checks policy, and policy checks read a document that Kubernetes may
+be quietly discarding half of.
+
+**The tool everybody reaches for first cannot do it.** `kubectl apply
+--dry-run=client` fetches the OpenAPI schema **from a cluster**. On a machine or
+a runner with no cluster it fails with
+
+```
+failed to download openapi: Get "http://localhost:8080/openapi/v2": connect: connection refused
+```
+
+which is not the same thing as a manifest being wrong, and a gate built on it
+would be skipped in CI and would then be a gate that never runs.
+`scripts/manifests-valid.sh` uses `kubeconform -strict` instead, which carries
+its own schemas. `-strict` is the load-bearing flag: without it, kubeconform
+accepts unknown fields exactly as the API server does, and the check passes on
+the one defect it exists for.
+
+**What the new gate found on its first run, in files that were already here.**
+Two, and both are legitimate, which is its own lesson: `tunnel/console-patch.yaml`
+is a kustomize strategic-merge patch and `manifests/55-copilot-cloud.yaml` is a
+`kubectl patch --patch-file` body. Neither is a whole object and a validator is
+right to reject both.
+
+**The trap inside the fix.** They were first excluded by one shared rule, "a
+patch fragment carries no `apiVersion`", and that rule is **wrong about
+kustomize**. A kustomize patch DOES carry `apiVersion` and `kind`: that is
+precisely how it names the object it merges into. Only the `kubectl patch` body
+has neither. The guard written to stop the exclusion list hiding a real manifest
+immediately refused its own author's assumption, which is the argument for
+writing that kind of guard at all.
+
+So each exclusion now carries a fact checked on every run, and they are
+different facts: the kustomize patch must still be **listed under `patches:`**
+in a kustomization, and the patch body must still carry **no `apiVersion`**. An
+exclusion that stops being true is red, so the list cannot become somewhere to
+put an inconvenient file.
+
+**Cost:** nothing. `go install github.com/yannh/kubeconform/cmd/kubeconform@latest`,
+a standard runner, a public repository.

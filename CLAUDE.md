@@ -88,6 +88,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/closed-by-default.sh
 ./scripts/portability-claims.sh
 ./scripts/pinned-images.sh
+./scripts/manifests-valid.sh      # invariant 10; needs kubeconform on PATH
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -190,6 +191,29 @@ an absent invariant.
    `manifests/kustomization.yaml`, and it already fails loudly on a missing or
    empty `resources:` block, which is checked by reading it rather than by a
    mutation.
+
+10. **Every manifest is a document Kubernetes would accept, unknown fields
+    included.** The API server does not reject an unknown field, it IGNORES it:
+    `readOnlyRootFileSystem` with a capital S is dropped silently, the pod
+    starts, and a container an operator believes is read-only is writable. Every
+    other gate here reads a document the platform may be quietly discarding half
+    of, so this one runs first in spirit even where it runs last in the list.
+
+    `kubectl apply --dry-run=client` cannot hold this: it fetches the schema
+    FROM a cluster and fails for want of one, which is not the same as a
+    manifest being wrong and would make the check skip in CI.
+    *(gate: `scripts/manifests-valid.sh`, kubeconform with `--strict`, which is
+    the load-bearing flag: without it unknown fields are accepted exactly as the
+    API server accepts them. Verified four ways in
+    `scripts/gates-have-teeth.sh` and by hand: the capital-S typo, a skipped
+    patch no longer listed as a patch, a patch body that grew an `apiVersion`,
+    and kubeconform absent, which FAILS rather than passing quietly.)*
+
+    Two files are skipped as patch fragments, each with its own checked reason
+    rather than a shared one. The shared rule tried first, "a fragment carries
+    no `apiVersion`", is WRONG about kustomize: a strategic-merge patch carries
+    both `apiVersion` and `kind`, because that is how it names its target. See
+    GOTCHAS 82.
 
 ## Decisions that have no gate yet
 
