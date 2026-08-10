@@ -64,5 +64,13 @@ COPY --from=build /out/service /usr/local/bin/service
 # fetch with a message about the network.
 ENV SCOPYX_CHROMIUM=/usr/bin/chromium
 
+# HOME must name a directory that exists and is writable. `useradd -M` creates
+# no home directory, and on a k3s pod on EC2 that was fatal: Chromium died with
+# `chrome_crashpad_handler: --database is required`, which says nothing about a
+# home directory. Measured there 2026-08-10, and NOT reproduced under `docker
+# run` locally in any shape tried, so the precise trigger is not isolated. The
+# fix stands regardless.
+ENV HOME=/tmp
+
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/service"]
