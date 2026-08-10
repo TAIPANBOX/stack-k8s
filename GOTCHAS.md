@@ -2809,3 +2809,41 @@ forbidding port 53. It was not: `allow-dns` in `30-network-policy.yaml` covers
 every pod in the namespace, and the test had not applied that file. A missing
 piece of the deployment reads exactly like a fault in the piece under test.
 
+## 85. The browser image could not render on a real node, and a local cluster had said it could
+
+**Ours, and fixed.** `48-scopyx-browser.yaml` was applied to a local kind
+cluster on 2026-08-10, came up, and served a governed fetch. On a t3.xlarge
+running k3s the same manifest came up and failed EVERY fetch:
+
+    cdp: Target.createTarget: the browser closed the connection.
+    The browser said: chrome_crashpad_handler: --database is required |
+    Try 'chrome_crashpad_handler --help' for more information.
+
+**Why:** the image's `useradd -M` creates no home directory, so `HOME` pointed
+at `/home/nonroot`, which does not exist. Chromium writes before it opens
+anything and died. The message names a crash-handler database and says nothing
+about a home directory, which is why reading it does not lead anywhere.
+
+**Fixed by** `ENV HOME=/tmp` in the image, published as `v0.1.2`, and the
+manifests here repinned. `/tmp` is writable in every deployment of this image:
+an emptyDir here, a tmpfs in compose, the container's own layer under docker.
+
+**Not reproduced off that node**, and that is stated rather than glossed. The
+same amd64 image under `docker run` renders with the old HOME, with a read-only
+root filesystem, with all capabilities dropped, with no-new-privileges and as
+uid 65532. The trigger is something else about that runtime and it is not
+isolated; the fix stands on its own, because HOME must name a directory that
+exists.
+
+**The lesson is the pair of entries, 84 and this one.** kind caught what kind
+can catch, admission, for nothing. It could not catch this, and no amount of
+running it again would have. Six cents of EC2 caught it in twenty minutes. The
+question to ask before spending is not "is a cluster needed" but "which layer
+answers this", and the two answers are different layers.
+
+**What that node also measured, which is worth more than the bug:** the pod was
+Running 48 seconds after apply with the 267 MB pull included, and every request
+of every page was decided, 40 on a Wikipedia article, 113 on bbc.com/news, 144
+on a GitHub repository page and 343 on nytimes.com, with a peak of 517 MiB for
+the whole pod against a 2 GiB limit.
+

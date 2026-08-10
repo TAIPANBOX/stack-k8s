@@ -40,15 +40,25 @@
 # names the sandbox, and with the filter relaxed it renders a live page end to
 # end through the assembled service.
 #
-# Applied to a real API server on 2026-08-10, on a local kind cluster, which
-# cost nothing: the pod is admitted, comes up, and serves a governed fetch. The
-# first version of this file was NOT, and PodSecurity refused every pod it
-# tried to create while `kubectl apply` reported success. See GOTCHAS 83 and
-# 84.
+# APPLIED TO A REAL CLUSTER ON A REAL NODE, 2026-08-10.
 #
-# What a local cluster still does not answer, named rather than glossed: the
-# 1 GB pull over a real network onto a real node, and the memory limits under
-# a page heavier than the fixture.
+# First on a local kind cluster, which cost nothing and caught PodSecurity
+# refusing every pod while `kubectl apply` reported success (GOTCHAS 83, 84).
+# Then on a t3.xlarge running k3s in eu-central-1, for about six cents, which
+# caught what kind structurally could not: the browser in v0.1.1 died on every
+# fetch because HOME named a directory that does not exist.
+#
+# What that node measured, with v0.1.2:
+#
+#   Running 48 s after apply, image pull included
+#   267 MB pulled (1.03 GB on disk); the plain image is 3.5 MB and 15.4 MB
+#   every request of every page decided: 40 on a Wikipedia article, 113 on
+#     bbc.com/news, 144 on a GitHub repository page, 343 on nytimes.com
+#   peak memory for the whole pod, from the cgroup's own high-water mark,
+#     517 MiB against the 2 GiB limit below
+#
+# So the limit has real headroom and the 512Mi request is close to the true
+# peak, which is the sizing a reader would otherwise have to guess at.
 #
 # Memory is the other cost, and it is not optional. A browser is not a 256 MiB
 # process. The limits below are for one page at a time, which is what
@@ -123,7 +133,7 @@ spec:
           # at the same version has no browser in it and this pod would exit at
           # startup saying so, which is the intended failure rather than a
           # confusing one.
-          image: ghcr.io/taipanbox/scopyx:v0.1.1-chromium
+          image: ghcr.io/taipanbox/scopyx:v0.1.2-chromium
           imagePullPolicy: IfNotPresent
           env:
             - { name: SCOPYX_ADDR, value: "0.0.0.0:4300" }
@@ -164,10 +174,12 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
           resources:
-            # A browser is not a 256 MiB process, and these are for ONE page at
-            # a time, which is what replicas: 1 and the cap above mean. Set too
-            # low, the kernel kills the renderer mid-page and the plane reports
-            # a failed fetch with no reason a reader could act on.
+            # Measured rather than guessed: 517 MiB peak across pages of up
+            # to 343 subresources, read from the cgroup's high-water mark on a
+            # t3.xlarge on 2026-08-10. The request is about that peak and the
+            # limit has headroom. Set too low, the kernel kills the renderer
+            # mid-page and the plane reports a failed fetch with no reason a
+            # reader could act on.
             requests: { cpu: 250m, memory: 512Mi }
             limits: { memory: 2Gi }
           # No probe, for 47's reason unchanged: the MCP endpoint requires a
