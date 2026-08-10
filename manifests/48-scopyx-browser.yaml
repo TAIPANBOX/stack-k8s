@@ -1,0 +1,153 @@
+# The egress enforcement point, with a real browser in it.
+#
+# APPLIED AFTER 47, AND IT REPLACES RATHER THAN ADDS
+#
+#   kubectl apply -f manifests/47-scopyx.yaml        # the PVC, Service, policies
+#   kubectl apply -f manifests/48-scopyx-browser.yaml
+#
+# This file holds ONE object, a Deployment with the same name as 47's. That is
+# deliberate and it is what makes "one or the other" structural instead of a
+# sentence in a README: applying this replaces the Deployment, so the cluster
+# cannot end up running both behind one Service and round-robining an agent's
+# fetches between a browser and a fetcher that runs no JavaScript.
+#
+# Everything shared stays in 47 and is not repeated here: the PVC, the Service,
+# and the four NetworkPolicies. The pod keeps `app: scopyx`, so every one of
+# those policies applies to it unchanged, including the egress rule that permits
+# 80 and 443 to public addresses only.
+#
+# To go back, apply 47 again.
+#
+# WHY ANYBODY WOULD
+#
+# The default fetcher runs no JavaScript, so a page assembled in the browser
+# arrives as the shell that assembles it. This one renders, and it is the only
+# backend that decides the forty other requests a page makes: it is launched
+# with no route to the network except a proxy scopyx owns, and that proxy
+# refuses any destination the policy plane did not allow.
+#
+# WHAT IT COSTS, BEFORE YOU APPLY IT
+#
+# The image is 1.03 GB against 15.4 MB, measured 2026-08-10. On a fresh node
+# that is a pull worth planning for, and it is why this is a separate file
+# rather than a flag: a decision with a size attached should look like one.
+#
+# WHAT HAS AND HAS NOT BEEN RUN, because this repository's whole culture is
+# that the difference is stated rather than assumed.
+#
+# The image, the backend and the sandbox trade were measured in Docker on
+# 2026-08-10: the browser refuses to start under a default seccomp profile and
+# names the sandbox, and with the filter relaxed it renders a live page end to
+# end through the assembled service.
+#
+# THIS MANIFEST HAS NOT BEEN APPLIED TO A LIVE CLUSTER. A cluster costs money
+# and nobody has spent it on this. What that leaves unverified is named rather
+# than glossed: the pull on a real node, the memory limits under a real page,
+# and whether Unconfined is permitted by whatever PodSecurity level the
+# namespace runs at. See GOTCHAS 83.
+#
+# Memory is the other cost, and it is not optional. A browser is not a 256 MiB
+# process. The limits below are for one page at a time, which is what
+# `replicas: 1` and a per-hour cap mean here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scopyx
+  namespace: agent-stack
+  labels: { app: scopyx, plane: egress-pep, backend: chromium }
+spec:
+  replicas: 1
+  # Recreate for 47's two reasons, both unchanged: the journal volume is RWO,
+  # and the hash chain in it is per file and per writer, so two processes
+  # appending would interleave `prev_hash` values and the result verifies as
+  # tampered.
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: scopyx } }
+  template:
+    metadata:
+      labels: { app: scopyx, plane: egress-pep, backend: chromium }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        # Unconfined, and this is the one line in the file that is a decision
+        # rather than a consequence. It is NOT here to make a warning go away.
+        #
+        # Chromium's renderer sandbox needs the user namespaces the
+        # RuntimeDefault profile refuses, and it does not degrade quietly: it
+        # exits at startup and names the sandbox. So an operator is choosing
+        # WHICH sandbox to keep, and for this workload keeping Chrome's is the
+        # better trade.
+        #
+        # With Chrome's sandbox off, an exploit in a hostile page runs as this
+        # container's user and can open sockets DIRECTLY. That is egress which
+        # never passes the proxy and never reaches the journal, in the one pod
+        # in this namespace that is allowed out to the internet: the failure
+        # would be invisible in exactly the evidence this plane exists to
+        # produce. The seccomp profile protects the NODE from the container; it
+        # does not protect the record from a compromised renderer.
+        #
+        # An operator whose policy is the other way round sets
+        # SCOPYX_CHROMIUM_NO_SANDBOX=1 below and restores RuntimeDefault here.
+        # Both were measured rendering a live page on 2026-08-10.
+        seccompProfile: { type: Unconfined }
+      containers:
+        - name: scopyx
+          # The `-chromium` variant, pinned like everything else. The plain tag
+          # at the same version has no browser in it and this pod would exit at
+          # startup saying so, which is the intended failure rather than a
+          # confusing one.
+          image: ghcr.io/taipanbox/scopyx:v0.1.1-chromium
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: SCOPYX_ADDR, value: "0.0.0.0:4300" }
+            - { name: SCOPYX_WARDRYX, value: "http://wardryx:8090" }
+            - { name: SCOPYX_EVENTS, value: "/var/lib/scopyx/events.ndjson" }
+            - { name: SCOPYX_BACKEND, value: "chromium" }
+            # Lower than 47's 200, and lower again than the code's 500. A
+            # rendering fetch costs a browser launch, a page load and whatever
+            # that page decides to fetch, so the same number here is a
+            # different amount of work and a different amount of somebody
+            # else's bandwidth. Raise it deliberately.
+            - { name: SCOPYX_MAX_FETCHES_PER_HOUR, value: "60" }
+          envFrom:
+            - secretRef: { name: scopyx-keys }
+          ports: [{ name: mcp, containerPort: 4300 }]
+          volumeMounts:
+            - { name: journal, mountPath: /var/lib/scopyx }
+            # A browser writes, and the root filesystem stays read-only, so it
+            # writes here: a fresh profile directory per fetch, deleted after.
+            # An emptyDir rather than a volume because a profile that outlived
+            # the pod would be invariant 4 broken by storage instead of by
+            # code, and one that outlived a FETCH would be the same fault a
+            # level down, which is why scopyx removes it itself.
+            - { name: tmp, mountPath: /tmp }
+            # Chromium puts its shared memory here and the default in a
+            # container is 64 MiB, which it exhausts on ordinary pages. The
+            # symptom is not an error about memory: tabs crash and the fetch
+            # comes back empty, which this plane would then report honestly as
+            # a failure nobody can explain.
+            - { name: dshm, mountPath: /dev/shm }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            # A browser is not a 256 MiB process, and these are for ONE page at
+            # a time, which is what replicas: 1 and the cap above mean. Set too
+            # low, the kernel kills the renderer mid-page and the plane reports
+            # a failed fetch with no reason a reader could act on.
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 2Gi }
+          # No probe, for 47's reason unchanged: the MCP endpoint requires a
+          # credential, so a probe would need one, and the alternative is an
+          # unauthenticated path in the door this component exists to have.
+      volumes:
+        - name: journal
+          persistentVolumeClaim: { claimName: scopyx-events }
+        - name: tmp
+          emptyDir: { sizeLimit: 1Gi }
+        - name: dshm
+          emptyDir: { medium: Memory, sizeLimit: 512Mi }

@@ -81,7 +81,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: scopyx
-          image: ghcr.io/taipanbox/scopyx:v0.1.0
+          image: ghcr.io/taipanbox/scopyx:v0.1.1
           imagePullPolicy: IfNotPresent
           env:
             # 0.0.0.0 because a pod binding loopback is reachable by nothing.
@@ -95,6 +95,11 @@ spec:
             # sets SCOPYX_EXTERNAL_ENDPOINT instead, and gains a decision, a
             # bound and a record over the tool they already own.
             - { name: SCOPYX_BACKEND, value: "passthrough" }
+            # A third backend exists and is not this file: `chromium`, a real
+            # browser, in `48-scopyx-browser.yaml`. It replaces this Deployment
+            # rather than running beside it, which is what stops a cluster
+            # round-robining an agent's fetches between a browser and a fetcher
+            # that runs no JavaScript.
             # Finite, and lower than the code's own default of 500. This is a
             # real cluster governing somebody's fleet: an agent loop that
             # discovers it can fetch will do so as fast as it is allowed, and
