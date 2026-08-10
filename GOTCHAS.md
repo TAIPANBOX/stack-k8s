@@ -2753,3 +2753,59 @@ to write with `readOnlyRootFilesystem: true`, which is what the `/tmp` emptyDir
 is for: scopyx makes a fresh profile directory per fetch and removes it, so
 nothing there may outlive the pod.
 
+## 84. PodSecurity refused every pod and `kubectl apply` reported success
+
+**Ours, meeting a platform fact.** `48-scopyx-browser.yaml` was written with
+`seccompProfile: { type: Unconfined }`, to keep Chromium's renderer sandbox.
+`00-base.yaml` puts this namespace at PodSecurity `restricted`, and restricted
+FORBIDS Unconfined.
+
+**How it failed, which is the part worth keeping.** It did not fail loudly:
+
+    $ kubectl apply -f manifests/48-scopyx-browser.yaml
+    Warning: would violate PodSecurity "restricted:latest": seccompProfile ...
+    deployment.apps/scopyx created
+    $ echo $?
+    0
+
+The Deployment exists. The rollout never completes. No pod is ever created, and
+the actual refusal is one level down, in the ReplicaSet's events:
+
+    Error creating: pods "scopyx-..." is forbidden: violates PodSecurity
+    "restricted:latest": seccompProfile (pod must not set
+    securityContext.seccompProfile.type to "Unconfined")
+
+**And this file REPLACES 47's Deployment on purpose**, so applying it to a
+running cluster would have deleted the working egress plane and put nothing in
+its place, while the command that did it printed `created` and exited 0. That
+combination, a destructive change reporting success and the reason hidden a
+level down, is why this entry is here rather than in a commit message.
+
+**Fixed by** taking the trade the platform allows: `RuntimeDefault` seccomp and
+`SCOPYX_CHROMIUM_NO_SANDBOX=1`, with the loss stated next to it. The browser
+runs without its own sandbox and the pod's other confinement carries the line:
+non-root, no capabilities, no privilege escalation, read-only root filesystem,
+and 47's NetworkPolicies. Two ways to keep Chrome's sandbox are recorded in the
+manifest, a `Localhost` seccomp profile (permitted by restricted, needs a file
+on every node) and a second namespace at `baseline`.
+
+**Measured 2026-08-10 on a local kind cluster, at no cost.** The manifest had
+been merged the same afternoon carrying a header that said honestly it had not
+been applied to a live cluster, and named this exact question as unverified,
+because a cloud cluster costs money. A cluster on the laptop answered it in
+four minutes: the pod is refused, then with the fix admitted, and it fetched a
+live page through Chromium, refused `169.254.169.254`, and wrote both to its
+journal on its own PVC.
+
+**The lesson is about which cluster, not about spending.** "It needs a real
+cluster" was true and "a real cluster costs money" was false: kind is a real
+API server with real admission control, and admission is where this failed.
+What it still does not answer is the pull of a 1 GB image over a real network
+onto a real node, and memory under a page heavier than a fixture.
+
+**One false finding on the way, recorded because it nearly shipped as a
+defect.** DNS timed out from the pod and it looked like `scopyx-web-egress`
+forbidding port 53. It was not: `allow-dns` in `30-network-policy.yaml` covers
+every pod in the namespace, and the test had not applied that file. A missing
+piece of the deployment reads exactly like a fault in the piece under test.
+
