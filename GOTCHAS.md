@@ -2710,3 +2710,46 @@ put an inconvenient file.
 
 **Cost:** nothing. `go install github.com/yannh/kubeconform/cmd/kubeconform@latest`,
 a standard runner, a public repository.
+
+## 83. Chromium refuses to start where the seccomp profile is doing its job
+
+**Platform.** `48-scopyx-browser.yaml` runs a real browser, and the browser will
+not start under `seccompProfile: RuntimeDefault`. It does not degrade: it exits
+at startup with `No usable sandbox!` and a paragraph naming `--no-sandbox`.
+
+**Why:** Chromium's renderer sandbox is built on unprivileged user namespaces,
+and the runtime's default seccomp profile refuses the syscalls that create one.
+Nothing is misconfigured on either side. The container runtime is protecting the
+node exactly as intended, and the browser is refusing to run without its own
+protection exactly as intended.
+
+**What it costs to get wrong quietly.** The tempting fix is `--no-sandbox`,
+because it is the first thing the error suggests and it works immediately. In
+this pod it is the worse of the two options, and the reason is specific to what
+this workload is: with Chrome's sandbox off, an exploit in a hostile page runs
+as the container's user and can open sockets DIRECTLY. That is egress which
+never passes scopyx's proxy and never reaches its journal, in the one pod in
+this namespace permitted out to the internet. The seccomp profile protects the
+node from the container; it does not protect the record from a compromised
+renderer.
+
+**Fixed by** choosing which sandbox to keep, visibly: the manifest sets
+`seccompProfile: { type: Unconfined }` with the reasoning next to it, and an
+operator whose policy is the other way round sets
+`SCOPYX_CHROMIUM_NO_SANDBOX=1` and restores `RuntimeDefault`.
+
+**Measured 2026-08-10 in Docker, not in a cluster.** With the default profile
+the browser refuses to start and names the sandbox; with the filter relaxed it
+renders a live page end to end through the assembled service. The Kubernetes
+half of this entry is desk-established: `48-scopyx-browser.yaml` has not been
+applied to a live cluster, because a cluster costs money and nobody has spent
+it on this yet.
+
+**And two container facts that come with it**, both ordinary and both silent
+when missed. `/dev/shm` defaults to 64 MiB in a container, which Chromium
+exhausts on ordinary pages: the symptom is not an error about memory, it is
+renderers crashing and fetches returning empty. And a browser needs somewhere
+to write with `readOnlyRootFilesystem: true`, which is what the `/tmp` emptyDir
+is for: scopyx makes a fresh profile directory per fetch and removes it, so
+nothing there may outlive the pod.
+
