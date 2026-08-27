@@ -18,6 +18,10 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 5.30"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.5"
+    }
   }
 }
 
@@ -195,8 +199,28 @@ resource "google_project_iam_member" "node_lb" {
 # in-tree GCE service controller does both. Rather than reach for
 # roles/compute.securityAdmin, which also carries SSL certificates and security
 # policies, this is exactly the missing set and nothing else.
+# The suffix is not decoration. GCP SOFT-deletes a custom role and reserves its
+# id for days afterwards, so `terraform destroy` followed by a fresh apply inside
+# that window fails on
+#
+#   You can't create a role_id (stack_k8s_ccm) which has been marked for
+#   deletion, failedPrecondition
+#
+# and the role is invisible to both `gcloud iam roles list --show-deleted` and
+# `gcloud iam roles undelete`, so there is nothing to clean up by hand either.
+# That made teardown followed by redeploy impossible for days at a time, which
+# is invariant 4 in ../../CLAUDE.md: the second run is the real test. Measured
+# 2026-08-27, on the second GCP range of the day.
+#
+# Destroying the cluster destroys this nonce with it, so the next apply picks a
+# new id and cannot collide with the reserved one. Custom roles are free, and
+# the abandoned ids age out on their own.
+resource "random_id" "role_nonce" {
+  byte_length = 3
+}
+
 resource "google_project_iam_custom_role" "node_extra" {
-  role_id     = replace("${var.cluster_name}_ccm", "-", "_")
+  role_id     = replace("${var.cluster_name}_ccm_${random_id.role_nonce.hex}", "-", "_")
   title       = "stack-k8s cloud controller, firewall and lookups"
   description = "The permissions the GCE service controller needs that roles/compute.loadBalancerAdmin does not grant."
   permissions = [

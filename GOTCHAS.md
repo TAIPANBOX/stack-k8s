@@ -2890,3 +2890,39 @@ throughout. Every Kubernetes check passed, all 44 pods were Running, etcd had
 quorum, and the operator had simply lost the ability to log in and fix any of
 it. Nothing in a health check looks at whether the people who own the cluster
 can still reach it.
+
+## 87. A teardown made the next deploy impossible for days, and left nothing to clean up
+
+**Platform.** `terraform destroy` removes the project's custom IAM role. GCP
+does not delete it, it SOFT-deletes it and reserves the id. A fresh
+`terraform apply` inside that window fails:
+
+    Error creating the custom project role
+    projects/stack-k8s-gcp/roles/stack_k8s_ccm: googleapi: Error 400:
+    You can't create a role_id (stack_k8s_ccm) which has been marked for
+    deletion., failedPrecondition
+
+**What makes it worse than a wait** is that the role is invisible from both
+directions. `gcloud iam roles list --project P` shows nothing.
+`gcloud iam roles list --project P --show-deleted` shows nothing. And
+`gcloud iam roles undelete stack_k8s_ccm --project P` answers `NOT_FOUND: The
+role named ... was not found`, as project Owner. So the id is reserved by
+something the API will neither show nor restore, and there is no manual step
+that clears it.
+
+This is invariant 4 in CLAUDE.md, the second run being the real test, broken by
+the platform rather than by us: the deploy worked once and could not be repeated
+until the reservation aged out.
+
+**Fixed by** giving the role id a nonce that lives and dies with the cluster:
+
+    resource "random_id" "role_nonce" { byte_length = 3 }
+    role_id = replace("${var.cluster_name}_ccm_${random_id.role_nonce.hex}", "-", "_")
+
+Destroying the cluster destroys the nonce, so the next apply picks an id that
+cannot collide with the reserved one. Custom roles cost nothing and the
+abandoned ids age out by themselves.
+
+**Measured 2026-08-27**, teardown at 17:24 and the next apply at 17:57, on the
+second GCP range of the same day. The first range never hit it because it was
+the first deploy after a long gap.
