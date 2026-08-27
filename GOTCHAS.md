@@ -2847,3 +2847,46 @@ of every page was decided, 40 on a Wikipedia article, 113 on bbc.com/news, 144
 on a GitHub repository page and 343 on nytimes.com, with a peak of 517 MiB for
 the whole pod against a 2 GiB limit.
 
+## 86. The deploy took the operator's ssh away from two nodes and did not notice for four steps
+
+**Ours, and fixed.** On the 2026-08-27 GCP range, `deploy-gcp.sh` reached step
+3/5 and died on `Permission denied (publickey)` against a node it had been
+talking to minutes earlier. The key had not changed, the operator's address had
+not changed, `enable-oslogin` was FALSE, the firewall was untouched, the serial
+console showed the node healthy with k3s running, and re-syncing the instance
+metadata did nothing.
+
+**What gave it away** was which nodes were affected. Two of three refused; the
+third did not. The third is the BUILDER, and `BUILDER` is the last node in the
+list. The distribution-key loop skips the builder and touches every other node,
+so the set that broke is exactly the set this script rewrites
+`~/.ssh/authorized_keys` on.
+
+**Why:** the removal step ended `> ~/.ssh/authorized_keys.new && mv
+~/.ssh/authorized_keys.new ~/.ssh/authorized_keys`. `mv` replaces the inode, so
+the key file comes back owned and moded by whatever the shell's umask gave the
+temporary. sshd is deliberately strict about that file and refuses it, and the
+refusal it gives is `Permission denied (publickey)`: a completed TCP connection,
+a finished handshake, a rejected key. Nothing in that message suggests the file
+was written by the tool that is now failing to connect.
+
+A reboot restored access on the node that was rebooted, which fits: the GCE
+guest agent rebuilds `authorized_keys` from instance metadata at boot. The node
+that was never rebooted was still refusing an hour later.
+
+**Fixed by** writing THROUGH the file instead of over it, `cat tmp >
+authorized_keys`, which keeps the original inode, mode and owner, guarded by a
+`-s` test so an empty filter result can never truncate the operator's own key
+and lock everyone out of a running cluster. Both `deploy-gcp.sh` and
+`deploy-aws.sh` carried the same line and both are fixed.
+
+**And then checked**, which is the part that was missing entirely: the loop is
+followed by an ssh to every node, so a broken key fails immediately, at the step
+that broke it, with a message naming the remedy. Before this the deploy carried
+on for four steps and failed somewhere unrelated.
+
+**The lesson is about the class, not the line.** The cluster was green
+throughout. Every Kubernetes check passed, all 44 pods were Running, etcd had
+quorum, and the operator had simply lost the ability to log in and fix any of
+it. Nothing in a health check looks at whether the people who own the cluster
+can still reach it.

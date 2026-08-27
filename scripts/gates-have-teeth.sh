@@ -196,6 +196,19 @@ run_case "gotchas-classified: an entry with no classification" fail \
 	"$(py 'edit("GOTCHAS.md", "> **Platform.**", "> Platform, unlabelled.")')" \
 	"has no classification"
 
+# A k3s install that does not name the node leaves its identity to whatever
+# `hostname` returns at boot, and a machine that comes back under a different
+# name registers a SECOND node object while the first sits NotReady forever
+# holding its old pod records (FINDINGS.md F3, 2026-08-27).
+run_case "node-name-is-pinned: an install that lets the boot choose the name" fail \
+	'./scripts/node-name-is-pinned.sh' \
+	"$(py 'import re
+s = open("cloud/gcp/install-gcp.sh").read()
+out = re.sub(r"^ +--node-name .*\n", "", s, count=1, flags=re.M)
+assert out != s, "no --node-name line to remove"
+open("cloud/gcp/install-gcp.sh", "w").write(out)')" \
+	"without --node-name"
+
 echo
 echo "=== and what they must NOT catch ==="
 
@@ -212,6 +225,16 @@ for f in sorted(glob.glob("manifests/*.yaml")):
         break
 else:
     raise AssertionError("no postgres image reference to leave alone")')"
+
+
+# Prose describing an unpinned install is not an unpinned install. This gate
+# reads code, and the marker below is assembled from pieces so that this very
+# file does not become a subject of the gate it is testing.
+run_case "node-name-is-pinned: a comment describing an unpinned install" pass \
+	'./scripts/node-name-is-pinned.sh' \
+	"$(py 'marker = "sh -s " + "- server"
+s = open("install.sh").read()
+open("install.sh", "w").write(s + "\n# For reference, an unpinned install used to read:\n#   " + marker + " --cluster-init --node-ip 1.2.3.4\n")')"
 
 echo
 echo "=== and the one this estate learned the hard way ==="
@@ -237,6 +260,18 @@ out = re.sub(r"^## (\d+)\. ", r"### \\1) ", s, flags=re.M)
 assert out != s, "no numbered gotcha headings to disable"
 open("GOTCHAS.md", "w").write(out)')" \
 	"no numbered gotcha sections found"
+
+run_case "node-name-is-pinned: no k3s install left to check" fail \
+	'./scripts/node-name-is-pinned.sh' \
+	"$(py 'import glob, subprocess
+marker = "sh -s " + "- server"
+n = 0
+for f in sorted(glob.glob("*.sh")) + sorted(glob.glob("cloud/*/*.sh")):
+    if marker in open(f).read():
+        subprocess.run(["git", "mv", f, f[:-3] + ".bash"], check=True)
+        n += 1
+assert n, "no installer to move out of the way"')" \
+	"measured nothing"
 
 run_case "portability-claims: the comparison sheet loses its section" fail \
 	'./scripts/portability-claims.sh' \

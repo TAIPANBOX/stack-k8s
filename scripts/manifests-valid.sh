@@ -105,7 +105,23 @@ while IFS= read -r f; do
 	done
 	[ -z "$skip" ] && files+=("$f")
 done < <(
-	find manifests tunnel cloud -name '*.yaml' -not -name 'kustomization.yaml' 2>/dev/null | sort
+	# `git check-ignore` filters out what the repository deliberately does not
+	# track. Without it this gate validated cloud/gcp/kubeconfig.yaml, which a
+	# deploy writes beside the terraform state and .gitignore excludes because it
+	# holds cluster credentials. kubeconform has no schema for a kubeconfig, so
+	# the gate went red on every machine that had ever run a deploy and stayed
+	# green in CI, where the file does not exist.
+	#
+	# The cost was not the red line. `gates-have-teeth.sh` refuses to judge a
+	# gate that is already failing, so the two manifests-valid cases reported
+	# UNJUDGEABLE, and this gate quietly stopped being verified on exactly the
+	# machines that run deployments.
+	#
+	# Asking git is discovery, not a list: a file added to .gitignore later is
+	# excluded here without anyone remembering to come back.
+	find manifests tunnel cloud -name '*.yaml' -not -name 'kustomization.yaml' 2>/dev/null \
+		| sort | git check-ignore --stdin --non-matching --verbose 2>/dev/null \
+		| sed -n 's/^::[[:space:]]*//p'
 )
 
 if [ "${#files[@]}" -eq 0 ]; then
