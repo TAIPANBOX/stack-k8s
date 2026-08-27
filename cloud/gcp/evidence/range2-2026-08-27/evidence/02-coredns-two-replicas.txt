@@ -1,0 +1,6 @@
+18:04:15Z
+--- coredns ---
+spec.replicas=2 ready=2
+--- and WHERE they are ---
+coredns-5f5694d56b-7jbn6   stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal
+coredns-5f5694d56b-phklk   stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal

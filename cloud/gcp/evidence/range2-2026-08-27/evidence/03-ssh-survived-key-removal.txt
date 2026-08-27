@@ -1,0 +1,4 @@
+18:19:22Z independent ssh check after the key-removal step
+34.141.81.101    OK  authorized_keys 230 bytes mode 600 owner ubuntu
+34.89.219.7      OK  authorized_keys 230 bytes mode 600 owner ubuntu
+34.179.142.184   OK  authorized_keys 230 bytes mode 600 owner ubuntu

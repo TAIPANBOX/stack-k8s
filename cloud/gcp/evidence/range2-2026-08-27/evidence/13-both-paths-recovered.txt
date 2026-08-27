@@ -1,0 +1,8 @@
+allow path (402 = policy allowed, ledger stopped it):
+18:33:24 402
+18:33:25 402
+18:33:25 402
+deny path (403 = refused):
+18:33:25 403 deny
+18:33:26 403 deny
+18:33:26 403 deny

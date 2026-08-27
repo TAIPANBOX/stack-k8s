@@ -1,0 +1,428 @@
+
+>> using this checkout: /Users/yukos/Development/stack-k8s
+
+>> step 1/5: the cluster
+
+== preflight on 3 node(s)
+
+== forgetting host keys for addresses this cloud may have recycled
+   done (this is not the same as disabling the check: see the comment)
+   34.141.81.101    private 10.10.0.4    stack-k8s-server-1     europe-west3-a
+   34.89.219.7      private 10.10.0.3    stack-k8s-server-2     europe-west3-a
+   34.179.142.184   private 10.10.0.2    stack-k8s-server-3     europe-west3-a
+   project stack-k8s-gcp
+
+== firewall
+   the tag-scoped rules Terraform created are already enforcing ssh, 6443 and
+   icmp from your address only, plus the NodePort range from Google's two
+   health check ranges. Nothing to do here, which is the GCP difference.
+
+== sshd: keys only
+   34.141.81.101 hardened
+   34.89.219.7 hardened
+   34.179.142.184 hardened
+
+== node prep: iscsi + nfs client on every node
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+   done
+
+== k3s server on 34.141.81.101 (10.10.0.4)
+[INFO]  Using v1.36.2+k3s1 as release
+[INFO]  Downloading hash https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/sha256sum-amd64.txt
+[INFO]  Downloading binary https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/k3s
+[INFO]  Verifying binary download
+[INFO]  Installing k3s to /usr/local/bin/k3s
+[INFO]  Skipping installation of SELinux RPM
+[INFO]  Creating /usr/local/bin/kubectl symlink to k3s
+[INFO]  Creating /usr/local/bin/crictl symlink to k3s
+[INFO]  Creating /usr/local/bin/ctr symlink to k3s
+[INFO]  Creating killall script /usr/local/bin/k3s-killall.sh
+[INFO]  Creating uninstall script /usr/local/bin/k3s-uninstall.sh
+[INFO]  env: Creating environment file /etc/systemd/system/k3s.service.env
+[INFO]  systemd: Creating service file /etc/systemd/system/k3s.service
+[INFO]  systemd: Enabling k3s unit
+Created symlink '/etc/systemd/system/multi-user.target.wants/k3s.service' → '/etc/systemd/system/k3s.service'.
+[INFO]  systemd: Starting k3s
+
+== waiting for the API server
+   ready
+
+== k3s server joining: 34.89.219.7 (10.10.0.3)
+[INFO]  Using v1.36.2+k3s1 as release
+[INFO]  Downloading hash https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/sha256sum-amd64.txt
+[INFO]  Downloading binary https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/k3s
+[INFO]  Verifying binary download
+[INFO]  Installing k3s to /usr/local/bin/k3s
+[INFO]  Skipping installation of SELinux RPM
+[INFO]  Creating /usr/local/bin/kubectl symlink to k3s
+[INFO]  Creating /usr/local/bin/crictl symlink to k3s
+[INFO]  Creating /usr/local/bin/ctr symlink to k3s
+[INFO]  Creating killall script /usr/local/bin/k3s-killall.sh
+[INFO]  Creating uninstall script /usr/local/bin/k3s-uninstall.sh
+[INFO]  env: Creating environment file /etc/systemd/system/k3s.service.env
+[INFO]  systemd: Creating service file /etc/systemd/system/k3s.service
+[INFO]  systemd: Enabling k3s unit
+Created symlink '/etc/systemd/system/multi-user.target.wants/k3s.service' → '/etc/systemd/system/k3s.service'.
+[INFO]  systemd: Starting k3s
+
+== k3s server joining: 34.179.142.184 (10.10.0.2)
+[INFO]  Using v1.36.2+k3s1 as release
+[INFO]  Downloading hash https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/sha256sum-amd64.txt
+[INFO]  Downloading binary https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/k3s
+[INFO]  Verifying binary download
+[INFO]  Installing k3s to /usr/local/bin/k3s
+[INFO]  Skipping installation of SELinux RPM
+[INFO]  Creating /usr/local/bin/kubectl symlink to k3s
+[INFO]  Creating /usr/local/bin/crictl symlink to k3s
+[INFO]  Creating /usr/local/bin/ctr symlink to k3s
+[INFO]  Creating killall script /usr/local/bin/k3s-killall.sh
+[INFO]  Creating uninstall script /usr/local/bin/k3s-uninstall.sh
+[INFO]  env: Creating environment file /etc/systemd/system/k3s.service.env
+[INFO]  systemd: Creating service file /etc/systemd/system/k3s.service
+[INFO]  systemd: Enabling k3s unit
+Created symlink '/etc/systemd/system/multi-user.target.wants/k3s.service' → '/etc/systemd/system/k3s.service'.
+[INFO]  systemd: Starting k3s
+
+== nodes
+NAME                                                         STATUS   PROVIDER
+stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal   Ready    gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-1
+stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   Ready    gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-2
+stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   Ready    gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-3
+
+== Calico v3.29.1 (VXLAN, unconditional: see the comment above this line in the source)
+namespace/tigera-operator created
+customresourcedefinition.apiextensions.k8s.io/bgpconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/bgpfilters.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/bgppeers.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/blockaffinities.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/caliconodestatuses.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/clusterinformations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/felixconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/globalnetworkpolicies.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/globalnetworksets.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/hostendpoints.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipamblocks.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipamconfigs.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipamhandles.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ippools.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipreservations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/kubecontrollersconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/networkpolicies.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/networksets.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/tiers.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/adminnetworkpolicies.policy.networking.k8s.io created
+customresourcedefinition.apiextensions.k8s.io/apiservers.operator.tigera.io created
+customresourcedefinition.apiextensions.k8s.io/imagesets.operator.tigera.io created
+customresourcedefinition.apiextensions.k8s.io/installations.operator.tigera.io created
+customresourcedefinition.apiextensions.k8s.io/tigerastatuses.operator.tigera.io created
+serviceaccount/tigera-operator created
+clusterrole.rbac.authorization.k8s.io/tigera-operator created
+clusterrolebinding.rbac.authorization.k8s.io/tigera-operator created
+deployment.apps/tigera-operator created
+
+== waiting for Calico to make every node Ready
+   all nodes Ready
+
+== cluster DNS: more than one replica
+   coredns replicas=2
+
+== cross-node pod traffic (the check the AWS run wished it had)
+   vxlanMode=Always, so pod packets never leave a node unencapsulated
+
+== Longhorn v1.7.2
+namespace/longhorn-system created
+priorityclass.scheduling.k8s.io/longhorn-critical created
+serviceaccount/longhorn-service-account created
+serviceaccount/longhorn-ui-service-account created
+serviceaccount/longhorn-support-bundle created
+configmap/longhorn-default-setting created
+configmap/longhorn-storageclass created
+customresourcedefinition.apiextensions.k8s.io/backingimagedatasources.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/backingimagemanagers.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/backingimages.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/backupbackingimages.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/backups.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/backuptargets.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/backupvolumes.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/engineimages.longhorn.io created
+Warning: unrecognized format "int64"
+customresourcedefinition.apiextensions.k8s.io/engines.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/instancemanagers.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/nodes.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/orphans.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/recurringjobs.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/replicas.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/settings.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/sharemanagers.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/snapshots.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/supportbundles.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/systembackups.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/systemrestores.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/volumeattachments.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/volumes.longhorn.io created
+clusterrole.rbac.authorization.k8s.io/longhorn-role created
+clusterrolebinding.rbac.authorization.k8s.io/longhorn-bind created
+clusterrolebinding.rbac.authorization.k8s.io/longhorn-support-bundle created
+service/longhorn-backend created
+service/longhorn-frontend created
+service/longhorn-conversion-webhook created
+service/longhorn-admission-webhook created
+service/longhorn-recovery-backend created
+daemonset.apps/longhorn-manager created
+deployment.apps/longhorn-driver-deployer created
+deployment.apps/longhorn-ui created
+
+== waiting for Longhorn (this takes a few minutes on a fresh node)
+   longhorn-manager ready on 3/3 nodes
+
+== one default StorageClass
+NAME                 PROVISIONER          RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+longhorn (default)   driver.longhorn.io   Delete          Immediate           true                   1s
+
+== stack-rwx StorageClass
+storageclass.storage.k8s.io/stack-rwx created
+
+== cloud-provider-gcp v36.2.4 (load balancers only)
+   project stack-k8s-gcp  network stack-k8s  subnetwork stack-k8s-nodes  zone europe-west3-a  tag stack-k8s-node
+configmap/gce-cloud-config created
+serviceaccount/cloud-controller-manager created
+clusterrole.rbac.authorization.k8s.io/stack-gcp-cloud-controller-manager created
+clusterrolebinding.rbac.authorization.k8s.io/stack-gcp-cloud-controller-manager created
+role.rbac.authorization.k8s.io/stack-gcp-ccm-cluster-id created
+rolebinding.rbac.authorization.k8s.io/stack-gcp-ccm-cluster-id created
+rolebinding.rbac.authorization.k8s.io/stack-gcp-ccm-authentication-reader created
+daemonset.apps/gcp-cloud-controller-manager created
+Waiting for daemon set "gcp-cloud-controller-manager" rollout to finish: 0 of 3 updated pods are available...
+Waiting for daemon set "gcp-cloud-controller-manager" rollout to finish: 1 of 3 updated pods are available...
+Waiting for daemon set "gcp-cloud-controller-manager" rollout to finish: 2 of 3 updated pods are available...
+daemon set "gcp-cloud-controller-manager" successfully rolled out
+
+== confirming the cloud controller is actually running, not merely started
+   3/3 running, restart counts stable
+
+== policy-store credentials (generated, never committed)
+   created secret stack-policy-db
+
+== plane credentials (generated, never committed)
+   created secret stack-keys
+
+== kubeconfig -> ./kubeconfig.yaml
+
+== verify
+NAME                                                         STATUS   PROVIDER                                                IP
+stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal   Ready    gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-1   10.10.0.4
+stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   Ready    gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-2   10.10.0.3
+stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   Ready    gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-3   10.10.0.2
+
+NAME                 PROVISIONER          RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+longhorn (default)   driver.longhorn.io   Delete          Immediate           true                   37s
+longhorn-static      driver.longhorn.io   Delete          Immediate           true                   29s
+stack-rwx            driver.longhorn.io   Retain          Immediate           true                   35s
+
+NAME                           DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                                AGE
+gcp-cloud-controller-manager   3         3         3       3            3           node-role.kubernetes.io/control-plane=true   30s
+
+Platform is up, and billing. Two commands left:
+
+  1. Build the stack's images and import them into every node:
+
+       cd ../.. && ./build.sh ubuntu@34.141.81.101 ubuntu@34.89.219.7 ubuntu@34.179.142.184 
+
+  2. Apply the workload:
+
+       KUBECONFIG=cloud/gcp/./kubeconfig.yaml kubectl apply -k manifests/
+
+  Then the tunnel, unchanged from the other two clouds (GOTCHAS.md item 13: it
+  has to land on the node running the console pod):
+
+       ssh -i /Users/yukos/.ssh/stack-k8s-gcp -L 17420:$(kubectl -n agent-stack get svc genaryx-console -o jsonpath='{.spec.clusterIP}'):7420 ubuntu@<node running the console>
+
+  A public entry point is a separate, metered decision: loadbalancer-gcp.yaml,
+  and on GCP it is a forwarding rule at USD 0.030/hour plus USD 0.010/GiB.
+
+  When done: ./teardown.sh  (about USD 1.88/hour says so)
+
+>> step 2/5: sources and images on 34.179.142.184
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+   qryx ok
+   mockryx ok
+   tokenfuse ok
+   verdryx ok
+   engram ok
+
+>> fetching the console source here, so any token stays on this machine
+   console source at bf229f7, uploading to the builder
+   genaryx (console) staged, no credential on any node
+
+>> building what is not published (the console build is four languages and takes the longest)
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+   built stack/tokenfuse:dev
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+   built stack/genaryx-console:dev
+
+>> distributing images over the private network
+   stack/tokenfuse:dev -> builder
+   stack/tokenfuse:dev -> 10.10.0.4
+   stack/tokenfuse:dev -> 10.10.0.3
+   stack/genaryx-console:dev -> builder
+   stack/genaryx-console:dev -> 10.10.0.4
+   stack/genaryx-console:dev -> 10.10.0.3
+
+>> removing the distribution key
+   done, the nodes are back to the operator's key only
+
+>> step 3/5: the workload
+namespace/agent-stack configured
+configmap/stack-environment created
+configmap/stack-wiring created
+configmap/wardryx-policy created
+service/genaryx-console created
+service/idryx created
+service/policy-db created
+service/tokenfuse-cloud created
+service/tokenfuse-gateway created
+service/wardryx created
+persistentvolumeclaim/cloud-state created
+persistentvolumeclaim/console-state created
+persistentvolumeclaim/stack-events created
+deployment.apps/genaryx-console created
+deployment.apps/idryx created
+deployment.apps/tokenfuse-cloud created
+deployment.apps/tokenfuse-gateway created
+deployment.apps/wardryx created
+statefulset.apps/policy-db created
+cronjob.batch/crypto-trend created
+cronjob.batch/drills created
+cronjob.batch/identity-sweep created
+cronjob.batch/quality-drift created
+networkpolicy.networking.k8s.io/allow-dns created
+networkpolicy.networking.k8s.io/console-egress created
+networkpolicy.networking.k8s.io/console-ingress-lb created
+networkpolicy.networking.k8s.io/default-deny created
+networkpolicy.networking.k8s.io/drills-egress-gateway created
+networkpolicy.networking.k8s.io/gateway-egress-internet created
+networkpolicy.networking.k8s.io/gateway-ingress-drills created
+networkpolicy.networking.k8s.io/planes-ingress created
+networkpolicy.networking.k8s.io/policy-store created
+networkpolicy.networking.k8s.io/wardryx-egress-store created
+
+>> waiting for rollouts
+Waiting for deployment "genaryx-console" rollout to finish: 0 of 1 updated replicas are available...
+deployment "genaryx-console" successfully rolled out
+Waiting for deployment "idryx" rollout to finish: 0 of 1 updated replicas are available...
+deployment "idryx" successfully rolled out
+deployment "tokenfuse-cloud" successfully rolled out
+deployment "tokenfuse-gateway" successfully rolled out
+Waiting for deployment "wardryx" rollout to finish: 0 of 1 updated replicas are available...
+deployment "wardryx" successfully rolled out
+partitioned roll out complete: 1 new pods have been updated...
+
+>> step 4/5: is it running
+
+nodes
+NAME                                                         READY   PROVIDER                                                IP
+stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal   Ready   gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-1   10.10.0.4
+stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   Ready   gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-2   10.10.0.3
+stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   Ready   gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-3   10.10.0.2
+  ok   every node Ready
+  ok   no machine is registered under two node names
+  ok   cluster DNS has 2 ready replicas
+
+pods
+POD                                 NODE                                                         READY   STATUS
+genaryx-console-75b9b5fdcc-6v9px    stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal   true    Running
+idryx-56b547655f-pgbkp              stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   true    Running
+policy-db-0                         stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   true    Running
+tokenfuse-cloud-8c8f98945-zg9f9     stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal   true    Running
+tokenfuse-gateway-c65c5fb64-wn64v   stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   true    Running
+wardryx-595d444fc6-s2qj7            stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   true    Running
+  ok   every pod Running (finished Job pods ignored)
+  ok   workload spread over 3 nodes
+
+storage
+CLAIM              MODE              CLASS       STATUS   SIZE
+cloud-state        [ReadWriteOnce]   longhorn    Bound    2Gi
+console-state      [ReadWriteOnce]   longhorn    Bound    2Gi
+data-policy-db-0   [ReadWriteOnce]   longhorn    Bound    5Gi
+stack-events       [ReadWriteMany]   stack-rwx   Bound    5Gi
+  ok   the RWX event volume is Bound
+  ok   1 default StorageClass
+
+network policy is actually enforced
+  ok   10 NetworkPolicies present
+  ok   default-deny holds (the console cannot reach the policy store)
+
+every plane answers
+  cloud 200
+  gateway 200
+  wardryx 200
+  idryx 200
+  console 200
+  ok   all five planes answer 200
+
+the data the console governs
+  money    0 runs, $0.00 settled, 0 budget alerts
+  policy   0 policies (0 console blocks), 0 approvals
+  identity 0 identities
+  ok   the console can read all three planes it governs
+
+the console is reading a real environment, not fixtures
+  ok   an environment descriptor is mounted
+
+the notifier
+  note heraldyx is not deployed: this box was not asked to write to anyone
+
+result
+  12 passed, 0 failed, 1 noted
+
+
+>> step 5/5: is it contained
+
+0. the notifier's way out goes outward only
+  note heraldyx is not deployed: no egress rule to test
+
+1. a compromised pod in this namespace reaches nothing

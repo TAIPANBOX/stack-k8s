@@ -1,0 +1,2 @@
+18:24:40 scaling wardryx to 0
+18:25:06 scaling wardryx back to 1

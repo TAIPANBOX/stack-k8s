@@ -1,0 +1,17 @@
+== billable ==
+  instances                  none
+  disks                      none
+  snapshots                  none
+  custom images              none
+  reserved IPs               none
+  forwarding rules           none
+  target pools               none
+  GKE clusters               none
+  filestore                  none
+  storage buckets            none
+  SQL instances              none
+== free, but leftovers that block a clean VPC ==
+  networks                   default 
+  firewall rules             default-allow-icmp default-allow-internal default-allow-rdp default-allow-ssh 
+  service accounts           960706384607-compute@developer.gserviceaccount.com 
+  custom roles               none

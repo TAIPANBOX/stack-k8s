@@ -1,0 +1,22 @@
+   clear: networks
+   clear: filestore
+   clear: snapshots
+
+   Nothing left. The meter is at zero for this project.
+
+  Two things this script deliberately does NOT delete:
+
+    - your SSH keypair (~/.ssh/stack-k8s-gcp), which costs nothing and is yours
+    - the PROJECT itself, which costs nothing empty and is reused for the next
+      run. GCP has a kill switch the other two clouds do not:
+
+        gcloud projects delete stack-k8s-gcp
+
+      That removes everything in it at once, billable or not, with a 30 day
+      undo. It is the only teardown that cannot miss anything, and it is the
+      project owner's call, not this script's.
+
+  Check the bill tomorrow, not just this output. Billing data lags real usage
+  by several hours on every cloud.
+
+[exited with code 0]
