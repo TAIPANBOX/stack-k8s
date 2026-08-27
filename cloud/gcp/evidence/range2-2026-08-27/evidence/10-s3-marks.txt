@@ -1,0 +1,2 @@
+18:26:49 stopping server-2 (holds wardryx AND policy-db)
+18:29:15 stop returned

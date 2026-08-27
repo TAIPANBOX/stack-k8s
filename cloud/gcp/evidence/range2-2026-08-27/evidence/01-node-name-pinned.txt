@@ -1,0 +1,9 @@
+18:04:00Z
+--- k3s unit ---
+	'--cluster-init' \
+	'--node-name' \
+	'stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal' \
+--- nodes ---
+stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal   True   gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-1
+stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   True   gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-2
+stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   True   gce://stack-k8s-gcp/europe-west3-a/stack-k8s-server-3
