@@ -1,0 +1,5 @@
+Warning: Permanently added '34.89.219.7' (ED25519) to the list of known hosts.
+NAME                                                         STATUS   ROLES                AGE     VERSION        INTERNAL-IP   EXTERNAL-IP   OS-IMAGE           KERNEL-VERSION           CONTAINER-RUNTIME
+stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal   Ready    control-plane,etcd   3m49s   v1.36.2+k3s1   10.10.0.4     <none>        Ubuntu 26.04 LTS   7.0.0-1010-gcp (amd64)   containerd://2.3.2-k3s2
+stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   Ready    control-plane,etcd   3m20s   v1.36.2+k3s1   10.10.0.3     <none>        Ubuntu 26.04 LTS   7.0.0-1010-gcp (amd64)   containerd://2.3.2-k3s2
+stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   Ready    control-plane,etcd   2m53s   v1.36.2+k3s1   10.10.0.2     <none>        Ubuntu 26.04 LTS   7.0.0-1010-gcp (amd64)   containerd://2.3.2-k3s2

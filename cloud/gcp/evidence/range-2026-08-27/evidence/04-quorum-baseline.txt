@@ -1,0 +1,13 @@
+== etcd quorum ==
+[+]poststarthook/kube-apiserver-autoregistration ok
+[+]autoregister-completion ok
+[+]poststarthook/apiservice-openapi-controller ok
+[+]poststarthook/apiservice-openapiv3-controller ok
+[+]shutdown ok
+readyz check passed
+
+== what a node loss would cost ==
+      2 3m36s
+     17 stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal
+     13 stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal
+     12 stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal

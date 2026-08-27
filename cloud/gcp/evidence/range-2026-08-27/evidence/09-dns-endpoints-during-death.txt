@@ -1,0 +1,4 @@
+=== coredns pods and where they live ===
+coredns-5f5694d56b-wzwdl Running stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal
+=== the EndpointSlice, which is what callers actually resolve through ===
+10.42.83.134 node=stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal ready=false

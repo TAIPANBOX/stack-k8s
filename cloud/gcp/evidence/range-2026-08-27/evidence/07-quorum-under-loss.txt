@@ -1,0 +1,14 @@
+ok
+== pods that were on the dead node ==
+
+real	0m0.089s
+user	0m0.067s
+sys	0m0.049s
+calico-apiserver calico-apiserver-7b45d65d47-7mcpz Running
+calico-apiserver calico-apiserver-7b45d65d47-qhvjk Running
+calico-system calico-kube-controllers-5f5f44c946-5ff8n Running
+calico-system calico-node-j2t5t Running
+calico-system csi-node-driver-tpchz Running
+kube-system coredns-5f5694d56b-wzwdl Running
+== how many now not Running ==
+0

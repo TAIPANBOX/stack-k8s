@@ -1,0 +1,5 @@
+agent-stack calico-apiserver calico-system default kube-node-lease kube-public kube-system longhorn-system tigera-operator 
+--- etcd members ---
+coredns-5f5694d56b-wzwdl             1/1   Running   0     4m33s
+gcp-cloud-controller-manager-9wnqw   1/1   Running   0     2m47s
+gcp-cloud-controller-manager-mrc24   1/1   Running   0     2m47s

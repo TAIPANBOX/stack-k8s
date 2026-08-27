@@ -1,0 +1,9 @@
+1:17:15:49 er-1=Ready er-1.eur=NotReady er-2.eur=Ready er-3.eur=Ready 
+2:17:15:51 er-1=Ready er-1.eur=NotReady er-2.eur=Ready er-3.eur=Ready 
+--- current ---
+17:16:39 er-1=NotReady er-1.eur=NotReady er-2.eur=Ready er-3.eur=Ready 
+17:16:42 er-1=NotReady er-1.eur=NotReady er-2.eur=Ready er-3.eur=Ready 
+last line where the partitioned node still looked Ready:
+17:16:31 er-1=Ready er-1.eur=NotReady er-2.eur=Ready er-3.eur=Ready 
+first line where the majority marked it NotReady:
+17:16:33 er-1=NotReady er-1.eur=NotReady er-2.eur=Ready er-3.eur=Ready 

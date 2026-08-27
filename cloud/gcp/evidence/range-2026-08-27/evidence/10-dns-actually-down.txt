@@ -1,0 +1,3 @@
+=== 17:12:23Z real DNS query to the cluster service IP ===
+kubernetes.default.svc.cluster.local          ANSWERED in 1 ms, 1 answer rr
+kube-dns.kube-system.svc.cluster.local        ANSWERED in 0 ms, 1 answer rr

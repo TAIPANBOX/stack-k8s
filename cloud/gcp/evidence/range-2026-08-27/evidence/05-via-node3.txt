@@ -1,0 +1,4 @@
+stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal   Ready   control-plane,etcd   20m   v1.36.2+k3s1
+stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   Ready   control-plane,etcd   20m   v1.36.2+k3s1
+stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   Ready   control-plane,etcd   19m   v1.36.2+k3s1
+--- pods not running ---
