@@ -59,6 +59,39 @@ $KUBECTL get nodes -o custom-columns=NAME:.metadata.name,READY:.status.condition
 notready="$($KUBECTL get nodes --no-headers 2>/dev/null | grep -cv ' Ready ')"
 [ "${notready:-1}" = 0 ] && ok "every node Ready" || bad "$notready node(s) not Ready"
 
+# One machine registered TWICE. A node name that is not pinned is re-derived at
+# boot, and a machine that comes back under a different name leaves its old
+# object behind: NotReady for the rest of the cluster's life, still holding the
+# pod records it had when it left, and cleaned up by nothing
+# (cloud/gcp/evidence/range-2026-08-27/FINDINGS.md, F3, where it held 17).
+#
+# The provider ID is what makes this exact rather than a guess: it names the
+# INSTANCE, so two node objects carrying the same one are two names for one
+# machine. Counting NotReady nodes cannot tell that apart from a node that is
+# merely down, which is why it is a separate check.
+dupe_provider="$($KUBECTL get nodes -o jsonpath='{range .items[*]}{.spec.providerID}{"\n"}{end}' 2>/dev/null \
+  | grep -v '^$' | sort | uniq -d | grep -c . || true)"
+if [ "${dupe_provider:-0}" = 0 ]; then
+  ok "no machine is registered under two node names"
+else
+  bad "$dupe_provider machine(s) hold two node objects each: a stale name was left behind, see FINDINGS F3"
+fi
+
+# Cluster DNS at one replica means one dead node costs the full not-ready
+# toleration in lost name resolution, measured at 298 s on 2026-08-27
+# (FINDINGS.md, F2). The installers scale this to two; k3s re-applies its own
+# manifest on a version change, so this is here to catch the revert.
+dns_replicas="$($KUBECTL -n kube-system get deployment coredns -o jsonpath='{.status.readyReplicas}' 2>/dev/null)"
+if [ "${nodes_total_early:-$($KUBECTL get nodes --no-headers 2>/dev/null | grep -c .)}" -le 1 ]; then
+  note "single-node cluster: cluster DNS cannot be spread, and one replica is all there is to have"
+elif [ -z "$dns_replicas" ]; then
+  bad "cannot read the coredns replica count: is cluster DNS deployed?"
+elif [ "$dns_replicas" -ge 2 ]; then
+  ok "cluster DNS has $dns_replicas ready replicas"
+else
+  bad "cluster DNS has $dns_replicas ready replica: one dead node costs the full 300 s toleration in lost resolution"
+fi
+
 head_ "pods"
 kc get pods -o custom-columns=POD:.metadata.name,NODE:.spec.nodeName,READY:.status.containerStatuses[0].ready,STATUS:.status.phase
 # `Completed` is not a failure: the CronJobs leave finished pods behind, and so

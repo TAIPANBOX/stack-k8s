@@ -215,6 +215,45 @@ an absent invariant.
     both `apiVersion` and `kind`, because that is how it names its target. See
     GOTCHAS 82.
 
+11. **A node's identity is decided by the install, never by a later boot.**
+    Every k3s install passes `--node-name`. Left to k3s, the name defaults to
+    whatever `hostname` returns at that moment, and that value is not reliably
+    stable: on 2026-08-27 a GCP node that had registered under its fully
+    qualified internal name came back from a stop/start under its short one. The
+    result is a SECOND node object for one machine, while the first sits
+    NotReady for the rest of the cluster's life still holding the 17 pod records
+    it had when it left, cleaned up by nothing, on a cluster that reports itself
+    healthy the whole time.
+
+    The honest limit: a controlled reboot afterwards did NOT reproduce it, so
+    the trigger is not "any restart" and the cause is not established. This
+    invariant is not holding a proven mechanism, it is removing the dependency
+    on one. A name we choose cannot be re-chosen by a boot, whatever the race
+    turns out to be.
+
+    `verify.sh` carries the other half, on a running cluster: two node objects
+    with the same `providerID` are one machine registered twice, which is the
+    exact shape of the fault and distinguishable from a node that is merely
+    down.
+    *(gate: `scripts/node-name-is-pinned.sh`, which FINDS the installs rather
+    than listing them, reads code rather than comments, and fails when it can
+    find no install at all. Three cases in `scripts/gates-have-teeth.sh`.
+    Measured evidence: `cloud/gcp/evidence/range-2026-08-27/FINDINGS.md`, F3.)*
+
+12. **Cluster DNS runs on more than one node wherever there is more than one
+    node.** Measured 2026-08-27: with `replicas=1`, stopping a single node cost
+    298 seconds of name resolution for the whole cluster, which is the 300 s
+    `not-ready` toleration charged in full while the sole coredns pod waited to
+    be rescheduled. Nothing was broken. The configuration said one dead node
+    costs five minutes of DNS, and it charged exactly that.
+
+    The installers scale it after the nodes are Ready. k3s owns the manifest and
+    re-applies it on its own version change, not on restart, so this survives a
+    reboot but not a k3s upgrade.
+    *(partly gated: `verify.sh` checks the replica count on a running cluster,
+    which turns a revert into a failed check rather than into the next outage.
+    Nothing static can hold it, because the number lives on the cluster.)*
+
 ## Decisions that have no gate yet
 
 This list is debt, and it is here to stay visible rather than to be tidy.

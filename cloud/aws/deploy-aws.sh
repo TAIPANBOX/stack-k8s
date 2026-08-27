@@ -363,10 +363,39 @@ else
       done
     done\""
 
+  # Rewritten THROUGH the file rather than over it, and never with nothing.
+  #
+  # `> new && mv new authorized_keys` replaces the inode, so the operator's key
+  # file comes back with whatever mode and owner the shell's umask handed the
+  # temporary. sshd is strict about that file by design and answers a bad mode
+  # with `Permission denied (publickey)`: a completed handshake, a rejected key,
+  # and no hint that the file it just refused is one this script wrote.
+  #
+  # On 2026-08-27 the operator lost ssh to exactly the nodes this loop touches,
+  # and kept it on the builder, which the loop skips. The cluster stayed green
+  # throughout, so nothing alerted; the deploy failed four steps later on a
+  # connection it had broken itself. A reboot restored access, which fits: the
+  # GCE guest agent rebuilds this file from instance metadata at boot.
+  # See cloud/gcp/evidence/range-2026-08-27/FINDINGS.md, F1.
+  #
+  # `cat tmp > ak` keeps the original file, its mode and its owner. The `-s`
+  # test is the other half and matters more: if the filter ever produced an
+  # empty result, writing it would remove the operator's own key and lock
+  # everyone out of a running cluster permanently. Doing nothing is always the
+  # better failure here.
   say "removing the distribution key"
   for n in "${ALL_NODES[@]}"; do
     [ "$n" = "$BUILDER" ] && continue
-    sh_ "$n" "grep -vF '$DIST_PUB' ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.new 2>/dev/null && mv ~/.ssh/authorized_keys.new ~/.ssh/authorized_keys" || true
+    sh_ "$n" "grep -vF '$DIST_PUB' ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.new 2>/dev/null; if [ -s ~/.ssh/authorized_keys.new ]; then cat ~/.ssh/authorized_keys.new > ~/.ssh/authorized_keys; fi; rm -f ~/.ssh/authorized_keys.new" || true
+  done
+
+  # And then prove it, because the failure above was silent for four steps.
+  # This is the cheapest possible check and it is the one that was missing.
+  for n in "${ALL_NODES[@]}"; do
+    sh_ "$n" true >/dev/null 2>&1 || die "the operator can no longer ssh to $n, and this step is what touched its keys.
+   A reboot of that node restores access (the guest agent rebuilds
+   authorized_keys from instance metadata), and the deploy can be re-run:
+   every step here is idempotent. See FINDINGS.md F1 for the measured case."
   done
   su_ "$BUILDER" "rm -f /root/.ssh/stack-distribute /root/.ssh/stack-distribute.pub"
   echo "   done, the nodes are back to the operator's key only"

@@ -28,6 +28,9 @@ jobs:
       - name: every image is pinned or built here
         run: ./scripts/pinned-images.sh
 
+      - name: node names are pinned by the install, not by a boot
+        run: ./scripts/node-name-is-pinned.sh
+
       # Pinned rather than left to whatever the runner ships. `go install` of a
       # module built against a newer toolchain fails on an older one, and the
       # error names a Go version rather than this step, which is a confusing

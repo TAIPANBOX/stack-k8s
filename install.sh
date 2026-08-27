@@ -321,6 +321,24 @@ echo "   done"
 # `--token` on the command line: the installer writes it to
 # /etc/systemd/system/k3s.service.env (0600), whereas a flag would put it in
 # the unit file and in every `ps` listing for the life of the node.
+# The name a node registers under is decided ONCE, here, and never re-decided by
+# whatever `hostname` happens to return on some later boot. k3s defaults the node
+# name to the host name, and that value is not reliably stable across a stop and
+# start: on the 2026-08-27 GCP range a node that had registered under its fully
+# qualified name came back from a stop/start under its short one, and the
+# original object sat NotReady for the rest of the cluster's life still holding
+# 17 pod records that nothing ever cleans up
+# (cloud/gcp/evidence/range-2026-08-27/FINDINGS.md, F3). The measurement was on
+# GCP; the exposure is the same wherever a host name can be re-derived at boot,
+# so all three installers pin it.
+#
+# The value read here is the one k3s would have picked by itself, so pinning it
+# changes nothing about an existing cluster's identity. It only stops that choice
+# from being made a second time.
+node_name_of() { sh_ "$1" hostname 2>/dev/null || printf '%s' "$1"; }
+FIRST_NODE_NAME="$(node_name_of "$FIRST")"
+[ -n "$FIRST_NODE_NAME" ] || die "could not read a host name from $FIRST to pin --node-name to"
+
 say "k3s server on $FIRST ($FIRST_PRIV)"
 # The token is REUSED when this cluster already has one, and that is what makes
 # a second run of this script possible at all. k3s encrypts its bootstrap data
@@ -345,6 +363,7 @@ if [ -z "$K3S_TOKEN_VALUE" ]; then
 fi
 sh_ "$FIRST" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - server \
     --cluster-init \
+    --node-name '$FIRST_NODE_NAME' \
     --node-ip '$FIRST_PRIV' --advertise-address '$FIRST_PRIV' \
     --tls-san '$FIRST_PRIV' --tls-san '$FIRST' \
     --flannel-backend=none --disable-network-policy \
@@ -367,8 +386,11 @@ done
 # three-member cluster ends up with two half-joined members.
 for n in "${SERVER_LIST[@]:1}"; do
   say "k3s server joining: $n ($(priv_of "$n"))"
+  JOINED_NAME="$(node_name_of "$n")"
+  [ -n "$JOINED_NAME" ] || die "could not read a host name from $n to pin --node-name to"
   sh_ "$n" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - server \
       --server 'https://$FIRST_PRIV:6443' \
+      --node-name '$JOINED_NAME' \
       --node-ip '$(priv_of "$n")' --advertise-address '$(priv_of "$n")' \
       --tls-san '$(priv_of "$n")' --tls-san '$n' \
       --flannel-backend=none --disable-network-policy \
@@ -378,7 +400,7 @@ for n in "${SERVER_LIST[@]:1}"; do
       --kubelet-arg=provider-id=hcloud://$(sid_of "$n") \
       --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
   for i in $(seq 1 40); do
-    k_ "get node $(sh_ "$n" hostname) -o name" >/dev/null 2>&1 && break
+    k_ "get node $JOINED_NAME -o name" >/dev/null 2>&1 && break
     sleep 5
   done
 done
@@ -386,6 +408,7 @@ done
 for n in ${AGENT_LIST[@]+"${AGENT_LIST[@]}"}; do
   say "k3s agent: $n ($(priv_of "$n"))"
   sh_ "$n" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_URL='https://$FIRST_PRIV:6443' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - agent \
+      --node-name '$(node_name_of "$n")' \
       --node-ip '$(priv_of "$n")' \
       --kubelet-arg=provider-id=hcloud://$(sid_of "$n")" < <(curl -sfL https://get.k3s.io)
 done
@@ -432,6 +455,29 @@ for i in $(seq 1 60); do
   [ "$i" = 60 ] && die "nodes did not become Ready: check 'kubectl -n calico-system get pods'"
   sleep 10
 done
+
+# Cluster DNS ships at ONE replica, and on 2026-08-27 that cost 298 seconds of
+# name resolution for the whole cluster when a single node was stopped: the sole
+# coredns pod went down with it and the replacement waited out the full 300 s
+# not-ready toleration before it was rescheduled somewhere else
+# (cloud/gcp/evidence/range-2026-08-27/FINDINGS.md, F2). Nothing was broken. The
+# configuration says one dead node costs five minutes of DNS, and it charged
+# exactly that.
+#
+# The deployment already carries a topology spread constraint over host names,
+# so a second replica lands on a different node with no further configuration.
+# There was simply never a second replica for it to place.
+#
+# k3s owns this manifest and re-applies it when its own version changes, not on
+# every restart, so the scale survives reboots but not a k3s upgrade. verify.sh
+# checks the replica count for that reason: a revert should surface as a failed
+# check rather than as the next outage.
+say "cluster DNS: more than one replica"
+DNS_WANT=2
+[ "${#ALL_NODES[@]}" -lt 2 ] && DNS_WANT=1
+k_ "-n kube-system scale deployment coredns --replicas=$DNS_WANT" >/dev/null \
+  || echo "   could not scale coredns; verify.sh will report this"
+echo "   coredns replicas=$DNS_WANT"
 
 # ---- 5. Longhorn, and one honest default -----------------------------------
 say "Longhorn $LONGHORN_VERSION"
