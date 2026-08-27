@@ -1,0 +1,4 @@
+=== 17:11:22Z: machine has been OFF since 17:07:09 ===
+pods still reported Running on the dead node: 17
+node condition: NotReady
+--- what a caller would see: the API lists endpoints of pods that cannot answer ---

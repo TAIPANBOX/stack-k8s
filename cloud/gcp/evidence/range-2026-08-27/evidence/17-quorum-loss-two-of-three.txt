@@ -1,0 +1,4 @@
+4
+--- first and last no-answer line ---
+17:21:22 API DID NOT ANSWER (no quorum)
+17:21:43 API DID NOT ANSWER (no quorum)

@@ -1,0 +1,13 @@
+=== A. why DNS was gone for ~5 min: the toleration that governs it ===
+CriticalAddonsOnly=/s node-role.kubernetes.io/control-plane=NoSchedule/s node.kubernetes.io/not-ready=NoExecute/300s node.kubernetes.io/unreachable=NoExecute/300s 
+replacement pod started at:
+2026-08-27T17:12:07Z
+
+=== B. the node came back under a DIFFERENT name ===
+stack-k8s-server-1                                           Ready   2026-08-27T17:12:26Z
+stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal   Ready   2026-08-27T16:43:08Z
+stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal   Ready   2026-08-27T16:43:37Z
+stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal   Ready   2026-08-27T16:44:04Z
+hostname the machine now reports to the API:
+ghost object still owns pods:
+17

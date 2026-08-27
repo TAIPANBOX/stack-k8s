@@ -1,0 +1,14 @@
+=== how THIS node was told its name (node 3, never rebooted) ===
+--- unit ExecStart ---
+ExecStartPre=-/sbin/modprobe br_netfilter
+ExecStartPre=-/sbin/modprobe overlay
+ExecStart=/usr/local/bin/k3s \
+    server \
+	'--server' \
+	'https://10.10.0.4:6443' \
+	'--node-ip' \
+	'10.10.0.2' \
+	'--advertise-address' \
+--- what the OS reports ---
+hostname:    stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal
+hostname -f: stack-k8s-server-3.europe-west3-a.c.stack-k8s-gcp.internal

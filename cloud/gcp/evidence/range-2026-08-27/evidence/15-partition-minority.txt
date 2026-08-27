@@ -1,0 +1,5 @@
+17:15:48 partition APPLIED (node1 cut from node2+node3)
+17:15:48 local-api: real 3.01 user 0.07 sys 0.04 
+17:15:53 local-api: real 3.01 user 0.08 sys 0.04 
+...
+17:16:03 local-api: real 3.01 user 0.07 sys 0.05 

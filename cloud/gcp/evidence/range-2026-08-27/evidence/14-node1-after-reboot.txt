@@ -1,0 +1,4 @@
+SSH RESTORED by the reboot
+hostname:    stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal
+hostname -f: stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal
+k3s node-name flag: 0

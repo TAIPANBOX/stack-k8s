@@ -1,0 +1,12 @@
+=== how many replicas does cluster DNS actually have ===
+replicas=1 ready=1 strategy=RollingUpdate
+anti-affinity or spread constraint: [{"labelSelector":{"matchLabels":{"k8s-app":"kube-dns"}},"maxSkew":1,"topologyKey":"kubernetes.io/hostname","whenUnsatisfiable":"DoNotSchedule"},{"labelSelector":{"matchLabels":{"k8s-app":"kube-dns"}}
+=== where the coredns pod is NOW and how old it is ===
+coredns-5f5694d56b-78jn8 Running 49s stack-k8s-server-2.europe-west3-a.c.stack-k8s-gcp.internal
+coredns-5f5694d56b-wzwdl Terminating 29m stack-k8s-server-1.europe-west3-a.c.stack-k8s-gcp.internal
+=== has the dead node rejoined? ===
+now 17:12:56Z
+er-1 Ready 30s
+er-1.eur NotReady 29m
+er-2.eur Ready 29m
+er-3.eur Ready 28m
