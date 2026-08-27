@@ -6,9 +6,10 @@ Times are UTC, from the machines themselves.
 |---|---|
 | 16:41:23 | billing starts, 3 x c3d-highcpu-8 + 300 GB pd-balanced, europe-west3-a, 1.1258 USD/h |
 | 16:43-16:44 | three nodes register, etcd on all three |
-| ~16:50 | image build runs on nodes 1 and 2 |
+| ~16:50 | image build runs on node 3, the last node, which `deploy-gcp.sh` picks as the builder |
+| ~16:55 | the distribution-key cleanup rewrites `~/.ssh/authorized_keys` on nodes 1 and 2, and skips the builder |
 | ~17:00 | deploy stops at step 3/5, `Permission denied (publickey)`; only 2 of ~10 images built |
-| 17:00-17:05 | cause ruled out one by one: IP, key fingerprint, oslogin, serial console, metadata re-sync. Node 3 works, nodes 1 and 2 do not |
+| 17:00-17:05 | cause ruled out one by one: IP, key fingerprint, oslogin, serial console, metadata re-sync. Node 3 works, nodes 1 and 2 do not, and that is exactly the cleanup's skip list |
 | 17:05:22 | observer armed on node 3 |
 | 17:07:07 | last `Ready` for node 1 |
 | 17:07:09 | `NotReady`, **2 s detection for a graceful stop** |

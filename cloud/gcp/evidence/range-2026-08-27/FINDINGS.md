@@ -8,7 +8,7 @@ behaviour, and those are the two worth acting on.
 
 | # | finding | worth acting on |
 |---|---|---|
-| F1 | a build on a control-plane node locks the operator out by SSH, while Kubernetes keeps reporting the node healthy | **yes** |
+| F1 | the deploy's own key cleanup locks the operator out of the nodes it touches, while Kubernetes keeps reporting them healthy | **yes** |
 | F2 | cluster DNS runs at one replica, so one dead node costs 298 s of name resolution | **yes** |
 | F3 | a ghost node object appeared after a stop/start and never cleared; node identity is not pinned | **yes, but see the correction** |
 | F4 | a clean stop is detected in 2 s | no, expected |
@@ -26,13 +26,13 @@ Longhorn. Billing started 16:41:23Z at 1.1258 USD/h.
 Every number below is `@measured 2026-08-27` on that cluster, with the command
 or the log line that produced it named. Raw output is in `evidence/`.
 
-## F1. A build on a control-plane node locks the operator out of it by SSH,
-## while Kubernetes keeps reporting the node healthy
+## F1. The deploy takes the operator's SSH away from the nodes it touches,
+## while Kubernetes keeps reporting them healthy
 
 `evidence/14-node1-after-reboot.txt`
 
-The image build ran on nodes 1 and 2. After it, both refused `publickey` for a
-key that had not changed. Node 3, which the build never touched, kept working.
+Two of three nodes refused `publickey` for a key that had not changed. Node 3
+kept working.
 
 Ruled out by direct check, not by reasoning: the operator IP was unchanged and
 still inside `operator_cidr`; the ed25519 key in instance metadata matched the
@@ -46,10 +46,33 @@ machine, not keys, metadata or firewall. That is the dangerous shape: the
 cluster stayed green throughout, so nothing would have alerted, and the
 operator loses hands on the box exactly when a build is doing something heavy.
 
-`@claude` on the mechanism: the most likely candidate is resource exhaustion
-during the build (pids or file descriptors) leaving sshd unable to fork or read
-the key. Not proven; proving it needs a rerun with `sshd -ddd` and the counters
-sampled during the build.
+**The mechanism was found afterwards, in our own code, and my first reading of
+this finding was wrong.** I attributed it to the image build, on the assumption
+that the build ran on nodes 1 and 2. It did not. `deploy-gcp.sh` sets
+`BUILDER="${ALL_NODES[${#ALL_NODES[@]}-1]}"`, the LAST node, so the build ran on
+node 3, the one that kept working.
+
+What the affected set actually matches is the distribution-key cleanup, which
+skips the builder and touches every other node:
+
+```sh
+grep -vF "$DIST_PUB" ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.new \
+  && mv ~/.ssh/authorized_keys.new ~/.ssh/authorized_keys
+```
+
+`mv` replaces the inode, so the operator's key file comes back owned and moded
+by whatever the shell's umask gave the temporary. sshd is deliberately strict
+about that file and refuses it, and the refusal it gives is exactly
+`Permission denied (publickey)`. The reboot fix fits too: the GCE guest agent
+rebuilds `authorized_keys` from instance metadata at boot.
+
+Provenance, kept straight: the loop's skip list matching the surviving node
+exactly is `@measured`. That `mv` losing the mode is what sshd then refused is
+`@claude`, strongly supported but not reproduced under `sshd -ddd`.
+
+Fixed in the same session: written through the file rather than over it, guarded
+so an empty result can never truncate the operator's own key, and followed by an
+ssh to every node so the break fails at the step that caused it. GOTCHAS 86.
 
 ## F2. Cluster DNS is a single replica, so one dead node costs ~5 minutes of DNS
 
@@ -184,10 +207,10 @@ the node monitor grace period.
 
 ### F1 confirmed a second time, by the node that was not rebooted
 
-At 17:18Z, node 2 (build-touched, never rebooted) still answered
-`Permission denied (publickey)`, while node 1 (build-touched, rebooted at
-17:11:56) answered normally. Two machines, same build, same symptom; the only
-one that recovered is the one that was restarted. The remedy is a reboot, and
+At 17:18Z, node 2 (key-rewritten, never rebooted) still answered
+`Permission denied (publickey)`, while node 1 (key-rewritten, rebooted at
+17:11:56) answered normally. Two machines, same cleanup step, same symptom; the
+only one that recovered is the one that was restarted. The remedy is a reboot, and
 nothing short of it was found to work.
 
 ### F6 addendum: the minority never wavered
@@ -209,8 +232,10 @@ Stated plainly, because the coverage is partial and the gaps are not small.
 - **Everything above is about the k3s platform**, which is the layer under our
   services, not our code. It is still worth having: F1 and F3 are defects in
   our own deploy scripts, not upstream behaviour.
-- **F1's mechanism is unproven.** The symptom, its scope and its remedy are
-  measured; the cause is a hypothesis.
+- **F1's mechanism is identified but not reproduced under instrumentation.**
+  The symptom, its scope, its remedy and the code path are established; that
+  `mv` losing the file's mode is what sshd then refused has not been shown with
+  `sshd -ddd`.
 - **Storage was never tested.** Longhorn ran throughout and no volume was
   killed, detached or failed over. A stateful workload behaves differently
   under node loss than the stateless pods measured here.
@@ -243,7 +268,7 @@ evidence before the question was asked: **in the same minute, over the same link
 and the same ssh config, node 3 accepted that key while nodes 1 and 2 rejected
 it.** A link fault cannot be selective by destination host. What separates the
 three machines is not the network between them and the operator, it is that the
-build ran on two of them.
+deploy rewrote the key file on two of them.
 
 The measurements themselves never crossed that link: the observers ran on the
 nodes, wrote to local files, and timestamped with `date -u` on the node. A
