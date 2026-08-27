@@ -8,7 +8,7 @@ Times are UTC, from the machines themselves.
 | 16:43-16:44 | three nodes register, etcd on all three |
 | ~16:50 | image build runs on node 3, the last node, which `deploy-gcp.sh` picks as the builder |
 | ~16:55 | the distribution-key cleanup rewrites `~/.ssh/authorized_keys` on nodes 1 and 2, and skips the builder |
-| ~17:00 | deploy stops at step 3/5, `Permission denied (publickey)`; only 2 of ~10 images built |
+| ~17:00 | deploy stops at step 3/5, `Permission denied (publickey)`. Both images the script builds were already built and distributed; the other eight come from GHCR |
 | 17:00-17:05 | cause ruled out one by one: IP, key fingerprint, oslogin, serial console, metadata re-sync. Node 3 works, nodes 1 and 2 do not, and that is exactly the cleanup's skip list |
 | 17:05:22 | observer armed on node 3 |
 | 17:07:07 | last `Ready` for node 1 |
@@ -32,8 +32,9 @@ Times are UTC, from the machines themselves.
 Ran: node death, quorum under single loss, network partition, quorum loss at
 2 of 3, node rejoin, DNS availability under node loss.
 
-Did not run, and the reason is the same for all of them: the image build never
-finished, so the services were not on the cluster. Anything about revocation,
+Did not run, and the reason is one defect rather than a shortage of time: F1
+stopped the deploy at step 3/5, so the workload was never applied. The image
+build had completed. Anything about revocation,
 erasure, delegation, PDP decisions or the record plane is untouched by this run.
 
 ## A gap in the evidence, and how it happened
