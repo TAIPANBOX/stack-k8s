@@ -224,11 +224,18 @@ it held flat for the whole window.
 
 Stated plainly, because the coverage is partial and the gaps are not small.
 
-- **The stack's own services were never exercised.** The build reached only two
-  of roughly ten images (`stack/tokenfuse:dev`, `stack/genaryx-console:dev`)
-  before F1 took SSH away from the build node. So every scenario in
-  `PLAN.md` that needed trailryx, vouchryx or a live PDP did not run. Nothing
-  here says anything about revocation, erasure or delegation on a cluster.
+- **The stack's own services were never exercised**, and my first account of why
+  was wrong. I wrote that the build "reached only two of roughly ten images".
+  It did not stop early: `deploy-gcp.sh` builds exactly two images,
+  `stack/tokenfuse:dev` and `stack/genaryx-console:dev`, and the other eight are
+  pulled from GHCR by the nodes themselves. Both were built and both were
+  distributed. The build had finished.
+
+  What stopped the run was F1 alone, one step later, at `step 3/5: the workload`.
+  So every scenario in `PLAN.md` that needed the stack running did not run, and
+  nothing here says anything about revocation, erasure or delegation on a
+  cluster. But the reason is a single defect that is now fixed, not a build that
+  ran out of time.
 - **Everything above is about the k3s platform**, which is the layer under our
   services, not our code. It is still worth having: F1 and F3 are defects in
   our own deploy scripts, not upstream behaviour.
