@@ -171,6 +171,52 @@ echo "=== faults each gate must catch ==="
 
 # An image tag that moves means a pod can come back different with no rollout,
 # on a cluster nobody touched.
+# invariant: components.json says what this launcher actually installs.
+#
+# The Kubernetes half of what stack-up and stack-single carry. Three cases: the
+# ordinary drift, the map that makes this deployment's names comparable at all,
+# and the reader losing its subject.
+run_case "manifest-is-true: a workload is installed and not declared" fail \
+	'./scripts/manifest-is-true.sh' \
+	"$(py 'import json
+p = "components.json"
+d = json.load(open(p))
+c = d["components"][0]["checked"]
+before = len(c["installs_services"])
+c["installs_services"] = [s for s in c["installs_services"] if s != "policy-db"]
+assert len(c["installs_services"]) == before - 1, "policy-db was not declared"
+json.dump(d, open(p, "w"), indent=2)')" \
+	"and components.json does not say so"
+
+# This is the only deployment whose routines are called something else, so the
+# map is what makes them comparable. A CronJob mapped to a name the estate does
+# not use is a private nickname for a private nickname.
+run_case "manifest-is-true: a CronJob is mapped to a routine the estate does not have" fail \
+	'./scripts/manifest-is-true.sh' \
+	"$(py 'import json
+p = "components.json"
+d = json.load(open(p))
+c = d["components"][0]["checked"]
+assert "drills" in c["schedules_routines"], "the drills CronJob is not mapped"
+c["schedules_routines"]["drills"] = "drill-runner"
+json.dump(d, open(p, "w"), indent=2)')" \
+	"not one of the estate's routines"
+
+# The subject taken away. An empty manifests/ must say it measured nothing
+# rather than agree that this deployment installs nothing.
+run_case "manifest-is-true: the manifests stop declaring a kind" fail \
+	'./scripts/manifest-is-true.sh' \
+	"$(py 'import pathlib
+n = 0
+for path in sorted(pathlib.Path("manifests").glob("*.yaml")):
+    body = path.read_text()
+    if "kind:" not in body:
+        continue
+    path.write_text(body.replace("kind:", "sort:"))
+    n += 1
+assert n, "no manifest declared a kind to remove"')" \
+	"measured NOTHING"
+
 run_case "pinned-images: a tag that moves under the operator" fail \
 	'./scripts/pinned-images.sh' \
 	"$(py 'import re, glob
