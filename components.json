@@ -1,0 +1,85 @@
+{
+  "$comment": [
+    "What this LAUNCHER installs, and what a check may believe about it.",
+    "`checked` is proved against this repository by scripts/manifest-is-true.sh;",
+    "`declared` is a statement nobody can verify and carries its own `why`.",
+    "",
+    "THE THIRD GRAMMAR, AND THE LAST OF THE THREE LAUNCHERS. estate-gates' C5",
+    "reads all three from one central file: `register <name>` out of a shell",
+    "script in stack-up, compose service keys in stack-single, Kubernetes kinds",
+    "here. One parser, three syntaxes, none of it living where the fact lives.",
+    "Now each launcher states its own, and the two readings can catch each other.",
+    "",
+    "IT IS THE ONLY ONE WHERE THE ROUTINES ARE NAMED SOMETHING ELSE. A CronJob",
+    "here is called `crypto-trend` and the estate calls that routine",
+    "`qryx-trend`; `identity-sweep` is `idryx-detect`, `quality-drift` is",
+    "`verdryx-drift`, `drills` is `mockryx-drill`. C5 carries that map and its",
+    "comment says an unmapped routine is a FAIL rather than a skip, because one",
+    "it does not know is one it silently would not compare. The map is here too",
+    "now, as a pair per CronJob, so a rename on either side is visible from both.",
+    "",
+    "SIX PERSISTENT CLAIMS, AND THEY ARE THE ONE THING IN THIS ESTATE THAT COSTS",
+    "MONEY BY EXISTING. A PersistentVolumeClaim provisions a real disk on every",
+    "provider and is billed from creation, whether or not anything writes to it,",
+    "and some providers round up to their own minimum so the requested size is",
+    "not always the billed size. 00-base.yaml says this beside the claims. They",
+    "are listed here so that adding one is a visible change to a file somebody",
+    "reviews, rather than a line in a manifest nobody diffs.",
+    "",
+    "THE LOADBALANCER IS DELIBERATELY NOT IN THE DEFAULT INSTALL, for the same",
+    "reason: a cloud load balancer is metered. It lives outside the default",
+    "kustomization and stack-single reaches the same place with caddy, which",
+    "estate-gates already records as a recorded divergence rather than a gap."
+  ],
+  "schema": "taipanbox.dev/components/v1",
+  "repo": "TAIPANBOX/stack-k8s",
+  "kind": "launcher",
+  "components": [
+    {
+      "name": "stack-k8s",
+      "class": "launcher",
+      "checked": {
+        "installs_services": [
+          "genaryx-console",
+          "heraldyx",
+          "idryx",
+          "policy-db",
+          "scopyx",
+          "tokenfuse-cloud",
+          "tokenfuse-gateway",
+          "wardryx"
+        ],
+        "schedules_routines": {
+          "crypto-trend": "qryx-trend",
+          "drills": "mockryx-drill",
+          "identity-sweep": "idryx-detect",
+          "quality-drift": "verdryx-drift",
+          "record-seal": "trailryx-seal"
+        },
+        "persistent_claims": [
+          "cloud-state",
+          "console-state",
+          "heraldyx-state",
+          "scopyx-events",
+          "stack-events",
+          "trailryx-records"
+        ],
+        "namespace": "agent-stack"
+      },
+      "declared": {
+        "the_claims_are_metered": {
+          "value": "6 PersistentVolumeClaims",
+          "why": "Each provisions a real disk and is billed from creation, whether or not anything writes to it; some providers round up to their own minimum, so the requested size is not always the billed size. Listed so adding one is a visible change to a reviewed file."
+        },
+        "the_loadbalancer_is_excluded_on_purpose": {
+          "value": "genaryx-console-lb",
+          "why": "A cloud load balancer is metered, so it sits outside the default kustomization and a default install never creates it. stack-single reaches the same place with caddy. estate-gates records this as a decision rather than a gap."
+        },
+        "focus_export_has_no_cronjob_here": {
+          "value": "focus-export",
+          "why": "Four of the five governance routines have a CronJob and this one does not, so a Kubernetes install produces no focus export at all. Recorded in estate-gates as a GAP rather than a decision, and repeated here because `schedules_routines` is the list where its absence is the finding."
+        }
+      }
+    }
+  ]
+}
