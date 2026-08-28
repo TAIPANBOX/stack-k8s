@@ -126,15 +126,46 @@ if len(set(schedules.values())) != len(schedules):
     print("      once per deployment, so this map cannot be right.")
     problems += 1
 
+# A routine may run here without a CronJob. focus-export does: it is a sidecar
+# in the gateway pod, because the volume it reads is an emptyDir that no other
+# pod can mount. Counted as run rather than as absent, and checked against the
+# pod that is supposed to hold it.
+sidecars = checked.get("runs_as_sidecar", {})
+for routine, pod in sorted(sidecars.items()):
+    if routine not in ESTATE_ROUTINES:
+        print(f"FAIL: components.json says {routine!r} runs as a sidecar and it is not")
+        print(f"      one of the estate's routines: {sorted(ESTATE_ROUTINES)}")
+        problems += 1
+    if pod not in objs["Deployment"] | objs["StatefulSet"]:
+        print(f"FAIL: components.json says {routine!r} is a sidecar in {pod!r} and no")
+        print(f"      such workload exists under {manifests_dir}/.")
+        problems += 1
+        continue
+    # And the container has to actually be there, or the claim is a sentence.
+    body = "".join(
+        path.read_text()
+        for path in sorted(pathlib.Path(manifests_dir).glob("*.yaml"))
+    )
+    # Anchored to the whole line, because `- name: focus-export` is a PREFIX of
+    # `- name: focus-exporter`: a substring test passes on a container that was
+    # renamed, which is exactly the change this is meant to catch. Found by
+    # planting that rename and watching the first version stay silent.
+    if not re.search(rf"(?m)^\s*- name: {re.escape(routine)}\s*$", body):
+        print(f"FAIL: components.json says {routine!r} runs as a sidecar and no container")
+        print(f"      by that name exists in any manifest.")
+        problems += 1
+
 if problems:
     print()
     print(f"{problems} problem(s). components.json and these manifests disagree.")
     sys.exit(1)
 
-missing = sorted(ESTATE_ROUTINES - set(schedules.values()))
+missing = sorted(ESTATE_ROUTINES - set(schedules.values()) - set(sidecars))
 print(f"OK: {len(checked.get('installs_services', []))} workload(s), {len(schedules)} CronJob(s) "
       f"and {len(checked.get('persistent_claims', []))} claim(s), each compared with")
 print(f"    manifests/ both ways, across {docs} object(s).")
 if missing:
-    print(f"    Not scheduled here: {', '.join(missing)}. estate-gates is where that is judged.")
+    print(f"    Not run here at all: {', '.join(missing)}. estate-gates is where that is judged.")
+if sidecars:
+    print(f"    Run without a CronJob: {', '.join(f'{r} (sidecar in {p})' for r, p in sorted(sidecars.items()))}.")
 PY
