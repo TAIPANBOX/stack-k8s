@@ -9,7 +9,7 @@
 #
 # Static binary, distroless runtime, non-root: nothing in the final layer can
 # run a shell, which matters more than usual for a policy decision point.
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.27
 
 FROM golang:${GO_VERSION}-alpine AS build
 ENV GOTOOLCHAIN=auto

@@ -37,7 +37,25 @@ jobs:
       # way to learn the runner image changed under you.
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.26.5"
+          go-version: "1.27.0"
+
+      # uapi-proxy is Go source in this repository, built into the wg image and
+      # run beside the WireGuard daemon, where it is the thing standing between
+      # a caller and the raw UAPI socket. Its tests assert that the bearer is
+      # checked before anything reaches the daemon, that the private key is
+      # swapped for its public half rather than read back, and that the four
+      # ways to take the tunnel away are each refused by name.
+      #
+      # Until 2026-08-28 nothing ran them: the word `go test` did not appear
+      # anywhere in this repository, and the module was compiled only inside a
+      # docker build, where a failure reads as an image problem. A test nobody
+      # runs is indistinguishable from one that passes.
+      - name: the tunnel proxy still refuses what it claims to refuse
+        working-directory: images/uapi-proxy
+        run: |
+          test -z "$(gofmt -l .)" || (gofmt -l .; exit 1)
+          go vet ./...
+          go test ./...
 
       # kubeconform validates against the real schemas without a cluster.
       # `kubectl --dry-run=client` fetches its schema FROM a cluster, so a
