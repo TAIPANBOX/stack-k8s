@@ -352,7 +352,10 @@ fi
 # are pulled from ghcr.io now, so cloning their source on the node would be
 # fetching something nothing reads. Their policy and config come from the
 # manifests, not from their repositories.
-OPEN_REPOS="qryx mockryx tokenfuse verdryx engram"
+# trailryx joins the list because its image is BUILT here, not pulled: the
+# published one carries `trailryx-ingest` only and every sealing command is in
+# `trailryx-node`. Same reason tokenfuse is on this list and wardryx is not.
+OPEN_REPOS="qryx mockryx tokenfuse verdryx engram trailryx"
 if [ "$SKIP_IMAGES" = 1 ]; then
   say "skipping the image build (--skip-images)"
 else
@@ -422,6 +425,11 @@ else
     cd /root/src
     docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
     echo '   built stack/tokenfuse:dev'
+    # The record plane's sealing tools. Built here for the same reason
+    # tokenfuse is: the published GHCR image carries `trailryx-ingest` only and
+    # every sealing command is in `trailryx-node`, which is published nowhere.
+    docker build -q -f stack-k8s/images/trailryx.Dockerfile -t stack/trailryx:dev ./trailryx >/dev/null
+    echo '   built stack/trailryx:dev'
     # The operator tunnel needs these two, and nothing else builds them. Left
     # out, ./tunnel/up.sh reaches a running cluster and then sits in
     # ImagePullBackOff for images that were never built anywhere, which reads

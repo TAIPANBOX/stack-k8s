@@ -58,6 +58,36 @@ spec:
     requests:
       storage: 2Gi
 ---
+# The record plane's store. Its own claim and not a corner of `stack-events`,
+# because the two are different things that happen to be NDJSON: the events
+# claim is a BUS that four components append to and anything may read, and this
+# is a tamper-evident STORE of sealed segments, their manifests and one cursor
+# per source file. Putting a hash-chained record inside the volume its own
+# inputs live in would mean an operator clearing space on the bus could delete
+# the evidence about it.
+#
+# ReadWriteOnce and not RWX on purpose: `record-seal` is the only writer, it is
+# `concurrencyPolicy: Forbid`, and the store takes no cross-process lock, so a
+# second writer would be two minters of one shard. RWO makes that structural
+# rather than a promise, and it needs no RWX storage class, which the events
+# claim does.
+#
+# 2Gi matches the two claims above. METERED: a claim provisions a real disk on
+# every provider and is billed from creation. Some providers round up to their
+# own minimum, so 2Gi requested is not always 2Gi billed.
+#
+# @yurii 2026-08-28 authorised this claim.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: trailryx-records
+  namespace: agent-stack
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -70,6 +100,22 @@ data:
   WARDRYX_URL: "http://wardryx:8090"
   IDRYX_URL: "http://idryx:8081"
   EVENTS_DIR: "/var/lib/stack/events"
+  # The trust domain the record plane is told to accept, and it is a
+  # PLACEHOLDER until an operator sets it to what this cluster's agents
+  # actually carry.
+  #
+  # There is no defensible default. The plane accepts an event only if its
+  # agent id begins `agent://<domain>/`, matched against exactly ONE value, and
+  # a default install here carries no single one: the drill agents are
+  # `mockryx.local`, the gateway's are whatever a caller sends in
+  # `x-fuse-agent-id`.
+  #
+  # Getting it wrong is safe and loud rather than silent, since
+  # TAIPANBOX/trailryx#50: a run that stores nothing and refuses only for the
+  # domain it was handed does NOT move its cursor and says
+  # `cursor: NOT moved` with the reason. Before that fix the same mistake
+  # marked every line read and no correction recovered them.
+  TRAILRYX_TRUST_DOMAIN: "set-me.invalid"
   TOKENFUSE_EVENTS_PATH: "/var/lib/stack/events/tokenfuse.ndjson"
   # The control plane writes its own file: it emits incidents, the gateway
   # emits one event per call, and the two have nothing to do with each other in
