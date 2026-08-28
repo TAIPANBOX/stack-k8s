@@ -239,10 +239,79 @@ spec:
           resources:
             requests: { cpu: 50m, memory: 96Mi }
             limits: { memory: 512Mi }
+        # focus-export, AS A SIDECAR AND NOT A CRONJOB, AND THE REASON IS THE
+        # VOLUME RATHER THAN A PREFERENCE.
+        #
+        # 40-routines-and-secrets.yaml recorded this as a finding on
+        # 2026-08-06: four of stack-up's five routines have a CronJob here and
+        # this one does not, so a Kubernetes install produced no focus export
+        # at all. `tokenfuse-gateway focus-export --traces <dir>` reads the
+        # gateway's local Parquet directory straight off disk, and that
+        # directory is the `traces` emptyDir below. An emptyDir is mountable
+        # ONLY by containers inside its own pod, by Kubernetes' own design, so
+        # no CronJob can reach it whatever its affinity says.
+        #
+        # The other way out was to give `traces` a PersistentVolumeClaim. That
+        # is a real solution and it provisions a real disk, billed from
+        # creation, so it is a spending decision rather than a fix. A sidecar
+        # is in the pod already and costs nothing.
+        #
+        # It prints rather than storing, which is what quality-drift does one
+        # file over: in this deployment a routine's artifact is its log. The
+        # CSV goes to an emptyDir of its own so that the export never writes
+        # into the directory it reads.
+        - name: focus-export
+          image: stack/tokenfuse:dev
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -u
+              traces=/var/lib/stack/traces/gateway
+              out=/var/lib/stack/focus
+              # First run waits, so the gateway has served something before
+              # the first export asks what it served.
+              sleep "${FOCUS_EXPORT_INTERVAL:-3600}"
+              while :; do
+                stamp=$(date -u +%Y%m%dT%H%M%SZ)
+                if [ ! -d "$traces" ]; then
+                  echo "focus-export: skipped, no trace directory at $traces yet"
+                else
+                  # It exits non-zero with "no calls found in the trace" on an
+                  # idle window, which is not a failure of the export. Same
+                  # judgement stack-up's routine makes.
+                  if tokenfuse-gateway focus-export --traces "$traces" \
+                       --out "$out/focus-$stamp.csv" 2>&1; then
+                    echo "focus-export: wrote $out/focus-$stamp.csv"
+                  else
+                    echo "focus-export: nothing to export in this window"
+                  fi
+                fi
+                sleep "${FOCUS_EXPORT_INTERVAL:-3600}"
+              done
+          env:
+            - { name: FOCUS_EXPORT_INTERVAL, value: "3600" }
+          volumeMounts:
+            # Read only: this reads what the gateway wrote and must not be
+            # able to edit it. The gateway's own mount above stays writable.
+            - { name: traces, mountPath: /var/lib/stack/traces, readOnly: true }
+            - { name: focus, mountPath: /var/lib/stack/focus }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 256Mi }
       volumes:
         - name: events
           persistentVolumeClaim: { claimName: stack-events }
         - name: traces
+          emptyDir: {}
+        # The export's own scratch, so it never writes into the directory it
+        # reads. emptyDir rather than a claim: the artifact is the log line,
+        # and a CSV that outlives the pod would need a disk somebody pays for.
+        - name: focus
           emptyDir: {}
 ---
 apiVersion: v1
