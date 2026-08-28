@@ -25,7 +25,7 @@
 # way. Where a container cannot give it the user namespaces it needs, the
 # DEPLOYMENT decides between relaxing the container's syscall filter and
 # setting SCOPYX_CHROMIUM_NO_SANDBOX=1, and scopyx's own error names both.
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.27
 
 FROM golang:${GO_VERSION}-alpine AS build
 ENV GOTOOLCHAIN=auto

@@ -3,4 +3,4 @@
 // or trusted beyond the Go toolchain the image already builds with.
 module github.com/TAIPANBOX/stack-k8s/images/uapi-proxy
 
-go 1.23
+go 1.27

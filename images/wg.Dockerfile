@@ -20,7 +20,7 @@
 #
 # Nothing about the agents' own path goes through here.
 
-FROM golang:1.23-alpine AS build
+FROM golang:1.27-alpine AS build
 # `git` first: `go install` fetches this module over git and fails with a bare
 # exit 1 without it.
 RUN apk add --no-cache git

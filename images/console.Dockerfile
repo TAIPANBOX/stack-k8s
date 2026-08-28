@@ -13,7 +13,7 @@
 # Build context is the PARENT of the repos (~/Development), because this one
 # image legitimately spans five of them.
 ARG RUST_VERSION=1.85
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.27
 ARG PYTHON_VERSION=3.12
 ARG NODE_VERSION=22
 
