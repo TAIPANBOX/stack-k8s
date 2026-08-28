@@ -2926,3 +2926,68 @@ abandoned ids age out by themselves.
 **Measured 2026-08-27**, teardown at 17:24 and the next apply at 17:57, on the
 second GCP range of the same day. The first range never hit it because it was
 the first deploy after a long gap.
+
+## 88. The record profile had never run on a cluster, and four things stood between it and one
+
+**The stack's own contract.** Three of the four obstacles below are properties
+of this stack rather than bugs: the namespace really does refuse a pod that is
+not `restricted`, the bus really is ReadWriteMany, and a hostPath really does
+ignore `fsGroup`. Only the binding-mode deadlock is a property of the test.
+
+Recorded 2026-08-28, the day it first ran on real Kubernetes.
+
+`record-seal` was added to this repository on 2026-08-28 and everything about it
+was proved locally: the image built, the shell it runs verified against a real
+bus, `trailryx-verify` printed VERIFIED. What had never happened was a CronJob
+executing it inside a cluster, which is the only thing that answers whether the
+manifests are right.
+
+They were. It took four unrelated obstacles to find that out, and each is worth
+writing down because three of them are properties of this stack rather than of
+the test.
+
+**One. The namespace refuses a pod that does not meet `restricted`.** A seeding
+Job written the obvious way (busybox, no `securityContext`) was rejected four
+times by the PodSecurity admission controller before any pod existed:
+`allowPrivilegeEscalation != false`, `unrestricted capabilities`,
+`runAsNonRoot != true`, `seccompProfile`. That is 00-base.yaml doing exactly its
+job, and it means anything an operator adds by hand needs the same four lines
+the real workloads carry.
+
+**Two. `stack-events` is ReadWriteMany and most local clusters cannot provide
+it.** kind's `local-path` provisioner answers plainly: `NodePath only supports
+ReadWriteOnce and ReadWriteOncePod access modes`. Four components append to the
+bus from different pods, so RWX is the requirement rather than a preference. A
+single-node test can stand in a `hostPath` PersistentVolume with RWX and one
+matching StorageClass, and that stand-in is exactly what it sounds like: it
+proves the manifests, not the storage.
+
+**Three. `WaitForFirstConsumer` and a manually created volume deadlock.** The
+claim waited for a pod, the pod waited for the claim, and neither moved for
+eleven minutes. `volumeBindingMode: Immediate` on the test StorageClass is what
+breaks it. On a real cluster the provisioner makes the volume, so the question
+never arises.
+
+**Four. `fsGroup` does nothing for a hostPath volume.** The directory arrives
+`root:root`, the workloads run as 10001, and a write fails. A real RWX
+provisioner sets ownership; a hostPath test has to `chown` the directory on the
+node.
+
+WHAT THE RUN ACTUALLY PROVED, once it ran:
+
+    12 events on the bus  ->  24 records in 1 segment, 4827-byte pack, VERIFIED
+    6 more events, TRAILRYX_TRUST_DOMAIN deliberately wrong:
+        refused: foreign_trust_domain 6
+        cursor: NOT moved
+    domain corrected, same CronJob:
+        seg-2, 12 records, 36 rows total, VERIFIED
+
+That middle step is the one worth having. Before trailryx held the cursor for
+this case (2026-08-27), a run under the wrong domain committed the position it
+reached, and the next correct run answered "nothing new" about events that were
+then permanently outside the record. Here the cluster shows it refusing, keeping
+the position, and the same six events being sealed a minute later once the
+domain was right. Nothing was lost and nothing had to be recovered by hand.
+
+Total wall time from `kind create cluster` to VERIFIED: about eleven minutes, of
+which nine were the four obstacles above.
