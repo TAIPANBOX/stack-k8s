@@ -369,6 +369,11 @@ spec:
             # operator will look.
             - name: WARDRYX_APPROVAL_SECRET
               valueFrom: { secretKeyRef: { name: stack-policy-db, key: approval_secret } }
+            # Read from stack-wiring rather than repeated here, so the path
+            # has ONE source: anything else that needs to find this archive
+            # (a replay routine, an operator) reads the same key.
+            - name: WARDRYX_POLICY_ARCHIVE
+              valueFrom: { configMapKeyRef: { name: stack-wiring, key: WARDRYX_POLICY_ARCHIVE } }
           ports: [{ name: http, containerPort: 8090 }]
           volumeMounts:
             - { name: events, mountPath: /var/lib/stack/events }

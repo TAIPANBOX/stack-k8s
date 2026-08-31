@@ -123,6 +123,18 @@ data:
   # identity graph; heraldyx reads the directory and picks up both.
   TOKENFUSE_CLOUD_EVENTS_PATH: "/var/lib/stack/events/tokenfuse-cloud.ndjson"
   WARDRYX_EVENTS_PATH: "/var/lib/stack/events/wardryx.ndjson"
+  # Where wardryx keeps every policy set it makes effective, named by that
+  # set's own policy_version. It is a directory on the SAME already-provisioned
+  # stack-events volume, so this costs no new storage.
+  #
+  # Unset, wardryx serves exactly as before and loses one thing: a decision it
+  # records names a policy_version, and the rules behind that name are gone at
+  # the next `/v1/policies` write, because the policy store is a live control
+  # surface where writes overwrite and deletes remove. `wardryx replay` then
+  # reports every such decision as not-archived and can examine none of them.
+  # The loss is one-way: replay works forward from the day this is set and can
+  # never be applied to decisions recorded before it.
+  WARDRYX_POLICY_ARCHIVE: "/var/lib/stack/events/wardryx-policy-archive"
   # The drill harness writes here too, and until 2026-08-03 it did not write
   # anywhere. It ran, it found gaps, and `sim_finding` reached nothing: the
   # notifier has a sentence for that type and the operator was never going to
