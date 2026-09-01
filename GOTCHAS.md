@@ -2991,3 +2991,248 @@ domain was right. Nothing was lost and nothing had to be recovered by hand.
 
 Total wall time from `kind create cluster` to VERIFIED: about eleven minutes, of
 which nine were the four obstacles above.
+
+## 89. The finops plane had no deployment unit anywhere, and the notifier cannot see the passports it writes
+
+**The stack's own contract.** Neither half of this is a bug. CostCrew was built
+as a laptop console and never given a cluster shape, and heraldyx reads
+passports from a ConfigMap on purpose. Both are properties somebody adding a
+plane has to know, and neither is visible from the manifests alone.
+
+Recorded 2026-09-01, when 49-costcrew.yaml was written. **Ran on a live GCP cluster the same day**, three
+c3d-highcpu-8 nodes in europe-west3, and what that run found is entry 90.
+
+**One. The plane that reads the bills could not be deployed where bills
+arrive.** Measured by grep on 2026-09-01: zero occurrences of `costcrew` in
+`manifests/`, and zero in `stack-single/compose.yaml`. The same is true of
+`vouchryx`. Both exist only in `stack-up`, behind `--with-finops` and
+`--with-delegation`, and `stack-up` binds 127.0.0.1 by design and stops when you
+press Ctrl-C.
+
+So the stack had three deployment shapes and its finops plane was in exactly
+one of them, the one that cannot receive a real bill or outlive a terminal. It
+reads as an oversight only in hindsight: every document describing CostCrew is
+accurate, none of them claims a cluster shape, and nothing anywhere says the
+shape is missing. An absent thing raises no alert.
+
+**Two. Passports written at runtime never reach the notifier.** `45-heraldyx.yaml`
+mounts `/var/lib/stack/passports` from a ConfigMap named `heraldyx-passports`,
+with `optional: true`, and the operator creates that ConfigMap by hand. It does
+NOT mount the shared `stack-events` claim.
+
+That is a deliberate posture and the manifest says so: heraldyx opens a passport
+to learn one field and has no business editing one, and a ConfigMap is read-only
+by construction in a way a shared volume is not.
+
+The consequence for any new plane is the part worth writing down. CostCrew
+writes Agent Passport documents continuously, as it hires and re-briefs
+analysts. Those land on its own claim, heraldyx never sees them, and an alert
+about a CostCrew agent then names the agent and not the team to call. Nothing
+fails, nothing logs, and the alert that arrives looks complete.
+
+The three ways out, none of them free:
+
+1. **An operator refreshes the ConfigMap on a schedule.** Works today, needs no
+   change here, and is stale between refreshes.
+2. **heraldyx also mounts the shared claim.** One line in another plane's
+   manifest, and it widens what the notifier can read from a volume four
+   components write.
+3. **Passports become a service rather than a directory.** The correct long-term
+   answer and the same shape as the event-log question in the README: a file
+   stops being an interface. Out of scope here, and named rather than pretended
+   away.
+
+Until one of them is chosen, 49-costcrew.yaml writes passports to its own claim
+and says in its header that they do not meet.
+
+## 90. The first live run of the finops plane found four things, and no gate here could have found any of them
+
+**Ours, and fixed.** All four are our own, all four passed every static gate in
+this repository, and all four needed a cluster with money on it to appear.
+
+Measured 2026-09-01 on three c3d-highcpu-8 nodes in europe-west3, burning USD
+1.1258/hour, running the crew live against a real model account.
+
+**One. A plane that WRITES to a claim needs `fsGroup`, and 49-costcrew.yaml did
+not have it.** The pod came up, the volume attached, and the container exited
+with
+
+    costcrew: opening the store in /var/lib/costcrew: unable to open database file (14)
+
+which is SQLITE_CANTOPEN wearing a number. A freshly provisioned Longhorn volume
+arrives root-owned, the container runs as 65532, and without `fsGroup` the
+kubelet never chowns it. Every other plane here that writes to a claim already
+carries the line, each with the reason beside it: console 10001, heraldyx 65532,
+scopyx 65532. The mistake was copying idryx's `securityContext`, which mounts
+the event log READ-ONLY and therefore correctly has no `fsGroup` at all. Copying
+the wrong neighbour is the whole failure, and kubeconform cannot see it: the
+manifest is a perfectly valid document either way.
+
+**Two. `kubectl apply -k` reverts an operator's ConfigMap patch, and only some
+of it.** `00-base.yaml` ships `TRAILRYX_TRUST_DOMAIN: set-me.invalid`
+deliberately, because there is no defensible default, so an operator sets it by
+hand. The next run of the deploy script put the placeholder back.
+
+The asymmetry is what makes it a trap rather than an annoyance. `apply` reverts
+the fields it manages and leaves alone the ones it does not, so on the same
+ConfigMap in the same command: `COSTCREW_OWNER` and `COSTCREW_CEILING`, which
+the operator ADDED, survived; `TRAILRYX_TRUST_DOMAIN`, which the manifest
+DECLARES, was overwritten. Both behaviours are correct. Together they mean the
+one key that must be set is the one key that cannot stay set.
+
+What it costs is silent, which is the reason it is here rather than in a
+changelog. The record plane accepts an event only if its agent id begins
+`agent://<domain>/`. Measured on the bus afterwards: every event this cluster
+produced carried `agent://set-me.invalid/...`, so the seal would refuse all of
+them as foreign, and a refusal that fires on everything reads exactly like a
+quiet night.
+
+Fixed with `--trust-domain` on both cloud deploy scripts, applied AFTER the
+kustomization, which is the entire point of where it sits.
+
+**Three. The record plane could never have sealed anything on GCP or AWS.**
+`40-routines-and-secrets.yaml` applies the `record-seal` CronJob on every cloud
+and that CronJob runs `stack/trailryx:dev`. The Hetzner `deploy.sh` builds that
+image; `cloud/gcp/deploy-gcp.sh` and `cloud/aws/deploy-aws.sh` did not, and
+never had. Triggering the job by hand on the live cluster:
+
+    Error from server (BadRequest): container "trailryx" in pod "seal-foreign-..."
+    is waiting to start: image can't be pulled
+
+It is invisible by construction. The job fires at 05:27, its failure is one pod
+in ImagePullBackOff in a namespace nobody watches overnight, and the visible
+symptom the next morning is an empty record rather than an error. This is the
+same shape as 78, and it survived because the three deploy scripts diverged in a
+list that no check compares.
+
+**Four. The scopyx setup instructions produce a credential the policy plane
+refuses.** The header of `47-scopyx.yaml` said to build `SCOPYX_WARDRYX_KEY`
+with `... | cut -d, -f1`. But `wardryx_keys` holds comma-separated
+`<key>:<tenant>:<role>` triples, so that yields `<key>:default:admin`. Both
+forms, against the live PDP, same request:
+
+| bearer | answer |
+|---|---|
+| `<key>:default:admin`, as documented | `{"error": "missing or invalid bearer token"}` |
+| `<key>`, the first field | `{"decision":"allow","policy_version":"da10bac8cf9a", ...}` |
+
+scopyx starts perfectly well on the wrong one. What breaks is every policy
+decision it ever asks for, which is the only reason it stands in front of the
+web at all. An operator following the header exactly gets a governed egress
+plane that is not governed.
+
+## 91. What a delete leaves behind, and the one thing it cannot take back
+
+**Platform.** Three of the four below are Kubernetes doing exactly what it says:
+a delete removes what the manifest owns and nothing else, a cloud load balancer
+gets whatever address is free, and a label on somebody else's object outlives
+the file that put it there. Only the last, 48 deleting the plain scopyx with it,
+is a property of our own manifests.
+
+Nothing below is a bug. They are the removal half of "install by function", and
+until this run nobody had measured them, because every test this repo had was
+about putting things IN.
+
+Measured 2026-09-01 by cycling ten units through install, delete and install
+again on a live cluster: six optional manifests and four core planes removed one
+at a time. **All ten installed, deleted and reinstalled.** The four core planes
+come back with the same command that installed them, `kubectl apply -k`, which
+is the property that makes a plane removable rather than merely absent.
+
+**A claim in the manifest dies with it; a secret outside the manifest does not.**
+Deleting `49-costcrew.yaml` takes `costcrew-state` with it, so the finops
+plane's database, and every draft in it that a person had not yet stamped, is
+gone. The same delete leaves `costcrew-engine` behind, which is a model provider
+API key sitting in the namespace with nothing left to use it. Both are correct
+Kubernetes and the pairing is the wrong way round from what an operator would
+choose: the thing you want to keep is destroyed and the thing you want destroyed
+is kept.
+
+**A load balancer comes back at a different address.** First install
+34.185.221.164, delete, reinstall 35.246.210.3. GCP had zero orphaned forwarding
+rules afterwards, so the cloud controller cleans up after itself and the meter
+does stop, which is the part that costs money and the part that was worth
+checking. The address is not stable across a reinstall, so anything that wrote
+it into DNS is pointing at somebody else's cluster now.
+
+**`60-harden-neighbours.yaml` cannot be uninstalled, and that is structural.**
+`kubectl delete -f` returned a failure, and the PodSecurity `enforce: restricted`
+label on the `default` namespace survived it. It has to: the manifest LABELS a
+namespace it did not create, and a delete cannot remove an object it does not
+own, only the labels' host. So an operator who tries this file and changes their
+mind is left with somebody else's namespace still restricted and no obvious way
+back. The two NetworkPolicies it adds to `default` do go away.
+
+**48-scopyx-browser is a swap and its delete removes the plain one too.** Both
+files name one Deployment, `scopyx`, which is the property that stops a cluster
+round-robining an agent's fetches between a browser and a fetcher. Deleting the
+browser file therefore leaves NO scopyx at all: recovery is applying 47 again,
+which works. The header says they replace each other; it does not say that
+deleting the replacement deletes the original, and now it does.
+
+## 92. An optional ConfigMap key used in `$(VAR)` substitution fails open into a literal
+
+**Ours, and fixed.** Measured 2026-09-01 on a live AWS cluster, on the first
+run of the crew job anywhere.
+
+`49-costcrew.yaml` passed the run's ceiling as `-ceiling $(COSTCREW_CEILING)`,
+with the variable read from `stack-wiring` as `optional: true`. Nothing creates
+that key: it is a spending decision, so an operator sets it.
+
+`optional: true` on a missing key does not mean "run without it". It means the
+variable is never set, and Kubernetes then leaves `$(COSTCREW_CEILING)` in the
+args AS A LITERAL STRING. The runner receives the text and reports
+
+    run: the ceiling must look like 25.00: not a decimal amount: "$(COSTCREW_CEILING)"
+
+which is true, is about the wrong thing, and names nothing an operator can act
+on. The pod starts, the job runs, and it fails five layers away from the cause.
+
+Fixed by making it required, which is the shape the decision actually has. A
+ceiling is a number somebody chose: `tools/run` refuses to default one, and a
+manifest that defaults one on the operator's behalf would be undoing that
+refusal from the outside. Missing now stops the pod with `couldn't find key
+COSTCREW_CEILING in ConfigMap`, which says what is wrong.
+
+**The general shape, which is what makes it a gotcha rather than a typo.**
+`optional: true` is right for a variable a program can do without, and
+`45-heraldyx.yaml` uses it correctly for exactly that. It is wrong for a
+variable used in `$()` substitution, because there the absence is not an absence
+the program sees: it is a wrong VALUE the program is handed. Anywhere the two
+are combined, a missing key becomes a confusing runtime error instead of a
+clear startup one.
+
+Three other places in these manifests combine them, and all three are safe for
+the same checkable reason: the value goes to an `env` the program reads and
+tests for itself, never into `args`.
+
+## 93. The crew's own egress rule blocks the credential source its cloud engine needs
+
+**The stack's own contract.** Both halves are right and they disagree, which is
+worth writing down before somebody "fixes" one of them.
+
+`49-costcrew.yaml`'s egress rule grants the crew pod the public internet on 443
+MINUS the private ranges and 169.254.0.0/16, the metadata address every cloud
+parks credentials on. That exclusion is the point of the rule: a compromised
+runner must not be able to turn an outbound grant into the node's own identity.
+
+CostCrew's Bedrock engine, added the same day, exists precisely so that an
+agent already inside somebody's AWS account can be given a model bill with no
+key anywhere: it signs with whatever the AWS chain resolves. On plain EC2 that
+chain IS the metadata service, so on a cluster like this one the engine cannot
+get credentials, and the reason is our own rule.
+
+Not a defect in either. The resolution is the one a production deployment
+wants anyway:
+
+- **In EKS, use IRSA.** The pod gets a projected web-identity token from a file
+  and exchanges it at STS, which is an ordinary public endpoint on 443 and
+  therefore already permitted. No metadata access is needed and no rule changes.
+- **On plain EC2, hand the pod its own credentials as a Secret**, or do not use
+  the Bedrock engine there. Widening the rule to reach 169.254.169.254 would
+  give every crew pod the whole node's role, which is a strictly worse trade
+  than a scoped key.
+
+Recorded rather than resolved because the right answer is deployment-shaped,
+and because the failure otherwise looks like a broken engine rather than a
+policy doing its job.

@@ -2,8 +2,15 @@
 #
 # Local gate before anything leaves this machine.
 #
-# This repository has no CI, so this hook is the ONLY thing that runs the gates.
-# A gate nothing calls is a comment with an exit code.
+# `.github/workflows/gates.yml` runs the same checks since 2026-08-01, so this
+# hook stopped being the only caller then. It is the fast one: it answers before
+# a push rather than after it. This header said "this repository has no CI" until
+# 2026-09-01, which had been wrong for a month.
+#
+# A gate nothing calls is a comment with an exit code, and that is not
+# hypothetical here: manifest-is-true.sh was in neither caller for its whole
+# life, and the omission it would have caught (a workload installed and
+# undeclared) shipped past both.
 #
 # Install (once):  git config core.hooksPath .githooks
 # Skip (rarely):   git push --no-verify
@@ -34,6 +41,8 @@ step "the stack comes up closed" "./scripts/closed-by-default.sh"
 step "cloud claims are dated and marked" "./scripts/portability-claims.sh"
 step "every image is pinned or built here" "./scripts/pinned-images.sh"
 step "every manifest validates against the schema" "./scripts/manifests-valid.sh"
+step "components.json says what is installed" "./scripts/manifest-is-true.sh"
+step "node names are pinned by the install" "./scripts/node-name-is-pinned.sh"
 
 echo
 if [ "$fail" -ne 0 ]; then

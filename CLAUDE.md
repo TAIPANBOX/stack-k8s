@@ -35,9 +35,16 @@ The honest count of our own mistakes is what makes the platform classifications
 worth believing. A ledger where everything is somebody else's fault is
 marketing.
 
-**Measured 2026-08-06 by `./scripts/gotchas-classified.sh`, not estimated: 81
-entries, 37 platform, 30 ours, 10 the stack's own contract, 4 upstream. Nothing
-unclassified.** (70 on 2026-07-31;
+**Measured 2026-09-01 by `./scripts/gotchas-classified.sh`, not estimated: 93
+entries, 40 platform, 36 ours, 13 the stack's own contract, 4 upstream. Nothing
+unclassified.** (81 on 2026-08-06. The twelve added since are 82 to 88, then 89
+to 91 from the first live run of the finops plane on GCP, and 92 and 93 from
+the AWS run the same day. Between them: a plane with no cluster shape at all,
+five of our own defects that every static gate here passed, the removal half of
+"install by function" which nothing had ever measured because every test in
+this repo was about putting things IN, and one place where two correct rules of
+ours disagree with each other.)
+(70 on 2026-07-31;
 the nine added between 70 and 79 are 71, bash counting quotes inside a heredoc it was told
 to treat literally; 72, `kubectl get -o yaml` printing configuration that was
 deleted, which made a new check pass on the very defect it was written to
@@ -89,8 +96,16 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/portability-claims.sh
 ./scripts/pinned-images.sh
 ./scripts/manifests-valid.sh      # invariant 10; needs kubeconform on PATH
+./scripts/manifest-is-true.sh     # invariant 13
+./scripts/node-name-is-pinned.sh  # invariant 11
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
+
+The last two were missing from this list until 2026-09-01, and
+`manifest-is-true.sh` was missing from both callers as well, so for its whole
+life it enforced nothing anywhere. It is the exact shape invariant 9 is about:
+a gate that has quietly stopped catching anything looks like a gate with
+nothing to catch. Adding a workload without declaring it is what finally ran it.
 
 Anything that provisions real infrastructure is not a gate and never runs
 unattended: see the money rule at the bottom.
@@ -253,6 +268,36 @@ an absent invariant.
     *(partly gated: `verify.sh` checks the replica count on a running cluster,
     which turns a revert into a failed check rather than into the next outage.
     Nothing static can hold it, because the number lives on the cluster.)*
+
+13. **`components.json` says what this launcher actually installs, and a CronJob
+    is either a routine or a suspended template, never neither.** A launcher
+    builds nothing of its own, so what it INSTALLS is the only thing it can
+    declare, and estate-gates' C5 reads that declaration from outside. A
+    workload nobody declared is invisible from outside by construction: it is
+    not reported as missing, because nothing knows to look for it.
+
+    The CronJob half is the part with money in it. Two shapes live here and
+    only one is a routine: `schedules_routines` is governance work on a
+    schedule, mapped to the name the estate uses; `manual_jobs` is a Job
+    TEMPLATE, shipped suspended, run by a person with
+    `kubectl create job --from=cronjob/<name>`. Calling a manual job a routine
+    would put a schedule nobody keeps into the estate's record of what runs
+    where, and calling a routine manual would hide a schedule that does run.
+
+    So "manual" is checked against the object rather than accepted as a word:
+    the manifest has to actually set `suspend: true`. A CronJob declared manual
+    and left unsuspended runs on whatever schedule it carries, on a cluster
+    whose operator was told it runs only when they say so, and `costcrew-crew`
+    is the one CronJob in this namespace that spends on an account outside the
+    cluster.
+
+    **This gate existed and was called by nothing for its whole life**, which is
+    why it is numbered here now rather than when it was written. See the note
+    under Gates above.
+    *(gate: `scripts/manifest-is-true.sh`, now in both callers. Five cases in
+    `scripts/gates-have-teeth.sh`: an undeclared workload, a CronJob mapped to a
+    routine the estate does not have, the manifests ceasing to declare a kind, a
+    manual job that is not suspended, and a manual job with no reason.)*
 
 ## Decisions that have no gate yet
 

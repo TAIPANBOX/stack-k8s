@@ -217,6 +217,42 @@ for path in sorted(pathlib.Path("manifests").glob("*.yaml")):
 assert n, "no manifest declared a kind to remove"')" \
 	"measured NOTHING"
 
+# `manual_jobs` is a claim ABOUT an object, so the two cases below plant the
+# fault on each side of that claim: the manifest stops matching it, and the
+# reason behind it goes away.
+#
+# The first is the one that costs money. A CronJob declared manual and left
+# unsuspended runs on whatever schedule its manifest carries, on a cluster whose
+# operator was told it runs only when they say so, and costcrew-crew is the one
+# CronJob here that spends on an account outside the cluster.
+run_case "manifest-is-true: a manual job is not actually suspended" fail \
+	'./scripts/manifest-is-true.sh' \
+	"$(py 'import json, pathlib
+d = json.load(open("components.json"))
+manual = d["components"][0]["checked"].get("manual_jobs") or {}
+assert manual, "no manual job is declared, so there is nothing to un-suspend"
+n = 0
+for path in sorted(pathlib.Path("manifests").glob("*.yaml")):
+    body = path.read_text()
+    if "suspend: true" not in body:
+        continue
+    path.write_text(body.replace("suspend: true", "suspend: false"))
+    n += 1
+assert n, "no manifest set suspend: true, so the claim was already unbacked"')" \
+	"does not set"
+
+run_case "manifest-is-true: a manual job carries no reason" fail \
+	'./scripts/manifest-is-true.sh' \
+	"$(py 'import json
+p = "components.json"
+d = json.load(open(p))
+manual = d["components"][0]["checked"].get("manual_jobs") or {}
+assert manual, "no manual job is declared, so there is no reason to remove"
+for name in manual:
+    manual[name] = "   "
+json.dump(d, open(p, "w"), indent=2)')" \
+	"gives no"
+
 run_case "pinned-images: a tag that moves under the operator" fail \
 	'./scripts/pinned-images.sh' \
 	"$(py 'import re, glob

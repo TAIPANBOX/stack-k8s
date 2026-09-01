@@ -173,8 +173,9 @@ if [ "$MISSING" -eq 0 ]; then
 
    Next, in order:
 
-     1. Read ../COSTS.md. The cluster costs about USD 2.13/hour once step 3
-        runs, and not one cent before it.
+     1. Read ../COSTS.md for what each line of the bill is. What THIS cluster
+        costs is computed from the counts above by step 2, which prints it as
+        hourly_usd and creates nothing. Not one cent is spent before step 3.
 
      2. terraform init && terraform plan
         Free. Creates nothing. Shows exactly what step 3 would make.

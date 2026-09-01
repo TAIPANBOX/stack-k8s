@@ -23,6 +23,16 @@
 # `--console-token <github-token>` is what adds it. Leave it out and you get the
 # governed stack without the control room, which is a real deployment and not a
 # crippled one: the planes enforce with or without a UI in front of them.
+#
+# `--trust-domain <domain>` sets the record plane's trust domain after the
+# manifests are applied, which is the only place it survives.
+#
+# `--with-finops` additionally builds and applies CostCrew, the finops plane:
+# the bill, worked by a crew of agents. It is off by default because it is a
+# whole plane somebody may not want, not because it is dangerous. The half of
+# it that CAN spend on a model account ships suspended, so this flag applies a
+# console and starts no meter; see manifests/49-costcrew.yaml for how to run
+# the crew deliberately afterwards.
 set -euo pipefail
 
 SERVERS=""; AGENTS=""
@@ -43,6 +53,13 @@ SMTP_PASS=""
 # tells them to run.
 ALERT_CONSOLE_DEFAULT="http://localhost:17420"
 ALERT_CONSOLE_URL="${ALERT_CONSOLE_URL:-}"
+# The finops plane, off by default. It is a whole plane somebody may simply not
+# want, and the half of it that can spend money ships suspended, so the flag
+# carries the plane and never the spending. See manifests/49-costcrew.yaml.
+WITH_FINOPS="${WITH_FINOPS:-0}"
+# The record plane's trust domain. Empty leaves 00-base.yaml's `set-me.invalid`
+# in place, which is the loud state and the right default; see where it is used.
+TRUST_DOMAIN="${TRUST_DOMAIN:-}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 
 while [ $# -gt 0 ]; do
@@ -57,9 +74,19 @@ while [ $# -gt 0 ]; do
     --smtp-from)     SMTP_FROM="$2"; shift 2 ;;
     --smtp-user)     SMTP_USER="$2"; shift 2 ;;
     --console-url)   ALERT_CONSOLE_URL="$2"; shift 2 ;;
+    --with-finops)   WITH_FINOPS=1; shift ;;
+    --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
-    -h|--help)       sed -n '2,26p' "$0" | sed -E 's/^# ?//'; exit 0 ;;
+    # The header block, found rather than counted.
+    #
+    # It was a hardcoded line range twice, and drifted twice: first past
+    # --copilot-key-file, then past --trust-domain, each time leaving a
+    # real flag documented in a comment nobody prints. A range that has to
+    # be updated whenever the header grows is a range that will not be.
+    -h|--help)
+      end=$(grep -n '^set -euo pipefail' "$0" | head -1 | cut -d: -f1)
+      sed -n "2,$((end - 1))p" "$0" | sed -E 's/^# ?//'; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
 done
@@ -236,7 +263,18 @@ fi
 # are pulled from ghcr.io now, so cloning their source on the node would be
 # fetching something nothing reads. Their policy and config come from the
 # manifests, not from their repositories.
-OPEN_REPOS="qryx mockryx tokenfuse verdryx engram"
+# trailryx is on this list from 2026-09-01. 40-routines-and-secrets.yaml applies
+# the record-seal CronJob on every cloud and that CronJob runs
+# `stack/trailryx:dev`, which nothing here ever built, so the record plane could
+# never seal anything here. See the fuller account in ../gcp/deploy-gcp.sh, where
+# it was measured on a live cluster.
+#
+# costcrew joins the list only with --with-finops, for the same reason its
+# manifest is not in the kustomization: a deployment that clones and builds a
+# plane nobody applied is paying for it in build minutes and node disk to leave
+# it sitting there.
+OPEN_REPOS="qryx mockryx tokenfuse verdryx engram trailryx"
+[ "$WITH_FINOPS" = 1 ] && OPEN_REPOS="$OPEN_REPOS costcrew"
 if [ "$SKIP_IMAGES" = 1 ]; then
   say "skipping the image build (--skip-images)"
 else
@@ -323,9 +361,15 @@ else
     cd /root/src
     docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
     echo '   built stack/tokenfuse:dev'
+    docker build -q -f stack-k8s/images/trailryx.Dockerfile -t stack/trailryx:dev ./trailryx >/dev/null
+    echo '   built stack/trailryx:dev'
     if [ '$WITH_CONSOLE' = '1' ]; then
       docker build -q -f stack-k8s/images/console.Dockerfile -t stack/genaryx-console:dev . >/dev/null
       echo '   built stack/genaryx-console:dev'
+    fi
+    if [ '$WITH_FINOPS' = '1' ]; then
+      docker build -q -f stack-k8s/images/costcrew.Dockerfile -t stack/costcrew:dev ./costcrew >/dev/null
+      echo '   built stack/costcrew:dev'
     fi\""
 
   # ---- distributing the images -------------------------------------------
@@ -353,8 +397,9 @@ else
     sh_ "$n" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qF '$DIST_PUB' ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '$DIST_PUB' >> ~/.ssh/authorized_keys"
   done
 
-  IMAGES="stack/tokenfuse:dev"
+  IMAGES="stack/tokenfuse:dev stack/trailryx:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
+  [ "$WITH_FINOPS" = 1 ]  && IMAGES="$IMAGES stack/costcrew:dev"
   su_ "$BUILDER" "sh -c \"for img in $IMAGES; do
       docker save \\\$img | k3s ctr images import - >/dev/null 2>&1 && echo '   '\\\$img' -> builder' || echo '   '\\\$img' -> builder FAILED'
       for p in $PRIVS; do
@@ -405,6 +450,28 @@ fi
 say "step 3/5: the workload"
 tar -cz -C "$ROOT" manifests | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
 k_ "apply -k /root/stack-k8s/manifests"
+
+# The trust domain, set AFTER the kustomization and not before, which is the
+# whole point of it being here. 00-base.yaml ships `set-me.invalid` because
+# there is no defensible default, an operator patches it, and the next run of
+# this script puts the placeholder back: `apply` reverts the keys the manifest
+# DECLARES and leaves the ones an operator ADDED. See ../gcp/deploy-gcp.sh,
+# where it was measured three times in one session.
+if [ -n "$TRUST_DOMAIN" ]; then
+  say "trust domain: $TRUST_DOMAIN (set after apply, which is what makes it stick)"
+  k_ "-n agent-stack patch cm stack-wiring --type merge -p '{\"data\":{\"TRAILRYX_TRUST_DOMAIN\":\"$TRUST_DOMAIN\"}}'" >/dev/null \
+    || die "could not set the trust domain on stack-wiring"
+fi
+
+# The finops plane, applied from its own file for the same reason heraldyx and
+# scopyx are: it is not in the kustomization, so it arrives only when somebody
+# asked for it. Its crew CronJob ships suspended, so this applies a plane and
+# starts no spending.
+if [ "$WITH_FINOPS" = 1 ]; then
+  say "finops: applying the CostCrew plane (its crew stays suspended)"
+  k_ "apply -f /root/stack-k8s/manifests/49-costcrew.yaml"
+fi
+
 say "waiting for rollouts"
 for d in $(k_ "-n agent-stack get deploy -o name"); do
   k_ "-n agent-stack rollout status $d --timeout=300s" || true

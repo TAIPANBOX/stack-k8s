@@ -18,7 +18,7 @@
     "it does not know is one it silently would not compare. The map is here too",
     "now, as a pair per CronJob, so a rename on either side is visible from both.",
     "",
-    "SIX PERSISTENT CLAIMS, AND THEY ARE THE ONE THING IN THIS ESTATE THAT COSTS",
+    "SEVEN PERSISTENT CLAIMS, AND THEY ARE THE ONE THING IN THIS ESTATE THAT COSTS",
     "MONEY BY EXISTING. A PersistentVolumeClaim provisions a real disk on every",
     "provider and is billed from creation, whether or not anything writes to it,",
     "and some providers round up to their own minimum so the requested size is",
@@ -40,6 +40,7 @@
       "class": "launcher",
       "checked": {
         "installs_services": [
+          "costcrew",
           "genaryx-console",
           "heraldyx",
           "idryx",
@@ -56,9 +57,13 @@
           "quality-drift": "verdryx-drift",
           "record-seal": "trailryx-seal"
         },
+        "manual_jobs": {
+          "costcrew-crew": "A Job TEMPLATE rather than a schedule: shipped suspended, run by a person with `kubectl create job --from=cronjob/costcrew-crew`. It is the one CronJob in this namespace that spends on an account outside the cluster, so it is the one that must never start because a manifest was applied. Not a routine: mapping it into the estate's routine map would put a schedule nobody keeps into the record of what runs where. manifest-is-true.sh checks the manifest actually sets `suspend: true`, so this category is verified rather than asserted."
+        },
         "persistent_claims": [
           "cloud-state",
           "console-state",
+          "costcrew-state",
           "heraldyx-state",
           "scopyx-events",
           "stack-events",
@@ -71,7 +76,7 @@
       },
       "declared": {
         "the_claims_are_metered": {
-          "value": "6 PersistentVolumeClaims",
+          "value": "7 PersistentVolumeClaims",
           "why": "Each provisions a real disk and is billed from creation, whether or not anything writes to it; some providers round up to their own minimum, so the requested size is not always the billed size. Listed so adding one is a visible change to a reviewed file."
         },
         "the_loadbalancer_is_excluded_on_purpose": {
