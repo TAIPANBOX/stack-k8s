@@ -31,11 +31,20 @@ name: console image
 # name answers "which console" and says nothing about which four tools are
 # inside it, and those four are half of what the image is.
 #
-# WHAT IS NOT DONE HERE: arm64. Every other image the estate publishes today is
-# amd64 only except costcrew and trailryx, and this one is a four-language build
-# where the cheap cross-compile trick that makes a Go image multi-arch does not
-# apply to the Rust and Node stages. It is a separate piece of work and it is
-# named rather than quietly skipped.
+# ARM64, BUILT NATIVELY
+#
+# The cheap trick that makes a Go image multi-arch, compiling from BUILDPLATFORM
+# with GOARCH set, does not apply here: this is four languages and the Rust and
+# Node stages have no equivalent. The other route is QEMU, which for a Rust
+# compiler is tens of minutes.
+#
+# So each architecture is built on a runner of that architecture, pushed BY
+# DIGEST with no tag, and a second job merges the digests into one manifest list
+# carrying the tag. Both runners are free for public repositories.
+#
+# Six checkouts happen twice, once per architecture, which is the cost. It buys
+# a console that pulls on a Graviton node with the same pinned tag as on an x86
+# one, and nobody has to know which they got.
 on:
   push:
     tags: ["v*"]
@@ -46,9 +55,17 @@ permissions:
   packages: write
 
 jobs:
-  image:
-    name: build + push the console
-    runs-on: ubuntu-24.04
+  build:
+    name: console on ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       # This repository into a subdirectory, because the build context is the
       # PARENT of all six checkouts: console.Dockerfile's COPY paths are
@@ -97,14 +114,6 @@ jobs:
             echo "  $r $sha"
           done
 
-      # A registry repository name must be lowercase and the organisation is
-      # TAIPANBOX. costcrew's first release failed on exactly this.
-      - name: lowercase the owner
-        id: owner
-        run: echo "name=${OWNER,,}" >> "$GITHUB_OUTPUT"
-        env:
-          OWNER: ${{ github.repository_owner }}
-
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -113,13 +122,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: build and push
+      - name: lowercase the owner
+        id: owner
+        run: echo "name=${OWNER,,}" >> "$GITHUB_OUTPUT"
+        env:
+          OWNER: ${{ github.repository_owner }}
+
+      # By digest and by nothing else. The merge below is what gives these a
+      # name; until it runs they are unreferenced blobs, which is what a
+      # half-finished release should be rather than a tag somebody's arm64 node
+      # pulls and fails on.
+      - name: build and push by digest
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: stack-k8s/images/console.Dockerfile
-          push: true
-          tags: ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console:${{ github.ref_name }}
+          outputs: type=image,name=ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console,push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.version=${{ github.ref_name }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -128,11 +147,77 @@ jobs:
             dev.taipanbox.source.mockryx=${{ steps.sources.outputs.mockryx }}
             dev.taipanbox.source.verdryx=${{ steps.sources.outputs.verdryx }}
             dev.taipanbox.source.engram=${{ steps.sources.outputs.engram }}
-          cache-from: type=gha,scope=console
-          cache-to: type=gha,mode=max,scope=console
+          cache-from: type=gha,scope=console-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=console-${{ matrix.arch }}
 
-      - name: say what was published
+      # The image runs on the architecture that built it, and it runs the FOUR
+      # tools it exists to host rather than only the server. A console whose
+      # qryx was cross-built wrong is a console with four permanently empty
+      # tabs, and that failure is silent: the page renders.
+      - name: run the tools, on the architecture that built them
         run: |
-          echo "published ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console:${{ github.ref_name }}"
+          set -eu
+          img="ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console@${{ steps.build.outputs.digest }}"
+          echo "on $(uname -m):"
+          docker run --rm --entrypoint /bin/sh "$img" -c '
+            set -e
+            uname -m
+            qryx --version    || qryx --help    >/dev/null
+            mockryx --version || mockryx --help >/dev/null
+            verdryx --help    >/dev/null
+            genaryx-web --help >/dev/null 2>&1 || true
+            echo "the bundled tools run here"
+          '
+
+      - name: hand the digest on
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-console-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: merge the manifest list
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digest-console-*
+          merge-multiple: true
+          path: /tmp/digests
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: lowercase the owner
+        id: owner
+        run: echo "name=${OWNER,,}" >> "$GITHUB_OUTPUT"
+        env:
+          OWNER: ${{ github.repository_owner }}
+
+      - name: create the manifest list
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t "ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console:${{ github.ref_name }}" \
+            $(printf 'ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console@sha256:%s ' *)
+
+      # Printed rather than assumed. A manifest list with one architecture in it
+      # looks identical to a correct one from the outside, and that is the
+      # failure this whole job exists to end.
+      - name: say what is in it
+        run: |
           docker buildx imagetools inspect \
             "ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console:${{ github.ref_name }}"
