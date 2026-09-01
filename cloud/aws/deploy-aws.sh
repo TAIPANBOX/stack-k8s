@@ -24,6 +24,9 @@
 # governed stack without the control room, which is a real deployment and not a
 # crippled one: the planes enforce with or without a UI in front of them.
 #
+# `--trust-domain <domain>` sets the record plane's trust domain after the
+# manifests are applied, which is the only place it survives.
+#
 # `--with-finops` additionally builds and applies CostCrew, the finops plane:
 # the bill, worked by a crew of agents. It is off by default because it is a
 # whole plane somebody may not want, not because it is dangerous. The half of
@@ -54,6 +57,9 @@ ALERT_CONSOLE_URL="${ALERT_CONSOLE_URL:-}"
 # want, and the half of it that can spend money ships suspended, so the flag
 # carries the plane and never the spending. See manifests/49-costcrew.yaml.
 WITH_FINOPS="${WITH_FINOPS:-0}"
+# The record plane's trust domain. Empty leaves 00-base.yaml's `set-me.invalid`
+# in place, which is the loud state and the right default; see where it is used.
+TRUST_DOMAIN="${TRUST_DOMAIN:-}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 
 while [ $# -gt 0 ]; do
@@ -69,13 +75,18 @@ while [ $# -gt 0 ]; do
     --smtp-user)     SMTP_USER="$2"; shift 2 ;;
     --console-url)   ALERT_CONSOLE_URL="$2"; shift 2 ;;
     --with-finops)   WITH_FINOPS=1; shift ;;
+    --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
-    # 2,34: the whole header block, which is where the flags are documented.
-    # It was 2,26, which stopped at the line the header happened to end on when
-    # it was written. A flag documented in a comment nobody prints is an
-    # undocumented flag, and deploy-gcp.sh had already grown one that way.
-    -h|--help)       sed -n '2,34p' "$0" | sed -E 's/^# ?//'; exit 0 ;;
+    # The header block, found rather than counted.
+    #
+    # It was a hardcoded line range twice, and drifted twice: first past
+    # --copilot-key-file, then past --trust-domain, each time leaving a
+    # real flag documented in a comment nobody prints. A range that has to
+    # be updated whenever the header grows is a range that will not be.
+    -h|--help)
+      end=$(grep -n '^set -euo pipefail' "$0" | head -1 | cut -d: -f1)
+      sed -n "2,$((end - 1))p" "$0" | sed -E 's/^# ?//'; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
 done
@@ -439,6 +450,18 @@ fi
 say "step 3/5: the workload"
 tar -cz -C "$ROOT" manifests | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
 k_ "apply -k /root/stack-k8s/manifests"
+
+# The trust domain, set AFTER the kustomization and not before, which is the
+# whole point of it being here. 00-base.yaml ships `set-me.invalid` because
+# there is no defensible default, an operator patches it, and the next run of
+# this script puts the placeholder back: `apply` reverts the keys the manifest
+# DECLARES and leaves the ones an operator ADDED. See ../gcp/deploy-gcp.sh,
+# where it was measured three times in one session.
+if [ -n "$TRUST_DOMAIN" ]; then
+  say "trust domain: $TRUST_DOMAIN (set after apply, which is what makes it stick)"
+  k_ "-n agent-stack patch cm stack-wiring --type merge -p '{\"data\":{\"TRAILRYX_TRUST_DOMAIN\":\"$TRUST_DOMAIN\"}}'" >/dev/null \
+    || die "could not set the trust domain on stack-wiring"
+fi
 
 # The finops plane, applied from its own file for the same reason heraldyx and
 # scopyx are: it is not in the kustomization, so it arrives only when somebody

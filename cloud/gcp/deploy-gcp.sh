@@ -29,6 +29,12 @@
 # account rather than on the cluster, which is why it is a flag and not a
 # default, and why the key is a file rather than an argument.
 #
+# `--trust-domain <domain>` sets the record plane's trust domain after the
+# manifests are applied, which is the only place it survives: `apply -k`
+# reverts the keys the manifest declares and leaves the ones an operator
+# added, so a domain patched by hand goes back to the placeholder on the
+# next run and every event the cluster writes is then refused as foreign.
+#
 # `--with-finops` additionally builds and applies CostCrew, the finops plane:
 # the bill, worked by a crew of agents. It is off by default because it is a
 # whole plane somebody may not want, not because it is dangerous. The half of
@@ -80,11 +86,15 @@ while [ $# -gt 0 ]; do
     --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
-    # 2,37: the whole header block, which is where the flags are documented.
-    # It was 2,26, which stopped one line before --copilot-key-file and so
-    # printed a help text that omitted a flag this script has had for weeks.
-    # A flag documented in a comment nobody prints is an undocumented flag.
-    -h|--help)       sed -n '2,37p' "$0" | sed -E 's/^# ?//'; exit 0 ;;
+    # The header block, found rather than counted.
+    #
+    # It was a hardcoded line range twice, and drifted twice: first past
+    # --copilot-key-file, then past --trust-domain, each time leaving a
+    # real flag documented in a comment nobody prints. A range that has to
+    # be updated whenever the header grows is a range that will not be.
+    -h|--help)
+      end=$(grep -n '^set -euo pipefail' "$0" | head -1 | cut -d: -f1)
+      sed -n "2,$((end - 1))p" "$0" | sed -E 's/^# ?//'; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
 done
