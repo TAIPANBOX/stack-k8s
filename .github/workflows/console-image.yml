@@ -150,23 +150,46 @@ jobs:
           cache-from: type=gha,scope=console-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=console-${{ matrix.arch }}
 
-      # The image runs on the architecture that built it, and it runs the FOUR
-      # tools it exists to host rather than only the server. A console whose
-      # qryx was cross-built wrong is a console with four permanently empty
-      # tabs, and that failure is silent: the page renders.
-      - name: run the tools, on the architecture that built them
+      # Does each binary EXECUTE on this architecture. That is the question,
+      # and it is not the same as "does it exit 0".
+      #
+      # The first version of this ran `qryx --help` and required success. qryx
+      # prints its usage and exits 1, because `--help` is not one of its
+      # commands, so the check failed on a perfectly good image on both
+      # architectures at once. A smoke test that fails on a correct build is
+      # worse than none: the next person deletes it.
+      #
+      # A binary built for the wrong architecture does not exit non-zero. The
+      # kernel refuses to run it at all and says `exec format error`, so that
+      # is what this looks for, plus the plainer failure of producing no output
+      # whatsoever. Exit codes are ignored on purpose.
+      #
+      # All four tools and not only the server: this image exists to HOST qryx,
+      # mockryx, verdryx and engram, which the console spawns rather than calls.
+      # One of them built for the wrong architecture gives a console with a
+      # permanently empty tab, and the page still renders.
+      - name: every bundled tool executes on the architecture that built it
         run: |
           set -eu
           img="ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console@${{ steps.build.outputs.digest }}"
-          echo "on $(uname -m):"
+          echo "on $(uname -m), image $img"
           docker run --rm --entrypoint /bin/sh "$img" -c '
-            set -e
+            fail=0
+            for t in qryx mockryx verdryx genaryx-web; do
+              out=$(command -v "$t" >/dev/null 2>&1 && "$t" 2>&1 | head -5 || echo "__NOT_ON_PATH__")
+              case "$out" in
+                *"exec format error"*)
+                  echo "  $t: EXEC FORMAT ERROR, built for another architecture"; fail=1 ;;
+                __NOT_ON_PATH__)
+                  echo "  $t: not on PATH in this image"; fail=1 ;;
+                "")
+                  echo "  $t: ran and said nothing at all"; fail=1 ;;
+                *)
+                  echo "  $t: runs" ;;
+              esac
+            done
             uname -m
-            qryx --version    || qryx --help    >/dev/null
-            mockryx --version || mockryx --help >/dev/null
-            verdryx --help    >/dev/null
-            genaryx-web --help >/dev/null 2>&1 || true
-            echo "the bundled tools run here"
+            exit $fail
           '
 
       - name: hand the digest on
