@@ -1,0 +1,211 @@
+name: tunnel images
+
+# Publish the operator's door to ghcr.io, so no install builds it:
+#
+#   ghcr.io/<owner>/stack-caddy:<tag>   TLS for the console inside the tunnel
+#   ghcr.io/<owner>/stack-wg:<tag>      the WireGuard server and its UAPI relay
+#
+# WHY THESE TWO AND WHY NOW
+#
+# Every other image the deployments name is published and pinned since
+# 2026-09-01, and a cluster deploy now prints "nothing to build". These two were
+# left behind, and they are the last reason a SINGLE-BOX install still needs a
+# toolchain: `stack-single/install.sh` clones this repository and builds them on
+# the operator's own machine, on a box that may be a 2-vCPU VPS.
+#
+# The number that belongs here is a measurement, and it is being taken as this
+# is written: a from-scratch `stack-single` install on a GCP e2-standard-2, two
+# vCPU, building all ten images on the box. It is filled in below when the run
+# ends, and not before. An earlier draft of this comment carried an estimate
+# written as though it were measured, which is the exact habit the estate's
+# provenance rule exists to stop.
+#
+# WHY THE NAMES CARRY A `stack-` PREFIX
+#
+# `caddy` and `wg` are the two most generic names in this registry, and the
+# package namespace is shared with every other image the estate publishes. A
+# package called `caddy` under this owner would read as "upstream Caddy,
+# mirrored", which it is not: this one carries a DNS-01 provider plugin and an
+# entrypoint that writes its own Caddyfile. The prefix says whose it is.
+#
+# WHY BOTH ARCHITECTURES, BUILT NATIVELY
+#
+# Same reason as the console: these are Go builds inside a Dockerfile, so the
+# BUILDPLATFORM trick would need the Dockerfiles rewritten, and QEMU for a Go
+# toolchain plus `xcaddy` is minutes per architecture. Runners of both
+# architectures are free for public repositories, so each builds on its own and
+# a merge job makes one manifest list.
+#
+# WHAT THE SMOKE TEST ASKS, AND WHAT IT DELIBERATELY DOES NOT
+#
+# It asks whether the entrypoint EXISTS AND IS NON-EMPTY, and whether the
+# binaries execute on the architecture that built them. Both questions come from
+# failures this repository has already paid for:
+#
+#   - GOTCHAS 47: the heredoc entrypoint in both Dockerfiles requires BuildKit.
+#     The legacy builder accepts the file, reports success, and produces an
+#     EMPTY entrypoint. The container then dies with "exec format error" and
+#     nothing in the build output hints why.
+#   - 2026-09-01: a smoke test that ran `qryx --help` and required exit 0 failed
+#     a perfectly good image on both architectures, because that command exits 1
+#     by design. A check that goes red on a correct build is worse than no
+#     check, because the next person deletes it and takes real coverage along.
+#
+# So exit codes are ignored on purpose here too. `exec format error` is the
+# signal for a wrong architecture, and an empty entrypoint is checked by reading
+# the file rather than by running the container, because running it would start
+# a WireGuard daemon.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: ${{ matrix.image }} on ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [caddy, wg]
+        arch: [amd64, arm64]
+        # `include` entries that name only an existing key VALUE add fields to
+        # every combination carrying it, so this maps each architecture to its
+        # runner without spelling out four rows.
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The owner, lowercased. ghcr.io refuses a repository path with an
+      # uppercase letter in it, and this owner has one. `docker/metadata-action`
+      # lowercases on the way past, so a workflow that uses it survives without
+      # this step and one that talks to buildx directly does not: on 2026-09-01
+      # that difference killed three workflows in a row, each fixed in the file
+      # in front of me rather than in the template they were copied from.
+      # Anything below that names the registry uses THIS output.
+      - name: lowercase the owner
+        id: owner
+        run: echo "name=${OWNER,,}" >> "$GITHUB_OUTPUT"
+        env:
+          OWNER: ${{ github.repository_owner }}
+
+      # By digest, unreferenced until the merge job names it. A tag that exists
+      # with one architecture behind it is indistinguishable from a correct one
+      # until somebody's arm64 node pulls it.
+      - name: build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: images/${{ matrix.image }}.Dockerfile
+          outputs: type=image,name=ghcr.io/${{ steps.owner.outputs.name }}/stack-${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          labels: |
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+
+      - name: the entrypoint exists, is not empty, and runs on this architecture
+        run: |
+          set -eu
+          img="ghcr.io/${{ steps.owner.outputs.name }}/stack-${{ matrix.image }}@${{ steps.build.outputs.digest }}"
+          echo "on $(uname -m), image $img"
+          case "${{ matrix.image }}" in
+            caddy) entry=/usr/local/bin/caddy-entrypoint.sh; bins="caddy" ;;
+            wg)    entry=/usr/local/bin/wg-entrypoint.sh;    bins="wireguard-go uapi-proxy wg socat" ;;
+          esac
+          docker run --rm --entrypoint /bin/sh "$img" -c "
+            fail=0
+            if [ ! -s '$entry' ]; then
+              echo '  $entry is EMPTY or missing: built without BuildKit (GOTCHAS 47)'
+              fail=1
+            else
+              echo '  $entry present, '\$(wc -c < '$entry')' bytes'
+            fi
+            for b in $bins; do
+              out=\$(command -v \"\$b\" >/dev/null 2>&1 && \"\$b\" --version 2>&1 | head -3 || echo __NOT_ON_PATH__)
+              case \"\$out\" in
+                *'exec format error'*) echo \"  \$b: EXEC FORMAT ERROR, built for another architecture\"; fail=1 ;;
+                __NOT_ON_PATH__)       echo \"  \$b: not on PATH in this image\"; fail=1 ;;
+                *)                     echo \"  \$b: runs\" ;;
+              esac
+            done
+            uname -m
+            exit \$fail
+          "
+
+      - name: hand the digest on
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      # The name carries the image, and the merge job matches on it EXACTLY.
+      # A pattern of `digest-*` here would collect both images' digests into one
+      # manifest list: that is not hypothetical, it is what `digest-tokenfuse-*`
+      # did on 2026-09-01 by matching four images through a shared prefix.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: merge ${{ matrix.image }}
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        image: [caddy, wg]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digest-${{ matrix.image }}-*
+          merge-multiple: true
+          path: /tmp/digests
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: lowercase the owner
+        id: owner
+        run: echo "name=${OWNER,,}" >> "$GITHUB_OUTPUT"
+        env:
+          OWNER: ${{ github.repository_owner }}
+
+      - name: create the manifest list
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t "ghcr.io/${{ steps.owner.outputs.name }}/stack-${{ matrix.image }}:${{ github.ref_name }}" \
+            $(printf 'ghcr.io/${{ steps.owner.outputs.name }}/stack-${{ matrix.image }}@sha256:%s ' *)
+
+      # Printed rather than assumed: a one-architecture manifest list looks
+      # exactly like a correct one from outside.
+      - name: say what is in it
+        run: |
+          docker buildx imagetools inspect \
+            "ghcr.io/${{ steps.owner.outputs.name }}/stack-${{ matrix.image }}:${{ github.ref_name }}"
