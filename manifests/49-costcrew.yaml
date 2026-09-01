@@ -1,0 +1,305 @@
+# CostCrew, the finops plane: the bill, worked by a crew of agents.
+#
+# NOT in kustomization.yaml, and the reason is not the usual one. 45-heraldyx,
+# 47-scopyx and 50-loadbalancer are opt-in because applying them GRANTS
+# something: an egress path, a public address, a meter. The console below
+# grants nothing and calls nobody. It is opt-in because it is a whole plane
+# somebody may simply not want, and because the half of it that CAN spend
+# money is in this file too, suspended.
+#
+#   kubectl apply -f manifests/49-costcrew.yaml
+#
+# Until now this plane had no deployment unit at all. `stack-up --with-finops`
+# ran it on a laptop and neither this repository nor stack-single had a shape
+# for it, so the one plane in the stack that reads the bills could not be
+# deployed anywhere an actual bill arrives. That is what this file closes.
+#
+#
+# ## The two wirings that are easy to get subtly wrong
+#
+# Both are lifted from `stack-up`, which already learned them the hard way, and
+# both fail SILENTLY when wrong - which is why they are set here rather than
+# left to a reader.
+#
+# **The file name is the integration.** genaryx tails the event directory and
+# keys each source's read offset off the file STEM, so this console's stream
+# has to be called `costcrew.ndjson` and nothing else. The console's own
+# default is empty, which means one started by hand looks perfectly healthy and
+# puts nothing anywhere.
+#
+# **The trust domain has to be the one the record plane is given.** trailryx
+# accepts an event only if its agent id begins `agent://<domain>/`, matched
+# against exactly ONE value. A console minting under its own default
+# (`costcrew.local`) would have every line it emits refused by the seal and
+# counted as foreign, which reads as a calm night rather than as a
+# misconfiguration. So both take TRAILRYX_TRUST_DOMAIN from `stack-wiring`,
+# from one place. Note that key ships as `set-me.invalid`: set it before
+# expecting the seal to accept anything, here or anywhere else.
+#
+#
+# ## What this plane deliberately does not do
+#
+# It enforces nothing. It has no gateway, no interceptor and no refusal path,
+# and every `budget_threshold` it emits carries `enforced: false`, stamped by
+# the translation rather than by the caller. `tools/enforce` in that repository
+# is what pushes a budget to TokenFuse; it is a separate binary and nothing
+# here starts it.
+#
+# The console holds no credential and makes no outbound call. That is why it
+# gets no egress rule below and no Secret. The half that spends is the
+# suspended CronJob at the bottom, which is a different pod with a different
+# NetworkPolicy, and that separation is the product's own rather than this
+# file's invention.
+#
+#
+# ## The passports gap, said out loud rather than papered over
+#
+# This console writes Agent Passport documents, and heraldyx reads them to
+# learn who answers for an agent. They do not meet here: 45-heraldyx mounts
+# `/var/lib/stack/passports` from a ConfigMap (`heraldyx-passports`), not from
+# a shared volume, so passports written below land on this plane's own claim
+# and heraldyx never sees them. Closing that means editing heraldyx's manifest,
+# which is another plane's file and another decision. Until somebody makes it,
+# an alert about a CostCrew agent names the agent and not the team to call.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: costcrew-state
+  namespace: agent-stack
+spec:
+  # ReadWriteOnce: the database, the hash-chained journal and the signing key
+  # are this plane's alone. The CronJob below shares it by being pinned to the
+  # same node, exactly as the console-state routines are (GOTCHAS 76).
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: costcrew
+  namespace: agent-stack
+  labels: { app: costcrew, plane: finops }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: costcrew } }
+  strategy:
+    # The SQLite store is on a ReadWriteOnce claim, so two pods cannot hold it
+    # at once. A rolling update would start the new pod before stopping the
+    # old, and it would sit Pending on the volume forever.
+    type: Recreate
+  template:
+    metadata:
+      labels: { app: costcrew, plane: finops }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: costcrew
+          image: stack/costcrew:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-addr"
+            - "0.0.0.0:8321"
+            - "-data"
+            - "/var/lib/costcrew"
+            # The name is the integration. See the header.
+            - "-stack-events"
+            - "/var/lib/stack/events/costcrew.ndjson"
+            - "-stack-passports"
+            - "/var/lib/costcrew/passports"
+            # The same value the seal is given, from one place. See the header.
+            - "-stack-host"
+            - "$(TRAILRYX_TRUST_DOMAIN)"
+            - "-stack-owner"
+            - "$(COSTCREW_OWNER)"
+          env:
+            - name: TRAILRYX_TRUST_DOMAIN
+              valueFrom: { configMapKeyRef: { name: stack-wiring, key: TRAILRYX_TRUST_DOMAIN } }
+            # Who answers for these agents. Not the installation's own flag:
+            # an owner is an account a person can be paged at.
+            - name: COSTCREW_OWNER
+              valueFrom:
+                configMapKeyRef: { name: stack-wiring, key: COSTCREW_OWNER, optional: true }
+          ports: [{ name: http, containerPort: 8321 }]
+          volumeMounts:
+            # Read-write: this plane APPENDS its stream here. idryx mounts the
+            # same claim read-only because it only reads; the difference is
+            # deliberate and worth keeping visible.
+            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: state, mountPath: /var/lib/costcrew }
+          readinessProbe:
+            # /healthz is unauthenticated by design: a load balancer has no
+            # password. Every other route is behind the session.
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { memory: 512Mi }
+      volumes:
+        - name: events
+          persistentVolumeClaim: { claimName: stack-events }
+        - name: state
+          persistentVolumeClaim: { claimName: costcrew-state }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: costcrew, namespace: agent-stack }
+spec:
+  selector: { app: costcrew }
+  ports: [{ name: http, port: 8321, targetPort: http }]
+---
+# No NetworkPolicy for the console, and that is a statement rather than an
+# omission. The namespace default-denies both directions and `allow-dns`
+# already covers name resolution for every pod. This console dials nothing:
+# not a model, not the control plane, not the internet. If a future change
+# gives it an outbound call, it needs a rule here and this comment is the
+# reminder.
+#
+# Reaching it is the same as reaching the Genaryx console: the operator's own
+# tunnel, or
+#
+#   kubectl -n agent-stack port-forward svc/costcrew 8321:8321
+#
+# On first start it creates owner accounts with no usable password. Give
+# yourself one, against the running pod, without putting it in this file:
+#
+#   kubectl -n agent-stack exec deploy/costcrew -- \
+#     costcrew -data /var/lib/costcrew -set-password ops:<a real password>
+---
+# The crew, running for real. SUSPENDED, and it stays suspended until somebody
+# means it: this is the one thing in the namespace that spends money on an
+# account outside the cluster, on a bill separate from the cluster's own.
+#
+# It needs a key, which is not in this file and never should be:
+#
+#   kubectl -n agent-stack create secret generic costcrew-engine \
+#     --from-file=openrouter=/path/to/a/file/holding/the/key
+#
+# --from-file, not --from-literal: a literal puts the key in this machine's
+# shell history and in the argument list of a running process, where anyone
+# with a terminal on the box can read it out of `ps`.
+#
+# Then run it once, deliberately, and watch what it did:
+#
+#   kubectl -n agent-stack create job crew-1 --from=cronjob/costcrew-crew
+#   kubectl -n agent-stack logs job/crew-1
+#
+# The ceiling is the guarantee, not the estimate. `costcrew-run` refuses to
+# start without one, prices the WORST case of every task before calling
+# anything (max-tokens at the output price, because how long an answer runs is
+# not known before it is asked for), and refuses any task whose worst case
+# would take it past what is left of its own guard. Raise COSTCREW_CEILING
+# deliberately; the default here is one dollar.
+#
+# Every deliverable it writes is a DRAFT marked `live`, and only a person's
+# stamp publishes. That is the console's own invariant and this changes nothing
+# about it.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: costcrew-crew
+  namespace: agent-stack
+spec:
+  suspend: true
+  # 5:57. Nothing depends on this time while it is suspended; it is spaced away
+  # from the four governance routines (3:17, 3:57, 4:42, 5:27) so an operator
+  # who un-suspends it does not collide with the seal.
+  schedule: "57 5 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels: { app: costcrew-crew, plane: finops }
+        spec:
+          restartPolicy: Never
+          # costcrew-state is ReadWriteOnce: an RWO claim can be mounted by
+          # several pods on ONE node and by no pod anywhere else. Required,
+          # not preferred - landing elsewhere is not a degraded run, it is no
+          # run at all.
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - topologyKey: kubernetes.io/hostname
+                  labelSelector:
+                    matchLabels:
+                      app: costcrew
+          securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+          containers:
+            - name: crew
+              image: stack/costcrew:dev
+              imagePullPolicy: IfNotPresent
+              # Overrides the image's ENTRYPOINT (the console server): this is
+              # the other binary in the image, and it is the only one ever
+              # given a key.
+              command: ["/usr/local/bin/costcrew-run"]
+              args:
+                - "-data"
+                - "/var/lib/costcrew"
+                - "-live"
+                - "-ceiling"
+                - "$(COSTCREW_CEILING)"
+              env:
+                - name: COSTCREW_CEILING
+                  valueFrom:
+                    configMapKeyRef: { name: stack-wiring, key: COSTCREW_CEILING, optional: true }
+                # optional: true on both, so this manifest applies to a cluster
+                # that has no key yet. The runner then refuses at the call and
+                # says which variable is missing, which is the right failure:
+                # loud, before anything is spent.
+                - name: OPENROUTER_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: costcrew-engine, key: openrouter, optional: true }
+                - name: ANTHROPIC_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: costcrew-engine, key: anthropic, optional: true }
+              volumeMounts:
+                - { name: state, mountPath: /var/lib/costcrew }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { memory: 512Mi }
+          volumes:
+            - name: state
+              persistentVolumeClaim: { claimName: costcrew-state }
+---
+# The widest grant in this file, and the only one. The crew pod reaches a model
+# provider over HTTPS; the console pod is not selected by this rule and stays
+# unable to open anything.
+#
+# Same shape as heraldyx's mail egress: the whole public internet MINUS the
+# private ranges and the cloud metadata address every provider parks on
+# 169.254.169.254, so a compromised runner cannot turn an outbound grant into a
+# path back into the cluster or into the node's credentials.
+#
+# Port 443 only. A model API that needs plain HTTP is not one to hand a key to.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: costcrew-crew-egress
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: costcrew-crew } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - { protocol: TCP, port: 443 }

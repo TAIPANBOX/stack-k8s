@@ -2991,3 +2991,57 @@ domain was right. Nothing was lost and nothing had to be recovered by hand.
 
 Total wall time from `kind create cluster` to VERIFIED: about eleven minutes, of
 which nine were the four obstacles above.
+
+## 89. The finops plane had no deployment unit anywhere, and the notifier cannot see the passports it writes
+
+**The stack's own contract.** Neither half of this is a bug. CostCrew was built
+as a laptop console and never given a cluster shape, and heraldyx reads
+passports from a ConfigMap on purpose. Both are properties somebody adding a
+plane has to know, and neither is visible from the manifests alone.
+
+Recorded 2026-09-01, when 49-costcrew.yaml was written. **The cluster half is
+desk-established: this has not yet run on real Kubernetes.** Updated below when
+it does.
+
+**One. The plane that reads the bills could not be deployed where bills
+arrive.** Measured by grep on 2026-09-01: zero occurrences of `costcrew` in
+`manifests/`, and zero in `stack-single/compose.yaml`. The same is true of
+`vouchryx`. Both exist only in `stack-up`, behind `--with-finops` and
+`--with-delegation`, and `stack-up` binds 127.0.0.1 by design and stops when you
+press Ctrl-C.
+
+So the stack had three deployment shapes and its finops plane was in exactly
+one of them, the one that cannot receive a real bill or outlive a terminal. It
+reads as an oversight only in hindsight: every document describing CostCrew is
+accurate, none of them claims a cluster shape, and nothing anywhere says the
+shape is missing. An absent thing raises no alert.
+
+**Two. Passports written at runtime never reach the notifier.** `45-heraldyx.yaml`
+mounts `/var/lib/stack/passports` from a ConfigMap named `heraldyx-passports`,
+with `optional: true`, and the operator creates that ConfigMap by hand. It does
+NOT mount the shared `stack-events` claim.
+
+That is a deliberate posture and the manifest says so: heraldyx opens a passport
+to learn one field and has no business editing one, and a ConfigMap is read-only
+by construction in a way a shared volume is not.
+
+The consequence for any new plane is the part worth writing down. CostCrew
+writes Agent Passport documents continuously, as it hires and re-briefs
+analysts. Those land on its own claim, heraldyx never sees them, and an alert
+about a CostCrew agent then names the agent and not the team to call. Nothing
+fails, nothing logs, and the alert that arrives looks complete.
+
+The three ways out, none of them free:
+
+1. **An operator refreshes the ConfigMap on a schedule.** Works today, needs no
+   change here, and is stale between refreshes.
+2. **heraldyx also mounts the shared claim.** One line in another plane's
+   manifest, and it widens what the notifier can read from a volume four
+   components write.
+3. **Passports become a service rather than a directory.** The correct long-term
+   answer and the same shape as the event-log question in the README: a file
+   stops being an interface. Out of scope here, and named rather than pretended
+   away.
+
+Until one of them is chosen, 49-costcrew.yaml writes passports to its own claim
+and says in its header that they do not meet.
