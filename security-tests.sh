@@ -1,4 +1,20 @@
 #!/usr/bin/env bash
+#
+# The probe pods in here run the CONSOLE'S IMAGE, and that is a dependency worth
+# knowing about rather than a detail. They need a shell and a python3, they must
+# be admissible under the namespace's `restricted` Pod Security, and reusing an
+# image the cluster already pulls avoids adding a second thing to trust.
+#
+# It was `stack/genaryx-console:dev` with `imagePullPolicy: IfNotPresent`, which
+# worked only because every deploy built that image onto every node. The day the
+# manifests started PULLING the console instead, 2026-09-01, the image stopped
+# existing locally and two probe pods stopped starting. The run still said
+# `0 failed`, because a probe that cannot start is reported as a note: the only
+# visible difference was 24 passed / 5 noted where there had been 27 / 3.
+#
+# So the image here is the published, pinned one, the same tag the manifests
+# name. If that tag moves, move it here too: a probe pod that cannot start
+# disables a check without failing anything.
 # The security posture of this deployment, asserted rather than described.
 #
 #   ./security-tests.sh                    # cluster-side checks
@@ -100,7 +116,7 @@ spec:
   securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
   containers:
     - name: probe
-      image: stack/genaryx-console:dev
+      image: ghcr.io/taipanbox/genaryx-console:v0.1.0
       imagePullPolicy: IfNotPresent
       command: ["sleep", "300"]
       securityContext:
@@ -152,7 +168,7 @@ spec:
   securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
   containers:
     - name: probe
-      image: stack/genaryx-console:dev
+      image: ghcr.io/taipanbox/genaryx-console:v0.1.0
       imagePullPolicy: IfNotPresent
       command: ["sleep", "600"]
       securityContext:
@@ -225,7 +241,7 @@ metadata: { name: sec-privileged }
 spec:
   containers:
     - name: p
-      image: stack/genaryx-console:dev
+      image: ghcr.io/taipanbox/genaryx-console:v0.1.0
       securityContext: { privileged: true }
   hostNetwork: true
   hostPID: true
@@ -488,7 +504,7 @@ spec:
   securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
   containers:
     - name: forged
-      image: stack/genaryx-console:dev
+      image: ghcr.io/taipanbox/genaryx-console:v0.1.0
       imagePullPolicy: IfNotPresent
       command: ["sleep", "300"]
       securityContext:
