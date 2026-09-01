@@ -293,8 +293,26 @@ fi
 OPEN_REPOS="qryx mockryx verdryx engram"
 [ "$BUILD_FROM_SOURCE" = 1 ] && OPEN_REPOS="$OPEN_REPOS tokenfuse trailryx"
 [ "$BUILD_FROM_SOURCE" = 1 ] && [ "$WITH_FINOPS" = 1 ] && OPEN_REPOS="$OPEN_REPOS costcrew"
-if [ "$SKIP_IMAGES" = 1 ]; then
-  say "skipping the image build (--skip-images)"
+# Nothing is built here any more, and this whole step is the one that took the
+# time. Every image the manifests name is published and pinned, so the kubelet
+# pulls them and this machine does not clone, build, save, stream or import
+# anything at all.
+#
+# Measured on a live GCP cluster 2026-09-01: with only the console still built
+# here, a deploy took 17m16s and almost all of it was that build. What is left
+# once it is pulled too is k3s, the manifests and the two test suites.
+#
+# BUILD_FROM_SOURCE=1 brings the whole step back, for the two cases a registry
+# does not serve: a change that is not released yet, and a cluster whose nodes
+# cannot reach ghcr.io. It builds at :dev, which the manifests no longer name,
+# so using it also means editing an image line or patching the deployment.
+if [ "$SKIP_IMAGES" = 1 ] || [ "$BUILD_FROM_SOURCE" != 1 ]; then
+  if [ "$SKIP_IMAGES" = 1 ]; then
+    say "skipping the image build (--skip-images)"
+  else
+    say "step 2/5: nothing to build, every image is published and pinned"
+    echo "   set BUILD_FROM_SOURCE=1 to build on a node instead"
+  fi
 else
   say "step 2/5: sources and images on $BUILDER"
   su_ "$BUILDER" 'sh -c "set -e

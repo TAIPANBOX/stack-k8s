@@ -35,8 +35,8 @@ The honest count of our own mistakes is what makes the platform classifications
 worth believing. A ledger where everything is somebody else's fault is
 marketing.
 
-**Measured 2026-09-01 by `./scripts/gotchas-classified.sh`, not estimated: 93
-entries, 40 platform, 36 ours, 13 the stack's own contract, 4 upstream. Nothing
+**Measured 2026-09-01 by `./scripts/gotchas-classified.sh`, not estimated: 95
+entries, 40 platform, 38 ours, 13 the stack's own contract, 4 upstream. Nothing
 unclassified.** (81 on 2026-08-06. The twelve added since are 82 to 88, then 89
 to 91 from the first live run of the finops plane on GCP, and 92 and 93 from
 the AWS run the same day. Between them: a plane with no cluster shape at all,

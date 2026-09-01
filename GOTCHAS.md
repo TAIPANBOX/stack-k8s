@@ -3283,3 +3283,40 @@ workflow has no `platforms:` line, so it publishes amd64 only. It does not
 matter for these clusters, which are amd64, and it means nothing pulls on
 Graviton or on an Apple Silicon laptop. trailryx and costcrew publish both
 architectures; tokenfuse and the console do not yet.
+
+## 95. A test's own probe pod depended on an image the deploy happened to build
+
+**Ours, and fixed.** Measured 2026-09-01, on the run that proved the images
+migration and on the same run that broke this.
+
+`security-tests.sh` starts four probe pods of its own: an unlabelled one to
+prove the namespace contains a compromised workload, one wearing a forged
+`plane: console` label to prove a label is not authority, and two more. They ran
+`stack/genaryx-console:dev` with `imagePullPolicy: IfNotPresent`, which is a
+reasonable choice for a cluster where every deploy builds that image onto every
+node, and which stops being one the day the manifests start PULLING the console
+instead.
+
+The image was then on no node, the pods never became Ready, and the suite said
+
+    note  could not start the probe pod; skipping the in-namespace containment test
+    note  could not start the forged-label pod; that attack path is unverified here
+
+**and reported `0 failed`.** That is the part worth the entry. A probe that
+cannot start is not a failing check, it is an absent one, and reporting it as a
+note is the honest thing to do. But the summary line most people read is
+`N passed, 0 failed`, and it stayed green while two of the sharpest checks in
+the file quietly stopped running. The only visible difference was the counts:
+24 passed / 5 noted where the same cluster had given 27 / 3.
+
+Fixed by naming the published, pinned console image, which is what the cluster
+already pulls: the probes now get it the same way every workload does, and
+there is no second thing to trust. Verified by re-running the deploy's own step
+5 afterwards: back to 27 passed, 0 failed, 3 noted.
+
+**The general shape.** Any test that runs a pod inherits that pod's image as a
+dependency, and `IfNotPresent` turns a missing image into a skipped test rather
+than a failing one. A suite whose summary counts failures and not absences will
+report health either way. This file's own invariant 5 says a verification check
+must be able to fail; the sibling to it, learned here, is that a check must also
+be able to say it did not run, in the line somebody actually reads.
