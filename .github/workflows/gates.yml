@@ -38,6 +38,11 @@ jobs:
       - name: components.json says what this launcher installs
         run: ./scripts/manifest-is-true.sh
 
+      # Added 2026-09-01, in BOTH callers on the same commit, because the entry
+      # above records what happens when a gate reaches only one of them.
+      - name: every deploy path can set the trust domain, after the apply
+        run: ./scripts/deploy-flags-agree.sh
+
       # Pinned rather than left to whatever the runner ships. `go install` of a
       # module built against a newer toolchain fails on an older one, and the
       # error names a Go version rather than this step, which is a confusing

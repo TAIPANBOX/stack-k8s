@@ -98,10 +98,11 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/manifests-valid.sh      # invariant 10; needs kubeconform on PATH
 ./scripts/manifest-is-true.sh     # invariant 13
 ./scripts/node-name-is-pinned.sh  # invariant 11
+./scripts/deploy-flags-agree.sh   # invariant 14
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
-The last two were missing from this list until 2026-09-01, and
+`manifest-is-true.sh` and `node-name-is-pinned.sh` were missing from this list until 2026-09-01, and
 `manifest-is-true.sh` was missing from both callers as well, so for its whole
 life it enforced nothing anywhere. It is the exact shape invariant 9 is about:
 a gate that has quietly stopped catching anything looks like a gate with
@@ -305,6 +306,44 @@ an absent invariant.
     `scripts/gates-have-teeth.sh`: an undeclared workload, a CronJob mapped to a
     routine the estate does not have, the manifests ceasing to declare a kind, a
     manual job that is not suspended, and a manual job with no reason.)*
+
+14. **Every deploy path can set the one key the manifests deliberately ship
+    invalid, and sets it where it sticks.** `00-base.yaml` carries
+    `TRAILRYX_TRUST_DOMAIN: set-me.invalid` because there is no defensible
+    default, and `kubectl apply -k` puts the placeholder back on the next run:
+    apply reverts what it MANAGES and leaves what it does not, so the operator's
+    hand-patch is exactly the thing that cannot survive. GOTCHAS 90.
+
+    The two cloud wrappers grew `--trust-domain` on 2026-09-01 and this
+    repository's own `deploy.sh` did not, so a Hetzner deploy had no way at all
+    to set it. That asymmetry was found by a person reading, not by anything
+    here.
+
+    **The ordering is the load-bearing half.** A flag parsed and applied BEFORE
+    the kustomization is indistinguishable from a correct one by reading the
+    flag list, and it is silently useless, because the apply that follows
+    reverts it. So the check compares line numbers, not presence.
+
+    What it costs when it is wrong is silence, which is why it is a gate rather
+    than a note: the record plane accepts an event only if its agent id begins
+    `agent://<domain>/`, so with the placeholder standing every event the
+    cluster produces is refused as foreign, and a refusal that fires on
+    everything reads exactly like a quiet night.
+
+    *(gate: `scripts/deploy-flags-agree.sh`. Subjects are FOUND by what makes
+    them subjects, a script invoking `k_ "apply -k .../manifests"`, so a fourth
+    cloud is covered the day it lands whatever it is called. Two narrower rules
+    were tried and both were wrong: by NAME it found itself and
+    `deploy-target-current.sh`; by the bare string `apply -k` it found four
+    scripts that only PRINT the command as an instruction, plus the tunnel
+    overlay, which carries no trust domain. Proved able to fail four ways,
+    including the one that matters most: with every deploy script taken away the
+    first version exited non-zero and printed NOTHING, because `set -e` killed
+    it on grep's empty exit before the check could speak.)*
+
+    **What it does not do.** It reads text. That the patch actually sticks needs
+    a live cluster, which invariants 4 and 5 already say this repository cannot
+    hold in a gate.
 
 ## Decisions that have no gate yet
 
