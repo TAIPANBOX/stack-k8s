@@ -53,6 +53,10 @@ checked = components[0]["checked"]
 # Every object in every document, by kind. A `---` separated stream, read the
 # way kubectl reads it rather than the way a grep would.
 objs = collections.defaultdict(set)
+# The document each object came from, so a claim ABOUT an object can be checked
+# against the object rather than against its name. `manual_jobs` below is the
+# first thing that needs this: "suspended" is a property of the body.
+bodies = {}
 docs = 0
 for path in sorted(pathlib.Path(manifests_dir).glob("*.yaml")):
     for doc in path.read_text().split("\n---"):
@@ -63,6 +67,7 @@ for path in sorted(pathlib.Path(manifests_dir).glob("*.yaml")):
         name = re.search(r"(?m)^\s*name:\s*([a-z0-9-]+)", doc)
         if name:
             objs[kind.group(1)].add(name.group(1))
+            bodies[(kind.group(1), name.group(1))] = doc
 
 if docs == 0:
     print(f"FAIL: no Kubernetes object under {manifests_dir}/, so this measured NOTHING.")
@@ -94,10 +99,27 @@ compare(
     "no Deployment and no StatefulSet under manifests/",
 )
 
+# Two kinds of CronJob live here and only one of them is a routine.
+#
+# `schedules_routines` is the estate's governance work, on a schedule, mapped to
+# the name the estate calls it. `manual_jobs` is the other shape: a CronJob that
+# exists to be a Job TEMPLATE, shipped suspended, run by a person with
+# `kubectl create job --from=cronjob/<name>`. That is Kubernetes' own idiom for
+# "a job you trigger by hand", and calling one a routine would put a schedule
+# nobody keeps into the estate's map of what runs where.
+#
+# Both are compared against the manifests, so a CronJob in neither list is still
+# a FAIL. What separates them is what is then required of each.
 schedules = checked.get("schedules_routines", {})
+manual = checked.get("manual_jobs", {})
+overlap = sorted(set(schedules) & set(manual))
+if overlap:
+    print(f"FAIL: {overlap} are listed as BOTH a scheduled routine and a manual job.")
+    print("      A CronJob is one or the other; it cannot be both.")
+    problems += 1
 compare(
     "a CronJob",
-    list(schedules),
+    list(schedules) + list(manual),
     sorted(objs["CronJob"]),
     "no CronJob under manifests/",
 )
@@ -125,6 +147,29 @@ if len(set(schedules.values())) != len(schedules):
     print(f"FAIL: two CronJobs are mapped to the same routine {dupes}. One routine runs")
     print("      once per deployment, so this map cannot be right.")
     problems += 1
+
+# "Manual" is a claim about the object, so it is checked against the object.
+#
+# A CronJob declared manual and NOT suspended runs on whatever schedule its
+# manifest happens to carry, on a cluster whose operator was told it runs only
+# when they say so. That failure is silent in the direction that matters: the
+# first anybody knows is a job that already ran. costcrew-crew is the case this
+# was written for, and it is the one CronJob in this namespace that can spend
+# money on an account outside the cluster.
+for name in sorted(manual):
+    why = (manual.get(name) or "").strip()
+    if not why:
+        print(f"FAIL: components.json calls the CronJob {name!r} a manual job and gives no")
+        print("      reason. A category with no reason is a category nobody can review.")
+        problems += 1
+    body = bodies.get(("CronJob", name))
+    if body is None:
+        # compare() has already said the CronJob is missing; do not say it twice.
+        continue
+    if not re.search(r"(?m)^\s*suspend:\s*true\s*$", body):
+        print(f"FAIL: components.json calls the CronJob {name!r} a manual job, and its")
+        print("      manifest does not set `suspend: true`. It would run on its schedule.")
+        problems += 1
 
 # A routine may run here without a CronJob. focus-export does: it is a sidecar
 # in the gateway pod, because the volume it reads is an emptyDir that no other
@@ -161,9 +206,12 @@ if problems:
     sys.exit(1)
 
 missing = sorted(ESTATE_ROUTINES - set(schedules.values()) - set(sidecars))
-print(f"OK: {len(checked.get('installs_services', []))} workload(s), {len(schedules)} CronJob(s) "
-      f"and {len(checked.get('persistent_claims', []))} claim(s), each compared with")
+print(f"OK: {len(checked.get('installs_services', []))} workload(s), {len(schedules)} scheduled "
+      f"CronJob(s), {len(manual)} manual job(s) and {len(checked.get('persistent_claims', []))} "
+      f"claim(s), each compared with")
 print(f"    manifests/ both ways, across {docs} object(s).")
+if manual:
+    print(f"    Suspended, run by hand: {', '.join(sorted(manual))}.")
 if missing:
     print(f"    Not run here at all: {', '.join(missing)}. estate-gates is where that is judged.")
 if sidecars:

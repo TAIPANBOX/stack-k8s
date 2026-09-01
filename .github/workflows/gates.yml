@@ -31,6 +31,13 @@ jobs:
       - name: node names are pinned by the install, not by a boot
         run: ./scripts/node-name-is-pinned.sh
 
+      # Added 2026-09-01. This gate existed, had cases in gates-have-teeth.sh,
+      # and was called by NOTHING: not this workflow, not the pre-push hook,
+      # not the gate list in CLAUDE.md. It caught a real omission the first
+      # time anybody ran it.
+      - name: components.json says what this launcher installs
+        run: ./scripts/manifest-is-true.sh
+
       # Pinned rather than left to whatever the runner ships. `go install` of a
       # module built against a newer toolchain fails on an older one, and the
       # error names a Go version rather than this step, which is a confusing
