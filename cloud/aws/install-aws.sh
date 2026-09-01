@@ -674,5 +674,5 @@ $(printf '\033[1m')Platform is up, and billing. Two commands left:$(printf '\033
   A public entry point is a separate, metered decision: manifests/50-loadbalancer.yaml,
   and on AWS it is an NLB at USD 0.027/hour plus capacity units.
 
-  $(printf '\033[1m')When done: ./teardown.sh$(printf '\033[0m')  (about USD 2.13/hour says so)
+  $(printf '\033[1m')When done: ./teardown.sh$(printf '\033[0m')  (the hourly figure terraform apply printed says so)
 EOF

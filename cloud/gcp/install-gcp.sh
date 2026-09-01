@@ -789,5 +789,5 @@ $(printf '\033[1m')Platform is up, and billing. Two commands left:$(printf '\033
   A public entry point is a separate, metered decision: loadbalancer-gcp.yaml,
   and on GCP it is a forwarding rule at USD 0.030/hour plus USD 0.010/GiB.
 
-  $(printf '\033[1m')When done: ./teardown.sh$(printf '\033[0m')  (about USD 1.88/hour says so)
+  $(printf '\033[1m')When done: ./teardown.sh$(printf '\033[0m')  (the hourly figure terraform apply printed says so)
 EOF
