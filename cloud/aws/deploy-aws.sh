@@ -60,6 +60,15 @@ WITH_FINOPS="${WITH_FINOPS:-0}"
 # The record plane's trust domain. Empty leaves 00-base.yaml's `set-me.invalid`
 # in place, which is the loud state and the right default; see where it is used.
 TRUST_DOMAIN="${TRUST_DOMAIN:-}"
+# Build tokenfuse, trailryx and costcrew on a node instead of pulling them.
+#
+# Off, since 2026-09-01, because all three are published and pinned in the
+# manifests. It exists for the two cases a registry does not serve, which are
+# the same two BUILD_PLANES names in ../../build.sh: testing a change that is
+# not released yet, and a cluster whose nodes cannot reach ghcr.io. It builds
+# them at :dev, which the manifests no longer reference, so using it also
+# means editing an image line or patching the deployment.
+BUILD_FROM_SOURCE="${BUILD_FROM_SOURCE:-0}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 
 while [ $# -gt 0 ]; do
@@ -273,8 +282,17 @@ fi
 # manifest is not in the kustomization: a deployment that clones and builds a
 # plane nobody applied is paying for it in build minutes and node disk to leave
 # it sitting there.
-OPEN_REPOS="qryx mockryx tokenfuse verdryx engram trailryx"
-[ "$WITH_FINOPS" = 1 ] && OPEN_REPOS="$OPEN_REPOS costcrew"
+# What is left here is what the CONSOLE image bundles inside itself, and
+# nothing else: qryx, mockryx, verdryx and engram are four tools the console
+# spawns rather than four pods, so they have to be in its image and its image
+# is built here.
+#
+# tokenfuse, trailryx and costcrew left this list on 2026-09-01, when the
+# manifests started pulling them from ghcr.io by pinned tag. Cloning source
+# nothing builds is fetching something nothing reads.
+OPEN_REPOS="qryx mockryx verdryx engram"
+[ "$BUILD_FROM_SOURCE" = 1 ] && OPEN_REPOS="$OPEN_REPOS tokenfuse trailryx"
+[ "$BUILD_FROM_SOURCE" = 1 ] && [ "$WITH_FINOPS" = 1 ] && OPEN_REPOS="$OPEN_REPOS costcrew"
 if [ "$SKIP_IMAGES" = 1 ]; then
   say "skipping the image build (--skip-images)"
 else
@@ -359,16 +377,18 @@ else
   say "building what is not published (the console build is four languages and takes the longest)"
   su_ "$BUILDER" "sh -c \"set -e
     cd /root/src
-    docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
-    echo '   built stack/tokenfuse:dev'
-    docker build -q -f stack-k8s/images/trailryx.Dockerfile -t stack/trailryx:dev ./trailryx >/dev/null
-    echo '   built stack/trailryx:dev'
+    if [ '$BUILD_FROM_SOURCE' = '1' ]; then
+      docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
+      echo '   built stack/tokenfuse:dev'
+      docker build -q -f stack-k8s/images/trailryx.Dockerfile -t stack/trailryx:dev ./trailryx >/dev/null
+      echo '   built stack/trailryx:dev'
+    fi
     if [ '$WITH_CONSOLE' = '1' ]; then
       docker build -q -f stack-k8s/images/console.Dockerfile -t stack/genaryx-console:dev . >/dev/null
       echo '   built stack/genaryx-console:dev'
     fi
-    if [ '$WITH_FINOPS' = '1' ]; then
-      docker build -q -f stack-k8s/images/costcrew.Dockerfile -t stack/costcrew:dev ./costcrew >/dev/null
+    if [ '$WITH_FINOPS' = '1' ] && [ '$BUILD_FROM_SOURCE' = '1' ]; then
+      docker build -q -f costcrew/Dockerfile -t stack/costcrew:dev ./costcrew >/dev/null
       echo '   built stack/costcrew:dev'
     fi\""
 
@@ -397,9 +417,14 @@ else
     sh_ "$n" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qF '$DIST_PUB' ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '$DIST_PUB' >> ~/.ssh/authorized_keys"
   done
 
-  IMAGES="stack/tokenfuse:dev stack/trailryx:dev"
+  # Only what was actually built here goes over the private network. The
+  # pulled ones are the kubelet's business and never touch this path, which
+  # is the whole saving: this used to distribute every image on every
+  # install, and the console is now the only one left.
+  IMAGES=""
+  [ "$BUILD_FROM_SOURCE" = 1 ] && IMAGES="stack/tokenfuse:dev stack/trailryx:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
-  [ "$WITH_FINOPS" = 1 ]  && IMAGES="$IMAGES stack/costcrew:dev"
+  [ "$BUILD_FROM_SOURCE" = 1 ] && [ "$WITH_FINOPS" = 1 ] && IMAGES="$IMAGES stack/costcrew:dev"
   su_ "$BUILDER" "sh -c \"for img in $IMAGES; do
       docker save \\\$img | k3s ctr images import - >/dev/null 2>&1 && echo '   '\\\$img' -> builder' || echo '   '\\\$img' -> builder FAILED'
       for p in $PRIVS; do

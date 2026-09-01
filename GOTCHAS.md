@@ -3236,3 +3236,50 @@ wants anyway:
 Recorded rather than resolved because the right answer is deployment-shaped,
 and because the failure otherwise looks like a broken engine rather than a
 policy doing its job.
+
+## 94. A published image is not the local one with a registry in front of it
+
+**Ours, and fixed.** Found while moving this repository off building what is
+already published, 2026-09-01, by inspecting the published images rather than
+assuming they matched.
+
+`stack/tokenfuse:dev` is what `images/tokenfuse.Dockerfile` makes: ONE image
+holding both binaries, at `/usr/local/bin/tokenfuse-cloud` and
+`/usr/local/bin/tokenfuse-gateway`, named for the two things they do. That is
+this repository's own composition and nothing upstream promised it.
+
+What tokenfuse actually publishes is TWO images, and the binary in the gateway
+one is called `tokenfuse`:
+
+    ghcr.io/taipanbox/tokenfuse                entrypoint [tokenfuse]
+    ghcr.io/taipanbox/tokenfuse-control-plane  entrypoint [tokenfuse-cloud]
+
+So swapping the image line and leaving the `command` alone gives a pod that
+pulls fine, starts fine and dies on `no such file or directory` for a path that
+was correct yesterday. The control plane happens to match and the gateway does
+not, which is worse than both being wrong: half of it works.
+
+Three things were checked before the swap, and each could have failed:
+
+1. **The binary path**, above. One changed, one did not.
+2. **Whether there is a shell.** `10-planes.yaml` runs `focus-export` as a
+   sidecar in the gateway's pod with `command: ["/bin/sh", "-c"]` and a loop.
+   A published image built `FROM scratch` or on distroless would have had no
+   shell, and that sidecar would have failed at 3600 seconds rather than at
+   startup. Both published images have one.
+3. **The user.** The published images declare `USER tokenfuse` by NAME while
+   these manifests pin `runAsUser: 10001` numerically. The manifest wins, so
+   the numeric pin is what runs, but an image whose files were owned by a
+   different uid would fail on writes rather than on start.
+
+None of the three is visible from the manifest, the registry listing, or the
+tag. All three are one `docker inspect` and one `docker run --entrypoint
+/bin/sh` away, and that is the whole lesson: an image is a filesystem and a
+config, and swapping one for another that shares a NAME is not a rename.
+
+**And the arm64 half of it.** `docker pull` of either published tokenfuse image
+on an arm64 machine answers `no matching manifest for linux/arm64/v8`: that
+workflow has no `platforms:` line, so it publishes amd64 only. It does not
+matter for these clusters, which are amd64, and it means nothing pulls on
+Graviton or on an Apple Silicon laptop. trailryx and costcrew publish both
+architectures; tokenfuse and the console do not yet.
