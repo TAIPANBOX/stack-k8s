@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build the stack images that are NOT published, and load them into a k3s
-# cluster over ssh.
+# Build stack images from source at :dev, and load them into a k3s cluster
+# over ssh.
 #
 # This file used to say "no registry on purpose". That was true while nothing
 # was published: a private registry is a moving part to secure and a bill, and
@@ -10,7 +10,10 @@
 # and the kubelet pulls them: no build, no tarball over ssh, no Go toolchain on
 # anybody's node.
 #
-# What is left here is what is not published: tokenfuse (Rust) and the console.
+# Nothing is unpublished any more. As of 2026-09-01 every image the manifests
+# name is on ghcr.io, pinned and multi-arch, so this script is no longer part
+# of an ordinary install: it is the escape hatch. What it still builds here is
+# tokenfuse and the console, at :dev, which the manifests do not name.
 #
 #   ./build.sh                      # build only
 #   ./build.sh root@1.2.3.4 ...     # build, then import into each node

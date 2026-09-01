@@ -157,10 +157,17 @@ an absent invariant.
    column to carry a dated provenance line)*
 
 7. **What runs is pinned, or built here from a checkout the deploy names.**
-   The five Go planes are pulled from `ghcr.io/taipanbox/<name>` at an
-   immutable version tag; `tokenfuse` and the console are built on the node
-   because neither is published. Nothing may use `:latest`, `:main` or any
-   other tag that moves.
+   Every image these manifests name is pulled from `ghcr.io/taipanbox/<name>`
+   at an immutable version tag, and since 2026-09-01 that is all of them: a
+   node builds nothing. Nothing may use `:latest`, `:main` or any other tag
+   that moves.
+
+   The "or built here" half of the invariant is the escape hatch and stays.
+   `BUILD_FROM_SOURCE=1` on a cloud deploy, or `build.sh` locally, builds at
+   `:dev` for a change that is not released yet or a cluster that cannot reach
+   `ghcr.io`. Those tags are named by no manifest, so using that path also
+   means editing an image line, which each script says where an operator meets
+   it rather than leaving it to be discovered.
 
    The failure this refuses is silent by construction: a pod that comes back
    different after a restart nobody ran, and a rollback that has nowhere to go

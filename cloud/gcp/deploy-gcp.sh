@@ -390,13 +390,14 @@ else
   # live run found on 2026-08-02 lived in that build path rather than in any
   # service. What nobody builds, nobody breaks.
   #
-  # Still built here because it is not published: tokenfuse (Rust) and the
-  # console (built from source per install).
+  # This step runs only because BUILD_FROM_SOURCE=1 was asked for. Everything
+  # built below is published and pinned; the reason to build it anyway is a
+  # change that is not released yet, or nodes that cannot reach ghcr.io.
   #
   # The trade is that every node needs to reach ghcr.io. These nodes already
   # reach the internet for k3s, Longhorn and Calico, so this adds a host to
   # that list rather than a requirement.
-  say "building what is not published (the console build is four languages and takes the longest)"
+  say "building from source at :dev (the console build is four languages and takes the longest)"
   su_ "$BUILDER" "sh -c \"set -e
     cd /root/src
     if [ '$BUILD_FROM_SOURCE' = '1' ]; then
