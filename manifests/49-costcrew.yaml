@@ -247,10 +247,47 @@ spec:
                 - "-live"
                 - "-ceiling"
                 - "$(COSTCREW_CEILING)"
+                # The run reports to the same bus and under the same trust
+                # domain as the console beside it, from the same ConfigMap key.
+                #
+                # This was missing when the file was first written, because the
+                # runner could not emit anything then. It emitted nothing on a
+                # live GCP cluster while spending USD 0.2485, which is what got
+                # the emission built; a manifest that then did not ASK for it
+                # would have reproduced the same silence with the capability
+                # sitting right there.
+                - "-stack-events"
+                - "/var/lib/stack/events/costcrew.ndjson"
+                - "-stack-host"
+                - "$(TRAILRYX_TRUST_DOMAIN)"
               env:
+                # NOT optional, and that is the point.
+                #
+                # `optional: true` here does not mean "run without a ceiling".
+                # It means the variable is never set, and Kubernetes then
+                # leaves `$(COSTCREW_CEILING)` in the args as a LITERAL STRING.
+                # The runner receives the text `$(COSTCREW_CEILING)` where a
+                # number should be and reports
+                #
+                #     the ceiling must look like 25.00: not a decimal amount
+                #
+                # which is true and names nothing an operator can act on.
+                # Measured on a live AWS cluster 2026-09-01, on the first run
+                # of this job anywhere.
+                #
+                # Required instead, so a missing key stops the pod with
+                # `couldn't find key COSTCREW_CEILING in ConfigMap`, which says
+                # what is wrong. A ceiling is a number somebody chose: the
+                # runner refuses to default one and this manifest must not
+                # default one on its behalf either.
+                #
+                #   kubectl -n agent-stack patch cm stack-wiring --type merge \
+                #     -p '{"data":{"COSTCREW_CEILING":"1.00"}}'
                 - name: COSTCREW_CEILING
                   valueFrom:
-                    configMapKeyRef: { name: stack-wiring, key: COSTCREW_CEILING, optional: true }
+                    configMapKeyRef: { name: stack-wiring, key: COSTCREW_CEILING }
+                - name: TRAILRYX_TRUST_DOMAIN
+                  valueFrom: { configMapKeyRef: { name: stack-wiring, key: TRAILRYX_TRUST_DOMAIN } }
                 # optional: true on both, so this manifest applies to a cluster
                 # that has no key yet. The runner then refuses at the call and
                 # says which variable is missing, which is the right failure:
@@ -263,6 +300,11 @@ spec:
                     secretKeyRef: { name: costcrew-engine, key: anthropic, optional: true }
               volumeMounts:
                 - { name: state, mountPath: /var/lib/costcrew }
+                # Read-write: the run APPENDS to the shared stream, the same
+                # file the console appends to. One file is one hash chain and
+                # they take turns on it, which is what the emitter's own lock
+                # is for.
+                - { name: events, mountPath: /var/lib/stack/events }
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
@@ -273,6 +315,8 @@ spec:
           volumes:
             - name: state
               persistentVolumeClaim: { claimName: costcrew-state }
+            - name: events
+              persistentVolumeClaim: { claimName: stack-events }
 ---
 # The widest grant in this file, and the only one. The crew pod reaches a model
 # provider over HTTPS; the console pod is not selected by this rule and stays

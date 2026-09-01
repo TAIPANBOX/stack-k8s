@@ -3169,3 +3169,70 @@ round-robining an agent's fetches between a browser and a fetcher. Deleting the
 browser file therefore leaves NO scopyx at all: recovery is applying 47 again,
 which works. The header says they replace each other; it does not say that
 deleting the replacement deletes the original, and now it does.
+
+## 92. An optional ConfigMap key used in `$(VAR)` substitution fails open into a literal
+
+**Ours, and fixed.** Measured 2026-09-01 on a live AWS cluster, on the first
+run of the crew job anywhere.
+
+`49-costcrew.yaml` passed the run's ceiling as `-ceiling $(COSTCREW_CEILING)`,
+with the variable read from `stack-wiring` as `optional: true`. Nothing creates
+that key: it is a spending decision, so an operator sets it.
+
+`optional: true` on a missing key does not mean "run without it". It means the
+variable is never set, and Kubernetes then leaves `$(COSTCREW_CEILING)` in the
+args AS A LITERAL STRING. The runner receives the text and reports
+
+    run: the ceiling must look like 25.00: not a decimal amount: "$(COSTCREW_CEILING)"
+
+which is true, is about the wrong thing, and names nothing an operator can act
+on. The pod starts, the job runs, and it fails five layers away from the cause.
+
+Fixed by making it required, which is the shape the decision actually has. A
+ceiling is a number somebody chose: `tools/run` refuses to default one, and a
+manifest that defaults one on the operator's behalf would be undoing that
+refusal from the outside. Missing now stops the pod with `couldn't find key
+COSTCREW_CEILING in ConfigMap`, which says what is wrong.
+
+**The general shape, which is what makes it a gotcha rather than a typo.**
+`optional: true` is right for a variable a program can do without, and
+`45-heraldyx.yaml` uses it correctly for exactly that. It is wrong for a
+variable used in `$()` substitution, because there the absence is not an absence
+the program sees: it is a wrong VALUE the program is handed. Anywhere the two
+are combined, a missing key becomes a confusing runtime error instead of a
+clear startup one.
+
+Three other places in these manifests combine them, and all three are safe for
+the same checkable reason: the value goes to an `env` the program reads and
+tests for itself, never into `args`.
+
+## 93. The crew's own egress rule blocks the credential source its cloud engine needs
+
+**The stack's own contract.** Both halves are right and they disagree, which is
+worth writing down before somebody "fixes" one of them.
+
+`49-costcrew.yaml`'s egress rule grants the crew pod the public internet on 443
+MINUS the private ranges and 169.254.0.0/16, the metadata address every cloud
+parks credentials on. That exclusion is the point of the rule: a compromised
+runner must not be able to turn an outbound grant into the node's own identity.
+
+CostCrew's Bedrock engine, added the same day, exists precisely so that an
+agent already inside somebody's AWS account can be given a model bill with no
+key anywhere: it signs with whatever the AWS chain resolves. On plain EC2 that
+chain IS the metadata service, so on a cluster like this one the engine cannot
+get credentials, and the reason is our own rule.
+
+Not a defect in either. The resolution is the one a production deployment
+wants anyway:
+
+- **In EKS, use IRSA.** The pod gets a projected web-identity token from a file
+  and exchanges it at STS, which is an ordinary public endpoint on 443 and
+  therefore already permitted. No metadata access is needed and no rule changes.
+- **On plain EC2, hand the pod its own credentials as a Secret**, or do not use
+  the Bedrock engine there. Widening the rule to reach 169.254.169.254 would
+  give every crew pod the whole node's role, which is a strictly worse trade
+  than a scoped key.
+
+Recorded rather than resolved because the right answer is deployment-shaped,
+and because the failure otherwise looks like a broken engine rather than a
+policy doing its job.
