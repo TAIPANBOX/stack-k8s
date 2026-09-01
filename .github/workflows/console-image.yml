@@ -49,6 +49,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "The immutable tag to publish under, e.g. v0.1.2. Required on a dispatch: without it the image would be named after the branch."
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -128,6 +133,33 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
 
+      # The tag these images will carry, and it must not be able to move.
+      #
+      # `github.ref_name` is the tag on a tag push and the BRANCH NAME on a
+      # workflow_dispatch, so dispatching this from main would publish
+      # `<image>:main`: exactly the moving tag invariant 7 forbids, produced by
+      # a workflow that looks like it is doing the right thing. Nobody had hit
+      # it because these workflows had only ever run on a tag.
+      #
+      # So a dispatch has to say which version it is publishing, and anything
+      # that is not a v-prefixed tag is refused here rather than discovered in
+      # the registry.
+      - name: the version, and it must not move
+        id: ver
+        run: |
+          v="${INPUT_VERSION:-$GITHUB_REF_NAME}"
+          case "$v" in
+            v[0-9]*) ;;
+            *)
+              echo "refusing to publish under '$v': not a v-prefixed immutable tag." >&2
+              echo "Push a tag, or dispatch with the version input set." >&2
+              exit 1 ;;
+          esac
+          echo "tag=$v" >> "$GITHUB_OUTPUT"
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
       # By digest and by nothing else. The merge below is what gives these a
       # name; until it runs they are unreferenced blobs, which is what a
       # half-finished release should be rather than a tag somebody's arm64 node
@@ -140,7 +172,7 @@ jobs:
           file: stack-k8s/images/console.Dockerfile
           outputs: type=image,name=ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console,push-by-digest=true,name-canonical=true,push=true
           labels: |
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ steps.ver.outputs.tag }}
             org.opencontainers.image.revision=${{ github.sha }}
             dev.taipanbox.source.genaryx=${{ steps.sources.outputs.genaryx }}
             dev.taipanbox.source.qryx=${{ steps.sources.outputs.qryx }}
@@ -230,11 +262,38 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
 
+      # The tag these images will carry, and it must not be able to move.
+      #
+      # `github.ref_name` is the tag on a tag push and the BRANCH NAME on a
+      # workflow_dispatch, so dispatching this from main would publish
+      # `<image>:main`: exactly the moving tag invariant 7 forbids, produced by
+      # a workflow that looks like it is doing the right thing. Nobody had hit
+      # it because these workflows had only ever run on a tag.
+      #
+      # So a dispatch has to say which version it is publishing, and anything
+      # that is not a v-prefixed tag is refused here rather than discovered in
+      # the registry.
+      - name: the version, and it must not move
+        id: ver
+        run: |
+          v="${INPUT_VERSION:-$GITHUB_REF_NAME}"
+          case "$v" in
+            v[0-9]*) ;;
+            *)
+              echo "refusing to publish under '$v': not a v-prefixed immutable tag." >&2
+              echo "Push a tag, or dispatch with the version input set." >&2
+              exit 1 ;;
+          esac
+          echo "tag=$v" >> "$GITHUB_OUTPUT"
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
       - name: create the manifest list
         working-directory: /tmp/digests
         run: |
           docker buildx imagetools create \
-            -t "ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console:${{ github.ref_name }}" \
+            -t "ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console:${{ steps.ver.outputs.tag }}" \
             $(printf 'ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console@sha256:%s ' *)
 
       # Printed rather than assumed. A manifest list with one architecture in it
@@ -243,4 +302,4 @@ jobs:
       - name: say what is in it
         run: |
           docker buildx imagetools inspect \
-            "ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console:${{ github.ref_name }}"
+            "ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console:${{ steps.ver.outputs.tag }}"
