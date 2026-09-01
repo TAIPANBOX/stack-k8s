@@ -43,6 +43,7 @@ step "every image is pinned or built here" "./scripts/pinned-images.sh"
 step "every manifest validates against the schema" "./scripts/manifests-valid.sh"
 step "components.json says what is installed" "./scripts/manifest-is-true.sh"
 step "node names are pinned by the install" "./scripts/node-name-is-pinned.sh"
+step "every deploy path can set the trust domain" "./scripts/deploy-flags-agree.sh"
 
 echo
 if [ "$fail" -ne 0 ]; then

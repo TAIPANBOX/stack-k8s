@@ -29,6 +29,12 @@
 # governed stack and no control room, which is a real deployment and not a
 # crippled one: the planes enforce with or without a UI in front of them.
 #
+# `--trust-domain <domain>` sets the record plane's trust domain after the
+# kustomization, which is the only place it sticks. Without it the manifest's
+# `set-me.invalid` stands and the record plane refuses every event the cluster
+# produces, silently. The two cloud deploys have taken this flag since
+# 2026-09-01; this one did not until now.
+#
 # `--console-ref <branch>` builds the console from a branch instead of main.
 # The console is a separate repository, so a change proven on a branch there
 # was, until this flag, undeployable by this script at any version.
@@ -68,6 +74,10 @@ SMTP_HOST="${SMTP_HOST:-}"
 SMTP_FROM="${SMTP_FROM:-}"
 SMTP_USER="${SMTP_USER:-}"
 SMTP_PASS=""
+# The record plane's trust domain. Empty leaves 00-base.yaml's `set-me.invalid`
+# in place, which is the loud state and the right default; see where it is used
+# after the kustomization.
+TRUST_DOMAIN="${TRUST_DOMAIN:-}"
 REF="${REF:-main}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/TAIPANBOX/stack-k8s}"
@@ -90,6 +100,7 @@ while [ $# -gt 0 ]; do
     --smtp-host)      SMTP_HOST="$2"; shift 2 ;;
     --smtp-from)      SMTP_FROM="$2"; shift 2 ;;
     --smtp-user)      SMTP_USER="$2"; shift 2 ;;
+    --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     -h|--help)       awk 'NR>1 && /^#/ {print; next} NR>1 {exit}' "$0" | sed -E 's/^# ?//'; exit 0 ;;
@@ -464,6 +475,34 @@ fi
 say "step 3/5: the workload"
 tar -cz -C "$ROOT" manifests | sh_ "$FIRST" 'mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s'
 k_ "apply -k /root/stack-k8s/manifests"
+
+# The trust domain, set AFTER the kustomization and not before, which is the
+# whole point of it being here. The two cloud wrappers have carried this since
+# 2026-09-01 and this script did not, so a Hetzner deploy had no way to set the
+# one key that must be set, and the operator's hand-patch was reverted by the
+# next run of the very script they would run again.
+#
+# 00-base.yaml ships TRAILRYX_TRUST_DOMAIN as `set-me.invalid`, deliberately:
+# there is no defensible default. `kubectl apply` reverts the fields it manages
+# and leaves alone the ones it does not, so a key the operator ADDED survives
+# and a key the manifest DECLARES is overwritten. Both behaviours are correct;
+# together they mean the one key that must be set is the one key that cannot
+# stay set by hand.
+#
+# What it costs is silent, which is why it is worth a flag rather than a note.
+# The record plane accepts an event only if its agent id begins
+# `agent://<domain>/`, so with the placeholder standing every event the cluster
+# produces is refused as foreign, and a refusal that fires on everything reads
+# like a quiet night rather than like a misconfiguration.
+#
+# Without the flag nothing is patched and the placeholder stands, which is the
+# loud state and the right default.
+if [ -n "$TRUST_DOMAIN" ]; then
+  say "trust domain: $TRUST_DOMAIN (set after apply, which is what makes it stick)"
+  k_ "-n agent-stack patch cm stack-wiring --type merge -p '{\"data\":{\"TRAILRYX_TRUST_DOMAIN\":\"$TRUST_DOMAIN\"}}'" >/dev/null \
+    || die "could not set the trust domain on stack-wiring"
+fi
+
 say "waiting for rollouts"
 for d in $(k_ "-n agent-stack get deploy -o name"); do
   k_ "-n agent-stack rollout status $d --timeout=300s" || true

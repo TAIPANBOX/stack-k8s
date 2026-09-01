@@ -379,6 +379,27 @@ run_case "manifests-valid: a skipped patch is no longer listed as one" fail \
 	"$(py 'edit("tunnel/kustomization.yaml", "path: console-patch.yaml", "path: somewhere-else.yaml")')" \
 	"no longer lists it"
 
+# Invariant 14, three cases, and the middle one is the reason the gate compares
+# line numbers instead of counting a flag. A `--trust-domain` parsed and applied
+# BEFORE the kustomization reads identically in a flag list and is silently
+# useless, because the apply that follows reverts it.
+run_case "deploy-flags-agree: a deploy path stops taking --trust-domain" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'edit("deploy.sh", "    --trust-domain)  TRUST_DOMAIN=\"$2\"; shift 2 ;;\n", "")')" \
+	"does not parse --trust-domain"
+
+run_case "deploy-flags-agree: the flag is accepted and patches nothing" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'edit("deploy.sh", "TRAILRYX_TRUST_DOMAIN\\\":\\\"$TRUST_DOMAIN", "TRAILRYX_TRUST_DOMAI_N\\\":\\\"$TRUST_DOMAIN")')" \
+	"never patches"
+
+run_case "deploy-flags-agree: no deploy path left to judge" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'import os
+for f in ("deploy.sh", "cloud/aws/deploy-aws.sh", "cloud/gcp/deploy-gcp.sh"):
+    os.remove(f)')" \
+	"measured NOTHING"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'
