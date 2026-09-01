@@ -3277,12 +3277,14 @@ tag. All three are one `docker inspect` and one `docker run --entrypoint
 /bin/sh` away, and that is the whole lesson: an image is a filesystem and a
 config, and swapping one for another that shares a NAME is not a rename.
 
-**And the arm64 half of it.** `docker pull` of either published tokenfuse image
-on an arm64 machine answers `no matching manifest for linux/arm64/v8`: that
-workflow has no `platforms:` line, so it publishes amd64 only. It does not
-matter for these clusters, which are amd64, and it means nothing pulls on
-Graviton or on an Apple Silicon laptop. trailryx and costcrew publish both
-architectures; tokenfuse and the console do not yet.
+**And the arm64 half of it, closed the same day.** `docker pull` of either
+published tokenfuse image on an arm64 machine answered `no matching manifest for
+linux/arm64/v8`: that workflow had no `platforms:` line, so it published amd64
+only, and the console's was the same. Fixed in tokenfuse v0.4.1 and stack-k8s
+v0.1.1 by building each architecture on a runner of that architecture and merging
+the digests, rather than emulating a Rust compiler under QEMU. Verified against
+the registry afterwards: all eight images this estate publishes carry
+linux/amd64 and linux/arm64 under one manifest each.
 
 ## 95. A test's own probe pod depended on an image the deploy happened to build
 
