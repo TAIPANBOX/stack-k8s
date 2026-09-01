@@ -11,7 +11,20 @@
 #   kubectl apply -f manifests/47-scopyx.yaml
 #   kubectl -n agent-stack create secret generic scopyx-keys \
 #     --from-literal=SCOPYX_KEYS='pick-a-long-secret=agent://acme.example/support-bot' \
-#     --from-literal=SCOPYX_WARDRYX_KEY="$(kubectl -n agent-stack get secret stack-keys -o jsonpath='{.data.wardryx_keys}' | base64 -d | cut -d, -f1)"
+#     --from-literal=SCOPYX_WARDRYX_KEY="$(kubectl -n agent-stack get secret stack-keys -o jsonpath='{.data.wardryx_keys}' | base64 -d | cut -d, -f1 | cut -d: -f1)"
+#
+# The second `cut` is not tidying. `wardryx_keys` holds comma-separated
+# `<key>:<tenant>:<role>` triples, and the bearer token is the FIRST field of
+# one, not the whole triple. Measured against a live wardryx on 2026-09-01:
+# `cut -d, -f1` alone yields `<key>:default:admin` and every /v1/decide answers
+#
+#     {"error": "missing or invalid bearer token"}
+#
+# while the key alone answers with a decision, a policy_version and a reason.
+# This line said `cut -d, -f1` until then, so an operator who followed it
+# exactly configured scopyx with a credential the policy plane refuses, and
+# scopyx starts perfectly well on it: what breaks is every policy decision it
+# ever asks for, which is the whole reason it is in front of the web.
 #
 # WITHOUT THAT SECRET THIS POD REFUSES TO START, AND THAT IS THE POINT
 #

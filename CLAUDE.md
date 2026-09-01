@@ -35,9 +35,14 @@ The honest count of our own mistakes is what makes the platform classifications
 worth believing. A ledger where everything is somebody else's fault is
 marketing.
 
-**Measured 2026-08-06 by `./scripts/gotchas-classified.sh`, not estimated: 81
-entries, 37 platform, 30 ours, 10 the stack's own contract, 4 upstream. Nothing
-unclassified.** (70 on 2026-07-31;
+**Measured 2026-09-01 by `./scripts/gotchas-classified.sh`, not estimated: 91
+entries, 40 platform, 35 ours, 12 the stack's own contract, 4 upstream. Nothing
+unclassified.** (81 on 2026-08-06. The ten added since are 82 to 88, and then
+89, 90 and 91, all three from the first live run of the finops plane on GCP: a
+plane with no cluster shape at all, four of our own defects that every static
+gate here passed, and the removal half of "install by function", which nothing
+had ever measured because every test in this repo was about putting things in.)
+(70 on 2026-07-31;
 the nine added between 70 and 79 are 71, bash counting quotes inside a heredoc it was told
 to treat literally; 72, `kubectl get -o yaml` printing configuration that was
 deleted, which made a new check pass on the very defect it was written to

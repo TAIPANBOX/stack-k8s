@@ -252,11 +252,17 @@ fi
 # are pulled from ghcr.io now, so cloning their source on the node would be
 # fetching something nothing reads. Their policy and config come from the
 # manifests, not from their repositories.
+# trailryx is on this list from 2026-09-01. 40-routines-and-secrets.yaml applies
+# the record-seal CronJob on every cloud and that CronJob runs
+# `stack/trailryx:dev`, which nothing here ever built, so the record plane could
+# never seal anything here. See the fuller account in ../gcp/deploy-gcp.sh, where
+# it was measured on a live cluster.
+#
 # costcrew joins the list only with --with-finops, for the same reason its
 # manifest is not in the kustomization: a deployment that clones and builds a
 # plane nobody applied is paying for it in build minutes and node disk to leave
 # it sitting there.
-OPEN_REPOS="qryx mockryx tokenfuse verdryx engram"
+OPEN_REPOS="qryx mockryx tokenfuse verdryx engram trailryx"
 [ "$WITH_FINOPS" = 1 ] && OPEN_REPOS="$OPEN_REPOS costcrew"
 if [ "$SKIP_IMAGES" = 1 ]; then
   say "skipping the image build (--skip-images)"
@@ -344,6 +350,8 @@ else
     cd /root/src
     docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
     echo '   built stack/tokenfuse:dev'
+    docker build -q -f stack-k8s/images/trailryx.Dockerfile -t stack/trailryx:dev ./trailryx >/dev/null
+    echo '   built stack/trailryx:dev'
     if [ '$WITH_CONSOLE' = '1' ]; then
       docker build -q -f stack-k8s/images/console.Dockerfile -t stack/genaryx-console:dev . >/dev/null
       echo '   built stack/genaryx-console:dev'
@@ -378,7 +386,7 @@ else
     sh_ "$n" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qF '$DIST_PUB' ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '$DIST_PUB' >> ~/.ssh/authorized_keys"
   done
 
-  IMAGES="stack/tokenfuse:dev"
+  IMAGES="stack/tokenfuse:dev stack/trailryx:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
   [ "$WITH_FINOPS" = 1 ]  && IMAGES="$IMAGES stack/costcrew:dev"
   su_ "$BUILDER" "sh -c \"for img in $IMAGES; do

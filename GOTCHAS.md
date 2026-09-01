@@ -2999,9 +2999,8 @@ as a laptop console and never given a cluster shape, and heraldyx reads
 passports from a ConfigMap on purpose. Both are properties somebody adding a
 plane has to know, and neither is visible from the manifests alone.
 
-Recorded 2026-09-01, when 49-costcrew.yaml was written. **The cluster half is
-desk-established: this has not yet run on real Kubernetes.** Updated below when
-it does.
+Recorded 2026-09-01, when 49-costcrew.yaml was written. **Ran on a live GCP cluster the same day**, three
+c3d-highcpu-8 nodes in europe-west3, and what that run found is entry 90.
 
 **One. The plane that reads the bills could not be deployed where bills
 arrive.** Measured by grep on 2026-09-01: zero occurrences of `costcrew` in
@@ -3045,3 +3044,128 @@ The three ways out, none of them free:
 
 Until one of them is chosen, 49-costcrew.yaml writes passports to its own claim
 and says in its header that they do not meet.
+
+## 90. The first live run of the finops plane found four things, and no gate here could have found any of them
+
+**Ours, and fixed.** All four are our own, all four passed every static gate in
+this repository, and all four needed a cluster with money on it to appear.
+
+Measured 2026-09-01 on three c3d-highcpu-8 nodes in europe-west3, burning USD
+1.1258/hour, running the crew live against a real model account.
+
+**One. A plane that WRITES to a claim needs `fsGroup`, and 49-costcrew.yaml did
+not have it.** The pod came up, the volume attached, and the container exited
+with
+
+    costcrew: opening the store in /var/lib/costcrew: unable to open database file (14)
+
+which is SQLITE_CANTOPEN wearing a number. A freshly provisioned Longhorn volume
+arrives root-owned, the container runs as 65532, and without `fsGroup` the
+kubelet never chowns it. Every other plane here that writes to a claim already
+carries the line, each with the reason beside it: console 10001, heraldyx 65532,
+scopyx 65532. The mistake was copying idryx's `securityContext`, which mounts
+the event log READ-ONLY and therefore correctly has no `fsGroup` at all. Copying
+the wrong neighbour is the whole failure, and kubeconform cannot see it: the
+manifest is a perfectly valid document either way.
+
+**Two. `kubectl apply -k` reverts an operator's ConfigMap patch, and only some
+of it.** `00-base.yaml` ships `TRAILRYX_TRUST_DOMAIN: set-me.invalid`
+deliberately, because there is no defensible default, so an operator sets it by
+hand. The next run of the deploy script put the placeholder back.
+
+The asymmetry is what makes it a trap rather than an annoyance. `apply` reverts
+the fields it manages and leaves alone the ones it does not, so on the same
+ConfigMap in the same command: `COSTCREW_OWNER` and `COSTCREW_CEILING`, which
+the operator ADDED, survived; `TRAILRYX_TRUST_DOMAIN`, which the manifest
+DECLARES, was overwritten. Both behaviours are correct. Together they mean the
+one key that must be set is the one key that cannot stay set.
+
+What it costs is silent, which is the reason it is here rather than in a
+changelog. The record plane accepts an event only if its agent id begins
+`agent://<domain>/`. Measured on the bus afterwards: every event this cluster
+produced carried `agent://set-me.invalid/...`, so the seal would refuse all of
+them as foreign, and a refusal that fires on everything reads exactly like a
+quiet night.
+
+Fixed with `--trust-domain` on both cloud deploy scripts, applied AFTER the
+kustomization, which is the entire point of where it sits.
+
+**Three. The record plane could never have sealed anything on GCP or AWS.**
+`40-routines-and-secrets.yaml` applies the `record-seal` CronJob on every cloud
+and that CronJob runs `stack/trailryx:dev`. The Hetzner `deploy.sh` builds that
+image; `cloud/gcp/deploy-gcp.sh` and `cloud/aws/deploy-aws.sh` did not, and
+never had. Triggering the job by hand on the live cluster:
+
+    Error from server (BadRequest): container "trailryx" in pod "seal-foreign-..."
+    is waiting to start: image can't be pulled
+
+It is invisible by construction. The job fires at 05:27, its failure is one pod
+in ImagePullBackOff in a namespace nobody watches overnight, and the visible
+symptom the next morning is an empty record rather than an error. This is the
+same shape as 78, and it survived because the three deploy scripts diverged in a
+list that no check compares.
+
+**Four. The scopyx setup instructions produce a credential the policy plane
+refuses.** The header of `47-scopyx.yaml` said to build `SCOPYX_WARDRYX_KEY`
+with `... | cut -d, -f1`. But `wardryx_keys` holds comma-separated
+`<key>:<tenant>:<role>` triples, so that yields `<key>:default:admin`. Both
+forms, against the live PDP, same request:
+
+| bearer | answer |
+|---|---|
+| `<key>:default:admin`, as documented | `{"error": "missing or invalid bearer token"}` |
+| `<key>`, the first field | `{"decision":"allow","policy_version":"da10bac8cf9a", ...}` |
+
+scopyx starts perfectly well on the wrong one. What breaks is every policy
+decision it ever asks for, which is the only reason it stands in front of the
+web at all. An operator following the header exactly gets a governed egress
+plane that is not governed.
+
+## 91. What a delete leaves behind, and the one thing it cannot take back
+
+**Platform.** Three of the four below are Kubernetes doing exactly what it says:
+a delete removes what the manifest owns and nothing else, a cloud load balancer
+gets whatever address is free, and a label on somebody else's object outlives
+the file that put it there. Only the last, 48 deleting the plain scopyx with it,
+is a property of our own manifests.
+
+Nothing below is a bug. They are the removal half of "install by function", and
+until this run nobody had measured them, because every test this repo had was
+about putting things IN.
+
+Measured 2026-09-01 by cycling ten units through install, delete and install
+again on a live cluster: six optional manifests and four core planes removed one
+at a time. **All ten installed, deleted and reinstalled.** The four core planes
+come back with the same command that installed them, `kubectl apply -k`, which
+is the property that makes a plane removable rather than merely absent.
+
+**A claim in the manifest dies with it; a secret outside the manifest does not.**
+Deleting `49-costcrew.yaml` takes `costcrew-state` with it, so the finops
+plane's database, and every draft in it that a person had not yet stamped, is
+gone. The same delete leaves `costcrew-engine` behind, which is a model provider
+API key sitting in the namespace with nothing left to use it. Both are correct
+Kubernetes and the pairing is the wrong way round from what an operator would
+choose: the thing you want to keep is destroyed and the thing you want destroyed
+is kept.
+
+**A load balancer comes back at a different address.** First install
+34.185.221.164, delete, reinstall 35.246.210.3. GCP had zero orphaned forwarding
+rules afterwards, so the cloud controller cleans up after itself and the meter
+does stop, which is the part that costs money and the part that was worth
+checking. The address is not stable across a reinstall, so anything that wrote
+it into DNS is pointing at somebody else's cluster now.
+
+**`60-harden-neighbours.yaml` cannot be uninstalled, and that is structural.**
+`kubectl delete -f` returned a failure, and the PodSecurity `enforce: restricted`
+label on the `default` namespace survived it. It has to: the manifest LABELS a
+namespace it did not create, and a delete cannot remove an object it does not
+own, only the labels' host. So an operator who tries this file and changes their
+mind is left with somebody else's namespace still restricted and no obvious way
+back. The two NetworkPolicies it adds to `default` do go away.
+
+**48-scopyx-browser is a swap and its delete removes the plain one too.** Both
+files name one Deployment, `scopyx`, which is the property that stops a cluster
+round-robining an agent's fetches between a browser and a fetcher. Deleting the
+browser file therefore leaves NO scopyx at all: recovery is applying 47 again,
+which works. The header says they replace each other; it does not say that
+deleting the replacement deletes the original, and now it does.

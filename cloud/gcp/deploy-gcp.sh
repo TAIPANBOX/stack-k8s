@@ -58,6 +58,9 @@ ALERT_CONSOLE_URL="${ALERT_CONSOLE_URL:-}"
 # want, and the half of it that can spend money ships suspended, so the flag
 # carries the plane and never the spending. See manifests/49-costcrew.yaml.
 WITH_FINOPS="${WITH_FINOPS:-0}"
+# The record plane's trust domain. Empty leaves 00-base.yaml's `set-me.invalid`
+# in place, which is the loud state and the right default; see where it is used.
+TRUST_DOMAIN="${TRUST_DOMAIN:-}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 
 while [ $# -gt 0 ]; do
@@ -74,6 +77,7 @@ while [ $# -gt 0 ]; do
     --smtp-user)     SMTP_USER="$2"; shift 2 ;;
     --console-url)   ALERT_CONSOLE_URL="$2"; shift 2 ;;
     --with-finops)   WITH_FINOPS=1; shift ;;
+    --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     # 2,37: the whole header block, which is where the flags are documented.
@@ -254,11 +258,24 @@ fi
 # are pulled from ghcr.io now, so cloning their source on the node would be
 # fetching something nothing reads. Their policy and config come from the
 # manifests, not from their repositories.
+# trailryx is on this list from 2026-09-01, and its absence was not cosmetic.
+# 40-routines-and-secrets.yaml applies the record-seal CronJob on every cloud,
+# and that CronJob runs `stack/trailryx:dev`, which nothing here ever built. So
+# on GCP and AWS the record plane could never seal anything: the image did not
+# exist on any node. The Hetzner deploy.sh had it and these two did not, which
+# is why it went unnoticed. Measured on a live GCP cluster, the seal job came up
+# `image can't be pulled`, and it only ever fires at 05:27, so the first symptom
+# an operator would get is an empty record and no alert about it.
+#
+# It is BUILT rather than pulled for the reason deploy.sh already gives: the
+# published GHCR image carries `trailryx-ingest` only, and every sealing command
+# lives in `trailryx-node`, which is published nowhere.
+#
 # costcrew joins the list only with --with-finops, for the same reason its
 # manifest is not in the kustomization: a deployment that clones and builds a
 # plane nobody applied is paying for it in build minutes and node disk to leave
 # it sitting there.
-OPEN_REPOS="qryx mockryx tokenfuse verdryx engram"
+OPEN_REPOS="qryx mockryx tokenfuse verdryx engram trailryx"
 [ "$WITH_FINOPS" = 1 ] && OPEN_REPOS="$OPEN_REPOS costcrew"
 if [ "$SKIP_IMAGES" = 1 ]; then
   say "skipping the image build (--skip-images)"
@@ -338,6 +355,8 @@ else
     cd /root/src
     docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
     echo '   built stack/tokenfuse:dev'
+    docker build -q -f stack-k8s/images/trailryx.Dockerfile -t stack/trailryx:dev ./trailryx >/dev/null
+    echo '   built stack/trailryx:dev'
     if [ '$WITH_CONSOLE' = '1' ]; then
       docker build -q -f stack-k8s/images/console.Dockerfile -t stack/genaryx-console:dev . >/dev/null
       echo '   built stack/genaryx-console:dev'
@@ -369,7 +388,7 @@ else
     sh_ "$n" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qF '$DIST_PUB' ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '$DIST_PUB' >> ~/.ssh/authorized_keys"
   done
 
-  IMAGES="stack/tokenfuse:dev"
+  IMAGES="stack/tokenfuse:dev stack/trailryx:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
   [ "$WITH_FINOPS" = 1 ]  && IMAGES="$IMAGES stack/costcrew:dev"
   su_ "$BUILDER" "sh -c \"for img in $IMAGES; do
@@ -436,6 +455,30 @@ TUNNEL_PORT="${TUNNEL_PORT:-17420}"
 say "step 3/5: the workload"
 tar -cz -C "$ROOT" manifests | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
 k_ "apply -k /root/stack-k8s/manifests"
+
+# The trust domain, set AFTER the kustomization and not before, which is the
+# whole point of it being here.
+#
+# 00-base.yaml ships TRAILRYX_TRUST_DOMAIN as `set-me.invalid`, deliberately:
+# there is no defensible default. An operator therefore patches it by hand, and
+# measured on a live GCP cluster 2026-09-01, the NEXT run of this script put the
+# placeholder back. `kubectl apply` reverts the fields it manages and leaves
+# alone the ones it does not, so a key the operator ADDED survives and a key the
+# manifest DECLARES is overwritten. Both behaviours are correct; together they
+# are a trap.
+#
+# What it costs is silent. The record plane accepts an event only if its agent
+# id begins `agent://<domain>/`, so every event from the whole cluster is then
+# refused as foreign, and a refusal that fires on everything reads like a quiet
+# night rather than like a misconfiguration.
+#
+# Without the flag nothing is patched and the placeholder stands, which is the
+# loud state and the right default.
+if [ -n "$TRUST_DOMAIN" ]; then
+  say "trust domain: $TRUST_DOMAIN (set after apply, which is what makes it stick)"
+  k_ "-n agent-stack patch cm stack-wiring --type merge -p '{\"data\":{\"TRAILRYX_TRUST_DOMAIN\":\"$TRUST_DOMAIN\"}}'" >/dev/null \
+    || die "could not set the trust domain on stack-wiring"
+fi
 
 # The finops plane, applied from its own file for the same reason heraldyx and
 # scopyx are: it is not in the kustomization, so it arrives only when somebody
