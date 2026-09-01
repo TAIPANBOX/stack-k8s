@@ -23,6 +23,13 @@
 # `--console-token <github-token>` is what adds it. Leave it out and you get the
 # governed stack without the control room, which is a real deployment and not a
 # crippled one: the planes enforce with or without a UI in front of them.
+#
+# `--with-finops` additionally builds and applies CostCrew, the finops plane:
+# the bill, worked by a crew of agents. It is off by default because it is a
+# whole plane somebody may not want, not because it is dangerous. The half of
+# it that CAN spend on a model account ships suspended, so this flag applies a
+# console and starts no meter; see manifests/49-costcrew.yaml for how to run
+# the crew deliberately afterwards.
 set -euo pipefail
 
 SERVERS=""; AGENTS=""
@@ -43,6 +50,10 @@ SMTP_PASS=""
 # tells them to run.
 ALERT_CONSOLE_DEFAULT="http://localhost:17420"
 ALERT_CONSOLE_URL="${ALERT_CONSOLE_URL:-}"
+# The finops plane, off by default. It is a whole plane somebody may simply not
+# want, and the half of it that can spend money ships suspended, so the flag
+# carries the plane and never the spending. See manifests/49-costcrew.yaml.
+WITH_FINOPS="${WITH_FINOPS:-0}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 
 while [ $# -gt 0 ]; do
@@ -57,9 +68,14 @@ while [ $# -gt 0 ]; do
     --smtp-from)     SMTP_FROM="$2"; shift 2 ;;
     --smtp-user)     SMTP_USER="$2"; shift 2 ;;
     --console-url)   ALERT_CONSOLE_URL="$2"; shift 2 ;;
+    --with-finops)   WITH_FINOPS=1; shift ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
-    -h|--help)       sed -n '2,26p' "$0" | sed -E 's/^# ?//'; exit 0 ;;
+    # 2,34: the whole header block, which is where the flags are documented.
+    # It was 2,26, which stopped at the line the header happened to end on when
+    # it was written. A flag documented in a comment nobody prints is an
+    # undocumented flag, and deploy-gcp.sh had already grown one that way.
+    -h|--help)       sed -n '2,34p' "$0" | sed -E 's/^# ?//'; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
 done
@@ -236,7 +252,12 @@ fi
 # are pulled from ghcr.io now, so cloning their source on the node would be
 # fetching something nothing reads. Their policy and config come from the
 # manifests, not from their repositories.
+# costcrew joins the list only with --with-finops, for the same reason its
+# manifest is not in the kustomization: a deployment that clones and builds a
+# plane nobody applied is paying for it in build minutes and node disk to leave
+# it sitting there.
 OPEN_REPOS="qryx mockryx tokenfuse verdryx engram"
+[ "$WITH_FINOPS" = 1 ] && OPEN_REPOS="$OPEN_REPOS costcrew"
 if [ "$SKIP_IMAGES" = 1 ]; then
   say "skipping the image build (--skip-images)"
 else
@@ -326,6 +347,10 @@ else
     if [ '$WITH_CONSOLE' = '1' ]; then
       docker build -q -f stack-k8s/images/console.Dockerfile -t stack/genaryx-console:dev . >/dev/null
       echo '   built stack/genaryx-console:dev'
+    fi
+    if [ '$WITH_FINOPS' = '1' ]; then
+      docker build -q -f stack-k8s/images/costcrew.Dockerfile -t stack/costcrew:dev ./costcrew >/dev/null
+      echo '   built stack/costcrew:dev'
     fi\""
 
   # ---- distributing the images -------------------------------------------
@@ -355,6 +380,7 @@ else
 
   IMAGES="stack/tokenfuse:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
+  [ "$WITH_FINOPS" = 1 ]  && IMAGES="$IMAGES stack/costcrew:dev"
   su_ "$BUILDER" "sh -c \"for img in $IMAGES; do
       docker save \\\$img | k3s ctr images import - >/dev/null 2>&1 && echo '   '\\\$img' -> builder' || echo '   '\\\$img' -> builder FAILED'
       for p in $PRIVS; do
@@ -405,6 +431,16 @@ fi
 say "step 3/5: the workload"
 tar -cz -C "$ROOT" manifests | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
 k_ "apply -k /root/stack-k8s/manifests"
+
+# The finops plane, applied from its own file for the same reason heraldyx and
+# scopyx are: it is not in the kustomization, so it arrives only when somebody
+# asked for it. Its crew CronJob ships suspended, so this applies a plane and
+# starts no spending.
+if [ "$WITH_FINOPS" = 1 ]; then
+  say "finops: applying the CostCrew plane (its crew stays suspended)"
+  k_ "apply -f /root/stack-k8s/manifests/49-costcrew.yaml"
+fi
+
 say "waiting for rollouts"
 for d in $(k_ "-n agent-stack get deploy -o name"); do
   k_ "-n agent-stack rollout status $d --timeout=300s" || true
