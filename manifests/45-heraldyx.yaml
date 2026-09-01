@@ -23,10 +23,10 @@
 # sends nothing. That is deliberate (heraldyx invariant 4): not having mail is
 # a choice an operator makes, not a broken deployment.
 #
-# Five of the planes are PULLED, pinned to an immutable version tag, and two
-# are still built on the node: `stack/tokenfuse:dev` (Rust, not published) and
-# `stack/genaryx-console:dev` (built from source per install). The rule for
-# which is which is in ../CLAUDE.md, invariant 7.
+# Every image named here is PULLED, pinned to an immutable version tag. Since
+# 2026-09-01 that is all of them and a node builds nothing. `BUILD_FROM_SOURCE=1`
+# is the escape hatch and builds at `:dev`, which no manifest names, so it also
+# means editing an image line. The rule is in ../CLAUDE.md, invariant 7.
 #
 # A pinned tag rather than `:latest` or `:dev`, deliberately: "which build is
 # running" has to have an answer that does not change under the operator. It
