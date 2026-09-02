@@ -36,10 +36,11 @@ spec:
           # Pulled, not built. `tokenfuse-control-plane` has been published
           # since v0.3.0 and this repository built it on a node anyway, on
           # every deploy, under a comment saying it was not published. The
-          # entrypoint path is unchanged: measured 2026-09-01, the published
+          # entrypoint path is unchanged: measured 2026-09-01 on v0.4.1 and again
+          # 2026-09-02 on v0.4.3, the published
           # image carries /usr/local/bin/tokenfuse-cloud exactly as the local
           # build did.
-          image: ghcr.io/taipanbox/tokenfuse-control-plane:v0.4.1
+          image: ghcr.io/taipanbox/tokenfuse-control-plane:v0.4.3
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse-cloud"]
           env:
@@ -151,9 +152,10 @@ spec:
           # Pulled, and the command CHANGES with it. The local image was one
           # workspace with two binaries in it, named for the two things they
           # do; the published one is the gateway alone and the binary in it is
-          # called `tokenfuse`. Measured 2026-09-01 by listing /usr/local/bin
+          # called `tokenfuse`. Measured 2026-09-01 on v0.4.1 and 2026-09-02 on
+          # v0.4.3 by listing /usr/local/bin
           # in the published image, which is the only way to know.
-          image: ghcr.io/taipanbox/tokenfuse:v0.4.1
+          image: ghcr.io/taipanbox/tokenfuse:v0.4.3
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse"]
           env:
@@ -275,8 +277,9 @@ spec:
           # The gateway's image, because this sidecar reads the gateway's own
           # trace directory and runs beside it. It needs a SHELL, which is the
           # one thing worth checking before swapping a distroless-looking image
-          # in underneath it: measured 2026-09-01, the published image has one.
-          image: ghcr.io/taipanbox/tokenfuse:v0.4.1
+          # in underneath it: measured 2026-09-01 on v0.4.1 and 2026-09-02 on
+          # v0.4.3, the published image has one (/usr/bin/dash).
+          image: ghcr.io/taipanbox/tokenfuse:v0.4.3
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
