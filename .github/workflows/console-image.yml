@@ -54,6 +54,16 @@ on:
         description: "The immutable tag to publish under, e.g. v0.1.2. Required on a dispatch: without it the image would be named after the branch."
         required: true
         type: string
+  # build-pr below runs on a pull request that touches THIS file, and nothing
+  # else does: build and merge stay off (see their `if`), so a pull request
+  # proves the image builds and every bundled tool runs, and publishes
+  # nothing. Added 2026-09-02 after tokenfuse's v0.4.2 failed on both Linux
+  # runners the first time its own tag-only release.yml ever reached its musl
+  # leg: a workflow gated on `push: tags: v*` alone is tested by exactly one
+  # event in its whole life, and that event is the one where a mistake is
+  # public.
+  pull_request:
+    paths: [".github/workflows/console-image.yml"]
 
 permissions:
   contents: read
@@ -62,6 +72,9 @@ permissions:
 jobs:
   build:
     name: console on ${{ matrix.arch }}
+    # Never on a pull request: this job pushes by digest. build-pr below is
+    # what a pull request runs instead.
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -241,6 +254,10 @@ jobs:
   merge:
     name: merge the manifest list
     needs: build
+    # Never on a pull request: this job creates the manifest list under the
+    # published tag. With build guarded off above, needs: build already skips
+    # this on a pull request; the explicit if says so directly too.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
@@ -303,3 +320,101 @@ jobs:
         run: |
           docker buildx imagetools inspect \
             "ghcr.io/${{ steps.owner.outputs.name }}/genaryx-console:${{ steps.ver.outputs.tag }}"
+
+  # What a pull request runs instead of build/merge: the same six checkouts
+  # and the same Dockerfile, loaded into the local daemon rather than pushed
+  # by digest, so the smoke test below can run it. No registry login, no
+  # owner-lowercasing, no version-must-not-move check: none of those matter to
+  # an image that is never pushed and carries no tag but a local one.
+  build-pr:
+    name: console on ${{ matrix.arch }} (build only, no push)
+    # Only on the pull request that exercises this file: build and merge
+    # above already cover a tag push, and running both here would repeat the
+    # six-checkout cost for nothing.
+    if: github.event_name == 'pull_request'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      # This repository into a subdirectory, because the build context is the
+      # PARENT of all six checkouts: console.Dockerfile's COPY paths are
+      # `genaryx-a360/...`, `qryx/...` and so on, exactly as the deploy scripts
+      # arrange them on a builder node.
+      - uses: actions/checkout@v4
+        with:
+          path: stack-k8s
+
+      - uses: actions/checkout@v4
+        with:
+          repository: TAIPANBOX/genaryx
+          path: genaryx-a360
+      - uses: actions/checkout@v4
+        with:
+          repository: TAIPANBOX/qryx
+          path: qryx
+      - uses: actions/checkout@v4
+        with:
+          repository: TAIPANBOX/mockryx
+          path: mockryx
+      - uses: actions/checkout@v4
+        with:
+          repository: TAIPANBOX/verdryx
+          path: verdryx
+      - uses: actions/checkout@v4
+        with:
+          repository: TAIPANBOX/engram
+          path: engram
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Loaded into the local daemon rather than pushed, so the smoke test
+      # below can `docker run` it. BuildKit only, same as the real build: the
+      # heredoc entrypoints these five repositories' Dockerfiles may carry
+      # need it, and setup-buildx-action's default driver already is BuildKit,
+      # so push: false plus load: true is the whole of the difference from the
+      # real build step.
+      - name: build (no push)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: stack-k8s/images/console.Dockerfile
+          push: false
+          load: true
+          tags: genaryx-console:pr-${{ matrix.arch }}
+          cache-from: type=gha,scope=console-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=console-${{ matrix.arch }}
+
+      # The same question the real build asks: does each bundled tool EXECUTE
+      # on this architecture, not merely "does it exit 0". See the comment on
+      # the equivalent step in the `build` job above for why exit codes are
+      # ignored on purpose here too.
+      - name: every bundled tool executes on the architecture that built it
+        run: |
+          set -eu
+          img="genaryx-console:pr-${{ matrix.arch }}"
+          echo "on $(uname -m), image $img"
+          docker run --rm --entrypoint /bin/sh "$img" -c '
+            fail=0
+            for t in qryx mockryx verdryx genaryx-web; do
+              out=$(command -v "$t" >/dev/null 2>&1 && "$t" 2>&1 | head -5 || echo "__NOT_ON_PATH__")
+              case "$out" in
+                *"exec format error"*)
+                  echo "  $t: EXEC FORMAT ERROR, built for another architecture"; fail=1 ;;
+                __NOT_ON_PATH__)
+                  echo "  $t: not on PATH in this image"; fail=1 ;;
+                "")
+                  echo "  $t: ran and said nothing at all"; fail=1 ;;
+                *)
+                  echo "  $t: runs" ;;
+              esac
+            done
+            uname -m
+            exit $fail
+          '
