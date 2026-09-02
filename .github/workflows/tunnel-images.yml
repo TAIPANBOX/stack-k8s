@@ -64,6 +64,16 @@ on:
         description: "The immutable tag to publish under, e.g. v0.1.2. Required on a dispatch: without it the image would be named after the branch."
         required: true
         type: string
+  # build-pr below runs on a pull request that touches THIS file, and nothing
+  # else does: build and merge stay off (see their `if`), so a pull request
+  # proves both images build and their entrypoints run, and publishes
+  # nothing. Added 2026-09-02 after tokenfuse's v0.4.2 failed on both Linux
+  # runners the first time its own tag-only release.yml ever reached its musl
+  # leg: a workflow gated on `push: tags: v*` alone is tested by exactly one
+  # event in its whole life, and that event is the one where a mistake is
+  # public.
+  pull_request:
+    paths: [".github/workflows/tunnel-images.yml"]
 
 permissions:
   contents: read
@@ -72,6 +82,9 @@ permissions:
 jobs:
   build:
     name: ${{ matrix.image }} on ${{ matrix.arch }}
+    # Never on a pull request: this job pushes by digest. build-pr below is
+    # what a pull request runs instead.
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -204,6 +217,10 @@ jobs:
   merge:
     name: merge ${{ matrix.image }}
     needs: build
+    # Never on a pull request: this job creates the manifest list under the
+    # published tag. With build guarded off above, needs: build already skips
+    # this on a pull request; the explicit if says so directly too.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -268,3 +285,75 @@ jobs:
         run: |
           docker buildx imagetools inspect \
             "ghcr.io/${{ steps.owner.outputs.name }}/stack-${{ matrix.image }}:${{ steps.ver.outputs.tag }}"
+
+  # What a pull request runs instead of build/merge: the same Dockerfile,
+  # loaded into the local daemon rather than pushed by digest, so the smoke
+  # test below can run it. No registry login, no owner-lowercasing, no
+  # version-must-not-move check: none of those matter to an image that is
+  # never pushed and carries no tag but a local one.
+  build-pr:
+    name: ${{ matrix.image }} on ${{ matrix.arch }} (build only, no push)
+    # Only on the pull request that exercises this file: build and merge
+    # above already cover a tag push.
+    if: github.event_name == 'pull_request'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [caddy, wg]
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Loaded into the local daemon rather than pushed, so the smoke test
+      # below can `docker run` it. BuildKit only, same as the real build: the
+      # heredoc entrypoints (GOTCHAS 47) need it, and setup-buildx-action's
+      # default driver already is BuildKit, so push: false plus load: true is
+      # the whole of the difference from the real build step.
+      - name: build (no push)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: images/${{ matrix.image }}.Dockerfile
+          push: false
+          load: true
+          tags: stack-${{ matrix.image }}:pr-${{ matrix.arch }}
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+
+      - name: the entrypoint exists, is not empty, and runs on this architecture
+        run: |
+          set -eu
+          img="stack-${{ matrix.image }}:pr-${{ matrix.arch }}"
+          echo "on $(uname -m), image $img"
+          case "${{ matrix.image }}" in
+            caddy) entry=/usr/local/bin/caddy-entrypoint.sh; bins="caddy" ;;
+            wg)    entry=/usr/local/bin/wg-entrypoint.sh;    bins="wireguard-go uapi-proxy wg socat" ;;
+          esac
+          docker run --rm --entrypoint /bin/sh "$img" -c "
+            fail=0
+            if [ ! -s '$entry' ]; then
+              echo '  $entry is EMPTY or missing: built without BuildKit (GOTCHAS 47)'
+              fail=1
+            else
+              echo '  $entry present, '\$(wc -c < '$entry')' bytes'
+            fi
+            for b in $bins; do
+              out=\$(command -v \"\$b\" >/dev/null 2>&1 && \"\$b\" --version 2>&1 | head -3 || echo __NOT_ON_PATH__)
+              case \"\$out\" in
+                *'exec format error'*) echo \"  \$b: EXEC FORMAT ERROR, built for another architecture\"; fail=1 ;;
+                __NOT_ON_PATH__)       echo \"  \$b: not on PATH in this image\"; fail=1 ;;
+                *)                     echo \"  \$b: runs\" ;;
+              esac
+            done
+            uname -m
+            exit \$fail
+          "
