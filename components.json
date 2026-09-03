@@ -51,15 +51,14 @@
           "wardryx"
         ],
         "schedules_routines": {
+          "costcrew-crew": "costcrew-run",
           "crypto-trend": "qryx-trend",
           "drills": "mockryx-drill",
           "identity-sweep": "idryx-detect",
           "quality-drift": "verdryx-drift",
           "record-seal": "trailryx-seal"
         },
-        "manual_jobs": {
-          "costcrew-crew": "A Job TEMPLATE rather than a schedule: shipped suspended, run by a person with `kubectl create job --from=cronjob/costcrew-crew`. It is the one CronJob in this namespace that spends on an account outside the cluster, so it is the one that must never start because a manifest was applied. Not a routine: mapping it into the estate's routine map would put a schedule nobody keeps into the record of what runs where. manifest-is-true.sh checks the manifest actually sets `suspend: true`, so this category is verified rather than asserted."
-        },
+        "manual_jobs": {},
         "persistent_claims": [
           "cloud-state",
           "console-state",
@@ -86,6 +85,10 @@
         "focus_export_runs_as_a_sidecar": {
           "value": "focus-export in the tokenfuse-gateway pod",
           "why": "It has no CronJob and cannot have one: it reads the gateway's local Parquet trace directory off disk, and that directory is an emptyDir, mountable only by containers inside its own pod by Kubernetes' own design. The other way out was to give it a PersistentVolumeClaim, which provisions a real disk billed from creation and is a spending decision rather than a fix.\\n\\nSo it is a sidecar in the pod that already holds the volume. It prints rather than storing, which is what quality-drift does one file over: in this deployment a routine's artifact is its log. Recorded as a GAP from 2026-08-06 until 2026-08-28."
+        },
+        "costcrew_crew_moved_from_manual_to_routine": {
+          "value": "costcrew-crew, mapped to costcrew-run, v0.2.0",
+          "why": "@yurii 2026-09-03, \"do it all\": un-suspend the crew CronJob, with the console's own cadence switch as the inner guard. costcrew v0.2.0's runner understands `-due`, so this CronJob no longer needs Kubernetes suspend to stay safe: it fires daily and `-due` refuses anything but cadence-due work with exit 2 (not a failure) unless a person has turned cadence on at the console's /cadence page, and never spends past the smaller of `-ceiling` and the console's own `cadence.ceiling_cents`. It is therefore no longer a Job TEMPLATE in Kubernetes' sense, and the manual_jobs bucket, which manifest-is-true.sh requires to carry `suspend: true`, would be false about it. Moved to schedules_routines instead.\\n\\nRecorded rather than resolved: estate-gates' C5 maps CronJobs to governance routines through its own ROUTINE_KIND, a table that lives in that repository, and `costcrew-run` is not in it yet. C5 will report `c5.routine-unmapped` for this pair until a person updates ROUTINE_KIND there, in a change to that repository, which this change does not make and this repository's own CLAUDE.md forbids making from here. Same shape as GOTCHAS 93: two correct rules, one repository apart, disagreeing until somebody closes the gap on purpose."
         }
       }
     }

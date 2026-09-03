@@ -133,9 +133,18 @@ compare(
 
 # The map has to name a routine the estate knows, or it is a private nickname
 # for a private nickname and C5 could not use it.
+#
+# `costcrew-run` is the one exception, added 2026-09-03 when costcrew-crew
+# stopped being a suspended manual_jobs template (it now fires daily, gated by
+# the console's own cadence switch rather than by Kubernetes suspend). This
+# repository knows it as a routine; estate-gates' own ROUTINE_KIND, in that
+# other repository, does not yet, so C5 reports `c5.routine-unmapped` for this
+# one pair until somebody updates it there. Recorded in components.json's
+# `declared` bucket rather than hidden, the same shape as GOTCHAS 93.
 ESTATE_ROUTINES = {
     "focus-export", "qryx-trend", "verdryx-drift",
     "idryx-detect", "mockryx-drill", "trailryx-seal",
+    "costcrew-run",
 }
 for local, routine in sorted(schedules.items()):
     if routine not in sorted(ESTATE_ROUTINES):

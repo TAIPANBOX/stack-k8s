@@ -221,16 +221,24 @@ assert n, "no manifest declared a kind to remove"')" \
 # fault on each side of that claim: the manifest stops matching it, and the
 # reason behind it goes away.
 #
-# The first is the one that costs money. A CronJob declared manual and left
-# unsuspended runs on whatever schedule its manifest carries, on a cluster whose
-# operator was told it runs only when they say so, and costcrew-crew is the one
-# CronJob here that spends on an account outside the cluster.
+# Neither case has a real subject any more. costcrew-crew was the one CronJob
+# here that spent on an account outside the cluster while it shipped as a
+# manual_jobs template, and it graduated out of that bucket on 2026-09-03:
+# v0.2.0's `-due` gates spending at the console's own cadence switch instead
+# of at Kubernetes suspend, so the manifest now correctly sets
+# `suspend: false` and components.json correctly declares no manual job at
+# all. A check with nothing to mutate proves nothing, so both cases below
+# plant a SYNTHETIC manual_jobs entry onto `drills`, a real CronJob that
+# really does carry `suspend: true` today, edited only inside this one
+# mutation and never written back.
 run_case "manifest-is-true: a manual job is not actually suspended" fail \
 	'./scripts/manifest-is-true.sh' \
 	"$(py 'import json, pathlib
-d = json.load(open("components.json"))
-manual = d["components"][0]["checked"].get("manual_jobs") or {}
-assert manual, "no manual job is declared, so there is nothing to un-suspend"
+p = "components.json"
+d = json.load(open(p))
+c = d["components"][0]["checked"]
+c["manual_jobs"] = {"drills": "planted by gates-have-teeth.sh: a real suspended CronJob, borrowed for this one case"}
+json.dump(d, open(p, "w"), indent=2)
 n = 0
 for path in sorted(pathlib.Path("manifests").glob("*.yaml")):
     body = path.read_text()
@@ -246,10 +254,8 @@ run_case "manifest-is-true: a manual job carries no reason" fail \
 	"$(py 'import json
 p = "components.json"
 d = json.load(open(p))
-manual = d["components"][0]["checked"].get("manual_jobs") or {}
-assert manual, "no manual job is declared, so there is no reason to remove"
-for name in manual:
-    manual[name] = "   "
+c = d["components"][0]["checked"]
+c["manual_jobs"] = {"drills": "   "}
 json.dump(d, open(p, "w"), indent=2)')" \
 	"gives no"
 

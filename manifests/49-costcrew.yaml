@@ -5,7 +5,8 @@
 # something: an egress path, a public address, a meter. The console below
 # grants nothing and calls nobody. It is opt-in because it is a whole plane
 # somebody may simply not want, and because the half of it that CAN spend
-# money is in this file too, suspended.
+# money is in this file too, gated by a switch in the console rather than by
+# Kubernetes: see the CronJob below.
 #
 #   kubectl apply -f manifests/49-costcrew.yaml
 #
@@ -47,7 +48,8 @@
 #
 # The console holds no credential and makes no outbound call. That is why it
 # gets no egress rule below and no Secret. The half that spends is the
-# suspended CronJob at the bottom, which is a different pod with a different
+# CronJob at the bottom, gated by the console's own cadence switch rather than
+# by Kubernetes suspend, which is a different pod with a different
 # NetworkPolicy, and that separation is the product's own rather than this
 # file's invention.
 #
@@ -97,7 +99,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: costcrew
-          image: ghcr.io/taipanbox/costcrew:v0.1.0
+          image: ghcr.io/taipanbox/costcrew:v0.2.0
           imagePullPolicy: IfNotPresent
           args:
             - "-addr"
@@ -172,9 +174,20 @@ spec:
 #   kubectl -n agent-stack exec deploy/costcrew -- \
 #     costcrew -data /var/lib/costcrew -set-password ops:<a real password>
 ---
-# The crew, running for real. SUSPENDED, and it stays suspended until somebody
-# means it: this is the one thing in the namespace that spends money on an
-# account outside the cluster, on a bill separate from the cluster's own.
+# The crew, running for real, daily. Not suspended: it fires on the schedule
+# below every day. Firing is not spending, and `-due` is what stands between
+# the two: the runner refuses anything but cadence-due work, and refuses it
+# with exit 2 unless a person has switched cadence ON for real, at the
+# console's own /cadence page (a settings row, `cadence.enabled`, default
+# OFF). A run that fires while that switch is off exits 2, "nothing to do,
+# by design", not a failure, and creates nothing: no draft, no spend, nothing
+# for a person to clean up. Until somebody visits /cadence and turns it on,
+# this CronJob is a clock ticking against a closed door.
+#
+# Once cadence is on, the ceiling is the SMALLER of two numbers: the
+# `-ceiling` this manifest passes below and the console's own
+# `cadence.ceiling_cents`, also set at /cadence. Neither alone is the
+# guarantee; the smaller of the two is, and a person sets both.
 #
 # It needs a key, which is not in this file and never should be:
 #
@@ -185,10 +198,14 @@ spec:
 # shell history and in the argument list of a running process, where anyone
 # with a terminal on the box can read it out of `ps`.
 #
-# Then run it once, deliberately, and watch what it did:
+# It can also be run once, by hand, outside the schedule:
 #
 #   kubectl -n agent-stack create job crew-1 --from=cronjob/costcrew-crew
 #   kubectl -n agent-stack logs job/crew-1
+#
+# The same two switches apply to a hand-run job: it carries the same `-due`
+# and the same args as the scheduled run, so it refuses exactly the same way
+# until cadence is on, and never spends past the same ceiling once it is.
 #
 # The ceiling is the guarantee, not the estimate. `costcrew-run` refuses to
 # start without one, prices the WORST case of every task before calling
@@ -206,10 +223,10 @@ metadata:
   name: costcrew-crew
   namespace: agent-stack
 spec:
-  suspend: true
-  # 5:57. Nothing depends on this time while it is suspended; it is spaced away
-  # from the four governance routines (3:17, 3:57, 4:42, 5:27) so an operator
-  # who un-suspends it does not collide with the seal.
+  suspend: false
+  # 5:57, spaced away from the four governance routines (3:17, 3:57, 4:42,
+  # 5:27) so this and the seal never collide. The time this fires spends
+  # nothing by itself: cadence, set at /cadence, is what decides that.
   schedule: "57 5 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
@@ -235,13 +252,19 @@ spec:
           securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
           containers:
             - name: crew
-              image: ghcr.io/taipanbox/costcrew:v0.1.0
+              image: ghcr.io/taipanbox/costcrew:v0.2.0
               imagePullPolicy: IfNotPresent
               # Overrides the image's ENTRYPOINT (the console server): this is
               # the other binary in the image, and it is the only one ever
               # given a key.
               command: ["/usr/local/bin/costcrew-run"]
               args:
+                # First, so it is the first thing a reader of `kubectl get
+                # cronjob -o yaml` sees: this run does ONLY cadence-due work,
+                # and refuses with exit 2 (not a failure) unless a person has
+                # turned cadence on at the console's /cadence page. See the
+                # header above this CronJob.
+                - "-due"
                 - "-data"
                 - "/var/lib/costcrew"
                 - "-live"

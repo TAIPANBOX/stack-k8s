@@ -3322,3 +3322,59 @@ than a failing one. A suite whose summary counts failures and not absences will
 report health either way. This file's own invariant 5 says a verification check
 must be able to fail; the sibling to it, learned here, is that a check must also
 be able to say it did not run, in the line somebody actually reads.
+
+## 96. A CronJob that graduates out of `manual_jobs` has nowhere the estate already recognises
+
+**The stack's own contract.** Both halves are right and they disagree, which
+is worth writing down before somebody "fixes" one of them, the same shape as
+entry 93.
+
+Recorded 2026-09-03, when `49-costcrew.yaml` un-suspended `costcrew-crew`.
+`@yurii` 2026-09-03, "do it all", to un-suspending the crew CronJob, with the
+console's own cadence switch as the inner guard, now that costcrew v0.2.0's
+runner understands `-due`.
+
+`manifest-is-true.sh`'s `manual_jobs` bucket exists for exactly one shape: a
+CronJob that is a Job TEMPLATE, shipped suspended, run by a person with
+`kubectl create job --from=cronjob/<name>`, and the check holds it to that by
+reading the object rather than the word: anything declared manual must
+actually carry `suspend: true`. costcrew-crew no longer does. It fires daily,
+and what stops it from spending is `-due`, refusing with exit 2 unless a
+person has turned cadence on at the console's own /cadence page: an
+application-level gate, not a Kubernetes one. Leaving it under `manual_jobs`
+with `suspend: false` would make that bucket assert something false about the
+object, which the check exists specifically to catch.
+
+So it moved to `schedules_routines`, mapped to `costcrew-run`, which is where
+every actually-scheduled CronJob in this manifest lives and is correct about
+this one now. It is also where the second half of the disagreement lives:
+`schedules_routines` entries have to map to a name in `ESTATE_ROUTINES`, a
+closed set kept here so a local rename cannot silently drift from what
+estate-gates' C5 knows, and C5 carries its OWN closed set, `ROUTINE_KIND`, in
+a different repository this one may not edit. Adding `costcrew-run` to the
+local set is this repository correctly declaring what it now believes; it
+cannot make the other repository agree.
+
+**What actually happens when both gates run.** `scripts/manifest-is-true.sh`
+is green: `costcrew-crew` maps to `costcrew-run`, which this repository's own
+`ESTATE_ROUTINES` now names, so the local check has nothing to disagree with
+itself about. `estate-gates/gates/c5-deployment-parity.py` is not: its
+`ROUTINE_KIND` has never heard of `costcrew-run`, so it reports
+`c5.routine-unmapped`, correctly, because from the estate's side nothing has
+told it this routine exists yet.
+
+**Not resolved here, on purpose.** Fixing the C5 finding needs an edit to
+`ROUTINE_KIND` in `estate-gates`, a repository this change does not touch: a
+finding in another repository is fixed in that repository, by a person, not
+worked around from here. `components.json`'s `declared` bucket carries the
+same explanation beside the fact, so a reader who opens only the manifest
+still finds it.
+
+**The teeth cost, paid in the same commit.** `gates-have-teeth.sh` had two
+cases proving `manual_jobs`'s two checks can fail on purpose, and both mutated
+whatever the real `manual_jobs` entry happened to be, which was always
+`costcrew-crew`. With `manual_jobs` correctly empty now, both cases plant a
+SYNTHETIC entry onto `drills` (a real CronJob that really does carry
+`suspend: true` today) for the one mutation's lifetime, rather than either
+losing the coverage or keeping a permanently-suspended job around only so a
+test has something to point at.
