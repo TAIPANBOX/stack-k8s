@@ -100,11 +100,11 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -155,7 +155,7 @@ jobs:
       # until somebody's arm64 node pulls it.
       - name: build and push by digest
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: images/${{ matrix.image }}.Dockerfile
@@ -207,7 +207,7 @@ jobs:
       # A pattern of `digest-*` here would collect both images' digests into one
       # manifest list: that is not hypothetical, it is what `digest-tokenfuse-*`
       # did on 2026-09-01 by matching four images through a shared prefix.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: digest-${{ matrix.image }}-${{ matrix.arch }}
           path: /tmp/digests/*
@@ -226,14 +226,14 @@ jobs:
       matrix:
         image: [caddy, wg]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: digest-${{ matrix.image }}-*
           merge-multiple: true
           path: /tmp/digests
 
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -308,9 +308,9 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       # Loaded into the local daemon rather than pushed, so the smoke test
       # below can `docker run` it. BuildKit only, same as the real build: the
@@ -319,7 +319,7 @@ jobs:
       # the whole of the difference from the real build step.
       - name: build (no push)
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: images/${{ matrix.image }}.Dockerfile
