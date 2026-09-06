@@ -91,6 +91,12 @@ spec:
       # so the plane looks healthy while producing no evidence. scopyx counts
       # write failures and reports them at shutdown, which is the backstop, not
       # a substitute for the volume being writable.
+      # No workload here talks to the Kubernetes API; see CLAUDE.md
+      # invariant 15. Without this every pod carries a projected token for
+      # the namespace default ServiceAccount, bound to nothing today but
+      # usable by a compromised container for discovery and SelfSubjectReview,
+      # and by any future RBAC binding an operator adds to `default`.
+      automountServiceAccountToken: false
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: scopyx

@@ -81,6 +81,12 @@ spec:
     metadata:
       labels: { app: scopyx, plane: egress-pep, backend: chromium }
     spec:
+      # No workload here talks to the Kubernetes API; see CLAUDE.md
+      # invariant 15. Without this every pod carries a projected token for
+      # the namespace default ServiceAccount, bound to nothing today but
+      # usable by a compromised container for discovery and SelfSubjectReview,
+      # and by any future RBAC binding an operator adds to `default`.
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532

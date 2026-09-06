@@ -99,6 +99,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/manifest-is-true.sh     # invariant 13
 ./scripts/node-name-is-pinned.sh  # invariant 11
 ./scripts/deploy-flags-agree.sh   # invariant 14
+./scripts/no-sa-token-by-default.sh # invariant 15
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -344,6 +345,28 @@ an absent invariant.
     **What it does not do.** It reads text. That the patch actually sticks needs
     a live cluster, which invariants 4 and 5 already say this repository cannot
     hold in a gate.
+
+15. **No pod automounts the default ServiceAccount token.** No manifest here
+    sets `automountServiceAccountToken`, and this repository ships no RBAC at
+    all: no ServiceAccount, Role or RoleBinding of its own. Left at the
+    default, every plane pod still gets kubelet's projected token for the
+    namespace's `default` ServiceAccount, bound to nothing today. A
+    compromised container holds that token anyway, and can use it for
+    discovery and SelfSubjectReview against the API server; it also becomes a
+    live credential the day any operator binds a Role to `default` for an
+    unrelated reason, with no change to the pod that suddenly gains it.
+
+    Confirmed by reading, not assumed: nothing under `manifests/` or `images/`
+    references `kubernetes.default`, a ServiceAccount token path, or an
+    in-cluster client. Nothing in this stack talks to the Kubernetes API from
+    inside a pod, so there is no case where a pod needs this token, and
+    `automountServiceAccountToken: false` costs it nothing.
+
+    *(gate: `scripts/no-sa-token-by-default.sh`, which finds every Deployment,
+    StatefulSet, CronJob and Job under `manifests/` by kind rather than by a
+    hand-kept list, and fails on a missing field or an explicit `true`. Two
+    cases in `scripts/gates-have-teeth.sh`: the field removed from a pod spec,
+    and a non-pod object, which the gate correctly leaves alone.)*
 
 ## Decisions that have no gate yet
 

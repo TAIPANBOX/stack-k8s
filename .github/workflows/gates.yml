@@ -10,6 +10,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   gates:
     runs-on: ubuntu-latest
@@ -43,6 +46,13 @@ jobs:
       - name: every deploy path can set the trust domain, after the apply
         run: ./scripts/deploy-flags-agree.sh
 
+      # No workload in this stack talks to the Kubernetes API from inside a
+      # pod, so the projected token every pod gets for the namespace default
+      # ServiceAccount is a live credential with nothing to authorize and
+      # nothing gained by mounting it. In both callers on the same commit.
+      - name: no pod automounts the default ServiceAccount token
+        run: ./scripts/no-sa-token-by-default.sh
+
       # Pinned rather than left to whatever the runner ships. `go install` of a
       # module built against a newer toolchain fails on an older one, and the
       # error names a Go version rather than this step, which is a confusing
@@ -73,8 +83,14 @@ jobs:
       # `kubectl --dry-run=client` fetches its schema FROM a cluster, so a
       # check built on it would fail here for want of one and would then be a
       # check that never runs.
+      #
+      # Pinned to v0.8.0 (the current tagged release as of 2026-09-06)
+      # rather than @latest, for the same reason the images in manifests/ are
+      # pinned: a tool that moves under the operator can start failing, or
+      # stop catching something, on a run nobody triggered. If v0.8.0 is ever
+      # removed, move to the newest tagged release and say so here.
       - name: install kubeconform
-        run: go install github.com/yannh/kubeconform/cmd/kubeconform@latest
+        run: go install github.com/yannh/kubeconform/cmd/kubeconform@v0.8.0
 
       - name: every manifest is a document Kubernetes would accept
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/manifests-valid.sh

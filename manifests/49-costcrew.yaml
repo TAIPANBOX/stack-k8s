@@ -96,6 +96,12 @@ spec:
     metadata:
       labels: { app: costcrew, plane: finops }
     spec:
+      # No workload here talks to the Kubernetes API; see CLAUDE.md
+      # invariant 15. Without this every pod carries a projected token for
+      # the namespace default ServiceAccount, bound to nothing today but
+      # usable by a compromised container for discovery and SelfSubjectReview,
+      # and by any future RBAC binding an operator adds to `default`.
+      automountServiceAccountToken: false
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: costcrew
@@ -238,6 +244,13 @@ spec:
           labels: { app: costcrew-crew, plane: finops }
         spec:
           restartPolicy: Never
+          # No workload here talks to the Kubernetes API; see CLAUDE.md
+          # invariant 15. Without this every pod carries a projected token for
+          # the namespace default ServiceAccount, bound to nothing today but
+          # usable by a compromised container for discovery and
+          # SelfSubjectReview, and by any future RBAC binding an operator
+          # adds to `default`.
+          automountServiceAccountToken: false
           # costcrew-state is ReadWriteOnce: an RWO claim can be mounted by
           # several pods on ONE node and by no pod anywhere else. Required,
           # not preferred - landing elsewhere is not a degraded run, it is no

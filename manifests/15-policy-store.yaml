@@ -56,6 +56,12 @@ spec:
     metadata:
       labels: { app: policy-db, plane: store }
     spec:
+      # No workload here talks to the Kubernetes API; see CLAUDE.md
+      # invariant 15. Without this every pod carries a projected token for
+      # the namespace default ServiceAccount, bound to nothing today but
+      # usable by a compromised container for discovery and SelfSubjectReview,
+      # and by any future RBAC binding an operator adds to `default`.
+      automountServiceAccountToken: false
       securityContext:
         # 70 is the postgres uid/gid in the alpine image. Numeric, for the same
         # reason every image here ends with a numeric USER: a kubelet with
