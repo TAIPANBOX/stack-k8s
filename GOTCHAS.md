@@ -3406,3 +3406,32 @@ Secret, `TOKENFUSE_ADMIN_KEYS` on the gateway, and the console presenting it
 as a bearer on that probe. That needs a genaryx change and a release of both
 images, so it is a decision for the owner, recorded rather than implied by a
 variable that reads like a temporary flag.
+
+## 98. Enrolling a passkey needs the tunnel's own domain, never a port-forward or SSH
+
+**Platform.** WebAuthn does this to everyone. Recorded 2026-09-06, from the
+estate security review that set `GENARYX_WEB_REQUIRE_PASSKEY=1` in
+`manifests/20-console.yaml`.
+
+WebAuthn checks the calling origin against the relying party the console was
+configured with, and `GENARYX_WEB_ORIGIN` here is `https://<CONSOLE_DOMAIN>`
+(`tunnel/console-patch.yaml`, from `stack-tunnel`'s `console_origin`). A
+device reaching the console any other way, a `kubectl port-forward` to the
+pod or an SSH tunnel to a NodePort, arrives as `http://localhost:<port>` or
+similar, a different origin, and the browser refuses the ceremony outright:
+not a wrong credential, an origin WebAuthn will not run at all.
+
+That is why the first device cannot come from the browser. Before a tunnel
+exists there is nowhere WebAuthn will run, so nothing can be enrolled, so
+none of the five now-gated commands, issuing a device included, can be
+exercised from the browser either. `tunnel/up.sh` issues that first device
+itself (`kubectl exec ... genaryx-web issue-device`), a call straight into
+the operator's own container that carries no passkey gate on purpose,
+because it is the one channel that exists before the tunnel it is
+bootstrapping.
+
+The internal-CA path adds a second precondition on top of the first. With no
+`CLOUDFLARE_API_TOKEN`, Caddy signs the console's certificate with its own
+CA, and WebAuthn's secure-context check refuses an untrusted certificate the
+same way it refuses plain HTTP. A device has to be told to trust that CA
+before enrolment works, resolving the domain is not enough on its own.

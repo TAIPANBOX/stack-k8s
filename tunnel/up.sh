@@ -279,9 +279,13 @@ $(printf '\033[1m')What to do$(printf '\033[0m')
      (GOTCHAS 50).
   4. Enrol a passkey THERE and not earlier. WebAuthn binds it to
      $CONSOLE_DOMAIN exactly, so one enrolled at any other address, including
-     an ssh -L to localhost, is useless here (GOTCHAS 38). Until one exists,
-     kill and budget actions still work and are journaled as software-signed;
-     enrolling upgrades them to hardware-confirmed.
+     an ssh -L to localhost, is useless here (GOTCHAS 38). A passkey is now
+     REQUIRED, not optional: kill, budget, approval and device commands all
+     refuse on a session cookie alone until one is enrolled. That is exactly
+     why this script issued your first device itself, back in "your first
+     device" above, rather than sending you to the console for it: the
+     browser has no passkey yet and cannot get one until a device exists to
+     reach the console with in the first place.
 
 $(printf '\033[1m')If step 2 never handshakes$(printf '\033[0m')
 
@@ -294,9 +298,12 @@ $(printf '\033[1m')If step 2 never handshakes$(printf '\033[0m')
 
 $(printf '\033[1m')Afterwards$(printf '\033[0m')
 
-  More devices, and revoking them, are in the console under Remote. Each
-  issue is a per-action ceremony once a passkey exists, and lands in the
-  audit as console.issue_wg_peer with the credential that confirmed it.
+  More devices, and revoking them, are in the console under Remote. A
+  passkey is required for that ceremony, the same as for a kill, a budget
+  change or an approval decision, and each issue lands in the audit as
+  console.issue_wg_peer with the credential that confirmed it. Your first
+  device did not go through that gate: it came from this script, outside
+  the browser, for the reason step 4 above explains.
 
   Re-running this script is safe. FIRST_DEVICE=0 skips the issuance so it
   does not mint a peer nobody asked for.
