@@ -297,6 +297,14 @@ assert out != s, "no --node-name line to remove"
 open("cloud/gcp/install-gcp.sh", "w").write(out)')" \
 	"without --node-name"
 
+# A pod that automounts the default ServiceAccount token holds a valid API
+# credential nothing in this stack needs, and the day an operator binds a Role
+# to `default` for an unrelated reason it stops being pointed at nothing.
+run_case "no-sa-token-by-default: a pod template loses the field" fail \
+	'./scripts/no-sa-token-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "      automountServiceAccountToken: false\n", "")')" \
+	"does not set"
+
 echo
 echo "=== and what they must NOT catch ==="
 
@@ -323,6 +331,14 @@ run_case "node-name-is-pinned: a comment describing an unpinned install" pass \
 	"$(py 'marker = "sh -s " + "- server"
 s = open("install.sh").read()
 open("install.sh", "w").write(s + "\n# For reference, an unpinned install used to read:\n#   " + marker + " --cluster-init --node-ip 1.2.3.4\n")')"
+
+# A Service is not a pod template, and this gate must not ask it for a field
+# that only means something on one. The comment planted here would trip a
+# gate that found "kind:" or "restartPolicy:" anywhere in the text rather than
+# reading structure; genaryx-console-lb has none of its own.
+run_case "no-sa-token-by-default: a non-pod object carries no such field" pass \
+	'./scripts/no-sa-token-by-default.sh' \
+	"$(py 'edit("manifests/50-loadbalancer.yaml", "spec:\n  type: LoadBalancer", "spec:\n  # not a pod template: kind: Deployment / template: / restartPolicy: OnFailure\n  type: LoadBalancer")')"
 
 echo
 echo "=== and the one this estate learned the hard way ==="

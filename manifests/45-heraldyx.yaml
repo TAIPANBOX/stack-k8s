@@ -74,6 +74,12 @@ spec:
       # deployment looks healthy for as long as nothing happens, and then loses
       # its read offset and its dedup counters on every restart. Both halves of
       # that state are invariant 5 in heraldyx's own CLAUDE.md.
+      # No workload here talks to the Kubernetes API; see CLAUDE.md
+      # invariant 15. Without this every pod carries a projected token for
+      # the namespace default ServiceAccount, bound to nothing today but
+      # usable by a compromised container for discovery and SelfSubjectReview,
+      # and by any future RBAC binding an operator adds to `default`.
+      automountServiceAccountToken: false
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: heraldyx
