@@ -68,6 +68,12 @@ spec:
             # Felyx stays local-first here. A cluster that wants a cloud model
             # sets these from a Secret it created itself; nothing is baked in.
             - { name: GENARYX_COPILOT_PROVIDER, value: "ollama" }
+            # The five sensitive commands (kill a run, set a budget, decide an
+            # approval, issue a device, revoke one) must not run on a session
+            # cookie alone: a stolen session should not be able to pull the
+            # switch. tunnel/up.sh issues the first device itself for exactly
+            # this reason, before an operator can ever reach the browser.
+            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: "1" }
           ports: [{ name: http, containerPort: 7420 }]
           volumeMounts:
             - { name: state, mountPath: /var/lib/stack }
