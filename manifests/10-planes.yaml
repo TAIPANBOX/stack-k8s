@@ -172,6 +172,16 @@ spec:
           command: ["/usr/local/bin/tokenfuse"]
           env:
             - { name: TOKENFUSE_ADDR, value: "0.0.0.0:4100" }
+            # The gateway's observability and kill routes (/v1/runs,
+            # /v1/runs/{id}/kill, /v1/keys, /v1/policy-plane, /v1/agent-ids)
+            # are reachable by every pod the NetworkPolicy admits, with no
+            # credential, today. tokenfuse after v0.4.3 refuses them on a
+            # non-loopback bind unless this opt-out or TOKENFUSE_ADMIN_KEYS
+            # is set, and the console reads /v1/keys with no credential, so
+            # this keeps today's behaviour across the image bump. The
+            # stronger shape, an admin key in stack-keys that the console
+            # presents, is GOTCHAS 97.
+            - { name: TOKENFUSE_ALLOW_OPEN_OBS, value: "1" }
             # enforce, not observe: an over-budget call gets a hard 402 rather
             # than a log line. This is the whole point of the gateway.
             - { name: TOKENFUSE_MODE, value: "enforce" }
