@@ -3378,3 +3378,31 @@ SYNTHETIC entry onto `drills` (a real CronJob that really does carry
 `suspend: true` today) for the one mutation's lifetime, rather than either
 losing the coverage or keeping a permanently-suspended job around only so a
 test has something to point at.
+
+## 97. The gateway's observability routes carry no credential, and the next image would start refusing them
+
+**Ours, meeting a platform fact.** Recorded 2026-09-06, from the estate
+security review.
+
+`tokenfuse` main (PR #254) puts `/v1/runs`, `/v1/runs/{id}/kill`,
+`/v1/keys`, `/v1/policy-plane` and `/v1/agent-ids` behind a gate: with
+`TOKENFUSE_ADMIN_KEYS` unset and a non-loopback bind they answer
+`403 admin_keys_required` unless `TOKENFUSE_ALLOW_OPEN_OBS=1`. The gateway
+here binds `0.0.0.0:4100`, because a pod has no other useful bind, so once
+the image in `10-planes.yaml` moves past v0.4.3 those five routes close, and
+the console's reachability probe, which reads `/v1/keys` with no credential
+(`genaryx/crates/connectors/src/gateway.rs`), reads a healthy gateway as
+unreachable.
+
+What holds today: the NetworkPolicy decides which pods may reach 4100 at
+all, and the plane-to-plane rules admit the console. Inside that admitted
+set the routes carry no credential, which is the same posture as before the
+review, and `TOKENFUSE_ALLOW_OPEN_OBS=1` in `10-planes.yaml` keeps it across
+the bump rather than letting a version change close a door nobody decided
+to close.
+
+The follow-up, not done here: a generated admin key in the `stack-keys`
+Secret, `TOKENFUSE_ADMIN_KEYS` on the gateway, and the console presenting it
+as a bearer on that probe. That needs a genaryx change and a release of both
+images, so it is a decision for the owner, recorded rather than implied by a
+variable that reads like a temporary flag.
