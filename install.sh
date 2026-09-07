@@ -602,7 +602,7 @@ else
 fi
 
 # ---- 7b. the planes' bearer keys -------------------------------------------
-# `stack-keys` is referenced by five secretKeyRefs across 10-planes.yaml and
+# `stack-keys` is referenced by eight secretKeyRefs across 10-planes.yaml and
 # 20-console.yaml, and until this block existed nothing created it: a fresh
 # cluster applied the manifests and every plane sat in
 # CreateContainerConfigError with no hint about what the missing values should
