@@ -612,7 +612,7 @@ fi
 # CLIENT side, and conflating the two is worse than an outage: a value with no
 # `:org` half parses to zero valid keys, so the plane starts cleanly,
 # authenticates nobody, answers 401 to its own console, and says so in one log
-# line. Three secrets, five values:
+# line. Three secrets, six values:
 #
 #   cloud_keys      the spec tokenfuse-cloud accepts
 #   cloud_admin     the bare key the gateway and console present to it
@@ -621,20 +621,41 @@ fi
 #   wardryx_gateway the gateway's key, deliberately VIEWER. /v1/decide needs
 #                   any authenticated principal, and an enforcement point that
 #                   can rewrite the policy it enforces is not one.
+#   gateway_admin   the gateway's OWN admin key: TOKENFUSE_ADMIN_KEYS on the
+#                   gateway container in 10-planes.yaml, and the same bare
+#                   value as TOKENFUSE_GATEWAY_ADMIN_KEY on the console in
+#                   20-console.yaml, so the console can present it on the
+#                   probe that used to need no credential at all. See
+#                   GOTCHAS.md item 97.
 if ! k_ "-n agent-stack get secret stack-keys" >/dev/null 2>&1; then
   say "plane credentials (generated, never committed)"
   CLOUD_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   WARDRYX_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   WARDRYX_GATEWAY_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  GATEWAY_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   k_ "-n agent-stack create secret generic stack-keys \
       --from-literal=cloud_keys='$CLOUD_SECRET:default:admin' \
       --from-literal=cloud_admin='$CLOUD_SECRET' \
       --from-literal=wardryx_keys='$WARDRYX_ADMIN_SECRET:default:admin,$WARDRYX_GATEWAY_SECRET:default:viewer' \
       --from-literal=wardryx_admin='$WARDRYX_ADMIN_SECRET' \
-      --from-literal=wardryx_gateway='$WARDRYX_GATEWAY_SECRET'" >/dev/null
+      --from-literal=wardryx_gateway='$WARDRYX_GATEWAY_SECRET' \
+      --from-literal=gateway_admin='$GATEWAY_ADMIN_SECRET'" >/dev/null
   echo "   created secret stack-keys"
 else
   echo "   secret stack-keys already exists, left as is"
+  # Every cluster installed before today has a stack-keys Secret with no
+  # gateway_admin key, because this key did not exist when it was created.
+  # "left as is" above is right for the five values that already have a
+  # meaning an operator may have rotated: this one cannot have been rotated,
+  # it has never existed, so an absent key here is not a value to leave
+  # alone, it is a manifest that will never resolve. Read before writing:
+  # only add what is actually missing, never touch a key that is present.
+  GATEWAY_ADMIN_B64="$(k_ "-n agent-stack get secret stack-keys -o jsonpath={.data.gateway_admin}" 2>/dev/null || true)"
+  if [ -z "$GATEWAY_ADMIN_B64" ]; then
+    GATEWAY_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    k_ "-n agent-stack patch secret stack-keys --type merge -p '{\"stringData\":{\"gateway_admin\":\"$GATEWAY_ADMIN_SECRET\"}}'" >/dev/null
+    echo "   added gateway_admin to the existing stack-keys secret"
+  fi
 fi
 
 # ---- 7c. the tunnel's network door ----------------------------------------

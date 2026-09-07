@@ -3407,6 +3407,30 @@ as a bearer on that probe. That needs a genaryx change and a release of both
 images, so it is a decision for the owner, recorded rather than implied by a
 variable that reads like a temporary flag.
 
+**2026-09-07.** The plumbing above is in, on `main`. `install.sh` mints a
+sixth value, `gateway_admin`, into `stack-keys` on a fresh cluster, and
+patches it into an existing one that predates this key rather than leaving
+that Secret "as is" the way its neighbours are (there is nothing to leave
+alone: the key never existed on those clusters). `10-planes.yaml` sets
+`TOKENFUSE_ADMIN_KEYS` on the gateway from that key, and `20-console.yaml`
+sets `TOKENFUSE_GATEWAY_ADMIN_KEY` on the console from the same key,
+alongside its two sibling admin bearers. `TOKENFUSE_ALLOW_OPEN_OBS` stays,
+unchanged, because both new variables are inert against the images pinned
+today: v0.4.3 predates the gate PR #254 implements, and the console image
+(v0.1.1) predates the genaryx change that would make it read
+`TOKENFUSE_GATEWAY_ADMIN_KEY` and present it. The console-side genaryx
+change itself is a separate PR, not this repository's to carry.
+
+What still waits, both phase 2 of the same plan and both the owner's call
+to make as an outward action: tokenfuse `v0.4.4`, the release that actually
+starts refusing the five routes without a key, and the console image bump
+that ships the genaryx change consuming this key. `verify.sh` gets its
+must-fail check (`/v1/runs` refused with no key, accepted with one) only
+once those two land, in phase 3, alongside deleting
+`TOKENFUSE_ALLOW_OPEN_OBS`. Nothing here was proven against a live cluster:
+the money rule at the bottom of `CLAUDE.md` still applies, and this is
+manifests and a bring-up script read, not run.
+
 ## 98. Enrolling a passkey needs the tunnel's own domain, never a port-forward or SSH
 
 **Platform.** WebAuthn does this to everyone. Recorded 2026-09-06, from the
