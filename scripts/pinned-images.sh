@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 # Every image the manifests apply is pinned, or explicitly built by this repo.
+# Also reads `security-tests.sh`: its probe pods run on a live cluster too,
+# so a tag drifting there is the same silent failure, just in a throwaway
+# container instead of a plane. Until 2026-09-07 this script read
+# manifests/*.yaml only, which is exactly why four probe pods there sat on
+# ghcr.io/taipanbox/genaryx-console:v0.1.1 after the manifests moved to
+# v0.1.2 with nothing noticing.
 #
 # The failure this refuses is quiet by construction: a pod that comes back
 # different after a restart nobody ran. `:latest` and `:main` move under the
@@ -17,6 +23,8 @@
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
+
+IMAGE_SOURCES=(manifests/*.yaml security-tests.sh)
 
 fail=0
 note() { printf '  \033[33mnote\033[0m %s\n' "$*"; }
@@ -50,7 +58,7 @@ while IFS= read -r line; do
         bad "$img is neither pinned, nor built here, nor an allowed upstream tag"
       fi ;;
   esac
-done < <(grep -rh "image: " manifests/*.yaml)
+done < <(grep -rh "image: " "${IMAGE_SOURCES[@]}")
 
 # A count of zero is not a clean bill of health, it is a check that found
 # nothing to check. Until 2026-08-09 this printed "OK: 0 image references, all
@@ -59,9 +67,9 @@ done < <(grep -rh "image: " manifests/*.yaml)
 # manifests into a subdirectory. Neither is a strange thing to do, and nothing
 # else here would have said the images had stopped being checked.
 if [ "$count" = 0 ]; then
-  echo "FAIL: no image references found under manifests/*.yaml, so this check"
+  echo "FAIL: no image references found under ${IMAGE_SOURCES[*]}, so this check"
   echo "      measured nothing. It cannot tell whether every image is pinned if"
-  echo "      it cannot find an image. If the manifests moved or were renamed,"
+  echo "      it cannot find an image. If those files moved or were renamed,"
   echo "      this check has to move with them; silence here is not health."
   exit 1
 fi

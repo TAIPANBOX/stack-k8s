@@ -272,6 +272,14 @@ else:
     raise AssertionError("no pinned ghcr image to unpin")')" \
 	"moves: a pod can come back different"
 
+# security-tests.sh runs probe pods on a live cluster too, and pinned-images.sh
+# started reading it on 2026-09-07 after four of those pods sat on a stale tag
+# with nothing noticing. Same fault, same gate, the other file it now reads.
+run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
+	'./scripts/pinned-images.sh' \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v0.1.2", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"moves: a pod can come back different"
+
 # The default apply set must not publish anything to the world, and must not
 # apply placeholder secrets.
 run_case "closed-by-default: placeholders join the default apply set" fail \
@@ -346,14 +354,21 @@ echo "    a gate whose subject is gone must SAY so, not report OK on nothing"
 
 # THE HOLE. Renaming manifests to .yml made pinned-images.sh report a clean
 # run over zero images. This is the case that keeps the fix in place.
-run_case "pinned-images: no manifests left to read images from" fail \
+# Both of the gate's sources have to be taken away for "measured nothing" to
+# be the honest answer: since 2026-09-07 it also reads security-tests.sh, so
+# renaming the manifests alone would leave that file's images still counted,
+# and the gate would report a clean pass over a real subject rather than
+# admitting it has nothing left to read.
+run_case "pinned-images: no manifests or security-tests.sh left to read images from" fail \
 	'./scripts/pinned-images.sh' \
 	"$(py 'import subprocess, glob
 n = 0
 for f in sorted(glob.glob("manifests/*.yaml")):
     subprocess.run(["git", "mv", f, f[:-5] + ".yml"], check=True)
     n += 1
-assert n, "no manifests in this repo"')" \
+subprocess.run(["git", "mv", "security-tests.sh", "security-tests.sh.bak"], check=True)
+n += 1
+assert n, "no manifests and no security-tests.sh in this repo"')" \
 	"measured nothing"
 
 run_case "gotchas-classified: no numbered entries left to classify" fail \

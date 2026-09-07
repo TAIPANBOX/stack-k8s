@@ -116,7 +116,7 @@ spec:
   securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
   containers:
     - name: probe
-      image: ghcr.io/taipanbox/genaryx-console:v0.1.1
+      image: ghcr.io/taipanbox/genaryx-console:v0.1.2
       imagePullPolicy: IfNotPresent
       command: ["sleep", "300"]
       securityContext:
@@ -168,7 +168,7 @@ spec:
   securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
   containers:
     - name: probe
-      image: ghcr.io/taipanbox/genaryx-console:v0.1.1
+      image: ghcr.io/taipanbox/genaryx-console:v0.1.2
       imagePullPolicy: IfNotPresent
       command: ["sleep", "600"]
       securityContext:
@@ -241,7 +241,7 @@ metadata: { name: sec-privileged }
 spec:
   containers:
     - name: p
-      image: ghcr.io/taipanbox/genaryx-console:v0.1.1
+      image: ghcr.io/taipanbox/genaryx-console:v0.1.2
       securityContext: { privileged: true }
   hostNetwork: true
   hostPID: true
@@ -504,7 +504,7 @@ spec:
   securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
   containers:
     - name: forged
-      image: ghcr.io/taipanbox/genaryx-console:v0.1.1
+      image: ghcr.io/taipanbox/genaryx-console:v0.1.2
       imagePullPolicy: IfNotPresent
       command: ["sleep", "300"]
       securityContext:
@@ -520,11 +520,23 @@ try:
 except Exception:
     print("reach=no")
 print("inherited_credential=" + ("yes" if (os.environ.get("WARDRYX_ADMIN_KEY") or os.environ.get("TOKENFUSE_CLOUD_ADMIN_KEY")) else "no"))
-for label, url, method in [("read_policies","http://wardryx:8090/v1/policies","GET"),
-                           ("delete_freeze","http://wardryx:8090/v1/policies/console-block-probe","DELETE"),
-                           ("read_fleet","http://tokenfuse-cloud:8080/v1/runs","GET")]:
+# gw_runs / gw_keys, GOTCHAS 97: the gateway's own admin routes, PR #62. Each is
+# tried twice, with the devkey bearer (the GOTCHAS 20 credential) and with no
+# Authorization header at all, because a route gated on "any bearer present"
+# would pass the devkey case and still be open to a caller sending none.
+# POST /v1/runs/{id}/kill is deliberately not probed here: this suite runs
+# against a live cluster and a kill is a state change, unlike these reads.
+for label, url, method, with_auth in [
+        ("read_policies","http://wardryx:8090/v1/policies","GET",True),
+        ("delete_freeze","http://wardryx:8090/v1/policies/console-block-probe","DELETE",True),
+        ("read_fleet","http://tokenfuse-cloud:8080/v1/runs","GET",True),
+        ("gw_runs","http://tokenfuse-gateway:4100/v1/runs","GET",True),
+        ("gw_runs_noauth","http://tokenfuse-gateway:4100/v1/runs","GET",False),
+        ("gw_keys","http://tokenfuse-gateway:4100/v1/keys","GET",True),
+        ("gw_keys_noauth","http://tokenfuse-gateway:4100/v1/keys","GET",False)]:
     try:
-        req = urllib.request.Request(url, method=method, headers={"Authorization":"Bearer devkey"})
+        headers = {"Authorization":"Bearer devkey"} if with_auth else {}
+        req = urllib.request.Request(url, method=method, headers=headers)
         r = urllib.request.urlopen(req, timeout=10); print(f"{label}={r.status}")
     except urllib.error.HTTPError as e:
         print(f"{label}={e.code}")
@@ -538,8 +550,10 @@ FORGEDPROBE
     || bad "the forged pod inherited an admin credential from its environment"
   if echo "$forged" | grep -qE "read_policies=(200|201)|delete_freeze=(200|204)|read_fleet=200"; then
     bad "a self-labelled pod reached an admin API: a plane is accepting an unauthenticated or devkey bearer (GOTCHAS 20)"
+  elif echo "$forged" | grep -qE "gw_runs(_noauth)?=200|gw_keys(_noauth)?=200"; then
+    bad "a self-labelled pod reached the gateway's own admin routes: TOKENFUSE_ADMIN_KEYS is not enforcing on /v1/runs or /v1/keys (GOTCHAS 97)"
   else
-    ok "every admin verb from the forged pod was refused"
+    ok "every admin verb from the forged pod was refused, wardryx, tokenfuse-cloud and the gateway alike"
   fi
   kc delete pod sec-forged --wait=false >/dev/null 2>&1
 else
