@@ -3431,6 +3431,30 @@ once those two land, in phase 3, alongside deleting
 the money rule at the bottom of `CLAUDE.md` still applies, and this is
 manifests and a bring-up script read, not run.
 
+**2026-09-07, phase 3 closed.** Both images phase 2 waited on are out:
+`ghcr.io/taipanbox/tokenfuse:v0.4.4` and `-control-plane:v0.4.4` implement
+PR #254, `ghcr.io/taipanbox/genaryx-console:v0.1.2` presents
+`TOKENFUSE_GATEWAY_ADMIN_KEY`. `10-planes.yaml` is bumped to both v0.4.4
+tags and `TOKENFUSE_ALLOW_OPEN_OBS` is deleted, not left inert: the gateway
+now enforces `TOKENFUSE_ADMIN_KEYS` on all five routes, with nothing left
+to fall back to if the key were ever unset. `20-console.yaml` and the
+`quality-drift` CronJob in `40-routines-and-secrets.yaml` are bumped to
+v0.1.2.
+
+What holds now: the NetworkPolicy still decides which pods may reach 4100
+at all, and inside that admitted set the five routes now also require the
+per-cluster `gateway_admin` key from `stack-keys`, presented by the console
+as a bearer. A sibling container or pod on the same network that used to
+list runs or kill one by virtue of reaching the port alone can no longer do
+either without that key.
+
+The live check is `verify.sh`'s new section, "the gateway's admin key is
+enforced": from inside the console pod, `/v1/runs` with no key must come
+back 401 or 403, and the same call with `TOKENFUSE_GATEWAY_ADMIN_KEY` must
+come back 200. **Not yet run on a cluster**, per the money rule at the
+bottom of `CLAUDE.md`: this is manifests and a verify script read, not
+brought up.
+
 ## 98. Enrolling a passkey needs the tunnel's own domain, never a port-forward or SSH
 
 **Platform.** WebAuthn does this to everyone. Recorded 2026-09-06, from the
