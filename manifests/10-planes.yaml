@@ -46,7 +46,7 @@ spec:
           # 2026-09-02 on v0.4.3, the published
           # image carries /usr/local/bin/tokenfuse-cloud exactly as the local
           # build did.
-          image: ghcr.io/taipanbox/tokenfuse-control-plane:v0.4.3
+          image: ghcr.io/taipanbox/tokenfuse-control-plane:v0.4.4
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse-cloud"]
           env:
@@ -167,28 +167,21 @@ spec:
           # called `tokenfuse`. Measured 2026-09-01 on v0.4.1 and 2026-09-02 on
           # v0.4.3 by listing /usr/local/bin
           # in the published image, which is the only way to know.
-          image: ghcr.io/taipanbox/tokenfuse:v0.4.3
+          image: ghcr.io/taipanbox/tokenfuse:v0.4.4
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse"]
           env:
             - { name: TOKENFUSE_ADDR, value: "0.0.0.0:4100" }
             # The gateway's observability and kill routes (/v1/runs,
             # /v1/runs/{id}/kill, /v1/keys, /v1/policy-plane, /v1/agent-ids)
-            # are reachable by every pod the NetworkPolicy admits, with no
-            # credential, today. tokenfuse after v0.4.3 refuses them on a
-            # non-loopback bind unless this opt-out or TOKENFUSE_ADMIN_KEYS
-            # is set, and the console reads /v1/keys with no credential, so
-            # this keeps today's behaviour across the image bump.
+            # take TOKENFUSE_ADMIN_KEYS below as a bearer credential.
+            # tokenfuse v0.4.4 enforces it on all five: no key or the wrong
+            # one is refused. The bridge that used to hold this open,
+            # TOKENFUSE_ALLOW_OPEN_OBS, is gone as of phase 3 of the gateway
+            # admin key plan (2026-09-07): the NetworkPolicy decides which
+            # pods may reach 4100 at all, and the key decides what those five
+            # routes answer once reached. GOTCHAS 97.
             #
-            # The stronger shape is now plumbed below: TOKENFUSE_ADMIN_KEYS
-            # from the gateway_admin key in stack-keys, and the console
-            # presents the same value as TOKENFUSE_GATEWAY_ADMIN_KEY
-            # (20-console.yaml). It has no effect on the pinned v0.4.3
-            # image, which predates the gate. This line stays, unchanged,
-            # until the image tag here moves past v0.4.3: it is DELETED in
-            # phase 3, together with the must-fail verify.sh check that
-            # phase adds. GOTCHAS 97.
-            - { name: TOKENFUSE_ALLOW_OPEN_OBS, value: "1" }
             # Read by tokenfuse main (PR #254, unreleased) as a bare,
             # comma-separated key list, no `:org[:role]` suffix, unlike the
             # cloud and wardryx keys above and below. One key is enough:
@@ -315,7 +308,7 @@ spec:
           # one thing worth checking before swapping a distroless-looking image
           # in underneath it: measured 2026-09-01 on v0.4.1 and 2026-09-02 on
           # v0.4.3, the published image has one (/usr/bin/dash).
-          image: ghcr.io/taipanbox/tokenfuse:v0.4.3
+          image: ghcr.io/taipanbox/tokenfuse:v0.4.4
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:

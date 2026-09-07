@@ -228,6 +228,40 @@ else
   fi
 fi
 
+head_ "the gateway's admin key is enforced"
+# This one MUST fail to pass, exactly like the "not reachable from the host"
+# shape used elsewhere in this suite: a gateway that answers /v1/runs to
+# nobody in particular has reopened the routes TOKENFUSE_ALLOW_OPEN_OBS used
+# to hold open on purpose. The key itself is read from the console's own
+# environment, TOKENFUSE_GATEWAY_ADMIN_KEY, which is the same gateway_admin
+# value from the stack-keys Secret the gateway enforces (10-planes.yaml,
+# 20-console.yaml), not a value this script mints or copies on its own.
+if [ "$CONSOLE_READY" = 0 ]; then
+  note "no console pod: cannot probe the gateway's admin routes from inside the namespace"
+else
+  admin="$(inpod "
+import os, urllib.request, urllib.error
+def code(url, key=None):
+    h = {'Authorization': 'Bearer ' + key} if key else {}
+    try:
+        return urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=10).status
+    except urllib.error.HTTPError as e:
+        return e.code
+GATEWAY = 'http://tokenfuse-gateway:4100/v1/runs'
+print('nokey', code(GATEWAY))
+print('withkey', code(GATEWAY, os.environ.get('TOKENFUSE_GATEWAY_ADMIN_KEY', '')))
+")"
+  echo "$admin" | sed 's/^/  /'
+  nokey_code="$(echo "$admin" | awk '$1 == "nokey" { print $2 }')"
+  withkey_code="$(echo "$admin" | awk '$1 == "withkey" { print $2 }')"
+  case "$nokey_code" in
+    401|403) ok "gateway refuses /v1/runs without the admin key ($nokey_code)" ;;
+    *)       bad "gateway did not refuse /v1/runs without a key: got '$nokey_code', expected 401 or 403" ;;
+  esac
+  [ "$withkey_code" = 200 ] && ok "gateway serves /v1/runs with the admin key" \
+    || bad "gateway did not serve /v1/runs with the admin key: got '$withkey_code', expected 200"
+fi
+
 head_ "the console is reading a real environment, not fixtures"
 # GOTCHAS 16: with no descriptor the bus serves DEMO fixtures and the Graph
 # draws agents that do not exist. `kind` is the only thing that says so.
