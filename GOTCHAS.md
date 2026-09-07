@@ -3455,6 +3455,18 @@ come back 200. **Not yet run on a cluster**, per the money rule at the
 bottom of `CLAUDE.md`: this is manifests and a verify script read, not
 brought up.
 
+**2026-09-07, the standing attack suite now covers it.** `verify.sh` asks
+whether the gateway is enforcing; `security-tests.sh` test 10, the GOTCHAS
+20 regression, now asks whether the gateway REFUSES an attacker who never
+had the key. The forged-label pod's probe list gained `GET /v1/runs` and
+`GET /v1/keys` against `tokenfuse-gateway:4100`, each tried with the
+GOTCHAS 20 `Bearer devkey` and with no `Authorization` header at all, and a
+200 from any of them fails the run naming the gateway and this entry.
+`POST /v1/runs/{id}/kill` stays unprobed here on purpose: this suite runs
+against a live cluster and a kill is a state change, unlike the reads.
+**Live-cluster only**, same as the rest of `security-tests.sh`: nothing
+above was run against a real deployment, per the money rule.
+
 ## 98. Enrolling a passkey needs the tunnel's own domain, never a port-forward or SSH
 
 **Platform.** WebAuthn does this to everyone. Recorded 2026-09-06, from the
