@@ -56,6 +56,15 @@ spec:
               valueFrom: { secretKeyRef: { name: stack-keys, key: cloud_admin } }
             - name: WARDRYX_ADMIN_KEY
               valueFrom: { secretKeyRef: { name: stack-keys, key: wardryx_admin } }
+            # The third plane's admin bearer, plumbed the same way as the
+            # two above (GOTCHAS 97). Unread by both pinned images today:
+            # genaryx's GatewayClient sends no credential until it grows one
+            # (a separate, genaryx-side change), and this console image
+            # (v0.1.1) predates that client. It becomes live once the
+            # console image is bumped past v0.1.1 and the gateway image
+            # past v0.4.3, both phase 2 of the same plan.
+            - name: TOKENFUSE_GATEWAY_ADMIN_KEY
+              valueFrom: { secretKeyRef: { name: stack-keys, key: gateway_admin } }
             # Where the console looks for environment descriptors. Pointed off
             # the state volume on purpose: which planes exist is CLUSTER
             # configuration, not console state, so it is mounted read-only
