@@ -372,6 +372,15 @@ run_case "no-operator-files-tracked: a stale allow-list entry" fail \
 	"$(py 'edit("scripts/no-operator-files-tracked.sh", "ALLOWED = {\n", "ALLOWED = {\n    \"cloud/gcp/nonexistent.tfvars.bak\": \"planted by gates-have-teeth.sh: this path is not tracked\",\n")')" \
 	"is allow-listed in this script but"
 
+# The allow list rots the other way too: a path that IS tracked but whose
+# basename never matched a shape in the first place has been suppressing
+# nothing since the day it was written, and nobody would notice that
+# either. CLAUDE.md is always tracked and matches none of the SHAPES above.
+run_case "no-operator-files-tracked: an allow-list entry that matches no shape" fail \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'edit("scripts/no-operator-files-tracked.sh", "ALLOWED = {\n", "ALLOWED = {\n    \"CLAUDE.md\": \"planted by gates-have-teeth.sh: this path matches no shape at all\",\n")')" \
+	"matches no operator-file shape"
+
 echo
 echo "=== and what they must NOT catch ==="
 

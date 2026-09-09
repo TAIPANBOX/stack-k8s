@@ -65,9 +65,10 @@
 # whose basename matches no shape below is also a failure, for the same
 # reason, with its own case in gates-have-teeth.sh.
 #
-# EXIT CODES: 0 clean, 1 a tracked operator file or a stale allow-list
-# entry was found, 2 this measured nothing (git ls-files came back empty,
-# or git itself could not be asked).
+# EXIT CODES: 0 clean, 1 a tracked operator file, a stale allow-list entry,
+# or a dead allow-list entry (one that matches no shape) was found, 2 this
+# measured nothing (git ls-files came back empty, or git itself could not
+# be asked).
 #
 # DEPENDENCIES: bash, git, python3. Nothing else.
 set -euo pipefail
@@ -165,7 +166,11 @@ for path in sorted(seen_allowed):
     print(f"note: {path} matches an operator-file shape and is allow-listed: {ALLOWED[path]}")
 
 for path, shape in sorted(offenders):
-    print(f"FAIL: {path} is tracked and matches the operator-file shape {shape!r}")
+    # repr(), not the raw path: a tracked path can legally hold a newline
+    # (git allows any byte but NUL and "/" in a filename), and printing one
+    # raw would split this FAIL line into two, one of which no longer starts
+    # with "FAIL:" and reads as a clean line to anything scanning output.
+    print(f"FAIL: {path!r} is tracked and matches the operator-file shape {shape!r}")
     problems += 1
 
 # An allow-listed path git no longer tracks is a hole with a comment
@@ -178,6 +183,21 @@ for path in sorted(set(ALLOWED) - tracked_set):
     print(f"FAIL: {path!r} is allow-listed in this script but `git ls-files` no")
     print("      longer tracks it. Remove it from ALLOWED: an allow-list entry")
     print("      for a file that is not there is a hole nobody would notice.")
+    problems += 1
+
+# The other way an entry rots: still tracked, but its basename never matched
+# a shape in the first place, so it has been suppressing nothing since the
+# day it was written and nobody would notice that either. Skips anything
+# already reported stale above, since a path that is not tracked at all has
+# no shape to check.
+for path in sorted(ALLOWED):
+    if path not in tracked_set:
+        continue
+    if shape_of(path) is not None:
+        continue
+    print(f"FAIL: {path!r} is allow-listed in this script but matches no operator-file shape")
+    print("      below, so the entry suppresses nothing. Remove it: a line that does")
+    print("      nothing hides the day it starts doing something.")
     problems += 1
 
 if problems:
