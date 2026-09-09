@@ -53,6 +53,14 @@ jobs:
       - name: no pod automounts the default ServiceAccount token
         run: ./scripts/no-sa-token-by-default.sh
 
+      # Added 2026-09-09, in both callers on the same commit. `git ls-files`
+      # is checked for shape, not content: nothing above this step would have
+      # caught cloud/gcp/terraform.tfvars.bak being tracked for 76 commits
+      # (GOTCHAS.md entry 99). See scripts/no-operator-files-tracked.sh's own
+      # header for what this can and cannot see.
+      - name: no tracked file is shaped like an operator-only secret
+        run: ./scripts/no-operator-files-tracked.sh
+
       # Pinned rather than left to whatever the runner ships. `go install` of a
       # module built against a newer toolchain fails on an older one, and the
       # error names a Go version rather than this step, which is a confusing

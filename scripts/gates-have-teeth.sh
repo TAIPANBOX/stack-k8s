@@ -58,6 +58,14 @@
 # had been verified BY HAND against the same gate minutes earlier. The hand
 # version and the harness version differ only in how many layers of quoting sit
 # between the text and python, which is exactly the difference nobody sees.
+#
+# A CASE CAN PASS IN CI AND MISBEHAVE LOCALLY
+#
+# On bash 3.2, which is the bash on this machine, an unquoted brace pair
+# inside "$(...)" splits the argument into two words, and CI's bash 5 does
+# not: commit 939f686 (a two-brace-pair case, since fixed in 73a2e63) ran
+# green in CI while reporting WRONG REASON here, so a case that only ever
+# runs in CI is not proven at all.
 
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
@@ -313,6 +321,86 @@ run_case "no-sa-token-by-default: a pod template loses the field" fail \
 	"$(py 'edit("manifests/10-planes.yaml", "      automountServiceAccountToken: false\n", "")')" \
 	"does not set"
 
+# The class of mistake this gate exists for: an operator-only file joining
+# the tracked set with nothing else in this repo positioned to notice, since
+# every other gate here reads content or manifests rather than names. See
+# GOTCHAS.md entry 99, where cloud/gcp/terraform.tfvars.bak did exactly this
+# for 76 commits.
+#
+# Three cases, not one, because root and nested are different blind spots
+# and closing one silently opened the other. The first round planted only
+# at the repository root (planted-secret.pem). A second review found that
+# left two mutants alive against a NESTED path, one that skips any path
+# containing a slash and one that matches the whole path instead of the
+# basename, and neither would have caught the file this gate actually
+# exists for, so the root-level case was replanted nested. That traded one
+# gap for its mirror: a third review found `if "/" not in path: return
+# None` inside `shape_of` survives every nested case untouched, because it
+# only exempts a path with no directory component, and the harness reported
+# a clean run even though the gate had silently stopped seeing anything at
+# the repository root, the placement GOTCHAS 99 and that review both call
+# the most common real one for a stray `.env` or `id_rsa`. So all three
+# stay: root, and the nested glob and nested exact shapes below.
+run_case "no-operator-files-tracked: an operator file gets tracked at the repository root" fail \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'import subprocess
+p = "gates-have-teeth-plant.env"
+open(p, "w").write("planted by gates-have-teeth.sh: a fake operator file\n")
+subprocess.run(["git", "add", p], check=True)')" \
+	"matches the operator-file shape"
+
+# Nested, not at the repository root: this is the shape GOTCHAS 99 actually
+# was. Under a synthetic gates-have-teeth-plant/ directory rather than
+# literally at cloud/gcp/terraform.tfvars.bak: a real GCP or AWS run leaves
+# real, gitignored terraform state at that exact path (confirmed present on
+# the machine this case was written on), and `git reset --hard` only ever
+# reverts a TRACKED path back to HEAD, so staging over a real untracked
+# file here would leave it silently replaced by this case's fake content
+# forever, not restored by restore() below. `git add -f` because
+# .gitignore now excludes this shape on purpose.
+run_case "no-operator-files-tracked: an operator file gets tracked" fail \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'import subprocess
+p = "cloud/gcp/gates-have-teeth-plant/terraform.tfvars.bak"
+subprocess.run(["mkdir", "-p", "cloud/gcp/gates-have-teeth-plant"], check=True)
+open(p, "w").write("planted by gates-have-teeth.sh: a fake operator file\n")
+subprocess.run(["git", "add", "-f", p], check=True)')" \
+	"matches the operator-file shape"
+
+# A second, nested EXACT name, not a glob suffix: this is what actually
+# distinguishes the two nested-path mutants named above. fnmatch's "*"
+# spans "/" (verified: fnmatch.fnmatch("cloud/gcp/x.tfvars.bak",
+# "*.tfvars.*") is True), so a whole-path-instead-of-basename mutant still
+# happens to catch the glob case above by accident. It cannot accidentally
+# catch an EXACT shape like "terraform.tfstate": the whole path is never
+# equal to the bare name.
+run_case "no-operator-files-tracked: a nested exact shape gets tracked" fail \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'import subprocess
+p = "cloud/gcp/gates-have-teeth-plant/terraform.tfstate"
+subprocess.run(["mkdir", "-p", "cloud/gcp/gates-have-teeth-plant"], check=True)
+open(p, "w").write("planted by gates-have-teeth.sh: a fake operator file\n")
+subprocess.run(["git", "add", "-f", p], check=True)')" \
+	"matches the operator-file shape"
+
+# The allow list itself must not be able to rot: an entry naming a path git
+# no longer tracks is a hole with a reason attached to it, and nothing would
+# notice it sitting there unused. Mutates the gate's own ALLOWED dict, the
+# same way other cases here mutate the file a gate reads.
+run_case "no-operator-files-tracked: a stale allow-list entry" fail \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'edit("scripts/no-operator-files-tracked.sh", "ALLOWED = {\n", "ALLOWED = {\n    \"cloud/gcp/nonexistent.tfvars.bak\": \"planted by gates-have-teeth.sh: this path is not tracked\",\n")')" \
+	"is allow-listed in this script but"
+
+# The allow list rots the other way too: a path that IS tracked but whose
+# basename never matched a shape in the first place has been suppressing
+# nothing since the day it was written, and nobody would notice that
+# either. CLAUDE.md is always tracked and matches none of the SHAPES above.
+run_case "no-operator-files-tracked: an allow-list entry that matches no shape" fail \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'edit("scripts/no-operator-files-tracked.sh", "ALLOWED = {\n", "ALLOWED = {\n    \"CLAUDE.md\": \"planted by gates-have-teeth.sh: this path matches no shape at all\",\n")')" \
+	"matches no operator-file shape"
+
 echo
 echo "=== and what they must NOT catch ==="
 
@@ -347,6 +435,14 @@ open("install.sh", "w").write(s + "\n# For reference, an unpinned install used t
 run_case "no-sa-token-by-default: a non-pod object carries no such field" pass \
 	'./scripts/no-sa-token-by-default.sh' \
 	"$(py 'edit("manifests/50-loadbalancer.yaml", "spec:\n  type: LoadBalancer", "spec:\n  # not a pod template: kind: Deployment / template: / restartPolicy: OnFailure\n  type: LoadBalancer")')"
+
+# The same shape, sitting on disk and never staged, must stay silent: this
+# gate exists to keep an operator file OUT of git, not to complain that one
+# exists on a machine. `git add` is deliberately never called here.
+run_case "no-operator-files-tracked: the same shape, left untracked, is not a fault" pass \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'p = "local-only.key"
+open(p, "w").write("never staged, just sitting on disk\n")')"
 
 echo
 echo "=== and the one this estate learned the hard way ==="
@@ -435,6 +531,18 @@ run_case "deploy-flags-agree: no deploy path left to judge" fail \
 	"$(py 'import os
 for f in ("deploy.sh", "cloud/aws/deploy-aws.sh", "cloud/gcp/deploy-gcp.sh"):
     os.remove(f)')" \
+	"measured NOTHING"
+
+# The subject taken away entirely: with nothing left in the index, this gate
+# has no tracked file list to check an operator-file shape against, and
+# agreeing that a repository with nothing in it also has no operator files
+# in it would be the same silent hole invariant 9 is about. `git rm --cached`
+# leaves the working tree untouched, so restore() (reset --hard) puts every
+# path straight back in the index.
+run_case "no-operator-files-tracked: nothing left in the index to check" fail \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'import subprocess
+subprocess.run(["git", "rm", "-r", "--cached", "-q", "."], check=True)')" \
 	"measured NOTHING"
 
 echo

@@ -3532,3 +3532,40 @@ rewrite history: the content still sits in `557df89` and in every clone made
 since. Purging it would need a force-push over a public repository, which is a
 separate decision and a larger one than the value of what leaked.
 
+## 100. None of this repository's gates ask whether a tracked file should exist at all
+
+**Ours, and fixed.** Not a platform trap: every gate here was ours to write,
+and this repository has now met the same gap twice.
+
+Found rereading entry 99 next to the rest of `scripts/` while writing this
+repository's architecture dossier. Every gate before this one answers "is what
+is here correct": `gotchas-classified.sh` reads GOTCHAS.md, `manifest-is-
+true.sh` and `pinned-images.sh` read manifests/ and security-tests.sh,
+`closed-by-default.sh` reads kustomization.yaml. Each opens files it already
+expects to find, by name, and has nothing to say about a file it was never
+told to expect. "Should this be here at all" is a different question, and no
+amount of care spent reading content answers it.
+
+`cloud/gcp/terraform.tfvars.bak` (entry 99) is the incident that shipped:
+tracked and published for 76 commits because `cloud/**/*.tfvars` matched the
+file `preflight.sh` writes and not the `.bak` copy beside it. Commit
+`6cfe51b`, 2026-07-26, is the one that did not: an issued WireGuard device
+`.conf`, carrying that device's private key, caught sitting untracked in `git
+status` output, "one `git add -A` away from handing a way in to everyone who
+can read the repository" in that commit's own words. Both are the same root
+cause wearing a different extension: an operator-only file's safety depended
+entirely on somebody remembering to add the right `.gitignore` line before
+running `git add`, and a gitignore line stops a file from being staged, it
+does not notice one that already was.
+
+The fix, `scripts/no-operator-files-tracked.sh`, wired into both callers on
+this commit, reads `git ls-files` and fails on any tracked path shaped like a
+terraform var file, a state file, a private key, an issued kubeconfig, or a
+backup left beside one of those, by name rather than by content. It is the
+other half of what already exists here, not a replacement: teaching a content
+gate every shape a secret can take on the inside is a much harder and much
+less reliable question than what an operator-only file is usually named. Its
+allow list carries zero entries today, checked against `git ls-files` before
+it was written, and an entry for a path that stops being tracked fails the
+gate itself, so the list cannot go stale the way `*.tfvars` did.
+
