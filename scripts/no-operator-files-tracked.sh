@@ -32,16 +32,28 @@
 #     say about it. The content it once held is still in every clone made
 #     before the fix; purging that is a separate, larger decision (entry 99
 #     again).
-#   - Case. The shapes below are matched exactly as written; `SECRET.PEM`
-#     beside a rule for `*.pem` is a gap this script does not close.
+#   - The index, not the push. Both callers read one tree: `git ls-files`
+#     reads the current index, and CI checks out a single commit. An
+#     operator file added and removed again inside the commits a push
+#     carries never appears in that tree and passes here clean, even though
+#     its content sits in the pushed history forever.
+#   - Directory context. Matching is on the basename alone, so a name too
+#     common to denylist by itself, like `config`, stays invisible however
+#     sensitive its directory makes it: `.kube/config` and
+#     `.docker/config.json` both hold real credentials and this script will
+#     never see either.
+#   - Only the shapes below. This is a denylist, not an allowlist: an
+#     operator-only file under a name nobody has added to SHAPES yet passes
+#     clean.
 #
 # THE ALLOW LIST
 #
 # A tracked path can legitimately match a shape below on purpose: a template
 # example carries no live value by construction. Checked by hand against
 # `git ls-files` on 2026-09-09, against every shape below, before this list
-# was written: nothing currently tracked matches any of them. This repo's
-# two tracked *.example.* templates, manifests/secrets.example.yaml and
+# was written and again after the list was widened the same day: nothing
+# currently tracked matches any of them. This repo's two tracked
+# *.example.* templates, manifests/secrets.example.yaml and
 # tunnel/site.example.yaml, are both `.yaml` and match none of the shapes
 # here either, so neither needs an entry today.
 #
@@ -49,6 +61,9 @@
 # can check against the file itself. An allow-listed path that `git
 # ls-files` no longer tracks is itself a failure below, so this list cannot
 # go stale silently: see gates-have-teeth.sh for the case that proves it.
+# Nor can it carry an entry that suppresses nothing: an allow-listed path
+# whose basename matches no shape below is also a failure, for the same
+# reason, with its own case in gates-have-teeth.sh.
 #
 # EXIT CODES: 0 clean, 1 a tracked operator file or a stale allow-list
 # entry was found, 2 this measured nothing (git ls-files came back empty,
@@ -64,18 +79,36 @@ import fnmatch
 import subprocess
 import sys
 
-# Every shape an operator-only file can take. Matched against the basename
-# only, so a pattern with no "/" behaves like a slash-free .gitignore line:
-# it matches at any depth, not only at the top of the tree.
+# Every shape an operator-only file can take. Matched against the
+# lower-cased basename only, so a pattern with no "/" behaves like a
+# slash-free .gitignore line: it matches at any depth, not only at the top
+# of the tree, and it matches regardless of how the name is cased.
 SHAPES = [
+    # terraform: variables, state, and a plan nobody remembered to exclude.
+    # tfplan is also named in .gitignore; this is the tracked-file half of
+    # the same rule.
     "*.tfvars", "*.tfvars.*",
     "terraform.tfstate", "terraform.tfstate.*",
-    "*.bak", "*.orig", "*.save", "*.swp", "*~",
-    ".env", ".env.*",
-    "*.pem", "*.key",
-    "id_rsa*", "id_ed25519*",
-    "kubeconfig.yaml", "kubeconfig-*.yaml",
+    "tfplan",
+    # editor, terraform and script backups, which carry whatever the file
+    # beside them held. GOTCHAS 99 is one of these.
+    "*.bak", "*.orig", "*.save", "*.swp", "*~", "*.backup", "*.old",
+    # environment files, however the tool that reads them names the file
+    ".env", ".env.*", "*.env", ".envrc",
+    # keys and certificates
+    "*.pem", "*.key", "*.p12", "*.pfx",
+    "id_rsa*", "id_ed25519*", "id_ecdsa*",
+    # a kubeconfig: this repo's own default name, an operator's
+    # KUBECONFIG_OUT override, or k3s's own name for the file install.sh
+    # copies it from (/etc/rancher/k3s/k3s.yaml)
+    "kubeconfig.yaml", "kubeconfig-*.yaml", "kubeconfig", "kubeconfig.yml",
+    "k3s.yaml",
+    # issued device configs (up.sh) and anything else ending .conf
     "*.conf",
+    # credential stores
+    "credentials", "*credentials*.json", ".git-credentials", ".netrc",
+    # shell and client history, which can hold a pasted secret verbatim
+    ".*_history",
 ]
 
 # Paths tracked on purpose despite matching a shape above, each with the
@@ -104,13 +137,21 @@ if not tracked:
     print("      or before the first commit, that is where to look.")
     sys.exit(2)
 
+def shape_of(path):
+    """The shape `path` matches, or None. Matched on the basename, folded to
+    lower case: SECRET.PEM, ID_RSA and Kubeconfig.yaml each match their
+    shape exactly as a lower-cased *.pem, id_rsa* and kubeconfig.yaml
+    would."""
+    base = path.rsplit("/", 1)[-1].lower()
+    return next((s for s in SHAPES if fnmatch.fnmatch(base, s)), None)
+
+
 tracked_set = set(tracked)
 offenders = []
 seen_allowed = set()
 
 for path in tracked:
-    base = path.rsplit("/", 1)[-1]
-    shape = next((s for s in SHAPES if fnmatch.fnmatch(base, s)), None)
+    shape = shape_of(path)
     if shape is None:
         continue
     if path in ALLOWED:
