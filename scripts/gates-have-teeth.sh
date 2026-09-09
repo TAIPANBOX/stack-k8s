@@ -58,6 +58,14 @@
 # had been verified BY HAND against the same gate minutes earlier. The hand
 # version and the harness version differ only in how many layers of quoting sit
 # between the text and python, which is exactly the difference nobody sees.
+#
+# A CASE CAN PASS IN CI AND MISBEHAVE LOCALLY
+#
+# On bash 3.2, which is the bash on this machine, an unquoted brace pair
+# inside "$(...)" splits the argument into two words, and CI's bash 5 does
+# not: commit 939f686 (a two-brace-pair case, since fixed in 73a2e63) ran
+# green in CI while reporting WRONG REASON here, so a case that only ever
+# runs in CI is not proven at all.
 
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
@@ -318,12 +326,41 @@ run_case "no-sa-token-by-default: a pod template loses the field" fail \
 # every other gate here reads content or manifests rather than names. See
 # GOTCHAS.md entry 99, where cloud/gcp/terraform.tfvars.bak did exactly this
 # for 76 commits.
+#
+# Planted nested, not at the repository root: a root-level planted-secret.pem
+# left two mutants alive, one that skips any path containing a slash and one
+# that matches the whole path instead of the basename, and neither would
+# have caught the file this gate exists for. Under a synthetic
+# gates-have-teeth-plant/ directory rather than literally at
+# cloud/gcp/terraform.tfvars.bak: a real GCP or AWS run leaves real,
+# gitignored terraform state at that exact path (confirmed present on the
+# machine this case was written on), and `git reset --hard` only ever
+# reverts a TRACKED path back to HEAD, so staging over a real untracked
+# file here would leave it silently replaced by this case's fake content
+# forever, not restored by restore() below. `git add -f` because
+# .gitignore now excludes this shape on purpose.
 run_case "no-operator-files-tracked: an operator file gets tracked" fail \
 	'./scripts/no-operator-files-tracked.sh' \
 	"$(py 'import subprocess
-p = "planted-secret.pem"
+p = "cloud/gcp/gates-have-teeth-plant/terraform.tfvars.bak"
+subprocess.run(["mkdir", "-p", "cloud/gcp/gates-have-teeth-plant"], check=True)
 open(p, "w").write("planted by gates-have-teeth.sh: a fake operator file\n")
-subprocess.run(["git", "add", p], check=True)')" \
+subprocess.run(["git", "add", "-f", p], check=True)')" \
+	"matches the operator-file shape"
+
+# A second, nested EXACT name, not a glob suffix: this is what actually
+# distinguishes the two mutants above. fnmatch's "*" spans "/" (verified:
+# fnmatch.fnmatch("cloud/gcp/x.tfvars.bak", "*.tfvars.*") is True), so a
+# whole-path-instead-of-basename mutant still happens to catch the glob
+# case above by accident. It cannot accidentally catch an EXACT shape like
+# "terraform.tfstate": the whole path is never equal to the bare name.
+run_case "no-operator-files-tracked: a nested exact shape gets tracked" fail \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'import subprocess
+p = "cloud/gcp/gates-have-teeth-plant/terraform.tfstate"
+subprocess.run(["mkdir", "-p", "cloud/gcp/gates-have-teeth-plant"], check=True)
+open(p, "w").write("planted by gates-have-teeth.sh: a fake operator file\n")
+subprocess.run(["git", "add", "-f", p], check=True)')" \
 	"matches the operator-file shape"
 
 # The allow list itself must not be able to rot: an entry naming a path git
