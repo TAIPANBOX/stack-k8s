@@ -3495,3 +3495,40 @@ The internal-CA path adds a second precondition on top of the first. With no
 CA, and WebAuthn's secure-context check refuses an untrusted certificate the
 same way it refuses plain HTTP. A device has to be told to trust that CA
 before enrolment works, resolving the domain is not enough on its own.
+## 99. A gitignore pattern that names an exact suffix does not cover the backup beside it
+
+**Ours, and fixed.** Not a platform trap: the pattern was ours, the backup was
+ours, and the repository is public.
+
+Found 2026-09-09, while reading this repository to write its architecture
+dossier. `cloud/gcp/terraform.tfvars.bak` was tracked, committed in `557df89`
+and present on `origin/main`, and its own first line says "Not committed:
+.gitignore excludes *.tfvars". That sentence was true of the file it describes
+and false of itself: the pattern was `cloud/**/*.tfvars`, which matches a name
+ENDING in `.tfvars`, and this one ends in `.bak`. `preflight.sh` writes the
+backup next to the real tfvars, and one `git add -A` was enough.
+
+What it exposed: a GCP project id, an operator's own address as
+`operator_cidr` in `/32` form, and a home directory path carrying the machine's
+user name. No credential, no key, no state. Low value to a stranger and still
+not ours to publish.
+
+The rule, which generalises past terraform: **an ignore pattern for a file a
+tool writes must cover what the tool writes NEXT TO it.** Editors, terraform
+and shell scripts all leave `.bak`, `.orig`, `.save` and `~` copies, and every
+one of them carries the same content as the file the pattern was written to
+protect. A trailing glob costs nothing: `cloud/**/*.tfvars*`.
+
+Checked at the same time, so the next person does not repeat the search: over
+the whole history, across every branch, this is the ONLY file of that shape
+this repository has ever tracked (`git log --all --diff-filter=A -- '*.bak'
+'*.orig' '*.backup' '*.save' '*~' '*.tfvars'` returns this one path and
+nothing else). `manifests/secrets.example.yaml` and
+`manifests/40-routines-and-secrets.yaml` are templates and reference-only; they
+hold no literal value.
+
+The fix untracks the file and leaves it on the operator's disk, and it does not
+rewrite history: the content still sits in `557df89` and in every clone made
+since. Purging it would need a force-push over a public repository, which is a
+separate decision and a larger one than the value of what leaked.
+
