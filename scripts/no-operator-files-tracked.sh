@@ -51,7 +51,8 @@
 # A tracked path can legitimately match a shape below on purpose: a template
 # example carries no live value by construction. Checked by hand against
 # `git ls-files` on 2026-09-09, against every shape below, before this list
-# was written and again after the list was widened the same day: nothing
+# was written, again after it was widened the same day, and a third time
+# after a later review widened it further the same day again: nothing
 # currently tracked matches any of them. This repo's two tracked
 # *.example.* templates, manifests/secrets.example.yaml and
 # tunnel/site.example.yaml, are both `.yaml` and match none of the shapes
@@ -87,27 +88,36 @@ import sys
 SHAPES = [
     # terraform: variables, state, and a plan nobody remembered to exclude.
     # tfplan is also named in .gitignore; this is the tracked-file half of
-    # the same rule.
+    # the same rule. *.tfstate catches a state file under any name (e.g.
+    # prod.tfstate), not only terraform's own default terraform.tfstate.
     "*.tfvars", "*.tfvars.*",
-    "terraform.tfstate", "terraform.tfstate.*",
+    "terraform.tfstate", "terraform.tfstate.*", "*.tfstate",
     "tfplan",
     # editor, terraform and script backups, which carry whatever the file
     # beside them held. GOTCHAS 99 is one of these.
     "*.bak", "*.orig", "*.save", "*.swp", "*~", "*.backup", "*.old",
     # environment files, however the tool that reads them names the file
     ".env", ".env.*", "*.env", ".envrc",
-    # keys and certificates
-    "*.pem", "*.key", "*.p12", "*.pfx",
-    "id_rsa*", "id_ed25519*", "id_ecdsa*",
+    # keys, certificates and a client VPN config, which conventionally
+    # embeds a private key or a pre-shared key inline
+    "*.pem", "*.key", "*.p12", "*.pfx", "*.jks", "*.ovpn",
+    "id_rsa*", "id_ed25519*", "id_ecdsa*", "id_dsa*",
     # a kubeconfig: this repo's own default name, an operator's
-    # KUBECONFIG_OUT override, or k3s's own name for the file install.sh
-    # copies it from (/etc/rancher/k3s/k3s.yaml)
+    # KUBECONFIG_OUT override, k3s's own name for the file install.sh
+    # copies it from (/etc/rancher/k3s/k3s.yaml), or the same credential
+    # serialized as JSON instead of YAML
     "kubeconfig.yaml", "kubeconfig-*.yaml", "kubeconfig", "kubeconfig.yml",
+    "kubeconfig.json",
     "k3s.yaml",
     # issued device configs (up.sh) and anything else ending .conf
     "*.conf",
-    # credential stores
+    # credential stores: a generic name, a JSON name with "credentials" in
+    # it anywhere, git's own store, a client's machine-login file, an
+    # Apache/nginx basic-auth password file, a PyPI upload credentials
+    # file, and a downloaded cloud IAM service-account key, whatever comes
+    # after "service-account" in its name
     "credentials", "*credentials*.json", ".git-credentials", ".netrc",
+    ".htpasswd", ".pypirc", "service-account*.json",
     # shell and client history, which can hold a pasted secret verbatim
     ".*_history",
 ]
