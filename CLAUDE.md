@@ -100,7 +100,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/node-name-is-pinned.sh  # invariant 11
 ./scripts/deploy-flags-agree.sh   # invariant 14
 ./scripts/no-sa-token-by-default.sh # invariant 15
-./scripts/no-operator-files-tracked.sh # GOTCHAS 99 and 100
+./scripts/no-operator-files-tracked.sh # invariant 16; GOTCHAS 99 and 100
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -368,6 +368,38 @@ an absent invariant.
     hand-kept list, and fails on a missing field or an explicit `true`. Two
     cases in `scripts/gates-have-teeth.sh`: the field removed from a pod spec,
     and a non-pod object, which the gate correctly leaves alone.)*
+
+16. **A tracked file shaped like an operator-only secret is a failure,
+    independent of content.** Every gate above answers "is what is here
+    correct": it opens a file it already expects, by name, and has nothing to
+    say about one it was never told to expect. `cloud/gcp/terraform.tfvars.bak`
+    was tracked and published for 76 commits (GOTCHAS 99) because of exactly
+    that gap, and GOTCHAS 100 records the second time it showed up, caught
+    that time by a person reading `git status` rather than by anything
+    automatic.
+
+    Matched by name, not content, folded to lower case so a differently-cased
+    extension cannot slip past: terraform variables and state, an issued
+    kubeconfig under this repo's own name or an operator's `KUBECONFIG_OUT`
+    override, private keys, credential stores, shell history, and a backup an
+    editor or a script leaves beside any of those. Not a replacement for the
+    gates above; the other half of what none of them do.
+
+    **What it does not cover**, named in the script's own header because it
+    stays true regardless of what shapes get added: it reads the index, not
+    the commits a push actually carries; a name too generic to denylist by
+    itself, like `config`, stays invisible however sensitive its directory
+    makes it; and it is a denylist, so a shape nobody has named yet still
+    passes clean.
+    *(gate: `scripts/no-operator-files-tracked.sh`, called from both
+    `.githooks/pre-push` and `.github/workflows/gates.yml`. Cases in
+    `scripts/gates-have-teeth.sh`: a tracked file at the nested shape of the
+    entry 99 incident, a nested EXACT state-file name (fnmatch's `*` spans
+    `/`, so a glob shape can still match a whole path by accident; only an
+    exact shape proves it is the basename that matched, not the whole path),
+    the same shape left untracked staying silent, a stale allow-list entry,
+    an allow-list entry that matches no shape at all, and the index taken
+    away entirely.)*
 
 ## Decisions that have no gate yet
 
