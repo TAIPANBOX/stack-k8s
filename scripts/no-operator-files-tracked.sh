@@ -163,7 +163,9 @@ for path in tracked:
 problems = 0
 
 for path in sorted(seen_allowed):
-    print(f"note: {path} matches an operator-file shape and is allow-listed: {ALLOWED[path]}")
+    # repr(), matching the FAIL line below: an allow-listed path is still a
+    # tracked path, and a tracked path can legally hold a newline.
+    print(f"note: {path!r} matches an operator-file shape and is allow-listed: {ALLOWED[path]}")
 
 for path, shape in sorted(offenders):
     # repr(), not the raw path: a tracked path can legally hold a newline
