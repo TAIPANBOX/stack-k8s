@@ -45,7 +45,7 @@ step "components.json says what is installed" "./scripts/manifest-is-true.sh"
 step "node names are pinned by the install" "./scripts/node-name-is-pinned.sh"
 step "every deploy path can set the trust domain" "./scripts/deploy-flags-agree.sh"
 step "no pod automounts the default SA token" "./scripts/no-sa-token-by-default.sh"
-step "no tracked file is shaped like an operator secret" "./scripts/no-operator-files-tracked.sh"
+step "nothing operator-shaped is tracked" "./scripts/no-operator-files-tracked.sh"
 
 echo
 if [ "$fail" -ne 0 ]; then
