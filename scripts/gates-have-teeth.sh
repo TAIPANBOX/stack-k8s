@@ -327,14 +327,33 @@ run_case "no-sa-token-by-default: a pod template loses the field" fail \
 # GOTCHAS.md entry 99, where cloud/gcp/terraform.tfvars.bak did exactly this
 # for 76 commits.
 #
-# Planted nested, not at the repository root: a root-level planted-secret.pem
-# left two mutants alive, one that skips any path containing a slash and one
-# that matches the whole path instead of the basename, and neither would
-# have caught the file this gate exists for. Under a synthetic
-# gates-have-teeth-plant/ directory rather than literally at
-# cloud/gcp/terraform.tfvars.bak: a real GCP or AWS run leaves real,
-# gitignored terraform state at that exact path (confirmed present on the
-# machine this case was written on), and `git reset --hard` only ever
+# Three cases, not one, because root and nested are different blind spots
+# and closing one silently opened the other. The first round planted only
+# at the repository root (planted-secret.pem). A second review found that
+# left two mutants alive against a NESTED path, one that skips any path
+# containing a slash and one that matches the whole path instead of the
+# basename, and neither would have caught the file this gate actually
+# exists for, so the root-level case was replanted nested. That traded one
+# gap for its mirror: a third review found `if "/" not in path: return
+# None` inside `shape_of` survives every nested case untouched, because it
+# only exempts a path with no directory component, and the harness reported
+# a clean run even though the gate had silently stopped seeing anything at
+# the repository root, the placement GOTCHAS 99 and that review both call
+# the most common real one for a stray `.env` or `id_rsa`. So all three
+# stay: root, and the nested glob and nested exact shapes below.
+run_case "no-operator-files-tracked: an operator file gets tracked at the repository root" fail \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'import subprocess
+p = "gates-have-teeth-plant.env"
+open(p, "w").write("planted by gates-have-teeth.sh: a fake operator file\n")
+subprocess.run(["git", "add", p], check=True)')" \
+	"matches the operator-file shape"
+
+# Nested, not at the repository root: this is the shape GOTCHAS 99 actually
+# was. Under a synthetic gates-have-teeth-plant/ directory rather than
+# literally at cloud/gcp/terraform.tfvars.bak: a real GCP or AWS run leaves
+# real, gitignored terraform state at that exact path (confirmed present on
+# the machine this case was written on), and `git reset --hard` only ever
 # reverts a TRACKED path back to HEAD, so staging over a real untracked
 # file here would leave it silently replaced by this case's fake content
 # forever, not restored by restore() below. `git add -f` because
@@ -349,11 +368,12 @@ subprocess.run(["git", "add", "-f", p], check=True)')" \
 	"matches the operator-file shape"
 
 # A second, nested EXACT name, not a glob suffix: this is what actually
-# distinguishes the two mutants above. fnmatch's "*" spans "/" (verified:
-# fnmatch.fnmatch("cloud/gcp/x.tfvars.bak", "*.tfvars.*") is True), so a
-# whole-path-instead-of-basename mutant still happens to catch the glob
-# case above by accident. It cannot accidentally catch an EXACT shape like
-# "terraform.tfstate": the whole path is never equal to the bare name.
+# distinguishes the two nested-path mutants named above. fnmatch's "*"
+# spans "/" (verified: fnmatch.fnmatch("cloud/gcp/x.tfvars.bak",
+# "*.tfvars.*") is True), so a whole-path-instead-of-basename mutant still
+# happens to catch the glob case above by accident. It cannot accidentally
+# catch an EXACT shape like "terraform.tfstate": the whole path is never
+# equal to the bare name.
 run_case "no-operator-files-tracked: a nested exact shape gets tracked" fail \
 	'./scripts/no-operator-files-tracked.sh' \
 	"$(py 'import subprocess

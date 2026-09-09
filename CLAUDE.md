@@ -393,13 +393,14 @@ an absent invariant.
     passes clean.
     *(gate: `scripts/no-operator-files-tracked.sh`, called from both
     `.githooks/pre-push` and `.github/workflows/gates.yml`. Cases in
-    `scripts/gates-have-teeth.sh`: a tracked file at the nested shape of the
-    entry 99 incident, a nested EXACT state-file name (fnmatch's `*` spans
-    `/`, so a glob shape can still match a whole path by accident; only an
-    exact shape proves it is the basename that matched, not the whole path),
-    the same shape left untracked staying silent, a stale allow-list entry,
-    an allow-list entry that matches no shape at all, and the index taken
-    away entirely.)*
+    `scripts/gates-have-teeth.sh`: a tracked file at the repository root (the
+    most common real placement, and the one a nested-only harness stopped
+    proving), a tracked file at the nested shape of the entry 99 incident, a
+    nested EXACT state-file name (fnmatch's `*` spans `/`, so a glob shape can
+    still match a whole path by accident; only an exact shape proves it is the
+    basename that matched, not the whole path), the same shape left untracked
+    staying silent, a stale allow-list entry, an allow-list entry that matches
+    no shape at all, and the index taken away entirely.)*
 
 ## Decisions that have no gate yet
 
