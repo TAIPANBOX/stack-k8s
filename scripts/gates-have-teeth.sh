@@ -313,6 +313,19 @@ run_case "no-sa-token-by-default: a pod template loses the field" fail \
 	"$(py 'edit("manifests/10-planes.yaml", "      automountServiceAccountToken: false\n", "")')" \
 	"does not set"
 
+# The class of mistake this gate exists for: an operator-only file joining
+# the tracked set with nothing else in this repo positioned to notice, since
+# every other gate here reads content or manifests rather than names. See
+# GOTCHAS.md entry 99, where cloud/gcp/terraform.tfvars.bak did exactly this
+# for 76 commits.
+run_case "no-operator-files-tracked: an operator file gets tracked" fail \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'import subprocess
+p = "planted-secret.pem"
+open(p, "w").write("planted by gates-have-teeth.sh: a fake operator file\n")
+subprocess.run(["git", "add", p], check=True)')" \
+	"matches the operator-file shape"
+
 echo
 echo "=== and what they must NOT catch ==="
 
@@ -347,6 +360,14 @@ open("install.sh", "w").write(s + "\n# For reference, an unpinned install used t
 run_case "no-sa-token-by-default: a non-pod object carries no such field" pass \
 	'./scripts/no-sa-token-by-default.sh' \
 	"$(py 'edit("manifests/50-loadbalancer.yaml", "spec:\n  type: LoadBalancer", "spec:\n  # not a pod template: kind: Deployment / template: / restartPolicy: OnFailure\n  type: LoadBalancer")')"
+
+# The same shape, sitting on disk and never staged, must stay silent: this
+# gate exists to keep an operator file OUT of git, not to complain that one
+# exists on a machine. `git add` is deliberately never called here.
+run_case "no-operator-files-tracked: the same shape, left untracked, is not a fault" pass \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'p = "local-only.key"
+open(p, "w").write("never staged, just sitting on disk\n")')"
 
 echo
 echo "=== and the one this estate learned the hard way ==="
@@ -435,6 +456,18 @@ run_case "deploy-flags-agree: no deploy path left to judge" fail \
 	"$(py 'import os
 for f in ("deploy.sh", "cloud/aws/deploy-aws.sh", "cloud/gcp/deploy-gcp.sh"):
     os.remove(f)')" \
+	"measured NOTHING"
+
+# The subject taken away entirely: with nothing left in the index, this gate
+# has no tracked file list to check an operator-file shape against, and
+# agreeing that a repository with nothing in it also has no operator files
+# in it would be the same silent hole invariant 9 is about. `git rm --cached`
+# leaves the working tree untouched, so restore() (reset --hard) puts every
+# path straight back in the index.
+run_case "no-operator-files-tracked: nothing left in the index to check" fail \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'import subprocess
+subprocess.run(["git", "rm", "-r", "--cached", "-q", "."], check=True)')" \
 	"measured NOTHING"
 
 echo

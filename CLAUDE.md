@@ -100,6 +100,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/node-name-is-pinned.sh  # invariant 11
 ./scripts/deploy-flags-agree.sh   # invariant 14
 ./scripts/no-sa-token-by-default.sh # invariant 15
+./scripts/no-operator-files-tracked.sh # GOTCHAS 99 and 100
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
