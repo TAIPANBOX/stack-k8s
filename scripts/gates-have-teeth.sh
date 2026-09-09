@@ -326,6 +326,15 @@ open(p, "w").write("planted by gates-have-teeth.sh: a fake operator file\n")
 subprocess.run(["git", "add", p], check=True)')" \
 	"matches the operator-file shape"
 
+# The allow list itself must not be able to rot: an entry naming a path git
+# no longer tracks is a hole with a reason attached to it, and nothing would
+# notice it sitting there unused. Mutates the gate's own ALLOWED dict, the
+# same way other cases here mutate the file a gate reads.
+run_case "no-operator-files-tracked: a stale allow-list entry" fail \
+	'./scripts/no-operator-files-tracked.sh' \
+	"$(py 'edit("scripts/no-operator-files-tracked.sh", "ALLOWED = {\n}", "ALLOWED = {\n    \"cloud/gcp/nonexistent.tfvars.bak\": \"planted by gates-have-teeth.sh: this path is not tracked\",\n}")')" \
+	"is allow-listed in this script but"
+
 echo
 echo "=== and what they must NOT catch ==="
 
