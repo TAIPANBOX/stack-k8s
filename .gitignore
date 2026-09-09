@@ -6,7 +6,10 @@ kubeconfig-*.yaml
 cloud/**/.terraform/
 cloud/**/terraform.tfstate
 cloud/**/terraform.tfstate.*
-cloud/**/*.tfvars
+# A trailing glob, not an exact suffix: cloud/**/*.tfvars matched the file
+# preflight.sh writes but not the terraform.tfvars.bak beside it, so the
+# backup was committed to a public repository. See GOTCHAS.md entry 99.
+cloud/**/*.tfvars*
 cloud/**/kubeconfig.yaml
 cloud/**/tfplan
 kubeconfig-tunnel.yaml
