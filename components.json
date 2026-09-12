@@ -33,6 +33,7 @@
   ],
   "schema": "taipanbox.dev/components/v1",
   "repo": "TAIPANBOX/stack-k8s",
+  "distribution": "ghcr.io/taipanbox/genaryx-console, built for amd64 and arm64 by .github/workflows/console-image.yml and merged into one tag (plus ghcr.io/taipanbox/stack-caddy and ghcr.io/taipanbox/stack-wg from tunnel-images.yml, same shape); manifests by tag, applied with kubectl or the install script",
   "kind": "launcher",
   "components": [
     {
