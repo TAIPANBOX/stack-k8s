@@ -390,7 +390,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v1.0.0
+          image: ghcr.io/taipanbox/wardryx:v1.0.2
           imagePullPolicy: IfNotPresent
           # Single-dash flags, exactly as up.sh calls it.
           args:
