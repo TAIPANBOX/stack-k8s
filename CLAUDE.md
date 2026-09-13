@@ -101,6 +101,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/deploy-flags-agree.sh   # invariant 14
 ./scripts/no-sa-token-by-default.sh # invariant 15
 ./scripts/no-operator-files-tracked.sh # invariant 16; GOTCHAS 99 and 100
+./scripts/secret-keys-agree.sh    # invariant 17; GOTCHAS 101
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -347,6 +348,13 @@ an absent invariant.
     a live cluster, which invariants 4 and 5 already say this repository cannot
     hold in a gate.
 
+    **What "loud" turned out to mean.** Measured on GCP 2026-09-13 with the
+    placeholder left standing on purpose: nothing went red. Every writer and
+    the sealer read the same ConfigMap, so the record plane sealed 9 records
+    under `agent://set-me.invalid/...` with `foreign_trust_domain 0` and
+    `trailryx-verify` said VERIFIED. `verify.sh` now fails on the placeholder,
+    because a default that is not loud anywhere is a default that ships.
+
 15. **No pod automounts the default ServiceAccount token.** No manifest here
     sets `automountServiceAccountToken`, and this repository ships no RBAC at
     all: no ServiceAccount, Role or RoleBinding of its own. Left at the
@@ -401,6 +409,30 @@ an absent invariant.
     basename that matched, not the whole path), the same shape left untracked
     staying silent, a stale allow-list entry, an allow-list entry that matches
     no shape at all, and the index taken away entirely.)*
+
+17. **Every installer that generates a Secret generates every key the
+    manifests read from it.** Three installers each carry a copy of the block
+    that generates `stack-keys`, and copies drift: `10-planes.yaml` and
+    `20-console.yaml` started reading `gateway_admin` on 2026-09-07 (GOTCHAS
+    97), the root `install.sh` grew the key the same day, and the two cloud
+    installers did not. The first fresh cluster after that, GCP on 2026-09-13,
+    came up with the gateway and the console both in
+    `CreateContainerConfigError` and `deploy-gcp.sh` waited five minutes per
+    rollout before its own verify went red. Same asymmetry, same three files,
+    as invariant 14. GOTCHAS 101.
+
+    A Secret nobody here generates (an operator's model key, the tunnel's
+    token) is out of scope on purpose: the manifest that reads it says so
+    beside the reference. The migration branch, "the Secret already exists,
+    add only the key that is missing", is a live-cluster property and is
+    proved there, not here.
+    *(gate: `scripts/secret-keys-agree.sh`, in both callers. Subjects are
+    found by what makes them subjects: a tracked script running
+    `create secret generic <name>` with a literal name, against every
+    `secretKeyRef` in `manifests/` in either YAML spelling. Four cases in
+    `scripts/gates-have-teeth.sh`: an installer dropping a key, a manifest
+    reading a key nobody writes, a key nobody reads (which must pass), and
+    every installer taken away.)*
 
 ## Decisions that have no gate yet
 

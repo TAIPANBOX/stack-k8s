@@ -3090,6 +3090,17 @@ quiet night.
 Fixed with `--trust-domain` on both cloud deploy scripts, applied AFTER the
 kustomization, which is the entire point of where it sits.
 
+Measured again on GCP, 2026-09-13, with the placeholder deliberately left
+standing and the seal job fired by hand: the seal did NOT refuse them. Every
+writer and the sealer read the same ConfigMap, so the events carried
+`agent://set-me.invalid/...` and the job was handed `--trust-domain
+set-me.invalid`; it counted `foreign_trust_domain 0`, wrote 9 records, sealed a
+segment and produced a pack that `trailryx-verify` called VERIFIED. The
+"would refuse" above was a reading, not a measurement, and the real behaviour is
+quieter still: a signed history under a domain nobody owns and not one red line
+anywhere. `verify.sh` now fails on the placeholder, which is the only place an
+operator was going to look.
+
 **Three. The record plane could never have sealed anything on GCP or AWS.**
 `40-routines-and-secrets.yaml` applies the `record-seal` CronJob on every cloud
 and that CronJob runs `stack/trailryx:dev`. The Hetzner `deploy.sh` builds that
@@ -3569,3 +3580,29 @@ allow list carries zero entries today, checked against `git ls-files` before
 it was written, and an entry for a path that stops being tracked fails the
 gate itself, so the list cannot go stale the way `*.tfvars` did.
 
+## 101. Three copies of the block that generates `stack-keys`, and two of them missed the newest key
+
+**Ours, and fixed.** `10-planes.yaml` and `20-console.yaml` started reading
+`gateway_admin` from the `stack-keys` Secret on 2026-09-07 (entry 97). The root
+`install.sh` grew the key the same day, with a migration branch for clusters
+installed before it existed. `cloud/gcp/install-gcp.sh` and
+`cloud/aws/install-aws.sh` carry their own copy of the same block and got
+neither.
+
+Measured on the first fresh cluster after that change, GCP, 2026-09-13:
+`tokenfuse-gateway` 1/2 and `genaryx-console` 0/1, both
+`CreateContainerConfigError`, `couldn't find key gateway_admin in Secret
+agent-stack/stack-keys`; `idryx` in `CrashLoopBackOff` behind them because the
+events file the gateway writes did not exist yet. `deploy-gcp.sh` waited its
+full 300 s per rollout and its own verify then went red. Nothing in
+`scripts/` had a view of it: every gate read manifests or scripts, none
+compared what a manifest READS with what an installer WRITES.
+
+This is the second time the same three files drifted apart on the same shape.
+Entry 90 and invariant 14 are the `--trust-domain` flag reaching two of three
+deploy scripts. The fix is the same shape too: port the block, then a gate over
+the block. `scripts/secret-keys-agree.sh` derives its subjects from every
+`create secret generic <name>` in tracked scripts and requires each to create
+every key a `secretKeyRef` in `manifests/` names on that Secret. The migration
+branch cannot be read from text; it is a live-cluster property, measured by the
+second `deploy-gcp.sh` run over the existing Secret on the same cluster.

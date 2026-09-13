@@ -75,7 +75,8 @@ SMTP_FROM="${SMTP_FROM:-}"
 SMTP_USER="${SMTP_USER:-}"
 SMTP_PASS=""
 # The record plane's trust domain. Empty leaves 00-base.yaml's `set-me.invalid`
-# in place, which is the loud state and the right default; see where it is used
+# in place, the right default and, measured 2026-09-13, NOT loud by itself:
+# verify.sh is what makes the placeholder red (GOTCHAS 90); see where it is used
 # after the kustomization.
 TRUST_DOMAIN="${TRUST_DOMAIN:-}"
 REF="${REF:-main}"
@@ -495,8 +496,11 @@ k_ "apply -k /root/stack-k8s/manifests"
 # produces is refused as foreign, and a refusal that fires on everything reads
 # like a quiet night rather than like a misconfiguration.
 #
-# Without the flag nothing is patched and the placeholder stands, which is the
-# loud state and the right default.
+# Without the flag nothing is patched and the placeholder stands. It is the
+# right default because there is no defensible domain to invent, and it is NOT
+# loud on its own: measured 2026-09-13, every plane and the sealer agree on
+# `set-me.invalid` and seal a history under it without one error. verify.sh
+# is what makes it red (GOTCHAS 90).
 if [ -n "$TRUST_DOMAIN" ]; then
   say "trust domain: $TRUST_DOMAIN (set after apply, which is what makes it stick)"
   k_ "-n agent-stack patch cm stack-wiring --type merge -p '{\"data\":{\"TRAILRYX_TRUST_DOMAIN\":\"$TRUST_DOMAIN\"}}'" >/dev/null \

@@ -533,6 +533,33 @@ for f in ("deploy.sh", "cloud/aws/deploy-aws.sh", "cloud/gcp/deploy-gcp.sh"):
     os.remove(f)')" \
 	"measured NOTHING"
 
+# Three installers each carry a copy of the block that generates `stack-keys`,
+# and two of the three shipped without the key the manifests had started to
+# read. The fault is one missing `--from-literal`, so that is what is planted;
+# the mirror fault is a manifest reading a key nobody writes; and a key an
+# installer writes that no manifest reads is NOT this gate's business, which the
+# pass case holds.
+run_case "secret-keys-agree: an installer stops creating a key the manifests read" fail \
+	'./scripts/secret-keys-agree.sh' \
+	"$(py 'edit("install.sh", " \\\n      --from-literal=gateway_admin=\x27$GATEWAY_ADMIN_SECRET\x27\"", "\"")')" \
+	"does not create key gateway_admin"
+
+run_case "secret-keys-agree: a manifest starts reading a key no installer writes" fail \
+	'./scripts/secret-keys-agree.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "{ name: stack-keys, key: gateway_admin }", "{ name: stack-keys, key: gateway_admin_v2 }")')" \
+	"does not create key gateway_admin_v2"
+
+run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
+	'./scripts/secret-keys-agree.sh' \
+	"$(py 'edit("install.sh", "      --from-literal=cloud_admin=\x27$CLOUD_SECRET\x27 \\\n", "      --from-literal=cloud_admin=\x27$CLOUD_SECRET\x27 \\\n      --from-literal=spare=\x27$CLOUD_SECRET\x27 \\\n")')"
+
+run_case "secret-keys-agree: no installer left to judge" fail \
+	'./scripts/secret-keys-agree.sh' \
+	"$(py 'import os
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh"):
+    os.remove(f)')" \
+	"measured NOTHING"
+
 # The subject taken away entirely: with nothing left in the index, this gate
 # has no tracked file list to check an operator-file shape against, and
 # agreeing that a repository with nothing in it also has no operator files

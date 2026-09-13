@@ -269,6 +269,21 @@ bus="$(kc exec deploy/genaryx-console -- sh -c 'echo' >/dev/null 2>&1; kc get cm
 [ -n "$bus" ] && ok "an environment descriptor is mounted" \
   || bad "no stack-environment ConfigMap: the bus will run on demo fixtures"
 
+# The trust domain is the one key the manifests deliberately ship invalid
+# (invariant 14, GOTCHAS 90). Measured on GCP 2026-09-13: with the placeholder
+# standing NOTHING else here goes red. Every writer and the sealer read the same
+# ConfigMap, so every event carries `agent://set-me.invalid/...`, the seal job
+# counts `foreign_trust_domain 0`, and the record plane signs a history under a
+# domain nobody owns. That is quieter than the refusal GOTCHAS 90 describes,
+# which is why this line exists: the placeholder has to be red somewhere an
+# operator looks, and this is where they look.
+domain="$(kc get cm stack-wiring -o jsonpath='{.data.TRAILRYX_TRUST_DOMAIN}' 2>/dev/null || true)"
+case "$domain" in
+  ""|set-me.invalid|*.invalid)
+    bad "TRAILRYX_TRUST_DOMAIN is '${domain:-unset}': the record plane is sealing under a placeholder; pass --trust-domain to the deploy" ;;
+  *) ok "trust domain is set: $domain" ;;
+esac
+
 if [ "$DO_FREEZE" = 1 ]; then
   head_ "freeze, restart, and check the freeze survived"
   AGENT="${AGENT:-agent://meridian.example/treasury/reconciliation-batch}"
