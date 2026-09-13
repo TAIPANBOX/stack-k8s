@@ -288,7 +288,14 @@ FIRST_NODE_NAME="$(node_name_of "$FIRST")"
 
 K3S_TOKEN_VALUE="${K3S_TOKEN_VALUE:-}"
 if [ -z "$K3S_TOKEN_VALUE" ]; then
-  K3S_TOKEN_VALUE="$(su_ "$FIRST" 'cat /var/lib/rancher/k3s/server/token 2>/dev/null' || true)"
+  # Absent and failed are two different answers. The old `2>/dev/null || true`
+  # made them one empty string, and the line below then mints a fresh token,
+  # which is the exact failure this block exists to prevent: one ssh or sudo
+  # hiccup at this moment and run 2 kills the first server (GOTCHAS 102).
+  K3S_TOKEN_VALUE="$(su_ "$FIRST" "sh -c 'test -f /var/lib/rancher/k3s/server/token && cat /var/lib/rancher/k3s/server/token || echo __ABSENT__'")" \
+    || die "could not read the cluster token from $FIRST (ssh or sudo failed): not minting a new one"
+  [ -n "$K3S_TOKEN_VALUE" ] || die "reading the cluster token from $FIRST returned nothing: not minting a new one"
+  [ "$K3S_TOKEN_VALUE" = __ABSENT__ ] && K3S_TOKEN_VALUE=""
   if [ -n "$K3S_TOKEN_VALUE" ]; then
     echo "   reusing the token this cluster was created with"
   else

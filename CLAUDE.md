@@ -102,6 +102,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/no-sa-token-by-default.sh # invariant 15
 ./scripts/no-operator-files-tracked.sh # invariant 16; GOTCHAS 99 and 100
 ./scripts/secret-keys-agree.sh    # invariant 17; GOTCHAS 101
+./scripts/k3s-token-is-reused.sh  # invariant 18; GOTCHAS 102
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -440,6 +441,34 @@ an absent invariant.
     `scripts/gates-have-teeth.sh`: an installer dropping a key, a manifest
     reading a key nobody writes in either spelling, a key nobody reads (which
     must pass), every installer taken away, and every reference taken away.)*
+
+18. **Every installer that brings up a k3s server reads the token the cluster
+    was created with, before it installs anything, over the helper that can
+    read it.** GOTCHAS 59 is the trap (a fresh token is correct exactly once);
+    `install.sh` learned it in a0250b8 and `install-gcp.sh` was written with
+    it; `install-aws.sh` minted a fresh token on every run. Measured on AWS
+    2026-09-13, the second `deploy-aws.sh` over a healthy five-node cluster:
+    the k3s install script rewrote `k3s.service.env` on the first server with
+    the new token and k3s refused to start, `bootstrap data already found and
+    encrypted with different token`; the other two servers kept quorum, so the
+    cluster looked alive from anywhere but the kubeconfig, which points at the
+    dead one. GOTCHAS 102. Third time a block copied across the three clouds
+    drifted: the deploy scripts once (14), the installers twice (17, this).
+
+    The read has to come BEFORE the first server install: a read after it reads
+    the file the install just rewrote. It has to be an assignment over the
+    same ssh helper as the install: the token file is root 0600, and a read
+    over the login helper comes back empty. And it has to tell absent from
+    failed: a failed ssh at that moment used to read as "no cluster yet" and
+    mint a token.
+    *(gate: `scripts/k3s-token-is-reused.sh`, in both callers. Subjects are
+    tracked scripts with a non-comment `sh -s - server` line that also set
+    `INSTALL_K3S_VERSION`; six cases in `scripts/gates-have-teeth.sh`: the read
+    taken away, the read moved below the install, a comment naming the phrase
+    (must pass), a wrapped first-server install with the read placed after it,
+    the read over the wrong helper, every installer taken away. The fix was
+    proved live: cluster 2's second run printed `reusing the token this cluster
+    was created with`, `verify.sh` 15 passed / 0 failed / 1 noted.)*
 
 ## Decisions that have no gate yet
 

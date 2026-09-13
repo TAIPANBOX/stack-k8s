@@ -248,7 +248,30 @@ FIRST_NODE_NAME="$(node_name_of "$FIRST")"
 [ -n "$FIRST_NODE_NAME" ] || die "could not read a host name from $FIRST to pin --node-name to"
 
 say "k3s server on $FIRST ($FIRST_PRIV)"
-K3S_TOKEN_VALUE="${K3S_TOKEN_VALUE:-$(head -c 18 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
+# Reuse the token this cluster was created with, or the second run kills the
+# first server: k3s re-run with a fresh K3S_TOKEN rewrites k3s.service.env and
+# then refuses to start, `bootstrap data already found and encrypted with
+# different token`, while the other servers keep quorum and the kubeconfig
+# points at the dead one. install.sh has carried this since a0250b8 and
+# install-gcp.sh was written with it; this copy had neither, and the second AWS
+# deploy of the R2 proving run (2026-09-13) stopped at exactly that line.
+# GOTCHAS 59 is the trap, 102 the drift.
+K3S_TOKEN_VALUE="${K3S_TOKEN_VALUE:-}"
+if [ -z "$K3S_TOKEN_VALUE" ]; then
+  # Absent and failed are two different answers. The old `2>/dev/null || true`
+  # made them one empty string, and the line below then mints a fresh token,
+  # which is the exact failure this block exists to prevent: one ssh or sudo
+  # hiccup at this moment and run 2 kills the first server (GOTCHAS 102).
+  K3S_TOKEN_VALUE="$(su_ "$FIRST" "sh -c 'test -f /var/lib/rancher/k3s/server/token && cat /var/lib/rancher/k3s/server/token || echo __ABSENT__'")" \
+    || die "could not read the cluster token from $FIRST (ssh or sudo failed): not minting a new one"
+  [ -n "$K3S_TOKEN_VALUE" ] || die "reading the cluster token from $FIRST returned nothing: not minting a new one"
+  [ "$K3S_TOKEN_VALUE" = __ABSENT__ ] && K3S_TOKEN_VALUE=""
+  if [ -n "$K3S_TOKEN_VALUE" ]; then
+    echo "   reusing the token this cluster was created with"
+  else
+    K3S_TOKEN_VALUE="$(head -c 18 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  fi
+fi
 su_ "$FIRST" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - server \
     --cluster-init \
     --node-name '$FIRST_NODE_NAME' \

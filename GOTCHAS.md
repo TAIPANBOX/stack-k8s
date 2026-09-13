@@ -3609,3 +3609,51 @@ the block. `scripts/secret-keys-agree.sh` derives its subjects from every
 every key a `secretKeyRef` in `manifests/` names on that Secret. The migration
 branch cannot be read from text; it is a live-cluster property, measured by the
 second `deploy-gcp.sh` run over the existing Secret on the same cluster.
+
+## 102. The second run of the AWS installer killed the first server, because it alone minted a new token
+
+**Ours, and fixed.** The trap itself is entry 59: a freshly generated k3s token
+is correct exactly once. This entry is the drift. `install.sh` has reused the
+cluster's token since a0250b8 ("reuse the cluster's token, so the second run is
+possible at all") and `install-gcp.sh` was written with that block the same
+day. `install-aws.sh` never got it: it generated a fresh `K3S_TOKEN` on every
+run and handed it to the k3s install script, which rewrote
+`/etc/systemd/system/k3s.service.env` on the first server and restarted k3s.
+1dfc242, eight hours after a0250b8, carried three of that day's fixes into
+`install-aws.sh` and not this one: diligence was tried the same day and missed
+it, which is the argument for a gate rather than for more diligence.
+
+Measured on AWS, 2026-09-13, the second `deploy-aws.sh` over a healthy
+five-node cluster, 23 seconds in:
+
+    Job for k3s.service failed because the control process exited with error code.
+    level=fatal msg="Error: preparing server: failed to bootstrap cluster data:
+      failed to reconcile with local datastore: bootstrap data already found and
+      encrypted with different token"
+
+The two other servers kept etcd quorum, every pod not on server-1 kept running,
+and `kubectl` failed only because the kubeconfig points at server-1. Read from a
+distance the cluster was fine; read from the operator's chair it was gone.
+Restored by copying the `K3S_TOKEN=` line from server-2's env file into
+server-1's and restarting k3s. After that the one pod on server-1 (idryx) kept
+running but stayed not Ready until it was recreated; cause not investigated,
+recorded as collateral of the hand restore, not as a defect of anything here.
+
+This is the third time a block copied across the three clouds drifted: the
+deploy scripts once (entry 90, invariant 14, `--trust-domain` in two of three),
+the installers twice (entry 101, invariant 17, `gateway_admin` in one of three,
+and this). The fix is the same shape each time: port the block, then a gate
+over the block. `scripts/k3s-token-is-reused.sh` finds every script that
+invokes the k3s installer as a server and requires an assignment from the
+token file, over the same ssh helper as the install (the file is root 0600, so
+a read over the login helper comes back empty and mints a fresh token with
+every line of the block in place), above the first-server install, whether
+that install sits on one line or wraps. The read itself now tells absent from
+failed: `test -f ... && cat ... || echo __ABSENT__`, and a failed ssh or sudo
+stops the installer instead of minting a token, the same discipline entry 101
+gave the `gateway_admin` read.
+
+Proved on a fresh cluster the same evening: run 1 from bare machines, run 2
+over it printed `reusing the token this cluster was created with`; both runs
+`verify.sh` 15 passed / 0 failed / 1 noted and `security-tests.sh` 27 passed /
+0 failed / 3 noted.

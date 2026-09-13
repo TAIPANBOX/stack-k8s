@@ -39,3 +39,4 @@ Feature: every installer creates every Secret key the manifests read
     Then it fails on TRAILRYX_TRUST_DOMAIN being set-me.invalid
     # -> measured live on GCP 2026-09-13: evidence/1.0/r2-gcp-2026-09-13/ins-6-verify-red-on-placeholder.log
     # in go-to-market-2026-09 (private); not a repository test, invariants 4 and 5 say why
+

@@ -54,6 +54,14 @@ jobs:
       - name: every installer creates every Secret key the manifests read
         run: ./scripts/secret-keys-agree.sh
 
+      # Added 2026-09-13, the same afternoon, in both callers. The second
+      # deploy-aws.sh over a healthy cluster minted a fresh k3s token and the
+      # first server refused to start; install.sh reused the token since
+      # a0250b8 and install-gcp.sh was written with it. Third drift of a block
+      # copied across the three clouds (GOTCHAS 90, 101, 102).
+      - name: every installer reuses the cluster token before it installs
+        run: ./scripts/k3s-token-is-reused.sh
+
       # No workload in this stack talks to the Kubernetes API from inside a
       # pod, so the projected token every pod gets for the namespace default
       # ServiceAccount is a live credential with nothing to authorize and
