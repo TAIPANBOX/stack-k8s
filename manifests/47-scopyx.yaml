@@ -100,7 +100,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: scopyx
-          image: ghcr.io/taipanbox/scopyx:v0.1.2
+          image: ghcr.io/taipanbox/scopyx:v1.0.0
           imagePullPolicy: IfNotPresent
           env:
             # 0.0.0.0 because a pod binding loopback is reachable by nothing.

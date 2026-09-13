@@ -390,7 +390,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v0.1.0
+          image: ghcr.io/taipanbox/wardryx:v1.0.0
           imagePullPolicy: IfNotPresent
           # Single-dash flags, exactly as up.sh calls it.
           args:
@@ -476,7 +476,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: idryx
-          image: ghcr.io/taipanbox/idryx:v0.3.1
+          image: ghcr.io/taipanbox/idryx:v1.0.0
           imagePullPolicy: IfNotPresent
           # Double-dash flags here, and :8081 because idryx's own default 8080
           # collides with the cloud plane. Both quirks are up.sh's, kept so the
