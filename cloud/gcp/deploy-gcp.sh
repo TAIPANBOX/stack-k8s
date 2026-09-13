@@ -529,9 +529,10 @@ k_ "apply -k /root/stack-k8s/manifests"
 #
 # Without the flag nothing is patched and the placeholder stands. It is the
 # right default because there is no defensible domain to invent, and it is NOT
-# loud on its own: measured 2026-09-13, every plane and the sealer agree on
-# `set-me.invalid` and seal a history under it without one error. verify.sh
-# is what makes it red (GOTCHAS 90).
+# loud on its own: measured 2026-09-13, the planes that take their id from the
+# ConfigMap seal a history under `set-me.invalid` without one error, and the
+# callers that carry their own domain are refused as foreign without one
+# either. verify.sh is what makes it red (GOTCHAS 90).
 if [ -n "$TRUST_DOMAIN" ]; then
   say "trust domain: $TRUST_DOMAIN (set after apply, which is what makes it stick)"
   k_ "-n agent-stack patch cm stack-wiring --type merge -p '{\"data\":{\"TRAILRYX_TRUST_DOMAIN\":\"$TRUST_DOMAIN\"}}'" >/dev/null \

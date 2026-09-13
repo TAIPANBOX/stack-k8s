@@ -762,17 +762,23 @@ if ! k_ "-n agent-stack get secret stack-keys" >/dev/null 2>&1; then
       --from-literal=gateway_admin='$GATEWAY_ADMIN_SECRET'" >/dev/null
   echo "   created secret stack-keys"
 else
-  echo "   secret stack-keys already exists, left as is"
   # A cluster installed before gateway_admin existed has a stack-keys Secret
   # without it. "left as is" is right for the five values an operator may have
   # rotated; this one has never existed on such a cluster, so an absent key is
   # not a value to leave alone, it is a manifest that will never resolve. Read
   # before writing: add only what is missing, touch nothing that is present.
-  GATEWAY_ADMIN_B64="$(k_ "-n agent-stack get secret stack-keys -o jsonpath={.data.gateway_admin}" 2>/dev/null || true)"
+  # No `|| true` and no stderr swallowed: a read that FAILS must stop the
+  # installer here, because the line after this one writes a fresh random
+  # value wherever the read came back empty. With the two conflated, an ssh
+  # hiccup rotates a live key under a running gateway and console. kubectl
+  # prints nothing and exits 0 for a key that is simply absent.
+  GATEWAY_ADMIN_B64="$(k_ "-n agent-stack get secret stack-keys -o jsonpath={.data.gateway_admin}")"
   if [ -z "$GATEWAY_ADMIN_B64" ]; then
     GATEWAY_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     k_ "-n agent-stack patch secret stack-keys --type merge -p '{\"stringData\":{\"gateway_admin\":\"$GATEWAY_ADMIN_SECRET\"}}'" >/dev/null
     echo "   added gateway_admin to the existing stack-keys secret"
+  else
+    echo "   secret stack-keys already exists, left as is"
   fi
 fi
 

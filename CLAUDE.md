@@ -329,9 +329,10 @@ an absent invariant.
 
     What it costs when it is wrong is silence, which is why it is a gate rather
     than a note: the record plane accepts an event only if its agent id begins
-    `agent://<domain>/`, so with the placeholder standing every event the
-    cluster produces is refused as foreign, and a refusal that fires on
-    everything reads exactly like a quiet night.
+    `agent://<domain>/`, so with the placeholder standing every event a caller
+    stamps with its own domain is refused as foreign, and a refusal that fires
+    on everything reads exactly like a quiet night. (Half the picture, it
+    turned out: see "What loud turned out to mean" below.)
 
     *(gate: `scripts/deploy-flags-agree.sh`. Subjects are FOUND by what makes
     them subjects, a script invoking `k_ "apply -k .../manifests"`, so a fourth
@@ -349,11 +350,16 @@ an absent invariant.
     hold in a gate.
 
     **What "loud" turned out to mean.** Measured on GCP 2026-09-13 with the
-    placeholder left standing on purpose: nothing went red. Every writer and
-    the sealer read the same ConfigMap, so the record plane sealed 9 records
-    under `agent://set-me.invalid/...` with `foreign_trust_domain 0` and
-    `trailryx-verify` said VERIFIED. `verify.sh` now fails on the placeholder,
-    because a default that is not loud anywhere is a default that ships.
+    placeholder left standing on purpose: nothing went red, in two ways at
+    once. Writers that derive their agent id from the ConfigMap (the finops
+    runner, the console) sealed 9 records under `agent://set-me.invalid/...`
+    with `foreign_trust_domain 0` and `trailryx-verify` said VERIFIED: a signed
+    history under a domain nobody owns. Writers that carry their own id (the
+    gateway stamps whatever a caller sends, the drills are `mockryx.local`)
+    are refused as foreign, which is the quiet night the paragraph above
+    describes. Neither is red anywhere an operator looks, so `verify.sh` now
+    fails on the placeholder: a default that is not loud anywhere is a default
+    that ships.
 
 15. **No pod automounts the default ServiceAccount token.** No manifest here
     sets `automountServiceAccountToken`, and this repository ships no RBAC at
@@ -429,10 +435,11 @@ an absent invariant.
     *(gate: `scripts/secret-keys-agree.sh`, in both callers. Subjects are
     found by what makes them subjects: a tracked script running
     `create secret generic <name>` with a literal name, against every
-    `secretKeyRef` in `manifests/` in either YAML spelling. Four cases in
+    `secretKeyRef` in `manifests/` in either YAML spelling, any field order,
+    `optional: true` excluded, an unparsable reference red. Six cases in
     `scripts/gates-have-teeth.sh`: an installer dropping a key, a manifest
-    reading a key nobody writes, a key nobody reads (which must pass), and
-    every installer taken away.)*
+    reading a key nobody writes in either spelling, a key nobody reads (which
+    must pass), every installer taken away, and every reference taken away.)*
 
 ## Decisions that have no gate yet
 

@@ -650,7 +650,12 @@ else
   # it has never existed, so an absent key here is not a value to leave
   # alone, it is a manifest that will never resolve. Read before writing:
   # only add what is actually missing, never touch a key that is present.
-  GATEWAY_ADMIN_B64="$(k_ "-n agent-stack get secret stack-keys -o jsonpath={.data.gateway_admin}" 2>/dev/null || true)"
+  # No `|| true` and no stderr swallowed: a read that FAILS must stop the
+  # installer here, because the line after this one writes a fresh random
+  # value wherever the read came back empty. With the two conflated, an ssh
+  # hiccup rotates a live key under a running gateway and console. kubectl
+  # prints nothing and exits 0 for a key that is simply absent.
+  GATEWAY_ADMIN_B64="$(k_ "-n agent-stack get secret stack-keys -o jsonpath={.data.gateway_admin}")"
   if [ -z "$GATEWAY_ADMIN_B64" ]; then
     GATEWAY_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     k_ "-n agent-stack patch secret stack-keys --type merge -p '{\"stringData\":{\"gateway_admin\":\"$GATEWAY_ADMIN_SECRET\"}}'" >/dev/null

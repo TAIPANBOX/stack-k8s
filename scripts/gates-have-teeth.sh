@@ -173,7 +173,7 @@ run_case() {
 	fi
 }
 
-py() { printf 'def edit(p, a, b):\n    s = open(p).read()\n    assert a in s, "pattern not found in " + p\n    open(p, "w").write(s.replace(a, b, 1))\n%s\n' "$1"; }
+py() { printf 'def edit(p, a, b):\n    s = open(p).read()\n    assert a in s, "pattern not found in " + p\n    assert a != b, "edit replaces a string with itself in " + p\n    open(p, "w").write(s.replace(a, b, 1))\n    assert open(p).read() != s, "edit changed nothing in " + p\n%s\n' "$1"; }
 
 echo "=== faults each gate must catch ==="
 
@@ -552,6 +552,19 @@ run_case "secret-keys-agree: a manifest starts reading a key no installer writes
 	'./scripts/secret-keys-agree.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "stack-keys, key: gateway_admin", "stack-keys, key: gateway_admin_v2")')" \
 	"does not create key gateway_admin_v2"
+
+run_case "secret-keys-agree: a manifest reads a key no installer writes, multi-line spelling" fail \
+	'./scripts/secret-keys-agree.sh' \
+	"$(py 'edit("manifests/55-copilot-cloud.yaml", "key: api_key\n", "key: api_key_v2\n")')" \
+	"does not create key api_key_v2"
+
+run_case "secret-keys-agree: no manifest left that reads a Secret" fail \
+	'./scripts/secret-keys-agree.sh' \
+	"$(py 'import glob
+for f in glob.glob("manifests/*.yaml"):
+    s = open(f).read()
+    open(f, "w").write(s.replace("secretKeyRef", "secretKeyRe_f"))')" \
+	"measured NOTHING"
 
 run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
 	'./scripts/secret-keys-agree.sh' \

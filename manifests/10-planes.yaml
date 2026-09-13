@@ -213,16 +213,6 @@ spec:
             # It catches carelessness. It does not stop intent.
             - { name: TOKENFUSE_DLP, value: "block" }
             - { name: TOKENFUSE_DATA_DIR, value: "/var/lib/stack/traces/gateway" }
-            # The bus. `stack-wiring` has declared this path since the events
-            # volume existed, idryx loads that exact file by name and heraldyx
-            # reads the directory, and no line here ever handed the path to the
-            # gateway: it wrote traces into its emptyDir and nothing onto the
-            # volume it already mounts. Measured on GCP 2026-09-13: idryx in
-            # CrashLoopBackOff on `tokenfuse.ndjson: no such file or directory`
-            # and an empty bus behind a gateway that had served calls.
-            # stack-single carried the same gap until its own 2026-09-13 fix.
-            - name: TOKENFUSE_EVENTS_PATH
-              valueFrom: { configMapKeyRef: { name: stack-wiring, key: TOKENFUSE_EVENTS_PATH } }
             # WHERE THE CALLS ACTUALLY GO. Leave this unset and the gateway does
             # not fail and does not warn: it answers every request itself from
             # `StubProvider`, with a fabricated body and a fixed 1000 input /

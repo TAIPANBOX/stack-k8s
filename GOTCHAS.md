@@ -3091,15 +3091,18 @@ Fixed with `--trust-domain` on both cloud deploy scripts, applied AFTER the
 kustomization, which is the entire point of where it sits.
 
 Measured again on GCP, 2026-09-13, with the placeholder deliberately left
-standing and the seal job fired by hand: the seal did NOT refuse them. Every
-writer and the sealer read the same ConfigMap, so the events carried
-`agent://set-me.invalid/...` and the job was handed `--trust-domain
-set-me.invalid`; it counted `foreign_trust_domain 0`, wrote 9 records, sealed a
-segment and produced a pack that `trailryx-verify` called VERIFIED. The
-"would refuse" above was a reading, not a measurement, and the real behaviour is
-quieter still: a signed history under a domain nobody owns and not one red line
-anywhere. `verify.sh` now fails on the placeholder, which is the only place an
-operator was going to look.
+standing and the seal job fired by hand: the "would refuse" above was half a
+reading. Writers that build their agent id from the ConfigMap (the finops
+runner and the console read `$(TRAILRYX_TRUST_DOMAIN)`) wrote
+`agent://set-me.invalid/...`, and the seal job, handed `--trust-domain
+set-me.invalid` from the same ConfigMap, accepted every one of them:
+`foreign_trust_domain 0`, 9 records written, a segment sealed, a pack that
+`trailryx-verify` called VERIFIED. A signed history under a domain nobody owns.
+Writers that carry their own id are the other half: the gateway stamps whatever
+a caller sends in `x-fuse-agent-id`, the drills are `agent://mockryx.local/*`,
+and those are refused as foreign exactly as described. Two quiet nights, not
+one, and not a red line between them. `verify.sh` now fails on the placeholder,
+which is the only place an operator was going to look.
 
 **Three. The record plane could never have sealed anything on GCP or AWS.**
 `40-routines-and-secrets.yaml` applies the `record-seal` CronJob on every cloud
