@@ -539,6 +539,10 @@ for f in ("deploy.sh", "cloud/aws/deploy-aws.sh", "cloud/gcp/deploy-gcp.sh"):
 # the mirror fault is a manifest reading a key nobody writes; and a key an
 # installer writes that no manifest reads is NOT this gate's business, which the
 # pass case holds.
+# The manifest edit names no brace pair on purpose: `{ name: ..., key: ... }`
+# inside "$(...)" is exactly the bash 3.2 expansion the header above describes,
+# and the first version of this case applied a different edit, missed the fault
+# and reported TOOTHLESS here while the gate itself was fine.
 run_case "secret-keys-agree: an installer stops creating a key the manifests read" fail \
 	'./scripts/secret-keys-agree.sh' \
 	"$(py 'edit("install.sh", " \\\n      --from-literal=gateway_admin=\x27$GATEWAY_ADMIN_SECRET\x27\"", "\"")')" \
@@ -546,7 +550,7 @@ run_case "secret-keys-agree: an installer stops creating a key the manifests rea
 
 run_case "secret-keys-agree: a manifest starts reading a key no installer writes" fail \
 	'./scripts/secret-keys-agree.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "{ name: stack-keys, key: gateway_admin }", "{ name: stack-keys, key: gateway_admin_v2 }")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "stack-keys, key: gateway_admin", "stack-keys, key: gateway_admin_v2")')" \
 	"does not create key gateway_admin_v2"
 
 run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
