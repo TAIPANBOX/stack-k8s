@@ -157,8 +157,13 @@ pointed at what you built.
 
 ```bash
 git clone https://github.com/TAIPANBOX/stack-k8s && cd stack-k8s
-./deploy.sh --servers ip1,ip2,ip3 --agents ip4,ip5 --hcloud-token <token>
+./deploy.sh --servers ip1,ip2,ip3 --agents ip4,ip5 --hcloud-token <token> \
+  --trust-domain acme.example
 ```
+
+`--trust-domain` is the domain your agents carry in their ids
+(`agent://acme.example/...`). The manifests ship a placeholder there on purpose
+and `verify.sh` fails on it, so leave the flag out and the deploy ends red.
 
 What it asks, in order:
 

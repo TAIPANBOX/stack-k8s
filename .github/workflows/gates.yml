@@ -46,6 +46,14 @@ jobs:
       - name: every deploy path can set the trust domain, after the apply
         run: ./scripts/deploy-flags-agree.sh
 
+      # Added 2026-09-13, in both callers on the same commit. Three installers
+      # each carry a copy of the block that generates stack-keys; two of them
+      # shipped without the key the manifests had read since 2026-09-07, and
+      # the first fresh GCP cluster after that came up with no gateway and no
+      # console. Same asymmetry as the flag above, one gate over the block.
+      - name: every installer creates every Secret key the manifests read
+        run: ./scripts/secret-keys-agree.sh
+
       # No workload in this stack talks to the Kubernetes API from inside a
       # pod, so the projected token every pod gets for the namespace default
       # ServiceAccount is a live credential with nothing to authorize and

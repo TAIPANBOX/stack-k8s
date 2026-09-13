@@ -101,6 +101,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/deploy-flags-agree.sh   # invariant 14
 ./scripts/no-sa-token-by-default.sh # invariant 15
 ./scripts/no-operator-files-tracked.sh # invariant 16; GOTCHAS 99 and 100
+./scripts/secret-keys-agree.sh    # invariant 17; GOTCHAS 101
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -328,9 +329,10 @@ an absent invariant.
 
     What it costs when it is wrong is silence, which is why it is a gate rather
     than a note: the record plane accepts an event only if its agent id begins
-    `agent://<domain>/`, so with the placeholder standing every event the
-    cluster produces is refused as foreign, and a refusal that fires on
-    everything reads exactly like a quiet night.
+    `agent://<domain>/`, so with the placeholder standing every event a caller
+    stamps with its own domain is refused as foreign, and a refusal that fires
+    on everything reads exactly like a quiet night. (Half the picture, it
+    turned out: see "What loud turned out to mean" below.)
 
     *(gate: `scripts/deploy-flags-agree.sh`. Subjects are FOUND by what makes
     them subjects, a script invoking `k_ "apply -k .../manifests"`, so a fourth
@@ -346,6 +348,18 @@ an absent invariant.
     **What it does not do.** It reads text. That the patch actually sticks needs
     a live cluster, which invariants 4 and 5 already say this repository cannot
     hold in a gate.
+
+    **What "loud" turned out to mean.** Measured on GCP 2026-09-13 with the
+    placeholder left standing on purpose: nothing went red, in two ways at
+    once. Writers that derive their agent id from the ConfigMap (the finops
+    runner, the console) sealed 9 records under `agent://set-me.invalid/...`
+    with `foreign_trust_domain 0` and `trailryx-verify` said VERIFIED: a signed
+    history under a domain nobody owns. Writers that carry their own id (the
+    gateway stamps whatever a caller sends, the drills are `mockryx.local`)
+    are refused as foreign, which is the quiet night the paragraph above
+    describes. Neither is red anywhere an operator looks, so `verify.sh` now
+    fails on the placeholder: a default that is not loud anywhere is a default
+    that ships.
 
 15. **No pod automounts the default ServiceAccount token.** No manifest here
     sets `automountServiceAccountToken`, and this repository ships no RBAC at
@@ -401,6 +415,31 @@ an absent invariant.
     basename that matched, not the whole path), the same shape left untracked
     staying silent, a stale allow-list entry, an allow-list entry that matches
     no shape at all, and the index taken away entirely.)*
+
+17. **Every installer that generates a Secret generates every key the
+    manifests read from it.** Three installers each carry a copy of the block
+    that generates `stack-keys`, and copies drift: `10-planes.yaml` and
+    `20-console.yaml` started reading `gateway_admin` on 2026-09-07 (GOTCHAS
+    97), the root `install.sh` grew the key the same day, and the two cloud
+    installers did not. The first fresh cluster after that, GCP on 2026-09-13,
+    came up with the gateway and the console both in
+    `CreateContainerConfigError` and `deploy-gcp.sh` waited five minutes per
+    rollout before its own verify went red. Same asymmetry, same three files,
+    as invariant 14. GOTCHAS 101.
+
+    A Secret nobody here generates (an operator's model key, the tunnel's
+    token) is out of scope on purpose: the manifest that reads it says so
+    beside the reference. The migration branch, "the Secret already exists,
+    add only the key that is missing", is a live-cluster property and is
+    proved there, not here.
+    *(gate: `scripts/secret-keys-agree.sh`, in both callers. Subjects are
+    found by what makes them subjects: a tracked script running
+    `create secret generic <name>` with a literal name, against every
+    `secretKeyRef` in `manifests/` in either YAML spelling, any field order,
+    `optional: true` excluded, an unparsable reference red. Six cases in
+    `scripts/gates-have-teeth.sh`: an installer dropping a key, a manifest
+    reading a key nobody writes in either spelling, a key nobody reads (which
+    must pass), every installer taken away, and every reference taken away.)*
 
 ## Decisions that have no gate yet
 

@@ -173,7 +173,7 @@ run_case() {
 	fi
 }
 
-py() { printf 'def edit(p, a, b):\n    s = open(p).read()\n    assert a in s, "pattern not found in " + p\n    open(p, "w").write(s.replace(a, b, 1))\n%s\n' "$1"; }
+py() { printf 'def edit(p, a, b):\n    s = open(p).read()\n    assert a in s, "pattern not found in " + p\n    assert a != b, "edit replaces a string with itself in " + p\n    open(p, "w").write(s.replace(a, b, 1))\n    assert open(p).read() != s, "edit changed nothing in " + p\n%s\n' "$1"; }
 
 echo "=== faults each gate must catch ==="
 
@@ -530,6 +530,50 @@ run_case "deploy-flags-agree: no deploy path left to judge" fail \
 	'./scripts/deploy-flags-agree.sh' \
 	"$(py 'import os
 for f in ("deploy.sh", "cloud/aws/deploy-aws.sh", "cloud/gcp/deploy-gcp.sh"):
+    os.remove(f)')" \
+	"measured NOTHING"
+
+# Three installers each carry a copy of the block that generates `stack-keys`,
+# and two of the three shipped without the key the manifests had started to
+# read. The fault is one missing `--from-literal`, so that is what is planted;
+# the mirror fault is a manifest reading a key nobody writes; and a key an
+# installer writes that no manifest reads is NOT this gate's business, which the
+# pass case holds.
+# The manifest edit names no brace pair on purpose: `{ name: ..., key: ... }`
+# inside "$(...)" is exactly the bash 3.2 expansion the header above describes,
+# and the first version of this case applied a different edit, missed the fault
+# and reported TOOTHLESS here while the gate itself was fine.
+run_case "secret-keys-agree: an installer stops creating a key the manifests read" fail \
+	'./scripts/secret-keys-agree.sh' \
+	"$(py 'edit("install.sh", " \\\n      --from-literal=gateway_admin=\x27$GATEWAY_ADMIN_SECRET\x27\"", "\"")')" \
+	"does not create key gateway_admin"
+
+run_case "secret-keys-agree: a manifest starts reading a key no installer writes" fail \
+	'./scripts/secret-keys-agree.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "stack-keys, key: gateway_admin", "stack-keys, key: gateway_admin_v2")')" \
+	"does not create key gateway_admin_v2"
+
+run_case "secret-keys-agree: a manifest reads a key no installer writes, multi-line spelling" fail \
+	'./scripts/secret-keys-agree.sh' \
+	"$(py 'edit("manifests/55-copilot-cloud.yaml", "key: api_key\n", "key: api_key_v2\n")')" \
+	"does not create key api_key_v2"
+
+run_case "secret-keys-agree: no manifest left that reads a Secret" fail \
+	'./scripts/secret-keys-agree.sh' \
+	"$(py 'import glob
+for f in glob.glob("manifests/*.yaml"):
+    s = open(f).read()
+    open(f, "w").write(s.replace("secretKeyRef", "secretKeyRe_f"))')" \
+	"measured NOTHING"
+
+run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
+	'./scripts/secret-keys-agree.sh' \
+	"$(py 'edit("install.sh", "      --from-literal=cloud_admin=\x27$CLOUD_SECRET\x27 \\\n", "      --from-literal=cloud_admin=\x27$CLOUD_SECRET\x27 \\\n      --from-literal=spare=\x27$CLOUD_SECRET\x27 \\\n")')"
+
+run_case "secret-keys-agree: no installer left to judge" fail \
+	'./scripts/secret-keys-agree.sh' \
+	"$(py 'import os
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh"):
     os.remove(f)')" \
 	"measured NOTHING"
 

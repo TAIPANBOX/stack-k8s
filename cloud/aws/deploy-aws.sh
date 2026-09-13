@@ -58,7 +58,8 @@ ALERT_CONSOLE_URL="${ALERT_CONSOLE_URL:-}"
 # carries the plane and never the spending. See manifests/49-costcrew.yaml.
 WITH_FINOPS="${WITH_FINOPS:-0}"
 # The record plane's trust domain. Empty leaves 00-base.yaml's `set-me.invalid`
-# in place, which is the loud state and the right default; see where it is used.
+# in place, the right default and, measured 2026-09-13, NOT loud by itself:
+# verify.sh is what makes the placeholder red (GOTCHAS 90); see where it is used.
 TRUST_DOMAIN="${TRUST_DOMAIN:-}"
 # Build tokenfuse, trailryx and costcrew on a node instead of pulling them.
 #

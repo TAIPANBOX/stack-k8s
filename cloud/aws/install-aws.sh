@@ -630,15 +630,41 @@ if ! k_ "-n agent-stack get secret stack-keys" >/dev/null 2>&1; then
   CLOUD_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   WARDRYX_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   WARDRYX_GATEWAY_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  # gateway_admin is the gateway's OWN admin key: TOKENFUSE_ADMIN_KEYS on the
+  # gateway container in 10-planes.yaml and TOKENFUSE_GATEWAY_ADMIN_KEY on the
+  # console in 20-console.yaml (GOTCHAS 97). The root install.sh grew it on
+  # 2026-09-07 and this file did not, so the first fresh cluster after that,
+  # GCP on 2026-09-13, came up with the gateway and the console both in
+  # CreateContainerConfigError. scripts/secret-keys-agree.sh now holds the
+  # three installers to the keys the manifests read.
+  GATEWAY_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   k_ "-n agent-stack create secret generic stack-keys \
       --from-literal=cloud_keys='$CLOUD_SECRET:default:admin' \
       --from-literal=cloud_admin='$CLOUD_SECRET' \
       --from-literal=wardryx_keys='$WARDRYX_ADMIN_SECRET:default:admin,$WARDRYX_GATEWAY_SECRET:default:viewer' \
       --from-literal=wardryx_admin='$WARDRYX_ADMIN_SECRET' \
-      --from-literal=wardryx_gateway='$WARDRYX_GATEWAY_SECRET'" >/dev/null
+      --from-literal=wardryx_gateway='$WARDRYX_GATEWAY_SECRET' \
+      --from-literal=gateway_admin='$GATEWAY_ADMIN_SECRET'" >/dev/null
   echo "   created secret stack-keys"
 else
-  echo "   secret stack-keys already exists, left as is"
+  # A cluster installed before gateway_admin existed has a stack-keys Secret
+  # without it. "left as is" is right for the five values an operator may have
+  # rotated; this one has never existed on such a cluster, so an absent key is
+  # not a value to leave alone, it is a manifest that will never resolve. Read
+  # before writing: add only what is missing, touch nothing that is present.
+  # No `|| true` and no stderr swallowed: a read that FAILS must stop the
+  # installer here, because the line after this one writes a fresh random
+  # value wherever the read came back empty. With the two conflated, an ssh
+  # hiccup rotates a live key under a running gateway and console. kubectl
+  # prints nothing and exits 0 for a key that is simply absent.
+  GATEWAY_ADMIN_B64="$(k_ "-n agent-stack get secret stack-keys -o jsonpath={.data.gateway_admin}")"
+  if [ -z "$GATEWAY_ADMIN_B64" ]; then
+    GATEWAY_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    k_ "-n agent-stack patch secret stack-keys --type merge -p '{\"stringData\":{\"gateway_admin\":\"$GATEWAY_ADMIN_SECRET\"}}'" >/dev/null
+    echo "   added gateway_admin to the existing stack-keys secret"
+  else
+    echo "   secret stack-keys already exists, left as is"
+  fi
 fi
 
 # ---- 7. the operator's kubeconfig -----------------------------------------

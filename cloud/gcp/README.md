@@ -171,8 +171,15 @@ in, and with the hourly rate it just started spending.
 ```bash
 ./deploy-gcp.sh \
   --servers "$(terraform output -json servers | jq -r 'join(",")')" \
-  --agents  "$(terraform output -json agents  | jq -r 'join(",")')"
+  --agents  "$(terraform output -json agents  | jq -r 'join(",")')" \
+  --trust-domain acme.example
 ```
+
+`--trust-domain` is the domain your agents carry in their ids
+(`agent://acme.example/...`). The manifests ship a placeholder there on
+purpose, and `verify.sh`, which this command runs at the end, fails on the
+placeholder: without the flag the record plane seals under a domain nobody
+owns, or refuses everything as foreign, and neither is loud anywhere else.
 
 Add `--console-token <github-token>` if the Genaryx console is wanted. Without
 it the open stack still deploys and still enforces, but there is no control
