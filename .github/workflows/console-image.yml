@@ -67,10 +67,14 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   build:
+    # Pushes to the registry by digest, so it needs the package scope the
+    # top level no longer grants; `contents: read` repeated for the checkout.
+    permissions:
+      contents: read
+      packages: write
     name: console on ${{ matrix.arch }}
     # Never on a pull request: this job pushes by digest. build-pr below is
     # what a pull request runs instead.
@@ -252,6 +256,11 @@ jobs:
           retention-days: 1
 
   merge:
+    # Pushes to the registry by digest, so it needs the package scope the
+    # top level no longer grants; `contents: read` repeated for the checkout.
+    permissions:
+      contents: read
+      packages: write
     name: merge the manifest list
     needs: build
     # Never on a pull request: this job creates the manifest list under the
