@@ -577,6 +577,58 @@ for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", 
     os.remove(f)')" \
 	"measured NOTHING"
 
+# Three installers each bring up a k3s server, and the second run of one of
+# them killed the first server on AWS because it alone minted a fresh token.
+# The fault planted is the read of the existing token taken away; the mirror
+# is the read moved BELOW the install, where it reads a file the install just
+# rewrote. No brace pair in any edit string (bash 3.2, see the header).
+run_case "k3s-token-is-reused: an installer stops reading the cluster's token" fail \
+	'./scripts/k3s-token-is-reused.sh' \
+	"$(py 'edit("install.sh", "cat /var/lib/rancher/k3s/server/token || echo __ABSENT__", "echo __ABSENT__")')" \
+	"never assigns K3S_TOKEN_VALUE from"
+
+run_case "k3s-token-is-reused: the token is read after the install rewrote it" fail \
+	'./scripts/k3s-token-is-reused.sh' \
+	"$(py 'edit("install.sh", "  K3S_TOKEN_VALUE=\"$(sh_ \"$FIRST\" \"sh -c", "  K3S_TOKEN_VALUE_HELD=\"$(sh_ \"$FIRST\" \"sh -c")
+s = open("install.sh").read()
+j = s.index("# ---- 3. the other servers")
+open("install.sh", "w").write(s[:j] + "K3S_TOKEN_VALUE=\"$(sh_ \"$FIRST\" \x27cat /var/lib/rancher/k3s/server/token\x27)\"\n" + s[j:])')" \
+	"AFTER its first server install"
+
+run_case "k3s-token-is-reused: a comment mentioning the install is not an installer" pass \
+	'./scripts/k3s-token-is-reused.sh' \
+	"$(py 'edit("install.sh", "#!/usr/bin/env bash\n", "#!/usr/bin/env bash\n# this comment names the k3s install phrase and installs nothing: INSTALL_K3S_VERSION=x sh -s - serv" + "er\n")')"
+
+# The first-server install wrapped over two lines, with the read moved between
+# the first-server and the joining-server installs: the first version of the
+# gate anchored its ordering check on the `sh -s` line alone, so the wrap slid
+# the anchor down to the joining-server line and the misplaced read passed.
+run_case "k3s-token-is-reused: a wrapped first-server install hides a read placed after it" fail \
+	'./scripts/k3s-token-is-reused.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "  K3S_TOKEN_VALUE=\"$(su_ \"$FIRST\" \"sh -c", "  K3S_TOKEN_VALUE_HELD=\"$(su_ \"$FIRST\" \"sh -c")
+s = open("cloud/aws/install-aws.sh").read()
+i = s.index("K3S_TOKEN=\x27$K3S_TOKEN_VALUE\x27 sh -s - serv" + "er \\")
+s = s[:i] + "K3S_TOKEN=\x27$K3S_TOKEN_VALUE\x27 \\\n    sh -s - serv" + "er \\" + s[i + len("K3S_TOKEN=\x27$K3S_TOKEN_VALUE\x27 sh -s - serv" + "er \\"):]
+j = s.index("# ---- 3. the other servers")
+s = s[:j] + "K3S_TOKEN_VALUE=\"$(su_ \"$FIRST\" \x27cat /var/lib/rancher/k3s/server/token\x27)\"\n" + s[j:]
+open("cloud/aws/install-aws.sh", "w").write(s)')" \
+	"AFTER its first server install"
+
+# The silent mutant: the read over the login helper instead of the sudo one.
+# On the box the token file is root-owned 0600, so `sh_` reads nothing and the
+# installer mints a fresh token with every line of the reuse block in place.
+run_case "k3s-token-is-reused: the token is read over a helper that cannot read it" fail \
+	'./scripts/k3s-token-is-reused.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "K3S_TOKEN_VALUE=\"$(su_ \"$FIRST\" \"sh -c", "K3S_TOKEN_VALUE=\"$(sh_ \"$FIRST\" \"sh -c")')" \
+	"reads the token over sh_ and installs over su_"
+
+run_case "k3s-token-is-reused: no installer left to judge" fail \
+	'./scripts/k3s-token-is-reused.sh' \
+	"$(py 'import os
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh"):
+    os.remove(f)')" \
+	"measured NOTHING"
+
 # The subject taken away entirely: with nothing left in the index, this gate
 # has no tracked file list to check an operator-file shape against, and
 # agreeing that a repository with nothing in it also has no operator files
