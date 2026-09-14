@@ -83,7 +83,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: heraldyx
-          image: ghcr.io/taipanbox/heraldyx:v0.2.2
+          image: ghcr.io/taipanbox/heraldyx:v0.2.3
           imagePullPolicy: IfNotPresent
           env:
             # The deployment's own shape. What the OPERATOR chooses (who to
