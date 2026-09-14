@@ -3657,3 +3657,44 @@ Proved on a fresh cluster the same evening: run 1 from bare machines, run 2
 over it printed `reusing the token this cluster was created with`; both runs
 `verify.sh` 15 passed / 0 failed / 1 noted and `security-tests.sh` 27 passed /
 0 failed / 3 noted.
+
+## 103. The GCP preflight rewrote the operator's machine type with its own default, and reported the quota against the wrong family
+
+**Ours, and fixed.** `cloud/gcp/preflight.sh` writes `terraform.tfvars` so no
+long command line has to be retyped, and its header has said "written, not
+clobbered" since 2026-08-02, when it learned to read the node counts back from
+an existing file (the script's own comment records why: an operator building
+three nodes was told five would not fit). It read the counts and nothing else. The machine type,
+disk size and region came from the environment or the script's defaults every
+run, and section 10 wrote them over whatever the file said.
+
+Measured 2026-09-13 on R2 of the 1.0 proving run (issue #79). The file said
+`machine_type = "c2d-highcpu-8"`, the family with a 100 vCPU ceiling in
+europe-west3 (entry 64: the NEWEST families, C3D, C4, C4A, are capped at 24
+there and the increase request is auto-denied). The preflight rewrote it to
+`c3d-highcpu-8`, checked `CPUS_PER_VM_FAMILY` for C3D, printed
+`wrote terraform.tfvars`, and would have handed `terraform apply` a cluster
+the quota step had just been written to refuse: 40 vCPU against a ceiling of
+24, three of five instances created and billing while the other two are
+refused, which is what happened on 2026-07-26 before the quota step existed
+(entry 64).
+The operator read the file, set it back to c2d by hand, and applied. The
+finding is in estate-gates `PROVEN.md` (the R2 row on the 1.0 set) and was
+carried as "set the file back before apply" in the session handoff until this
+entry.
+
+The shape is the one the counts fix already had, one variable over: a script that
+reads part of the file it rewrites is a script that clobbers the rest, and the
+comment that says it does not was written for the part. Fixed the way the
+counts were fixed: `machine_type`, `disk_gb` and `region` are read back from an
+existing file before anything is checked, with the precedence the counts
+already had, the environment (set on purpose for one run), then the file, then
+the default. `scripts/preflight-keeps-tfvars.sh` runs the real script in a
+scratch directory with a stub `gcloud`, `terraform` and `curl` on PATH (enough
+to reach section 10; nothing real is called and nothing is created) over a
+seeded tfvars, twice: with nothing in the environment every value and the
+operator's own line must survive and the quota line must name
+`5 x c2d-highcpu-8` in the file's region; with `MACHINE_TYPE` set the
+environment must win without resetting the others. Six problems on the unfixed
+script, none on the fixed one; invariant 19; three cases in
+`gates-have-teeth.sh`.

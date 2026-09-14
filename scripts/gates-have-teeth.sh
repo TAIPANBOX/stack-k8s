@@ -641,6 +641,27 @@ run_case "no-operator-files-tracked: nothing left in the index to check" fail \
 subprocess.run(["git", "rm", "-r", "--cached", "-q", "."], check=True)')" \
 	"measured NOTHING"
 
+# The GCP preflight rewrote the operator's machine type with its own default
+# (GOTCHAS 103, invariant 19). The gate runs the real script under stubs over a
+# seeded tfvars; the fault is the read-back of the file's value taken away, so
+# the default wins again exactly as it did on 2026-09-13.
+run_case "preflight-keeps-tfvars: the file's machine type is no longer read back" fail \
+	'./scripts/preflight-keeps-tfvars.sh' \
+	"$(py 'edit("cloud/gcp/preflight.sh", "MACHINE_TYPE=\"${MACHINE_TYPE:-$(tfvar_ machine_type || true)}\"", "MACHINE_TYPE=\"${MACHINE_TYPE:-}\"")')" \
+	"machine_type: the file said c2d-highcpu-8"
+
+# The default itself changing is not the fault: the gate judges what the file
+# said against what was written back, so a new default must not fire it.
+run_case "preflight-keeps-tfvars: a changed default is not a rewrite" pass \
+	'./scripts/preflight-keeps-tfvars.sh' \
+	"$(py 'edit("cloud/gcp/preflight.sh", "MACHINE_TYPE=\"${MACHINE_TYPE:-c3d-highcpu-8}\"", "MACHINE_TYPE=\"${MACHINE_TYPE:-c4-highcpu-8}\"")')"
+
+run_case "preflight-keeps-tfvars: no preflight left to run" fail \
+	'./scripts/preflight-keeps-tfvars.sh' \
+	"$(py 'import os
+os.remove("cloud/gcp/preflight.sh")')" \
+	"measured nothing"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'

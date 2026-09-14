@@ -48,6 +48,7 @@ step "no pod automounts the default SA token" "./scripts/no-sa-token-by-default.
 step "nothing operator-shaped is tracked" "./scripts/no-operator-files-tracked.sh"
 step "every installer creates every Secret key the manifests read" "./scripts/secret-keys-agree.sh"
 step "every installer reuses the cluster token before it installs" "./scripts/k3s-token-is-reused.sh"
+step "the GCP preflight keeps what the operator wrote in terraform.tfvars" "./scripts/preflight-keeps-tfvars.sh"
 
 echo
 if [ "$fail" -ne 0 ]; then
