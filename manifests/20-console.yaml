@@ -68,6 +68,15 @@ spec:
             # from a ConfigMap (00-base.yaml) and nothing the console writes
             # can change what it believes it is governing.
             - { name: TAIPAN_HOME, value: "/etc/genaryx/taipan" }
+            # Where the console keeps its bus history (console.sqlite). Said
+            # outright since 2026-09-14: without it the console used
+            # <TAIPAN_HOME>/genaryx, the root-owned parent of the read-only
+            # mount above, could not create it, and served every cluster with
+            # an empty Bus Explorer (genaryx#71, #82). The state volume is
+            # the one place it can write, so it is named here; a console
+            # image older than genaryx#72 ignores the name and falls back to
+            # nothing, which is the state every cluster was in.
+            - { name: GENARYX_STATE_DIR, value: "/var/lib/stack/genaryx" }
             # Scan the checked-out stack, not $HOME: pointing qryx at a home
             # directory is what made the Evidence tab hang on the box.
             - { name: GENARYX_SCAN_TARGET, value: "/srv/ui" }
