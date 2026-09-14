@@ -4,8 +4,10 @@
 #   ./preflight.sh --project <project-id>
 #
 # It checks everything the run needs, generates the ssh key if there is none,
-# and writes terraform.tfvars so no long command line has to be retyped. It
-# creates NOTHING billable and spends NOTHING. Safe to run as often as you like.
+# and writes terraform.tfvars so no long command line has to be retyped; an
+# existing file's machine type, disk size, region and node counts are carried
+# through (the environment overrides them). It creates NOTHING billable and
+# spends NOTHING. Safe to run as often as you like.
 #
 # Two things here have no counterpart in the AWS preflight, and both are GCP
 # facts worth the extra lines:
@@ -25,27 +27,39 @@
 set -euo pipefail
 
 KEY="${KEY:-$HOME/.ssh/stack-k8s-gcp}"
-REGION="${REGION:-europe-west3}"
-ZONE="${ZONE:-${REGION}-a}"
-MACHINE_TYPE="${MACHINE_TYPE:-c3d-highcpu-8}"
 IMAGE_FAMILY="${IMAGE_FAMILY:-ubuntu-2604-lts-amd64}"
 IMAGE_PROJECT="${IMAGE_PROJECT:-ubuntu-os-cloud}"
 PROJECT="${GCP_PROJECT:-${CLOUDSDK_CORE_PROJECT:-}}"
-DISK_GB="${DISK_GB:-100}"
 TFVARS="terraform.tfvars"
 
 # What the run will actually be. Read from terraform.tfvars when it exists, so
-# the quota this script checks is the quota the apply will need.
+# the quota this script checks is the quota the apply will need, and so the
+# file this script writes back is the operator's file and not this script's
+# defaults. Precedence: the environment (set on purpose for this run), then
+# the file (what the operator chose last time), then the default.
 #
 # It used to assume 3 servers and 2 agents no matter what the file said, and it
 # rewrote the file without those counts. So an operator who chose three nodes
 # was told they needed 40 vCPU, refused by a ceiling of 24, and had no way to
 # pass a gate that was measuring a cluster they were not building. Measured
 # 2026-08-02 in europe-west3, where the C3D per-family ceiling is exactly 24.
+#
+# The counts were read back from that day on; the machine type, disk size and
+# region were not, and on 2026-09-13 the file's `c2d-highcpu-8` (the family
+# with room) was rewritten to the default `c3d-highcpu-8` (the family capped
+# at 24) and set back by hand before the apply. GOTCHAS 103; the gate is
+# scripts/preflight-keeps-tfvars.sh.
 tfvar_() {
   [ -f "$TFVARS" ] || return 1
   sed -nE "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"?([^\"[:space:]]+)\"?.*/\1/p" "$TFVARS" | tail -1
 }
+REGION="${REGION:-$(tfvar_ region || true)}"
+REGION="${REGION:-europe-west3}"
+ZONE="${ZONE:-${REGION}-a}"
+MACHINE_TYPE="${MACHINE_TYPE:-$(tfvar_ machine_type || true)}"
+MACHINE_TYPE="${MACHINE_TYPE:-c3d-highcpu-8}"
+DISK_GB="${DISK_GB:-$(tfvar_ disk_gb || true)}"
+DISK_GB="${DISK_GB:-100}"
 SERVERS_WANTED="${SERVERS_WANTED:-$(tfvar_ server_count || true)}"
 SERVERS_WANTED="${SERVERS_WANTED:-3}"
 AGENTS_WANTED="${AGENTS_WANTED:-$(tfvar_ agent_count || true)}"

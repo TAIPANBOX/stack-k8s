@@ -103,6 +103,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/no-operator-files-tracked.sh # invariant 16; GOTCHAS 99 and 100
 ./scripts/secret-keys-agree.sh    # invariant 17; GOTCHAS 101
 ./scripts/k3s-token-is-reused.sh  # invariant 18; GOTCHAS 102
+./scripts/preflight-keeps-tfvars.sh # invariant 19; GOTCHAS 103
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -469,6 +470,30 @@ an absent invariant.
     the read over the wrong helper, every installer taken away. The fix was
     proved live: cluster 2's second run printed `reusing the token this cluster
     was created with`, `verify.sh` 15 passed / 0 failed / 1 noted.)*
+
+19. **The GCP preflight carries the operator's `terraform.tfvars` through: the
+    machine type, disk size, region and node counts already in the file are
+    what it checks the quota against and what it writes back, and only the
+    environment, set on purpose for one run, overrides them.** The script's
+    header has said "written, not clobbered" since the node counts were read
+    back on 2026-08-02; the machine type, disk size and region were not, so
+    the file's value lost to the script's default every run. Measured
+    2026-09-13, R2 of the 1.0 proving run: the file said `c2d-highcpu-8` (the
+    family with a 100 vCPU ceiling in europe-west3), the preflight rewrote it
+    to `c3d-highcpu-8` (capped at 24, below the 40 the cluster needs) and
+    reported the quota against C3D; set back by hand before `terraform apply`.
+    Had it not been, the apply would have died halfway on the family ceiling
+    with a partial cluster billing, the exact failure the quota step exists to
+    catch. GOTCHAS 103. Precedence is environment, then file, then default,
+    the same order the counts already had.
+    *(gate: `scripts/preflight-keeps-tfvars.sh`, in both callers. It runs the
+    real script in a scratch directory with a stub `gcloud`, `terraform` and
+    `curl` on PATH, over a seeded tfvars, twice: once with nothing in the
+    environment, once with `MACHINE_TYPE` set. Three cases in
+    `scripts/gates-have-teeth.sh`: the file's machine type no longer read
+    back, a changed default that must pass, the preflight taken away. Red
+    first: six problems on the unfixed script, `machine_type: the file said
+    c2d-highcpu-8 and the preflight wrote c3d-highcpu-8` among them.)*
 
 ## Decisions that have no gate yet
 
