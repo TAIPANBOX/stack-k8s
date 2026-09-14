@@ -228,6 +228,23 @@ else
   fi
 fi
 
+# Reading the planes is still not the bus. The console keeps its history in
+# a store it has to CREATE at startup; with TAIPAN_HOME pointed at a root-owned
+# config mount it could not, logged one line and served on with an empty Bus
+# Explorer, on every cluster from 2026-08-31 to 2026-09-14, and every check
+# above was green throughout (genaryx#71, #82). The console's own startup line
+# is the only place this shows, so it is read here, from the pod's log.
+console_log="$(kc logs deploy/genaryx-console --tail=200 2>/dev/null || true)"
+if [ -z "$console_log" ]; then
+  bad "the console's log could not be read, so whether its bus is live is unknown"
+elif echo "$console_log" | grep -q 'bus startup failed'; then
+  bad "the console's bus did not start: its Bus Explorer is empty (genaryx#71, #82; a console older than v1.1.1, or GENARYX_STATE_DIR not writable)"
+elif echo "$console_log" | grep -q 'bus LIVE'; then
+  ok "the console's bus is live"
+else
+  bad "the console's log carries neither 'bus LIVE' nor 'bus startup failed': the line this check reads has moved"
+fi
+
 head_ "the gateway's admin key is enforced"
 # This one MUST fail to pass, exactly like the "not reachable from the host"
 # shape used elsewhere in this suite: a gateway that answers /v1/runs to
