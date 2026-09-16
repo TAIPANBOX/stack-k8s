@@ -3698,3 +3698,37 @@ operator's own line must survive and the quota line must name
 environment must win without resetting the others. Six problems on the unfixed
 script, none on the fixed one; invariant 19; three cases in
 `gates-have-teeth.sh`.
+
+## 104. Every pod on the shared events volume can write a line in another plane's name, and nothing checks
+
+**The stack's own contract.** Named, not fixed. `stack-events` is one RWX PersistentVolumeClaim mounted
+read-write into the money-plane pods, `wardryx` and `idryx`
+(`manifests/10-planes.yaml`), and read by `heraldyx` and the record plane. A
+line on the bus is a plain append, and the `source` field is whatever the
+writer put there: heraldyx alerts on it and trailryx seals it as history
+without asking which process wrote the file. So a compromised pod with that
+mount can write `policy_allow` or `approval_granted` under `source:
+"wardryx"` and both readers take it as wardryx's word. The one plane whose
+log is kept apart, on purpose and with the reason in the manifest, is scopyx
+(`manifests/47-scopyx.yaml`): the workload that reaches the public internet
+must not be able to rewrite anyone else's trail. The same reasoning applies
+to every other writer and was not applied. The honest description of the
+current design is that the pods sharing `stack-events` trust each other as
+much as they trust the node they run on. A per-writer volume, the scopyx
+shape, or a per-line signature on the bus would close it; neither is built.
+Read together with 20 (a forged pod label) and 91.
+
+## 105. Delegation is verified nowhere unless you turn it on, and no launcher turns it on
+
+**The stack's own contract.** Named, not fixed. The gateway's two delegation doors verify a vouchryx
+token only when `TOKENFUSE_DELEGATION_ISSUER` and `TOKENFUSE_DELEGATION_JWKS`
+are set (tokenfuse `crates/gateway/src/chainproof.rs`), and the `stack-wiring`
+ConfigMap sets neither; the Go planes do not verify one at all (measured
+2026-09-16 with a grep for the `agent-stack-go/delegation` import over the
+nine Go repositories: only vouchryx itself imports it). So on this
+deployment `on_behalf_of` travels as a claim the caller wrote, and a wardryx
+policy carrying `deny_if_chain_unproven` or `require_root_principal` refuses
+only callers honest enough to say they did not prove it. Turning it on means
+vouchryx becomes a required component with a signing key provisioned at
+install and its JWKS fetched before the gateway starts, which stack-up does
+behind `--with-delegation` and this repository does not do yet.
