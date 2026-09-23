@@ -387,7 +387,18 @@ spec:
       # usable by a compromised container for discovery and SelfSubjectReview,
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
-      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      # fsGroup 10001, the stack group, and not wardryx's own 65532: the
+      # shared `stack-events` volume is written by tokenfuse-cloud and the
+      # console, whose fsGroup 10001 leaves it 10001:10001 mode 2775, and
+      # wardryx appends wardryx.ndjson to it. As 65532:65532 with no
+      # supplementary group that append is `permission denied`; fsGroup adds
+      # 10001 to the process's groups whatever the volume type, which is the
+      # same answer stack-single gives with `user: "65532:10001"`. Found on a
+      # kind run of v1.1.7 (2026-09-23). That run's volume was a hostPath,
+      # which gets no fsGroup chown at all, so it needed opening by hand
+      # whatever this line says; this closes the case where the volume is
+      # group 10001, not that one.
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: wardryx
           image: ghcr.io/taipanbox/wardryx:v1.0.3
