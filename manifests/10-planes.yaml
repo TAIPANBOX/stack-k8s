@@ -431,6 +431,12 @@ spec:
           volumeMounts:
             - { name: events, mountPath: /var/lib/stack/events }
             - { name: policy, mountPath: /etc/wardryx, readOnly: true }
+          # /healthz, not /readyz, on purpose. wardryx 1.0.3's /readyz answers 503
+          # while its policy store is unreachable, but POST /v1/decide does not use
+          # the store and keeps answering. A readiness probe on /readyz would take
+          # this pod out of the Service for the length of a store outage, and every
+          # gateway with failmode=closed would then refuse every call. verify.sh asks
+          # /readyz instead, where a 503 is a finding and not a routing decision.
           readinessProbe:
             httpGet: { path: /healthz, port: http }
             initialDelaySeconds: 2

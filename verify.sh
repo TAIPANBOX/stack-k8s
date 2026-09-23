@@ -166,6 +166,7 @@ import os, urllib.request
 for n,u in [('cloud',   'http://tokenfuse-cloud:8080/healthz'),
             ('gateway', 'http://tokenfuse-gateway:4100/healthz'),
             ('wardryx', 'http://wardryx:8090/healthz'),
+            ('wardryx store', 'http://wardryx:8090/readyz'),
             ('idryx',   'http://idryx:8081/healthz'),
             ('console', 'http://127.0.0.1:7420/healthz')]:
     try:
@@ -174,7 +175,7 @@ for n,u in [('cloud',   'http://tokenfuse-cloud:8080/healthz'),
         print(n, 'FAIL', e)
 ")"
 echo "$out" | sed 's/^/  /'
-echo "$out" | grep -q FAIL && bad "a plane did not answer" || ok "all five planes answer 200"
+echo "$out" | grep -q FAIL && bad "a plane did not answer" || ok "all five planes answer 200, and wardryx reaches its store"
 
 head_ "the data the console governs"
 # Each plane with ITS OWN credential. The money plane and the policy plane do
