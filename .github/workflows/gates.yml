@@ -70,6 +70,15 @@ jobs:
       - name: the GCP preflight keeps what the operator wrote in terraform.tfvars
         run: ./scripts/preflight-keeps-tfvars.sh
 
+      # Added 2026-09-24. The gateway's semantic response cache defaults to
+      # shadow mode whenever TOKENFUSE_CACHE is unset: one global mutex per
+      # call, up to 10,000 cached entries walked for cosine similarity,
+      # nothing served back (tokenfuse#319). Measured on a 4-core N150
+      # appliance: 177 calls/s with 403 refusals in shadow mode, 1102 calls/s
+      # and zero refusals with the cache off.
+      - name: the gateway's semantic cache is off in every install
+        run: ./scripts/gateway-cache-is-off.sh
+
       # No workload in this stack talks to the Kubernetes API from inside a
       # pod, so the projected token every pod gets for the namespace default
       # ServiceAccount is a live credential with nothing to authorize and

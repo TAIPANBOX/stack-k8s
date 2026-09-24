@@ -265,6 +265,15 @@ spec:
             # is the answer to "how fast does a freeze take effect on live
             # traffic": up to this many milliseconds later, not instantly.
             - { name: TOKENFUSE_WARDRYX_CACHE_TTL_MS, value: "3000" }
+            # The gateway's OWN semantic response cache, a different thing
+            # from the wardryx decision cache above. Left unset it defaults to
+            # shadow mode: one global mutex per call, a walk of up to 10,000
+            # cached entries computing cosine similarity, nothing served back.
+            # Measured on a 4-core N150 appliance, 2026-09-24: 50 agents gave
+            # 177 calls/s with 403 refusals and high CPU inside
+            # SemanticCache::get; with this variable off the same load gave
+            # 1102 calls/s and no refusals. tokenfuse#319.
+            - { name: TOKENFUSE_CACHE, value: "off" }
           envFrom:
             - configMapRef: { name: stack-wiring }
           ports: [{ name: http, containerPort: 4100 }]
