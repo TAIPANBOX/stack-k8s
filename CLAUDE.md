@@ -104,6 +104,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/secret-keys-agree.sh    # invariant 17; GOTCHAS 101
 ./scripts/k3s-token-is-reused.sh  # invariant 18; GOTCHAS 102
 ./scripts/preflight-keeps-tfvars.sh # invariant 19; GOTCHAS 103
+./scripts/gateway-cache-is-off.sh # invariant 20
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -494,6 +495,13 @@ an absent invariant.
     back, a changed default that must pass, the preflight taken away. Red
     first: six problems on the unfixed script, `machine_type: the file said
     c2d-highcpu-8 and the preflight wrote c3d-highcpu-8` among them.)*
+
+20. **The gateway's semantic response cache is off in every install.**
+    `@decided 2026-09-24`: the launcher sets `TOKENFUSE_CACHE=off` on every
+    tokenfuse gateway container explicitly, because the gateway's own shadow
+    default serialises every call behind one lock and serves nothing back for
+    it (tokenfuse#319).
+    *(gate: `scripts/gateway-cache-is-off.sh`)*
 
 ## Decisions that have no gate yet
 

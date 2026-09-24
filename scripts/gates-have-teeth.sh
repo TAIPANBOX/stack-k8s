@@ -662,6 +662,38 @@ run_case "preflight-keeps-tfvars: no preflight left to run" fail \
 os.remove("cloud/gcp/preflight.sh")')" \
 	"measured nothing"
 
+# The gateway's semantic cache defaults to shadow mode, one global mutex per
+# call, whenever TOKENFUSE_CACHE is unset (tokenfuse#319). A container losing
+# the line is the ordinary drift this gate exists for.
+run_case "gateway-cache-is-off: a gateway container loses TOKENFUSE_CACHE" fail \
+	'./scripts/gateway-cache-is-off.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n", "")')" \
+	"no TOKENFUSE_CACHE env var"
+
+# The variable present but wrong is a different failure than absent, and the
+# gate has to say which value it actually found.
+run_case "gateway-cache-is-off: a gateway container sets TOKENFUSE_CACHE to something other than off" fail \
+	'./scripts/gateway-cache-is-off.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "- { name: TOKENFUSE_CACHE, value: \"off\" }", "- { name: TOKENFUSE_CACHE, value: \"on\" }")')" \
+	"TOKENFUSE_CACHE='on'"
+
+# A sidecar that runs the same published image but with a subcommand (here,
+# focus-export) never reaches the semantic cache, and must not be judged as
+# if it were the gateway itself. Swapping its command onto the bare binary,
+# with its args: block left standing, checks that the args: key is what
+# excludes it, not the binary name.
+run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container" pass \
+	'./scripts/gateway-cache-is-off.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "command: [\"/bin/sh\", \"-c\"]", "command: [\"/usr/local/bin/tokenfuse\"]")')"
+
+# The subject taken away: the gateway container's image line is the only
+# thing that makes it a subject at all, so changing it removes the one
+# matching container from every manifest kustomization.yaml includes.
+run_case "gateway-cache-is-off: no gateway container left to judge" fail \
+	'./scripts/gateway-cache-is-off.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.0.4\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"measured nothing about the"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'
