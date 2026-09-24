@@ -691,7 +691,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.0.4\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.1.1\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 echo
