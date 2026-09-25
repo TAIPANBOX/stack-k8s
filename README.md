@@ -84,6 +84,7 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | Deployment + PVC + NetworkPolicy | `heraldyx`, the notifier. **Not in the default apply**, see "Being told, rather than watching" below. No Service and no port: it reads the event log and sends mail, so nothing calls it | |
 | Deployment + PVC + Service + NetworkPolicy x4 | `47-scopyx.yaml`, the web-egress enforcement point. **Not in the default apply**: it opens 80 and 443 to the whole public internet on behalf of agents, which is the widest grant in the namespace and the one decision an operator most needs to have made themselves. Refuses to start without a credential, deliberately | |
 | Deployment | `48-scopyx-browser.yaml`, the same plane with a real browser, for pages that assemble themselves. **Replaces 47's Deployment rather than running beside it**, so a cluster cannot round-robin an agent's fetches between a browser and a fetcher that runs no JavaScript. Costs 267 MB of pull against 3.5 MB. Read its header: PodSecurity `restricted` decides the sandbox question for you | |
+| Deployment + PVC + Service | `51-typryx.yaml`, the typed-answer plane: a typed question answered with a probability, scored later against what actually happened. **Not in the default apply**: a whole plane somebody may simply not want. Backend is `stub` (free, no outbound call) in every launcher. Refuses to start without a credential, the same as scopyx | |
 | Patch (Deployment) | `55-copilot-cloud.yaml`: points the console's copilot, Felyx, at a real Anthropic model instead of the local Ollama default. **Not in the default apply, opt-in, and METERED**: every conversation is billed by the model provider to the key's owner, on a bill separate from the cluster, so it needs a Secret holding your own API key and a manual `kubectl patch` naming this file. See its own header before applying | |
 | Namespace labels + NetworkPolicy x2 | `60-harden-neighbours.yaml`: Pod Security `restricted` plus default-deny ingress and egress for the cluster's `default` namespace, i.e. hardening for a namespace this stack does not own (`security-tests.sh` check 12 reports on the gap this closes). **Not in the default apply**: it changes a namespace that belongs to whoever runs the cluster, and it WILL stop anything already running in `default`. Read its header before applying | |
 
@@ -238,6 +239,30 @@ kubectl apply -f manifests/45-heraldyx.yaml
 Read that file's header before you do. It carries the only egress rule in the
 namespace that reaches past DNS, it says exactly how narrow that rule is, and
 it says what it leaves open.
+
+### The typed-answer plane
+
+`typryx` is off by default for a smaller reason than heraldyx or scopyx: it
+reaches nowhere outbound (its backend is `stub`, free and deterministic in
+every launcher) and enforces nothing, it is simply a whole plane somebody may
+not want. `./deploy.sh --with-typed` applies it after the kustomization; by
+hand it is
+
+```bash
+kubectl apply -f manifests/51-typryx.yaml
+kubectl -n agent-stack create secret generic typryx-keys \
+  --from-literal=TYPRYX_KEYS='pick-a-long-secret=agent://acme.example/support-bot'
+```
+
+Without that Secret the pod refuses to start, the same stance scopyx takes on
+its own key. Nothing in the cluster calls it yet: wiring tokenfuse's MCP
+broker to it is out of scope for this change (the broker forwards no
+credential today, so it cannot pass typryx's door), so reach it the way you
+reach costcrew, over your own tunnel or
+
+```bash
+kubectl -n agent-stack port-forward svc/typryx 4320:4320
+```
 
 ## Status
 

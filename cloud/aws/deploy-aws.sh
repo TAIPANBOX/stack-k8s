@@ -33,6 +33,14 @@
 # it that CAN spend on a model account ships suspended, so this flag applies a
 # console and starts no meter; see manifests/49-costcrew.yaml for how to run
 # the crew deliberately afterwards.
+#
+# `--with-typed` additionally applies typryx, the typed-answer plane: it answers a
+# typed question (a choice, a score, a yes or no) with a probability, and
+# scores those probabilities against truths recorded later. Off by
+# default for the same reason `--with-finops` is: a whole plane somebody may
+# simply not want. Nothing it does spends money (its backend is `stub`, free
+# and making no outbound call, in every launcher); see manifests/51-typryx.yaml
+# for how an operator switches it and for how its door key is generated.
 set -euo pipefail
 
 SERVERS=""; AGENTS=""
@@ -57,6 +65,9 @@ ALERT_CONSOLE_URL="${ALERT_CONSOLE_URL:-}"
 # want, and the half of it that can spend money ships suspended, so the flag
 # carries the plane and never the spending. See manifests/49-costcrew.yaml.
 WITH_FINOPS="${WITH_FINOPS:-0}"
+# The typed-answer plane, off by default: a whole plane somebody may simply
+# not want. Unlike WITH_FINOPS nothing behind it can spend money.
+WITH_TYPED="${WITH_TYPED:-0}"
 # The record plane's trust domain. Empty leaves 00-base.yaml's `set-me.invalid`
 # in place, the right default and, measured 2026-09-13, NOT loud by itself:
 # verify.sh is what makes the placeholder red (GOTCHAS 90); see where it is used.
@@ -85,6 +96,7 @@ while [ $# -gt 0 ]; do
     --smtp-user)     SMTP_USER="$2"; shift 2 ;;
     --console-url)   ALERT_CONSOLE_URL="$2"; shift 2 ;;
     --with-finops)   WITH_FINOPS=1; shift ;;
+    --with-typed)    WITH_TYPED=1; shift ;;
     --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
@@ -515,6 +527,17 @@ fi
 if [ "$WITH_FINOPS" = 1 ]; then
   say "finops: applying the CostCrew plane (its crew stays suspended)"
   k_ "apply -f /root/stack-k8s/manifests/49-costcrew.yaml"
+fi
+
+# The typed-answer plane, applied from its own file for the same reason
+# heraldyx, scopyx and costcrew are: it is not in the kustomization, so it
+# arrives only when somebody asked for it. It needs a typryx-keys Secret the
+# operator creates by hand (manifests/51-typryx.yaml's own header shows the
+# command); without one the pod stays in CrashLoopBackOff, which is the
+# intended signal, the same as scopyx.
+if [ "$WITH_TYPED" = 1 ]; then
+  say "typed: applying the typryx plane (backend stub, no outbound call)"
+  k_ "apply -f /root/stack-k8s/manifests/51-typryx.yaml"
 fi
 
 say "waiting for rollouts"
