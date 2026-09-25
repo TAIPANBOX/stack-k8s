@@ -59,12 +59,15 @@
 # `TYPRYX_EVENTS` and `TYPRYX_LEDGER_DIR` both point at this plane's own
 # volume, `/var/lib/typryx`, never at `stack-events`. typryx emits four event
 # types (`typed_answer`, `typed_unanswered`, `typed_refused`,
-# `calibration_drift`) that are not yet registered in agent-passport SPEC 6.2,
+# `calibration_drift`) that were not yet registered in agent-passport SPEC 6.2 when this was written,
 # so a line from an unregistered source on the shared bus would be exactly the
 # unregistered-source problem that bus is meant not to have. `@decided
 # 2026-09-25`: keep typryx's journal on its own claim until that registration
 # lands, the same choice 47-scopyx.yaml already makes for its own journal and
-# for the same reason (see that file's header).
+# for the same reason (see that file's header). `@claude` 2026-09-25: the
+# registration has since landed (agent-passport#67, SPEC 6.2 lists all four
+# types); the claim is unchanged until moving the journal onto `stack-events`
+# is decided on its own.
 #
 #
 # ## What this change deliberately does not do

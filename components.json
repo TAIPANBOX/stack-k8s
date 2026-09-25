@@ -95,7 +95,8 @@
         },
         "typryx_events_stay_off_the_shared_bus": {
           "value": "TYPRYX_EVENTS and TYPRYX_LEDGER_DIR both on typryx-state, never on stack-events",
-          "why": "@decided 2026-09-25: typryx's four event types (typed_answer, typed_unanswered, typed_refused, calibration_drift) are not yet registered in agent-passport SPEC 6.2, so a line from an unregistered source on the shared bus would be exactly the unregistered-source problem that bus exists to avoid. Same choice 47-scopyx.yaml already makes for its own journal, for the same reason: the plane keeps its own trail until the registration lands."
+          "why": "@decided 2026-09-25: typryx's four event types (typed_answer, typed_unanswered, typed_refused, calibration_drift) are not yet registered in agent-passport SPEC 6.2, so a line from an unregistered source on the shared bus would be exactly the unregistered-source problem that bus exists to avoid. Same choice 47-scopyx.yaml already makes for its own journal, for the same reason: the plane keeps its own trail until the registration lands.",
+          "note": "@claude 2026-09-25: the registration has landed (agent-passport#67, SPEC 6.2 lists all four types). The claim is unchanged until moving the journal onto stack-events is decided on its own."
         },
         "typryx_is_not_wired_to_the_mcp_broker": {
           "value": "TOKENFUSE_MCP_UPSTREAMS unset",
