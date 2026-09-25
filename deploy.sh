@@ -38,6 +38,14 @@
 # `--console-ref <branch>` builds the console from a branch instead of main.
 # The console is a separate repository, so a change proven on a branch there
 # was, until this flag, undeployable by this script at any version.
+#
+# `--with-typed` additionally applies typryx, the typed-answer plane: it answers a
+# typed question (a choice, a score, a yes or no) with a probability, and
+# scores those probabilities against truths recorded later. Off by
+# default because it is a whole plane somebody may simply not want, the same
+# reason `--with-finops` (the two cloud deploys) is off by default for
+# costcrew. Its backend is `stub`, free and making no outbound call, in every
+# launcher; see manifests/51-typryx.yaml for how an operator switches it.
 set -euo pipefail
 
 SERVERS=""; AGENTS=""; SSH_KEY="${SSH_KEY:-}"
@@ -79,6 +87,10 @@ SMTP_PASS=""
 # verify.sh is what makes the placeholder red (GOTCHAS 90); see where it is used
 # after the kustomization.
 TRUST_DOMAIN="${TRUST_DOMAIN:-}"
+# The typed-answer plane, off by default. A whole plane somebody may simply not
+# want; nothing it does spends money, so this is a smaller decision than
+# --with-finops, but it is still a plane nobody asked for by default.
+WITH_TYPED="${WITH_TYPED:-0}"
 REF="${REF:-main}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/TAIPANBOX/stack-k8s}"
@@ -102,6 +114,7 @@ while [ $# -gt 0 ]; do
     --smtp-from)      SMTP_FROM="$2"; shift 2 ;;
     --smtp-user)      SMTP_USER="$2"; shift 2 ;;
     --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
+    --with-typed)    WITH_TYPED=1; shift ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     -h|--help)       awk 'NR>1 && /^#/ {print; next} NR>1 {exit}' "$0" | sed -E 's/^# ?//'; exit 0 ;;
@@ -506,6 +519,17 @@ if [ -n "$TRUST_DOMAIN" ]; then
   say "trust domain: $TRUST_DOMAIN (set after apply, which is what makes it stick)"
   k_ "-n agent-stack patch cm stack-wiring --type merge -p '{\"data\":{\"TRAILRYX_TRUST_DOMAIN\":\"$TRUST_DOMAIN\"}}'" >/dev/null \
     || die "could not set the trust domain on stack-wiring"
+fi
+
+# The typed-answer plane, applied from its own file for the same reason
+# heraldyx, scopyx and costcrew are: it is not in the kustomization, so it
+# arrives only when somebody asked for it. It needs a typryx-keys Secret the
+# operator creates by hand (manifests/51-typryx.yaml's own header shows the
+# command); without one the pod stays in CrashLoopBackOff, which is the
+# intended signal, the same as scopyx.
+if [ "$WITH_TYPED" = 1 ]; then
+  say "typed: applying the typryx plane (backend stub, no outbound call)"
+  k_ "apply -f /root/stack-k8s/manifests/51-typryx.yaml"
 fi
 
 say "waiting for rollouts"

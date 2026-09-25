@@ -1,0 +1,174 @@
+# typryx, the typed-answer plane: answers a typed question (a choice, a score,
+# a yes or no) from a versioned template with a probability, and scores those
+# probabilities against truths recorded later.
+#
+# NOT in kustomization.yaml, and not because it is dangerous. Same reason as
+# 49-costcrew.yaml: this is a whole plane somebody may simply not want, and an
+# install that added it without being asked would be making that choice on
+# the operator's behalf. Unlike costcrew it enforces nothing and reaches
+# nowhere outbound (the default backend is `stub`, see below), so there is no
+# second, stronger reason the way there is for 45-heraldyx.yaml or
+# 47-scopyx.yaml.
+#
+#   kubectl apply -f manifests/51-typryx.yaml
+#
+#
+# ## The door, handled the way 47-scopyx.yaml handles its own
+#
+# `TYPRYX_KEYS` is `key=agent://identity[,key=agent://identity...]`, and it is
+# NOT optional here, for the same reason `SCOPYX_KEYS` is not optional on that
+# plane: the only authenticated fact this service has is which credential was
+# presented, so that has to be the only thing an agent identity is derived
+# from. The image's own refusal matrix backs this up at the process level: a
+# non-loopback bind (this Service is ClusterIP, reached from inside the mesh,
+# so the container still binds 0.0.0.0) with no `TYPRYX_KEYS` and no
+# `TYPRYX_ALLOW_OPEN_BIND=1` refuses to start, exit 1. A missing required
+# variable exits 2 naming it. The pod is set up so the only way it comes up
+# healthy is with a real key in place.
+#
+#   kubectl -n agent-stack create secret generic typryx-keys \
+#     --from-literal=TYPRYX_KEYS='pick-a-long-secret=agent://acme.example/support-bot'
+#
+# --from-literal here is what 47-scopyx.yaml's own header uses for the same
+# shape of value; swap in --from-file if the key should not sit in this
+# machine's shell history.
+#
+#
+# ## The backend is `stub`, on purpose, in every launcher
+#
+# `stub` is free, deterministic and makes no outbound call: it is the only
+# backend that belongs in a manifest nobody has to pay to apply. The image
+# also ships `openai-logprobs` and `jev`, both metered or external, and
+# neither is set here. An operator who wants one switches it by hand on the
+# running Deployment:
+#
+#   kubectl -n agent-stack set env deploy/typryx \
+#     TYPRYX_BACKEND=openai-logprobs \
+#     TYPRYX_OPENAI_URL=<url> TYPRYX_OPENAI_MODEL=<model> \
+#     TYPRYX_OPENAI_KEY_FILE=<path inside the pod, optional>
+#
+# and that is a decision with a bill attached, made once, not a default this
+# file carries.
+#
+# `TYPRYX_MAX_CALLS_PER_HOUR` is left unset on purpose: the image's own
+# default of 1000 is a sane ceiling and this file has no reason to move it.
+#
+#
+# ## Journal and ledger stay off the shared event bus, on purpose
+#
+# `TYPRYX_EVENTS` and `TYPRYX_LEDGER_DIR` both point at this plane's own
+# volume, `/var/lib/typryx`, never at `stack-events`. typryx emits four event
+# types (`typed_answer`, `typed_unanswered`, `typed_refused`,
+# `calibration_drift`) that are not yet registered in agent-passport SPEC 6.2,
+# so a line from an unregistered source on the shared bus would be exactly the
+# unregistered-source problem that bus is meant not to have. `@decided
+# 2026-09-25`: keep typryx's journal on its own claim until that registration
+# lands, the same choice 47-scopyx.yaml already makes for its own journal and
+# for the same reason (see that file's header).
+#
+#
+# ## What this change deliberately does not do
+#
+# It does not wire tokenfuse's MCP broker at typryx
+# (`TOKENFUSE_MCP_UPSTREAMS`): the broker forwards no credential today, so it
+# cannot pass typryx's door, and making it able to would be a change to the
+# broker, not to this manifest. Out of scope here.
+#
+# It does not add a NetworkPolicy. The namespace default-denies both
+# directions (`30-network-policy.yaml`), nothing in this change gives any
+# other pod a rule to reach port 4320, and the broker wiring that would be the
+# reason to add one is the exact thing left out above. Reaching it today is
+# the operator's own tunnel or
+#
+#   kubectl -n agent-stack port-forward svc/typryx 4320:4320
+#
+# the same path costcrew's console is reached by, and for the same reason:
+# nothing in the mesh calls it yet. A future change that wires a real caller
+# needs an ingress rule here and this comment is the reminder.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: typryx-state
+  namespace: agent-stack
+spec:
+  # ReadWriteOnce: the events NDJSON and the ledger are this plane's alone,
+  # the same shape as costcrew-state and heraldyx-state.
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: typryx
+  namespace: agent-stack
+  labels: { app: typryx, plane: typed }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: typryx } }
+  strategy:
+    # The events NDJSON and the ledger are on a ReadWriteOnce claim, so two
+    # pods cannot hold it at once. Same reason costcrew and scopyx both use
+    # Recreate rather than the default RollingUpdate.
+    type: Recreate
+  template:
+    metadata:
+      labels: { app: typryx, plane: typed }
+    spec:
+      # No workload here talks to the Kubernetes API; see CLAUDE.md
+      # invariant 15. Without this every pod carries a projected token for
+      # the namespace default ServiceAccount, bound to nothing today but
+      # usable by a compromised container for discovery and SelfSubjectReview,
+      # and by any future RBAC binding an operator adds to `default`.
+      automountServiceAccountToken: false
+      # 65532:65532 is not a guess, it is the uid:gid the image already runs
+      # as (distroless, verified 2026-09-25); stating it here means a change
+      # to the image's own user is a visible manifest diff instead of a
+      # silent mismatch.
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: typryx
+          image: ghcr.io/taipanbox/typryx:v0.1.0
+          imagePullPolicy: IfNotPresent
+          # ENTRYPOINT defaults to `serve`; TYPRYX_ADDR and TYPRYX_TEMPLATES
+          # are baked into the image (0.0.0.0:4320, the three example
+          # templates), so neither is set here.
+          env:
+            # Free, deterministic, no outbound call. See the header for how
+            # an operator switches this on the running Deployment.
+            - { name: TYPRYX_BACKEND, value: "stub" }
+            - { name: TYPRYX_EVENTS, value: "/var/lib/typryx/events.ndjson" }
+            - { name: TYPRYX_LEDGER_DIR, value: "/var/lib/typryx/ledger" }
+          envFrom:
+            # NOT optional, the same stance 47-scopyx.yaml takes on
+            # scopyx-keys. Missing here is not an unconfigured feature, it is
+            # a plane with no door, and the pod exits rather than starting
+            # without one.
+            - secretRef: { name: typryx-keys }
+          ports: [{ name: http, containerPort: 4320 }]
+          volumeMounts:
+            - { name: state, mountPath: /var/lib/typryx }
+          readinessProbe:
+            # /healthz needs no credential, by design (typryx's own README):
+            # a load balancer or a probe has no password to give it.
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 30m, memory: 64Mi }
+            limits: { memory: 256Mi }
+      volumes:
+        - name: state
+          persistentVolumeClaim: { claimName: typryx-state }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: typryx, namespace: agent-stack }
+spec:
+  selector: { app: typryx }
+  ports: [{ name: http, port: 4320, targetPort: http }]
