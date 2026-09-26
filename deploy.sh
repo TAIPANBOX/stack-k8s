@@ -45,7 +45,10 @@
 # default because it is a whole plane somebody may simply not want, the same
 # reason `--with-finops` (the two cloud deploys) is off by default for
 # costcrew. Its backend is `stub`, free and making no outbound call, in every
-# launcher; see manifests/51-typryx.yaml for how an operator switches it.
+# launcher; see manifests/51-typryx.yaml for how an operator switches it. The
+# same flag also applies tokenfuse's MCP broker in front of it
+# (manifests/52-tokenfuse-mcp-broker.yaml), free and outbound to nothing but
+# typryx itself.
 set -euo pipefail
 
 SERVERS=""; AGENTS=""; SSH_KEY="${SSH_KEY:-}"
@@ -530,6 +533,8 @@ fi
 if [ "$WITH_TYPED" = 1 ]; then
   say "typed: applying the typryx plane (backend stub, no outbound call)"
   k_ "apply -f /root/stack-k8s/manifests/51-typryx.yaml"
+  say "typed: applying tokenfuse's MCP broker in front of it"
+  k_ "apply -f /root/stack-k8s/manifests/52-tokenfuse-mcp-broker.yaml"
 fi
 
 say "waiting for rollouts"

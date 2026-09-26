@@ -33,6 +33,26 @@
 # shape of value; swap in --from-file if the key should not sit in this
 # machine's shell history.
 #
+# The identity after `agent://` should carry THIS deployment's own
+# TRAILRYX_TRUST_DOMAIN (00-base.yaml's stack-wiring, invariant 14), not a
+# placeholder domain copied from an example. That is an identity-honesty
+# point rather than a sealing one: see "Journal on the shared bus" below for
+# why the record plane does not seal these lines regardless of the domain
+# they carry.
+#
+# `TYPRYX_ACCEPT_KEY_IN_META=1` lets a caller present the same key inside a
+# `tools/call`'s own `_meta` object (`"_meta":{"typryx/key":"..."}`) instead
+# of a header, which is the shape tokenfuse's MCP broker forwards (typryx#6).
+# It does not widen the door: the value presented there is checked against
+# the same TYPRYX_KEYS above, so a caller reaching typryx directly still needs
+# the same credential either way.
+#
+# Needs typryx v0.2.0 or later: v0.1.0 predates typryx#6 and ignores this
+# variable (GOTCHAS 106). @measured on kind v0.33, 2026-09-26,
+# with 30-network-policy.yaml, 51-typryx.yaml and 52-tokenfuse-mcp-broker.yaml applied as committed: an ask
+# through the broker, its key only a `{{secret:typryx_key}}` handle, was
+# answered.
+#
 #
 # ## The backend is `stub`, on purpose, in every launcher
 #
@@ -54,40 +74,60 @@
 # default of 1000 is a sane ceiling and this file has no reason to move it.
 #
 #
-# ## Journal and ledger stay off the shared event bus, on purpose
+# ## Journal on the shared bus
 #
-# `TYPRYX_EVENTS` and `TYPRYX_LEDGER_DIR` both point at this plane's own
-# volume, `/var/lib/typryx`, never at `stack-events`. typryx emits four event
-# types (`typed_answer`, `typed_unanswered`, `typed_refused`,
-# `calibration_drift`) that were not yet registered in agent-passport SPEC 6.2 when this was written,
-# so a line from an unregistered source on the shared bus would be exactly the
-# unregistered-source problem that bus is meant not to have. `@decided
-# 2026-09-25`: keep typryx's journal on its own claim until that registration
-# lands, the same choice 47-scopyx.yaml already makes for its own journal and
-# for the same reason (see that file's header). `@claude` 2026-09-25: the
-# registration has since landed (agent-passport#67, SPEC 6.2 lists all four
-# types); the claim is unchanged until moving the journal onto `stack-events`
-# is decided on its own.
+# `@decided 2026-09-26`: `TYPRYX_EVENTS` now points at `stack-events`, the
+# same shared claim the money, policy and identity planes already write to,
+# in its own file (`typryx.ndjson`), now that agent-passport SPEC 6.2
+# registers typryx's four event types (`typed_answer`, `typed_unanswered`,
+# `typed_refused`, `calibration_drift`; landed 2026-09-25, agent-passport#67).
+# That registration is what the 2026-09-25 decision this line replaces was
+# waiting on. Superseded text stays in history rather than being reworded in
+# place; this paragraph is the current one.
+#
+# **This does not mean the record plane seals these lines.** They stop at the
+# schema first: typryx writes `agent-event/v1.0`, and trailryx 1.0 reads only
+# v0.1 to v0.3, so `record-seal` counts every line `unknown_schema` (measured
+# on stack-up 2026-09-26). Past the schema, trailryx's own mapper
+# (`trailryx-agentevent`) refuses all four BY NAME on purpose (trailryx#81), the same way
+# it refuses several dozen other registered types it has no honest run to
+# file them under: three of the four carry a run id only when their caller
+# happened to pass one, and a typed question travelling through tokenfuse's
+# MCP broker is already recorded there as a tool call, so mapping the answer
+# too would record one act twice; the fourth, `calibration_drift`, is a
+# finding about a template rather than about a run at all. `record-seal`
+# reads a refused line, counts it, and moves on, whatever
+# `TRAILRYX_TRUST_DOMAIN` is set to. So joining the shared bus is what it
+# says: one shared directory instead of a private one, the same place every
+# other plane's history lives, readable by heraldyx and the console the way
+# theirs is. Whether trailryx's own mapper ever seals typryx's four types is
+# that repository's decision, not this manifest's.
+#
+# `TYPRYX_LEDGER_DIR` is unchanged: the ledger is typryx's own scoring store,
+# not an event log, and it stays on `typryx-state`, its own claim, which this
+# manifest keeps for exactly that.
 #
 #
-# ## What this change deliberately does not do
+# ## The broker fronts typryx, by configuration only
 #
-# It does not wire tokenfuse's MCP broker at typryx
-# (`TOKENFUSE_MCP_UPSTREAMS`): the broker forwards no credential today, so it
-# cannot pass typryx's door, and making it able to would be a change to the
-# broker, not to this manifest. Out of scope here.
+# `@decided 2026-09-26`: tokenfuse's MCP broker is wired to typryx now that
+# typryx#6 lets a caller present its key inside a `tools/call`'s own `_meta`
+# (`TYPRYX_ACCEPT_KEY_IN_META=1`, above), which is the shape the broker's own
+# secret vault fills a `{{secret:NAME}}` handle into. Nothing in the broker's
+# own code changes: this is tokenfuse's `mcp-broker` subcommand, configured
+# with an upstream and a secret it already knew how to handle. That broker,
+# its own Secret, and the NetworkPolicies admitting only it to port 4320 are
+# in `manifests/52-tokenfuse-mcp-broker.yaml`, applied by the same
+# `--with-typed` path as this file (see that file's header for the two
+# `kubectl create secret` commands an operator runs, and for what was
+# measured through it; GOTCHAS 106).
 #
-# It does not add a NetworkPolicy. The namespace default-denies both
-# directions (`30-network-policy.yaml`), nothing in this change gives any
-# other pod a rule to reach port 4320, and the broker wiring that would be the
-# reason to add one is the exact thing left out above. Reaching it today is
-# the operator's own tunnel or
+# Reaching typryx directly, without the broker, is unchanged: the operator's
+# own tunnel or
 #
 #   kubectl -n agent-stack port-forward svc/typryx 4320:4320
 #
-# the same path costcrew's console is reached by, and for the same reason:
-# nothing in the mesh calls it yet. A future change that wires a real caller
-# needs an ingress rule here and this comment is the reminder.
+# the same path costcrew's console is reached by.
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -95,8 +135,12 @@ metadata:
   name: typryx-state
   namespace: agent-stack
 spec:
-  # ReadWriteOnce: the events NDJSON and the ledger are this plane's alone,
-  # the same shape as costcrew-state and heraldyx-state.
+  # ReadWriteOnce, and now the LEDGER's alone: the events NDJSON moved onto
+  # the shared `stack-events` claim below (`@decided 2026-09-26`, see the
+  # header). This claim still holds the ledger, which is a scoring store
+  # rather than an event log and has no honest home on a bus other planes
+  # read, the same shape costcrew-state and heraldyx-state keep for their own
+  # non-event state.
   accessModes: ["ReadWriteOnce"]
   resources:
     requests:
@@ -130,10 +174,18 @@ spec:
       # as (distroless, verified 2026-09-25); stating it here means a change
       # to the image's own user is a visible manifest diff instead of a
       # silent mismatch.
-      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      #
+      # fsGroup 10001, the stack group, not typryx's own 65532: `stack-events`
+      # is written by tokenfuse-cloud, tokenfuse-gateway and the console, whose
+      # fsGroup 10001 leaves it 10001:10001 mode 2775, and typryx now appends
+      # typryx.ndjson to it. As 65532:65532 with no supplementary group that
+      # append is `permission denied`; fsGroup adds 10001 to the process's
+      # groups whatever the volume type, the same fix wardryx already carries
+      # in 10-planes.yaml for the same reason.
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: typryx
-          image: ghcr.io/taipanbox/typryx:v0.1.0
+          image: ghcr.io/taipanbox/typryx:v0.2.0
           imagePullPolicy: IfNotPresent
           # ENTRYPOINT defaults to `serve`; TYPRYX_ADDR and TYPRYX_TEMPLATES
           # are baked into the image (0.0.0.0:4320, the three example
@@ -142,8 +194,15 @@ spec:
             # Free, deterministic, no outbound call. See the header for how
             # an operator switches this on the running Deployment.
             - { name: TYPRYX_BACKEND, value: "stub" }
-            - { name: TYPRYX_EVENTS, value: "/var/lib/typryx/events.ndjson" }
+            # On the shared bus now, in its own file, since 2026-09-26; see
+            # the header's "Journal on the shared bus". The ledger stays on
+            # this pod's own claim, below.
+            - { name: TYPRYX_EVENTS, value: "/var/lib/stack/events/typryx.ndjson" }
             - { name: TYPRYX_LEDGER_DIR, value: "/var/lib/typryx/ledger" }
+            # Lets the broker's own secret vault authenticate a tools/call by
+            # filling this field rather than a header; see the header's "The
+            # broker fronts typryx" for why that is not a wider door.
+            - { name: TYPRYX_ACCEPT_KEY_IN_META, value: "1" }
           envFrom:
             # NOT optional, the same stance 47-scopyx.yaml takes on
             # scopyx-keys. Missing here is not an unconfigured feature, it is
@@ -153,6 +212,7 @@ spec:
           ports: [{ name: http, containerPort: 4320 }]
           volumeMounts:
             - { name: state, mountPath: /var/lib/typryx }
+            - { name: events, mountPath: /var/lib/stack/events }
           readinessProbe:
             # /healthz needs no credential, by design (typryx's own README):
             # a load balancer or a probe has no password to give it.
@@ -168,6 +228,8 @@ spec:
       volumes:
         - name: state
           persistentVolumeClaim: { claimName: typryx-state }
+        - name: events
+          persistentVolumeClaim: { claimName: stack-events }
 ---
 apiVersion: v1
 kind: Service

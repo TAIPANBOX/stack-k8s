@@ -49,6 +49,7 @@
           "scopyx",
           "tokenfuse-cloud",
           "tokenfuse-gateway",
+          "tokenfuse-mcp-broker",
           "typryx",
           "wardryx"
         ],
@@ -93,15 +94,10 @@
           "value": "costcrew-crew, mapped to costcrew-run, v0.2.0",
           "why": "@yurii 2026-09-03, \"do it all\": un-suspend the crew CronJob, with the console's own cadence switch as the inner guard. costcrew v0.2.0's runner understands `-due`, so this CronJob no longer needs Kubernetes suspend to stay safe: it fires daily and `-due` refuses anything but cadence-due work with exit 2 (not a failure) unless a person has turned cadence on at the console's /cadence page, and never spends past the smaller of `-ceiling` and the console's own `cadence.ceiling_cents`. It is therefore no longer a Job TEMPLATE in Kubernetes' sense, and the manual_jobs bucket, which manifest-is-true.sh requires to carry `suspend: true`, would be false about it. Moved to schedules_routines instead.\\n\\nRecorded rather than resolved: estate-gates' C5 maps CronJobs to governance routines through its own ROUTINE_KIND, a table that lives in that repository, and `costcrew-run` is not in it yet. C5 will report `c5.routine-unmapped` for this pair until a person updates ROUTINE_KIND there, in a change to that repository, which this change does not make and this repository's own CLAUDE.md forbids making from here. Same shape as GOTCHAS 93: two correct rules, one repository apart, disagreeing until somebody closes the gap on purpose."
         },
-        "typryx_events_stay_off_the_shared_bus": {
-          "value": "TYPRYX_EVENTS and TYPRYX_LEDGER_DIR both on typryx-state, never on stack-events",
-          "why": "@decided 2026-09-25: typryx's four event types (typed_answer, typed_unanswered, typed_refused, calibration_drift) are not yet registered in agent-passport SPEC 6.2, so a line from an unregistered source on the shared bus would be exactly the unregistered-source problem that bus exists to avoid. Same choice 47-scopyx.yaml already makes for its own journal, for the same reason: the plane keeps its own trail until the registration lands.",
-          "note": "@claude 2026-09-25: the registration has landed (agent-passport#67, SPEC 6.2 lists all four types). The claim is unchanged until moving the journal onto stack-events is decided on its own."
-        },
-        "typryx_is_not_wired_to_the_mcp_broker": {
-          "value": "TOKENFUSE_MCP_UPSTREAMS unset",
-          "why": "@decided 2026-09-25: the broker forwards no credential today, so it cannot pass typryx's door (TYPRYX_KEYS). Wiring it is a change to the broker, not to this manifest, and stays out of scope here.",
-          "note": "@claude 2026-09-26: the reason has lapsed without any change to the broker. typryx#6 (96fc5c3) lets typryx read its key from params._meta of a tools/call (TYPRYX_ACCEPT_KEY_IN_META=1), which the broker already fills from its own secret vault (TOKENFUSE_MCP_SECRETS, a {{secret:NAME}} handle). Measured end to end on 2026-09-26: an agent's call through the broker was answered and recorded under the agent the key names. Still unwired here; wiring it by configuration is a separate choice."
+        "typryx_journal_is_on_the_shared_bus_and_the_broker_fronts_it_by_configuration": {
+          "value": "TYPRYX_EVENTS on stack-events (typryx.ndjson); tokenfuse-mcp-broker deployed with TOKENFUSE_MCP_UPSTREAMS=typryx=http://typryx:4320/mcp",
+          "why": "@decided 2026-09-26: typryx's four event types (typed_answer, typed_unanswered, typed_refused, calibration_drift) are registered in agent-passport SPEC 6.2 (agent-passport#67, landed 2026-09-25), and typryx#6 lets a caller present its key inside a tools/call's own _meta object (TYPRYX_ACCEPT_KEY_IN_META=1), which is the shape the broker's TOKENFUSE_MCP_SECRETS vault already fills a {{secret:NAME}} handle into. So the journal moves onto the shared claim every other plane's history lives on, and tokenfuse's MCP broker (manifests/52-tokenfuse-mcp-broker.yaml, applied by the same --with-typed path) fronts typryx by configuration alone, nothing in tokenfuse's own code changes. Superseded: typryx_events_stay_off_the_shared_bus and typryx_is_not_wired_to_the_mcp_broker, both dated 2026-09-25; their text is not reworded in place, it stays in git history.",
+          "note": "@claude 2026-09-26: moving the journal onto the bus does not make trailryx's own mapper seal it. The lines stop at the schema first (typryx writes agent-event/v1.0, trailryx 1.0 reads v0.1 to v0.3, so record-seal counts them unknown_schema; measured on stack-up 2026-09-26), and past the schema trailryx-agentevent refuses all four typryx types by name on purpose (trailryx#81) regardless of TRAILRYX_TRUST_DOMAIN (three carry a run id only when their caller passed one, and the fourth is a finding about a template rather than a run); record-seal counts a refused line and moves on. Whether trailryx maps them is that repository's own decision. The broker path needs typryx v0.2.0 or later (typryx#6); v0.1.0 refused every brokered call 401 (GOTCHAS 106). @measured on kind v0.33 2026-09-26 with typryx v0.2.0 pinned: an ask through the broker, its key only a {{secret:typryx_key}} handle, was answered and journalled on stack-events."
         }
       }
     }
