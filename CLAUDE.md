@@ -105,6 +105,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/k3s-token-is-reused.sh  # invariant 18; GOTCHAS 102
 ./scripts/preflight-keeps-tfvars.sh # invariant 19; GOTCHAS 103
 ./scripts/gateway-cache-is-off.sh # invariant 20
+./scripts/planes-leave-a-dead-node.sh # invariant 21
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -502,6 +503,32 @@ an absent invariant.
     default serialises every call behind one lock and serves nothing back for
     it (tokenfuse#319).
     *(gate: `scripts/gateway-cache-is-off.sh`)*
+
+21. **A plane that can move leaves a dead node in seconds, and drains before
+    it stops.** Every Deployment here is one replica, and Kubernetes gives
+    every pod a 300 s NoExecute toleration for an unreachable or not-ready
+    node by default. Measured on k3d on forge, 2026-09-26, stack-k8s v1.1.10:
+    `docker kill` of the node running the gateway left it refused for 360 s
+    and idryx for 347 s, 47 s to NotReady plus the full 300 s. The same
+    cluster's rolling upgrade from v1.1.7 refused 3 gateway probes in 0.8 s,
+    the old pod stopping while its endpoint was still in the Service. Same
+    shape as invariant 12: nothing broken, a default charged in full.
+
+    So every Deployment that ROLLS tolerates both taints for at most 60 s
+    (30 s is what ships) and every container in it that serves a port has a
+    `preStop` sleep (5 s ships, the native sleep action, no shell needed).
+    The Recreate ones are excluded on purpose: they are Recreate because they
+    hold a ReadWriteOnce claim, and evicting such a pod early does not move
+    its volume.
+
+    **What it does not cover.** A node lost with a ReadWriteOnce volume on
+    it: on k3d's local-path that volume waits for the node (policy-db came
+    back 17 s after the node did), and Longhorn's own detach timing was not
+    re-measured here. One replica still means an outage for as long as the
+    new pod takes to start; this shortens the wait, it does not add a replica.
+    *(gate: `scripts/planes-leave-a-dead-node.sh`, five cases in
+    `scripts/gates-have-teeth.sh`; scenarios in
+    `features/planes-leave-a-dead-node.feature`)*
 
 ## Decisions that have no gate yet
 

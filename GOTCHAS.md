@@ -3773,3 +3773,37 @@ only callers honest enough to say they did not prove it. Turning it on means
 vouchryx becomes a required component with a signing key provisioned at
 install and its JWKS fetched before the gateway starts, which stack-up does
 behind `--with-delegation` and this repository does not do yet.
+
+## 107. A one-replica plane sits on a dead node for five minutes, because that is the default
+
+**Platform.** Fixed here by invariant 21. Kubernetes adds a NoExecute toleration of 300 s for
+`node.kubernetes.io/unreachable` and `node.kubernetes.io/not-ready` to every pod that does not
+set its own, so a pod on a node that dies is evicted five minutes after the node is marked
+NotReady, not when it dies. Every Deployment here is one replica, so for those five minutes the
+plane is simply gone.
+
+Measured on k3d on forge, 2026-09-26 (1 server + 2 agents, k3s v1.36.2, Calico v3.29.1,
+stack-k8s v1.1.10, a probe from the console pod every 0.25 s): `docker kill` of the node
+running the gateway, idryx and policy-db. NotReady at +47 s; the gateway and idryx were
+rescheduled at +351 s; the probe saw the gateway refused for **360 s** and idryx for **347 s**.
+policy-db stayed Terminating until the node came back, because its `local-path` volume was on
+that node; it was ready 17 s after the node returned, and wardryx answered `/healthz` 200 the
+whole time and `/readyz` 503 `store: unreachable` until then, which is its documented contract.
+
+The same shape as the coredns finding behind invariant 12: nothing was broken, the
+configuration said five minutes and charged exactly that. The fix is 30 s tolerations on the
+three Deployments that roll, the ones with no ReadWriteOnce claim tying them to a node; the two
+Recreate Deployments keep the default, because evicting them early cannot move their volume.
+Evidence: `go-to-market-2026-09/evidence/forge-k3d-2026-09-26/`.
+
+## 108. A rolling update of a one-replica plane refuses traffic for the moment its endpoint takes to leave
+
+**Platform.** Fixed here by invariant 21. With `maxSurge: 25%` and `maxUnavailable: 25%` on one
+replica the new pod is Ready before the old one is told to stop, which reads as a zero-downtime
+rollout. It is not quite: the old pod stops at once, and kube-proxy on every node keeps routing
+to its address until the endpoint removal reaches it. Measured on the same k3d cluster,
+2026-09-26, during the rolling upgrade from v1.1.7 to v1.1.10: 3 gateway probes refused in a
+**0.8 s** window, 17 s after the apply; wardryx, rolled in the same apply, lost none, which is
+timing rather than immunity. A `preStop` sleep of 5 s on every container that serves a port
+keeps the process answering while its endpoint leaves; the native `sleep` action needs no shell,
+which these distroless images do not have.

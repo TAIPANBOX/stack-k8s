@@ -694,6 +694,44 @@ run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.1.1\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
+# A one-replica plane that keeps the default 300 s toleration sits on a dead
+# node for five minutes after it is marked NotReady: 360 s of a refused gateway
+# on 2026-09-26 (invariant 21). The first occurrence of each line below is the
+# gateway's.
+run_case "planes-leave-a-dead-node: a rolling plane drops the unreachable toleration" fail \
+	'./scripts/planes-leave-a-dead-node.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }\n", "")')" \
+	"no toleration for node.kubernetes.io/unreachable"
+
+run_case "planes-leave-a-dead-node: a not-ready toleration above 60 seconds" fail \
+	'./scripts/planes-leave-a-dead-node.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30", "node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 300")')" \
+	"tolerationSeconds 300 for node.kubernetes.io/not-ready"
+
+run_case "planes-leave-a-dead-node: a serving container loses its preStop sleep" fail \
+	'./scripts/planes-leave-a-dead-node.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "          lifecycle: { preStop: { sleep: { seconds: 5 } } }\n", "")')" \
+	"has no preStop sleep"
+
+# Recreate is how a Deployment around a ReadWriteOnce claim is marked here, and
+# evicting such a pod early cannot move its volume. idryx turned Recreate and
+# stripped of its tolerations must not be judged at all.
+run_case "planes-leave-a-dead-node: a Recreate Deployment is not a subject" pass \
+	'./scripts/planes-leave-a-dead-node.sh' \
+	"$(py 'p = "manifests/10-planes.yaml"
+s = open(p).read()
+i = s.index("        - name: idryx\n")
+t = s.rindex("      tolerations:\n", 0, i)
+j = s.index("      containers:\n", t)
+open(p, "w").write(s[:t] + s[j:])
+edit(p, "  selector: { matchLabels: { app: idryx } }\n", "  strategy: { type: Recreate }\n  selector: { matchLabels: { app: idryx } }\n")')"
+
+run_case "planes-leave-a-dead-node: no rolling Deployment left to judge" fail \
+	'./scripts/planes-leave-a-dead-node.sh' \
+	"$(py 'for app in ["tokenfuse-gateway", "wardryx", "idryx"]:
+    edit("manifests/10-planes.yaml", "  selector: { matchLabels: { app: " + app + " } }\n", "  strategy: { type: Recreate }\n  selector: { matchLabels: { app: " + app + " } }\n")')" \
+	"measured nothing about leaving a dead node"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'

@@ -79,6 +79,9 @@ jobs:
       - name: the gateway's semantic cache is off in every install
         run: ./scripts/gateway-cache-is-off.sh
 
+      - name: a plane that can move leaves a dead node and drains (invariant 21)
+        run: ./scripts/planes-leave-a-dead-node.sh
+
       # No workload in this stack talks to the Kubernetes API from inside a
       # pod, so the projected token every pod gets for the namespace default
       # ServiceAccount is a live credential with nothing to authorize and
