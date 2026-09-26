@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Enforces invariant 21 in CLAUDE.md: a Deployment that ROLLS (it holds no
-# ReadWriteOnce claim, so it can run on any node) leaves a dead node within 60
-# seconds, and every container in it that serves a port sleeps before it stops.
+# Enforces invariant 21 in CLAUDE.md: every Deployment and StatefulSet leaves a
+# dead node within 60 seconds, and every container that serves a port in a
+# Deployment that ROLLS sleeps before it stops.
 #
 # WHY
 #
@@ -19,21 +19,25 @@
 # was still routing to its endpoint. A short preStop sleep lets the endpoint
 # leave the Service before the process stops accepting.
 #
-# WHAT IS A SUBJECT, AND WHAT IS NOT
+# WHAT IS A SUBJECT
 #
-# A Deployment the kustomization includes whose strategy is not Recreate. The
-# Recreate ones (tokenfuse-cloud, genaryx-console) are recreated because they
-# hold a ReadWriteOnce claim, and evicting such a pod early does not move its
-# volume: on local storage the volume is on the dead node, and on Longhorn an
-# RWO volume still waits out its own detach. They keep the default on purpose.
+# Every Deployment and StatefulSet the kustomization includes carries NoExecute
+# tolerations for BOTH node.kubernetes.io/unreachable and
+# node.kubernetes.io/not-ready with tolerationSeconds of at most 60.
 #
-# For each subject:
-#   - its pod spec carries NoExecute tolerations for BOTH
-#     node.kubernetes.io/unreachable and node.kubernetes.io/not-ready with
-#     tolerationSeconds of at most 60;
-#   - every container that declares a containerPort has
-#     `lifecycle.preStop.sleep.seconds` of at least 1 and below the pod's
-#     terminationGracePeriodSeconds (30 when unset).
+# The first version of this gate excluded the Recreate Deployments and the
+# StatefulSet, the ones holding a ReadWriteOnce claim, on the premise that
+# evicting them early cannot move their volume. On Longhorn that premise is
+# wrong once the installers set node-down-pod-deletion-policy (invariant 22):
+# measured on GCP 2026-09-26, policy-db's VM stopped, the policy store was down
+# until the VM returned as shipped, about 400 s with the Longhorn setting alone,
+# about 150 s with it and 30 s tolerations. GOTCHAS 109.
+#
+# In addition, in a Deployment that ROLLS (strategy not Recreate), every
+# container that declares a containerPort has `lifecycle.preStop.sleep.seconds`
+# of at least 1 and below the pod's terminationGracePeriodSeconds (30 when
+# unset). A Recreate Deployment or a StatefulSet never runs two pods at once,
+# so there is no endpoint hand-over for the sleep to cover.
 #
 # Subjects are found from manifests/kustomization.yaml, not listed, and no
 # subject at all is a failure that says it measured nothing. Parsed by
@@ -233,8 +237,9 @@ def check_document(fname, doc_first_line, lines):
         if not is_blank_or_comment(line) and indent_of(line) == 0 and line.startswith("kind:"):
             kind, kind_idx = line.split(":", 1)[1].strip(), i
             break
-    if kind != "Deployment" or strategy_is_recreate(lines, kind_idx):
+    if kind not in ("Deployment", "StatefulSet"):
         return None
+    rolls = kind == "Deployment" and not strategy_is_recreate(lines, kind_idx)
     name = "(unnamed)"
     for line in lines:
         if line.strip().startswith("name:"):
@@ -242,10 +247,12 @@ def check_document(fname, doc_first_line, lines):
             break
     located = locate_pod_spec(lines, kind_idx, POD_TEMPLATE_KINDS[kind])
     if located is None:
-        return [f"{fname}: Deployment {name} has no pod spec this check can find"]
+        return [f"{fname}: {kind} {name} has no pod spec this check can find"]
     pod_idx, pod_indent = located
-    where = f"{fname}:{doc_first_line + pod_idx + 1} Deployment {name}"
+    where = f"{fname}:{doc_first_line + pod_idx + 1} {kind} {name}"
     problems = toleration_problems(lines, pod_idx, pod_indent, where)
+    if not rolls:
+        return problems
     grace = grace_seconds(lines, pod_idx, pod_indent)
     serving = 0
     for start, end, _ in container_blocks(lines, pod_idx, pod_indent):
@@ -299,9 +306,9 @@ for rname in resources:
             doc.append(line)
 
 if subjects == 0:
-    print("FAIL: no rolling Deployment was found under any manifest")
-    print("      manifests/kustomization.yaml includes. That is not health: every")
-    print("      plane is Recreate, or this check no longer knows how to find one.")
+    print("FAIL: no Deployment or StatefulSet was found under any manifest")
+    print("      manifests/kustomization.yaml includes. That is not health: the")
+    print("      planes moved, or this check no longer knows how to find them.")
     print("      This measured nothing about leaving a dead node, and it is not")
     print("      entitled to say OK.")
     sys.exit(1)
@@ -310,11 +317,11 @@ for f in failures:
     print(f"FAIL: {f}")
 if failures:
     print()
-    print(f"{len(failures)} problem(s) across {subjects} rolling Deployment(s). A single replica")
+    print(f"{len(failures)} problem(s) across {subjects} workload(s). A single replica")
     print("that keeps the default toleration sits on a dead node for 300 s after it is")
     print("marked NotReady, measured on 2026-09-26 as 360 s of a refused gateway.")
     sys.exit(1)
 
-print(f"OK: {subjects} rolling Deployment(s), each leaves a dead node within {MAX_TOLERATION} s and every")
-print("    container that serves a port sleeps before it stops.")
+print(f"OK: {subjects} Deployment(s) and StatefulSet(s), each leaves a dead node within {MAX_TOLERATION} s,")
+print("    and every container that serves a port in a rolling Deployment sleeps before it stops.")
 PY

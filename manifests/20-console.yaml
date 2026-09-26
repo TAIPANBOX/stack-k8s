@@ -28,6 +28,15 @@ spec:
         runAsGroup: 10001
         fsGroup: 10001 # so the state volume is writable by the stack user
         seccompProfile: { type: RuntimeDefault }
+      # Leave a dead node in 30 s, not the default 300 s. This pod holds a
+      # ReadWriteOnce claim; on Longhorn, once evicted, it is force-deleted and
+      # its volume released (the installers set node-down-pod-deletion-policy),
+      # so the replacement attaches it elsewhere. On storage that cannot move a
+      # volume (k3d's local-path) the replacement waits Pending for the node,
+      # exactly as before. CLAUDE.md invariants 21 and 22.
+      tolerations:
+        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+        - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: console
           # Pulled since stack-k8s v0.1.0, which is the tag that publishes
