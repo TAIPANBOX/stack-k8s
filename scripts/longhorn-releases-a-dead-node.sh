@@ -30,13 +30,15 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 python3 - <<'PY'
+import os
 import re
 import subprocess
 import sys
 
 VALUE = "delete-both-statefulset-and-deployment-pod"
 files = [f for f in subprocess.run(["git", "ls-files", "*.sh"], capture_output=True, text=True,
-                                   check=True).stdout.split() if not f.startswith("scripts/")]
+                                   check=True).stdout.split()
+         if not f.startswith("scripts/") and os.path.isfile(f)]
 subjects = 0
 failures = []
 for f in files:
