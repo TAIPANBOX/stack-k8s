@@ -3718,6 +3718,39 @@ much as they trust the node they run on. A per-writer volume, the scopyx
 shape, or a per-line signature on the bus would close it; neither is built.
 Read together with 20 (a forged pod label) and 91.
 
+## 106. A feature named in a manifest can be true of a repository's `main` and false of its only published tag
+
+**Ours, unresolved by design.** `manifests/51-typryx.yaml` sets
+`TYPRYX_ACCEPT_KEY_IN_META=1` and `manifests/52-tokenfuse-mcp-broker.yaml`
+configures tokenfuse's MCP broker to authenticate to typryx through it
+(typryx#6, commit `96fc5c3`). That commit is NOT an ancestor of the `v0.1.0` tag `51-typryx.yaml` pins
+(`ghcr.io/taipanbox/typryx:v0.1.0`, tagged 2026-09-25T13:31:39Z; `96fc5c3`
+committed 2026-09-26T08:13:32Z), confirmed with
+`git merge-base --is-ancestor 96fc5c3 v0.1.0` in the typryx checkout, which
+answers false. The running image therefore has no `_meta` bypass at all:
+every `/mcp` request needs `X-Typryx-Key` (`internal/api/api.go` at the tag,
+`mux.HandleFunc("/mcp", s.withDoor(s.handleMCP))`), and the broker forwards
+only a `content-type` header, never the caller's own credential
+(`mcpbroker.rs`'s forward sets `content-type` alone). So on a kind cluster
+with this exact pin, EVERY call through the broker to typryx answers
+`401 {"error":"unauthorized"}` from typryx, whatever the broker's own vault
+resolves into `_meta`. Measured 2026-09-26: `tools/list` and a `tools/call`
+"ask" both refused this way through the broker; the identical `tools/call`
+sent directly to typryx with `X-Typryx-Key` set succeeds and its
+`typed_answer` lands on `stack-events`, and the broker still records its own
+`tool_call` line (`decision: allowed-ungoverned`) before the forward, exactly
+per tokenfuse invariant 36, because that record is written before the
+upstream is even contacted.
+
+The wiring is correct and becomes live the moment a typryx release
+containing `96fc5c3` is tagged and this repository's pin moves to it: nothing
+in these two manifests needs to change for that. Recorded here rather than
+worked around, because the honest state of a change wired "by configuration
+alone" is that configuration can be complete and correct while still being
+inert, and a reader comparing the manifest to a live cluster deserves to know
+which one they are looking at. Unresolved by design: cutting a typryx release
+is that repository's own decision, not this one's to make.
+
 ## 105. Delegation is verified nowhere unless you turn it on, and no launcher turns it on
 
 **The stack's own contract.** Named, not fixed. The gateway's two delegation doors verify a vouchryx

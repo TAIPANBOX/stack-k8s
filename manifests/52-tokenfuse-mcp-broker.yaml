@@ -25,10 +25,21 @@
 # key inside a `tools/call`'s own `_meta` object
 # (`TYPRYX_ACCEPT_KEY_IN_META=1`, set in 51-typryx.yaml), which is exactly the
 # shape the broker's `TOKENFUSE_MCP_SECRETS` vault already fills a
-# `{{secret:NAME}}` handle into. Measured end to end before this file was
-# written: a `tools/call` carrying `"_meta":{"typryx/key":"{{secret:typryx_key}}"}`
-# through a broker configured as below reached typryx, was authenticated, and
-# was recorded under the key's own agent.
+# `{{secret:NAME}}` handle into.
+#
+# NOT YET LIVE against `typryx:v0.1.0`, the only published tag (GOTCHAS 106):
+# typryx#6 is not an ancestor of it, so today's image requires
+# `X-Typryx-Key` on every `/mcp` call and this broker forwards no such
+# header, ever (see "Forward to the real MCP server" in tokenfuse's own
+# `mcpbroker.rs`: content-type only). Measured 2026-09-26 on a kind cluster
+# with the pins below exactly as written: a `tools/call` carrying
+# `"_meta":{"typryx/key":"{{secret:typryx_key}}"}` through this broker
+# reaches typryx (confirmed by typryx's own `401 unauthorized` answer,
+# proxied back as this broker's `-32000 upstream error`) and the broker
+# records its own `tool_call` line before that answer arrives, exactly as
+# tokenfuse's own invariant 36 says it will. The same call sent directly to
+# typryx with `X-Typryx-Key` succeeds. Nothing here is wired wrong; the
+# dependency this configuration is written for has not been tagged yet.
 #
 #
 # ## Two Secrets, one value shared between them by hand
