@@ -100,7 +100,8 @@
         },
         "typryx_is_not_wired_to_the_mcp_broker": {
           "value": "TOKENFUSE_MCP_UPSTREAMS unset",
-          "why": "@decided 2026-09-25: the broker forwards no credential today, so it cannot pass typryx's door (TYPRYX_KEYS). Wiring it is a change to the broker, not to this manifest, and stays out of scope here."
+          "why": "@decided 2026-09-25: the broker forwards no credential today, so it cannot pass typryx's door (TYPRYX_KEYS). Wiring it is a change to the broker, not to this manifest, and stays out of scope here.",
+          "note": "@claude 2026-09-26: the reason has lapsed without any change to the broker. typryx#6 (96fc5c3) lets typryx read its key from params._meta of a tools/call (TYPRYX_ACCEPT_KEY_IN_META=1), which the broker already fills from its own secret vault (TOKENFUSE_MCP_SECRETS, a {{secret:NAME}} handle). Measured end to end on 2026-09-26: an agent's call through the broker was answered and recorded under the agent the key names. Still unwired here; wiring it by configuration is a separate choice."
         }
       }
     }
