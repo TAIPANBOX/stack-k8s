@@ -27,19 +27,17 @@
 # shape the broker's `TOKENFUSE_MCP_SECRETS` vault already fills a
 # `{{secret:NAME}}` handle into.
 #
-# NOT YET LIVE against `typryx:v0.1.0`, the only published tag (GOTCHAS 106):
-# typryx#6 is not an ancestor of it, so today's image requires
-# `X-Typryx-Key` on every `/mcp` call and this broker forwards no such
-# header, ever (see "Forward to the real MCP server" in tokenfuse's own
-# `mcpbroker.rs`: content-type only). Measured 2026-09-26 on a kind cluster
-# with the pins below exactly as written: a `tools/call` carrying
-# `"_meta":{"typryx/key":"{{secret:typryx_key}}"}` through this broker
-# reaches typryx (confirmed by typryx's own `401 unauthorized` answer,
-# proxied back as this broker's `-32000 upstream error`) and the broker
-# records its own `tool_call` line before that answer arrives, exactly as
-# tokenfuse's own invariant 36 says it will. The same call sent directly to
-# typryx with `X-Typryx-Key` succeeds. Nothing here is wired wrong; the
-# dependency this configuration is written for has not been tagged yet.
+# Needs typryx v0.2.0 or later: v0.1.0 predates typryx#6, requires
+# `X-Typryx-Key` on every `/mcp` call, and this broker forwards no such header
+# (tokenfuse `mcpbroker.rs` forwards content-type only), so against v0.1.0
+# every call is refused 401 (GOTCHAS 106). @measured on kind v0.33, 2026-09-26,
+# with 30-network-policy.yaml, 51-typryx.yaml and 52-tokenfuse-mcp-broker.yaml applied as
+# committed:
+# an `ask` carrying `"_meta":{"typryx/key":"{{secret:typryx_key}}"}` through
+# this broker was answered, and the broker wrote its own `tool_call` line
+# before the forward, as tokenfuse's invariant 36 says; a call with no broker
+# key was refused 401; a pod with neither the console nor the money label
+# timed out reaching this broker and typryx.
 #
 #
 # ## Two Secrets, one value shared between them by hand

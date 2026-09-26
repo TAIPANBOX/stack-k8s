@@ -3720,7 +3720,7 @@ Read together with 20 (a forged pod label) and 91.
 
 ## 106. A feature named in a manifest can be true of a repository's `main` and false of its only published tag
 
-**Ours, unresolved by design.** `manifests/51-typryx.yaml` sets
+**Ours, and fixed.** `manifests/51-typryx.yaml` sets
 `TYPRYX_ACCEPT_KEY_IN_META=1` and `manifests/52-tokenfuse-mcp-broker.yaml`
 configures tokenfuse's MCP broker to authenticate to typryx through it
 (typryx#6, commit `96fc5c3`). That commit is NOT an ancestor of the `v0.1.0` tag `51-typryx.yaml` pins
@@ -3748,8 +3748,16 @@ in these two manifests needs to change for that. Recorded here rather than
 worked around, because the honest state of a change wired "by configuration
 alone" is that configuration can be complete and correct while still being
 inert, and a reader comparing the manifest to a live cluster deserves to know
-which one they are looking at. Unresolved by design: cutting a typryx release
-is that repository's own decision, not this one's to make.
+which one they are looking at.
+
+Fixed 2026-09-26: typryx `v0.2.0` was tagged on `96fc5c3` and
+`51-typryx.yaml` pins it. @measured on kind v0.33, 2026-09-26, with 30-network-policy.yaml, 51-typryx.yaml and 52-tokenfuse-mcp-broker.yaml applied as committed (default-deny and DNS included): an `ask` whose typryx key travelled only as
+`{{secret:typryx_key}}` through the broker was answered (`"isError":false`),
+its `typed_answer` landed on `stack-events` under the key's agent with the
+caller's `run_id`, the broker's own `tool_call` line beside it; a call with no
+broker key was refused 401; a pod without the console or money label timed out
+reaching both typryx and the broker. The lesson stands: check a pinned tag for
+the commit a configuration relies on, not `main`.
 
 ## 105. Delegation is verified nowhere unless you turn it on, and no launcher turns it on
 

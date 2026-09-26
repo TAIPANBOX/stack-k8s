@@ -47,13 +47,11 @@
 # the same TYPRYX_KEYS above, so a caller reaching typryx directly still needs
 # the same credential either way.
 #
-# NOT YET LIVE against the pin below: typryx#6 (96fc5c3) is not an ancestor
-# of `v0.1.0`, the only published tag, so the running image ignores this
-# variable and requires `X-Typryx-Key` on every `/mcp` call, `tools/list`
-# included, exactly as it did before this variable existed. See GOTCHAS 106.
-# Setting it here is correct and costs nothing: it takes effect the moment
-# this image's pin moves to a release that contains 96fc5c3, with no other
-# change to this manifest.
+# Needs typryx v0.2.0 or later: v0.1.0 predates typryx#6 and ignores this
+# variable (GOTCHAS 106). @measured on kind v0.33, 2026-09-26,
+# with 30-network-policy.yaml, 51-typryx.yaml and 52-tokenfuse-mcp-broker.yaml applied as committed: an ask
+# through the broker, its key only a `{{secret:typryx_key}}` handle, was
+# answered.
 #
 #
 # ## The backend is `stub`, on purpose, in every launcher
@@ -121,8 +119,8 @@
 # its own Secret, and the NetworkPolicies admitting only it to port 4320 are
 # in `manifests/52-tokenfuse-mcp-broker.yaml`, applied by the same
 # `--with-typed` path as this file (see that file's header for the two
-# `kubectl create secret` commands an operator runs, and for why a call
-# through it is refused against today's pinned typryx image; GOTCHAS 106).
+# `kubectl create secret` commands an operator runs, and for what was
+# measured through it; GOTCHAS 106).
 #
 # Reaching typryx directly, without the broker, is unchanged: the operator's
 # own tunnel or
@@ -187,7 +185,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: typryx
-          image: ghcr.io/taipanbox/typryx:v0.1.0
+          image: ghcr.io/taipanbox/typryx:v0.2.0
           imagePullPolicy: IfNotPresent
           # ENTRYPOINT defaults to `serve`; TYPRYX_ADDR and TYPRYX_TEMPLATES
           # are baked into the image (0.0.0.0:4320, the three example

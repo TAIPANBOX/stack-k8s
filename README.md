@@ -271,9 +271,9 @@ kubectl -n agent-stack create secret generic tokenfuse-mcp-broker-keys \
 ```
 
 `manifests/52-tokenfuse-mcp-broker.yaml` has the full story: why two Secrets
-rather than one, and what its NetworkPolicies admit, and why a call through
-it is refused today (`typryx:v0.1.0`, the only published tag, predates the
-typryx commit this wiring needs; GOTCHAS 106). Reaching typryx directly,
+rather than one, what its NetworkPolicies admit, and what was measured
+through it on kind (it needs typryx v0.2.0 or later, which is what
+`51-typryx.yaml` pins; GOTCHAS 106). Reaching typryx directly,
 without the broker, is unchanged, over your own tunnel or
 
 ```bash
