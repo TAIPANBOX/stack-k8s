@@ -50,6 +50,7 @@ step "every installer creates every Secret key the manifests read" "./scripts/se
 step "every installer reuses the cluster token before it installs" "./scripts/k3s-token-is-reused.sh"
 step "the GCP preflight keeps what the operator wrote in terraform.tfvars" "./scripts/preflight-keeps-tfvars.sh"
 step "the gateway's semantic cache is off in every install" "./scripts/gateway-cache-is-off.sh"
+step "a plane that can move leaves a dead node and drains" "./scripts/planes-leave-a-dead-node.sh"
 
 echo
 if [ "$fail" -ne 0 ]; then

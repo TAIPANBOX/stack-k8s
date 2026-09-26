@@ -159,6 +159,13 @@ spec:
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
       securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      # Leave a dead node in 30 s, not the default 300 s. One replica, no
+      # ReadWriteOnce claim, so nothing ties this pod to the node it is on;
+      # the default toleration alone kept the gateway refused for 360 s after
+      # its node was killed (k3d on forge, 2026-09-26). CLAUDE.md invariant 21.
+      tolerations:
+        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+        - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: gateway
           # Pulled, and the command CHANGES with it. The local image was one
@@ -277,6 +284,10 @@ spec:
           envFrom:
             - configMapRef: { name: stack-wiring }
           ports: [{ name: http, containerPort: 4100 }]
+          # Stop taking traffic before stopping: the endpoint leaves the
+          # Service while this sleeps. Without it a rolling update refused 3
+          # gateway probes in 0.8 s (2026-09-26). CLAUDE.md invariant 21.
+          lifecycle: { preStop: { sleep: { seconds: 5 } } }
           volumeMounts:
             - { name: events, mountPath: /var/lib/stack/events }
             - { name: traces, mountPath: /var/lib/stack/traces }
@@ -408,6 +419,13 @@ spec:
       # whatever this line says; this closes the case where the volume is
       # group 10001, not that one.
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      # Leave a dead node in 30 s, not the default 300 s. One replica, no
+      # ReadWriteOnce claim, so nothing ties this pod to the node it is on;
+      # the default toleration alone kept the gateway refused for 360 s after
+      # its node was killed (k3d on forge, 2026-09-26). CLAUDE.md invariant 21.
+      tolerations:
+        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+        - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: wardryx
           image: ghcr.io/taipanbox/wardryx:v1.0.3
@@ -448,6 +466,10 @@ spec:
             - name: WARDRYX_POLICY_ARCHIVE
               valueFrom: { configMapKeyRef: { name: stack-wiring, key: WARDRYX_POLICY_ARCHIVE } }
           ports: [{ name: http, containerPort: 8090 }]
+          # Stop taking traffic before stopping: the endpoint leaves the
+          # Service while this sleeps. Without it a rolling update refused 3
+          # gateway probes in 0.8 s (2026-09-26). CLAUDE.md invariant 21.
+          lifecycle: { preStop: { sleep: { seconds: 5 } } }
           volumeMounts:
             - { name: events, mountPath: /var/lib/stack/events }
             - { name: policy, mountPath: /etc/wardryx, readOnly: true }
@@ -500,6 +522,13 @@ spec:
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      # Leave a dead node in 30 s, not the default 300 s. One replica, no
+      # ReadWriteOnce claim, so nothing ties this pod to the node it is on;
+      # the default toleration alone kept the gateway refused for 360 s after
+      # its node was killed (k3d on forge, 2026-09-26). CLAUDE.md invariant 21.
+      tolerations:
+        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+        - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: idryx
           image: ghcr.io/taipanbox/idryx:v1.0.0
@@ -514,6 +543,10 @@ spec:
             - "--load"
             - "tokenfuse:/var/lib/stack/events/tokenfuse.ndjson"
           ports: [{ name: http, containerPort: 8081 }]
+          # Stop taking traffic before stopping: the endpoint leaves the
+          # Service while this sleeps. Without it a rolling update refused 3
+          # gateway probes in 0.8 s (2026-09-26). CLAUDE.md invariant 21.
+          lifecycle: { preStop: { sleep: { seconds: 5 } } }
           volumeMounts:
             # Read-only: idryx builds its graph FROM the log and never writes
             # to it, and the mount should say so.
