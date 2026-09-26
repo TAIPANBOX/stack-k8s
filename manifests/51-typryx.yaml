@@ -87,8 +87,11 @@
 # waiting on. Superseded text stays in history rather than being reworded in
 # place; this paragraph is the current one.
 #
-# **This does not mean the record plane seals these lines.** trailryx's own
-# mapper (`trailryx-agentevent`) refuses all four BY NAME today, the same way
+# **This does not mean the record plane seals these lines.** They stop at the
+# schema first: typryx writes `agent-event/v1.0`, and trailryx 1.0 reads only
+# v0.1 to v0.3, so `record-seal` counts every line `unknown_schema` (measured
+# on stack-up 2026-09-26). Past the schema, trailryx's own mapper
+# (`trailryx-agentevent`) refuses all four BY NAME on purpose (trailryx#81), the same way
 # it refuses several dozen other registered types it has no honest run to
 # file them under: three of the four carry a run id only when their caller
 # happened to pass one, and a typed question travelling through tokenfuse's
