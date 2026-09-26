@@ -474,6 +474,26 @@ for i in $(seq 1 90); do
   sleep 10
 done
 
+# A pod on a node that dies holds its Longhorn volume until that node comes
+# back, whatever the pod's toleration says: evicted, it sits Terminating on the
+# dead node, and neither a StatefulSet nor a Recreate Deployment starts its
+# replacement until the old one is confirmed gone, which a dead node never
+# confirms. Longhorn's default here is `do-nothing`. With
+# `delete-both-statefulset-and-deployment-pod` it force-deletes such a pod and
+# releases the volume, so the replacement attaches it elsewhere. Measured on GCP
+# 2026-09-26 with policy-db's VM stopped: as shipped, the policy store was down
+# until the VM returned; with this setting and the manifests' 30 s tolerations,
+# about 150 s. CLAUDE.md invariant 22, GOTCHAS 109.
+say "Longhorn: release a dead node's volumes"
+for i in $(seq 1 12); do
+  if k_ "-n longhorn-system patch settings.longhorn.io node-down-pod-deletion-policy --type merge -p '{\"value\":\"delete-both-statefulset-and-deployment-pod\"}'" >/dev/null 2>&1; then
+    echo "   node-down-pod-deletion-policy=delete-both-statefulset-and-deployment-pod"
+    break
+  fi
+  [ "$i" = 12 ] && die "could not set Longhorn's node-down-pod-deletion-policy: a volume on a node that dies would stay held until the node returns"
+  sleep 5
+done
+
 say "one default StorageClass"
 if k_ "get sc local-path" >/dev/null 2>&1; then
   echo "   local-path still exists: patching it non-default"

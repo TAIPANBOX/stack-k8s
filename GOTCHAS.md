@@ -3807,3 +3807,28 @@ to its address until the endpoint removal reaches it. Measured on the same k3d c
 timing rather than immunity. A `preStop` sleep of 5 s on every container that serves a port
 keeps the process answering while its endpoint leaves; the native `sleep` action needs no shell,
 which these distroless images do not have.
+
+## 109. Longhorn keeps a dead node's volume, so a ReadWriteOnce plane never fails over by itself
+
+**Upstream**, and ours meeting it: fixed here by invariants 21 and 22. Longhorn's
+`node-down-pod-deletion-policy` defaults to `do-nothing`. A pod on a node that dies is evicted
+after its toleration, sits Terminating on that node, and holds its Longhorn volume; a StatefulSet
+or a Recreate Deployment does not start the replacement until the old pod is confirmed gone,
+which a dead node never confirms. So the plane is down until the node returns, however long
+that is.
+
+Measured on GCP, 2026-09-26 (N2/G1: six VMs, c2d/n2/t2a, three zones of europe-west4, stack-k8s
+v1.1.11), the VM running `policy-db` stopped with `gcloud compute instances stop`, three ways on
+the same cluster:
+
+| Configuration | policy store unreachable |
+|---|---|
+| as shipped (`do-nothing`, default 300 s toleration) | until the VM returned; policy-db ready 199 s after `instances start` |
+| Longhorn `delete-both-statefulset-and-deployment-pod` | about 400 s, then running on another node |
+| that, and 30 s NoExecute tolerations on policy-db | about 150 s |
+
+wardryx kept answering `/healthz` 200 and deciding throughout, with `/readyz` 503
+`store: unreachable` (its documented contract); what was down is what the store holds: approvals
+and freezes. Invariant 21's first version had excluded exactly these workloads on the premise
+that early eviction cannot move a ReadWriteOnce volume, which is true of k3d's local-path, where
+it was written, and false of Longhorn. Evidence: `go-to-market-2026-09/evidence/gcp-g1-2026-09-26/`.

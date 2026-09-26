@@ -713,24 +713,60 @@ run_case "planes-leave-a-dead-node: a serving container loses its preStop sleep"
 	"$(py 'edit("manifests/10-planes.yaml", "          lifecycle: { preStop: { sleep: { seconds: 5 } } }\n", "")')" \
 	"has no preStop sleep"
 
-# Recreate is how a Deployment around a ReadWriteOnce claim is marked here, and
-# evicting such a pod early cannot move its volume. idryx turned Recreate and
-# stripped of its tolerations must not be judged at all.
-run_case "planes-leave-a-dead-node: a Recreate Deployment is not a subject" pass \
+# A StatefulSet is a subject too since invariant 22: policy-db holds a
+# ReadWriteOnce claim, and on Longhorn it fails over only when it leaves the
+# dead node early (GOTCHAS 109).
+run_case "planes-leave-a-dead-node: a StatefulSet drops its unreachable toleration" fail \
+	'./scripts/planes-leave-a-dead-node.sh' \
+	"$(py 'edit("manifests/15-policy-store.yaml", "        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }\n", "")')" \
+	"StatefulSet policy-db: no toleration for node.kubernetes.io/unreachable"
+
+# A Recreate Deployment never runs two pods at once, so there is no endpoint
+# hand-over for a preStop sleep to cover: idryx turned Recreate and stripped of
+# its sleep must pass, its tolerations still judged.
+run_case "planes-leave-a-dead-node: a Recreate Deployment needs no preStop sleep" pass \
 	'./scripts/planes-leave-a-dead-node.sh' \
 	"$(py 'p = "manifests/10-planes.yaml"
+edit(p, "  selector: { matchLabels: { app: idryx } }\n", "  strategy: { type: Recreate }\n  selector: { matchLabels: { app: idryx } }\n")
 s = open(p).read()
 i = s.index("        - name: idryx\n")
-t = s.rindex("      tolerations:\n", 0, i)
-j = s.index("      containers:\n", t)
-open(p, "w").write(s[:t] + s[j:])
-edit(p, "  selector: { matchLabels: { app: idryx } }\n", "  strategy: { type: Recreate }\n  selector: { matchLabels: { app: idryx } }\n")')"
+j = s.index("          lifecycle: { preStop: { sleep: { seconds: 5 } } }\n", i)
+open(p, "w").write(s[:j] + s[j + len("          lifecycle: { preStop: { sleep: { seconds: 5 } } }\n"):])')"
 
-run_case "planes-leave-a-dead-node: no rolling Deployment left to judge" fail \
+run_case "planes-leave-a-dead-node: no Deployment or StatefulSet left to judge" fail \
 	'./scripts/planes-leave-a-dead-node.sh' \
-	"$(py 'for app in ["tokenfuse-gateway", "wardryx", "idryx"]:
-    edit("manifests/10-planes.yaml", "  selector: { matchLabels: { app: " + app + " } }\n", "  strategy: { type: Recreate }\n  selector: { matchLabels: { app: " + app + " } }\n")')" \
+	"$(py 'for f in ["15-policy-store.yaml", "10-planes.yaml", "20-console.yaml"]:
+    edit("manifests/kustomization.yaml", "  - " + f + "\n", "")')" \
 	"measured nothing about leaving a dead node"
+
+# Longhorn holds a dead node's volumes unless told otherwise; the setting is a
+# block copied into three installers, the shape that drifted three times
+# before (GOTCHAS 90, 101, 102).
+run_case "longhorn-releases-a-dead-node: an installer never sets the policy" fail \
+	'./scripts/longhorn-releases-a-dead-node.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "  if k_ \"-n longhorn-system patch settings.longhorn.io node-down-pod-deletion-policy", "  if k_ \"-n longhorn-system get settings.longhorn.io node-down-pod-deletion-policy-was-here")')" \
+	"never sets node-down-pod-deletion-policy"
+
+run_case "longhorn-releases-a-dead-node: an installer sets the policy to the wrong value" fail \
+	'./scripts/longhorn-releases-a-dead-node.sh' \
+	"$(py 'import re
+p = "cloud/gcp/install-gcp.sh"
+s = open(p).read()
+t = re.sub(r"(node-down-pod-deletion-policy --type merge -p .*?)delete-both-statefulset-and-deployment-pod", r"\1do-nothing", s, count=1)
+assert t != s, "the patch line was not found"
+open(p, "w").write(t)')" \
+	"but not to delete-both-statefulset-and-deployment-pod"
+
+run_case "longhorn-releases-a-dead-node: the confirmation line reworded is not a fault" pass \
+	'./scripts/longhorn-releases-a-dead-node.sh' \
+	"$(py 'edit("install.sh", "    echo \"   node-down-pod-deletion-policy=delete-both-statefulset-and-deployment-pod\"", "    echo \"   a dead node now releases its volumes\"")')"
+
+run_case "longhorn-releases-a-dead-node: no Longhorn installer left" fail \
+	'./scripts/longhorn-releases-a-dead-node.sh' \
+	"$(py 'import os
+for f in ["install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"]:
+    os.remove(f)')" \
+	"This measured nothing"
 
 echo
 if [ -n "$(git status --porcelain)" ]; then

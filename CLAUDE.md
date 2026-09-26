@@ -106,6 +106,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/preflight-keeps-tfvars.sh # invariant 19; GOTCHAS 103
 ./scripts/gateway-cache-is-off.sh # invariant 20
 ./scripts/planes-leave-a-dead-node.sh # invariant 21
+./scripts/longhorn-releases-a-dead-node.sh # invariant 22; GOTCHAS 109
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -514,21 +515,42 @@ an absent invariant.
     the old pod stopping while its endpoint was still in the Service. Same
     shape as invariant 12: nothing broken, a default charged in full.
 
-    So every Deployment that ROLLS tolerates both taints for at most 60 s
-    (30 s is what ships) and every container in it that serves a port has a
-    `preStop` sleep (5 s ships, the native sleep action, no shell needed).
-    The Recreate ones are excluded on purpose: they are Recreate because they
-    hold a ReadWriteOnce claim, and evicting such a pod early does not move
-    its volume.
+    So every Deployment AND StatefulSet tolerates both taints for at most 60 s
+    (30 s is what ships), and every container that serves a port in a
+    Deployment that ROLLS has a `preStop` sleep (5 s ships, the native sleep
+    action, no shell needed).
 
-    **What it does not cover.** A node lost with a ReadWriteOnce volume on
-    it: on k3d's local-path that volume waits for the node (policy-db came
-    back 17 s after the node did), and Longhorn's own detach timing was not
-    re-measured here. One replica still means an outage for as long as the
-    new pod takes to start; this shortens the wait, it does not add a replica.
+    The first version excluded the Recreate Deployments and the StatefulSet,
+    the ReadWriteOnce holders, on the premise that evicting them early cannot
+    move their volume. That premise was ours and it was wrong on Longhorn:
+    measured on GCP 2026-09-26, policy-db's VM stopped, the policy store stayed
+    down until the VM returned, and with invariant 22's Longhorn setting and
+    these tolerations it failed over in about 150 s. It is right only on
+    storage that cannot move a volume (k3d's local-path), where the early
+    eviction costs nothing: the replacement waits Pending for the node, as it
+    would have anyway. GOTCHAS 109.
+
+    **What it does not cover.** One replica still means an outage for as long
+    as the new pod takes to start; this shortens the wait, it does not add a
+    replica. A network partition, as opposed to a node that is gone, was not
+    measured.
     *(gate: `scripts/planes-leave-a-dead-node.sh`, five cases in
     `scripts/gates-have-teeth.sh`; scenarios in
     `features/planes-leave-a-dead-node.feature`)*
+
+22. **Every installer that installs Longhorn tells it to release a dead
+    node's volumes.** Longhorn ships `node-down-pod-deletion-policy:
+    do-nothing`: an evicted pod sits Terminating on the dead node, and neither
+    a StatefulSet nor a Recreate Deployment starts its replacement until the
+    old pod is confirmed gone, which a dead node never confirms. Measured on
+    GCP 2026-09-26 (N2/G1): policy-db's VM stopped, the policy store down until
+    the VM returned; with `delete-both-statefulset-and-deployment-pod` about
+    400 s; with that and invariant 21's tolerations about 150 s. The three
+    installers set it right after Longhorn is ready and stop if they cannot.
+    The shape of the risk: a block copied into three installers, the drift
+    behind GOTCHAS 90, 101 and 102.
+    *(gate: `scripts/longhorn-releases-a-dead-node.sh`, four cases in
+    `scripts/gates-have-teeth.sh`; GOTCHAS 109)*
 
 ## Decisions that have no gate yet
 

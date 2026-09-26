@@ -82,6 +82,9 @@ jobs:
       - name: a plane that can move leaves a dead node and drains (invariant 21)
         run: ./scripts/planes-leave-a-dead-node.sh
 
+      - name: Longhorn releases a dead node's volumes (invariant 22)
+        run: ./scripts/longhorn-releases-a-dead-node.sh
+
       # No workload in this stack talks to the Kubernetes API from inside a
       # pod, so the projected token every pod gets for the namespace default
       # ServiceAccount is a live credential with nothing to authorize and
