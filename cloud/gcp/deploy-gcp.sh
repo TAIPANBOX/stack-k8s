@@ -48,7 +48,9 @@
 # default for the same reason `--with-finops` is: a whole plane somebody may
 # simply not want. Nothing it does spends money (its backend is `stub`, free
 # and making no outbound call, in every launcher); see manifests/51-typryx.yaml
-# for how an operator switches it and for how its door key is generated.
+# for how an operator switches it and for how its door key is generated. The
+# same flag also applies tokenfuse's MCP broker in front of it
+# (manifests/52-tokenfuse-mcp-broker.yaml).
 set -euo pipefail
 
 SERVERS=""; AGENTS=""
@@ -569,6 +571,8 @@ fi
 if [ "$WITH_TYPED" = 1 ]; then
   say "typed: applying the typryx plane (backend stub, no outbound call)"
   k_ "apply -f /root/stack-k8s/manifests/51-typryx.yaml"
+  say "typed: applying tokenfuse's MCP broker in front of it"
+  k_ "apply -f /root/stack-k8s/manifests/52-tokenfuse-mcp-broker.yaml"
 fi
 
 # Tell the console which origin its operator will actually arrive from, before

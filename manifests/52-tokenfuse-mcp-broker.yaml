@@ -1,0 +1,245 @@
+# tokenfuse's MCP credential broker, fronting typryx (the typed-answer plane,
+# 51-typryx.yaml) so an agent reaches it through the money plane's own door
+# rather than with typryx's own key in hand.
+#
+# NOT in kustomization.yaml, for 51-typryx.yaml's own reason: this plane is
+# reachable with no broker at all (the operator's tunnel, or
+# `kubectl -n agent-stack port-forward svc/typryx 4320:4320`), so wiring a
+# broker in front of it is a second, separable decision an install must not
+# make on the operator's behalf. Applied by the same `--with-typed` path as
+# 51-typryx.yaml, after it, in `deploy.sh` and both cloud deploys:
+#
+#   kubectl apply -f manifests/51-typryx.yaml
+#   kubectl apply -f manifests/52-tokenfuse-mcp-broker.yaml
+#
+# This is `ghcr.io/taipanbox/tokenfuse`'s own `mcp-broker` subcommand, the
+# same published tag `10-planes.yaml` pins for `tokenfuse-gateway`, run with
+# a different ENTRYPOINT argument rather than as a second published artifact:
+# one binary, two process invocations, tokenfuse's own CLAUDE.md invariant
+# 34. Nothing in that repository's code changes here; this file is
+# configuration only.
+#
+# `@decided 2026-09-26`: the reason 51-typryx.yaml gave in its own prior
+# header for leaving this unwired (the broker forwarded no credential) has
+# lapsed without any change to the broker: typryx#6 lets a caller present its
+# key inside a `tools/call`'s own `_meta` object
+# (`TYPRYX_ACCEPT_KEY_IN_META=1`, set in 51-typryx.yaml), which is exactly the
+# shape the broker's `TOKENFUSE_MCP_SECRETS` vault already fills a
+# `{{secret:NAME}}` handle into. Measured end to end before this file was
+# written: a `tools/call` carrying `"_meta":{"typryx/key":"{{secret:typryx_key}}"}`
+# through a broker configured as below reached typryx, was authenticated, and
+# was recorded under the key's own agent.
+#
+#
+# ## Two Secrets, one value shared between them by hand
+#
+# `TOKENFUSE_MCP_SECRETS` needs the SAME bearer value that appears in
+# `typryx-keys`' own `TYPRYX_KEYS` (51-typryx.yaml), because that is the
+# credential typryx's door actually checks. Nothing here generates either
+# Secret: both are operator-created, the same stance 51-typryx.yaml and
+# 47-scopyx.yaml already take on their own doors, so CLAUDE.md invariant 17
+# (every installer that creates a Secret creates every key the manifests
+# read) does not apply to either: no tracked script runs `create secret
+# generic typryx-keys` or `create secret generic tokenfuse-mcp-broker-keys`,
+# so there is nothing for that gate to compare.
+#
+# `TOKENFUSE_MCP_KEYS` is a SEPARATE credential from the typryx one: it is
+# the door on the BROKER itself (`secret:key_id`, tokenfuse's own
+# `TOKENFUSE_CLIENT_KEYS` form), presented as `x-fuse-key: <secret>` by
+# whatever calls the broker. Reusing the typryx key here would mean anything
+# that can reach typryx directly can also reach the broker, and the reverse,
+# which collapses two doors into one; a caller of the broker never needs to
+# know typryx's own key at all, which is the point of fronting it.
+#
+#   TYPRYX_KEY="$(kubectl -n agent-stack get secret typryx-keys \
+#     -o jsonpath='{.data.TYPRYX_KEYS}' | base64 -d | cut -d, -f1 | cut -d= -f1)"
+#   kubectl -n agent-stack create secret generic tokenfuse-mcp-broker-keys \
+#     --from-literal=TOKENFUSE_MCP_KEYS='pick-a-different-long-secret:agent://acme.example/broker-caller' \
+#     --from-literal=TOKENFUSE_MCP_SECRETS="typryx_key=${TYPRYX_KEY}"
+#
+# The two `cut`s pull the bearer out of `TYPRYX_KEYS`' own
+# `key=agent://identity` shape, the same extraction 47-scopyx.yaml's header
+# already uses on `stack-keys`' `wardryx_keys` for the same reason: the
+# secret is the FIRST field before either separator, not the whole pair.
+#
+# Without this Secret the pod refuses to start (`TOKENFUSE_MCP_KEYS` set but
+# unusable, or the broker's vault empty and every `{{secret:typryx_key}}`
+# handle unresolved), the same stance every opt-in plane's own door takes
+# here.
+#
+#
+# ## What TOKENFUSE_MCP_SECRET_SCOPES buys
+#
+# Scoped to the three tools typryx actually exposes
+# (`tools:ask|ask_freeform|list_questions`) rather than left unscoped, so a
+# caller of a DIFFERENT upstream this broker might one day also front cannot
+# resolve typryx's key by naming a tool typryx never registered. This is
+# plain configuration, not a secret, and sits beside the env vars below
+# rather than in the Secret.
+#
+#
+# ## The NetworkPolicies, narrower than the gateway's own
+#
+# Two pairs. `broker-egress-typryx` and `typryx-ingress-broker` are the one
+# connection this plane needs: nothing else in the namespace is given a rule
+# to reach typryx's port 4320, so typryx keeps the same "reachable by
+# nothing but what this file names" posture it had with no NetworkPolicy at
+# all. `broker-ingress` admits exactly the peers `30-network-policy.yaml`'s
+# `planes-ingress` already admits into the gateway, `plane: console` and
+# `plane: money`, on this broker's own port instead of the gateway's four;
+# `console-egress-broker` is the matching half on the console's own egress
+# side, additive beside `console-egress` in that file rather than editing it,
+# the same pattern `47-scopyx.yaml`'s `scopyx-to-policy-plane` already uses
+# for itself.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tokenfuse-mcp-broker
+  namespace: agent-stack
+  labels: { app: tokenfuse-mcp-broker, plane: money }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  template:
+    metadata:
+      labels: { app: tokenfuse-mcp-broker, plane: money }
+    spec:
+      # No workload here talks to the Kubernetes API; see CLAUDE.md
+      # invariant 15. Without this every pod carries a projected token for
+      # the namespace default ServiceAccount, bound to nothing today but
+      # usable by a compromised container for discovery and SelfSubjectReview,
+      # and by any future RBAC binding an operator adds to `default`.
+      automountServiceAccountToken: false
+      # Same shape tokenfuse-cloud and tokenfuse-gateway already use: uid/gid
+      # 10001, fsGroup 10001, because this container appends its own file to
+      # the shared `stack-events` claim, which those two pods' fsGroup leaves
+      # 10001:10001 mode 2775.
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: broker
+          # The gateway's own image and pin, exactly (see pinned-images.sh
+          # and CLAUDE.md invariant 7): this is a subcommand of the same
+          # binary, not a separate published artifact.
+          image: ghcr.io/taipanbox/tokenfuse:v1.1.1
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/tokenfuse"]
+          args: ["mcp-broker"]
+          env:
+            # 0.0.0.0 because a pod binding loopback is reachable by nothing;
+            # paired with TOKENFUSE_MCP_KEYS below, which is what makes a wide
+            # bind here safe rather than an open proxy (tokenfuse CLAUDE.md
+            # invariant 20).
+            - { name: TOKENFUSE_MCP_ADDR, value: "0.0.0.0:4200" }
+            - { name: TOKENFUSE_MCP_UPSTREAM, value: "http://typryx:4320/mcp" }
+            - { name: TOKENFUSE_MCP_UPSTREAMS, value: "typryx=http://typryx:4320/mcp" }
+            # Which tools the typryx secret may be resolved for; see the
+            # header. Configuration, not a credential, so it sits here rather
+            # than in the Secret.
+            - { name: TOKENFUSE_MCP_SECRET_SCOPES, value: "typryx_key=tools:ask|ask_freeform|list_questions" }
+            # This broker's own line on the shared bus, beside
+            # tokenfuse.ndjson and tokenfuse-cloud.ndjson: a tool call through
+            # it is a metered, recorded act, same reason those two get their
+            # own file rather than sharing one.
+            - { name: TOKENFUSE_EVENTS_PATH, value: "/var/lib/stack/events/tokenfuse-mcp.ndjson" }
+          envFrom:
+            # NOT optional. Missing here is not an unconfigured feature, it
+            # is a door with nothing on it or a vault with nothing in it; see
+            # the header for what each half does.
+            - secretRef: { name: tokenfuse-mcp-broker-keys }
+          ports: [{ name: mcp, containerPort: 4200 }]
+          volumeMounts:
+            - { name: events, mountPath: /var/lib/stack/events }
+          readinessProbe:
+            # /healthz needs no credential, the same stance every plane here
+            # takes on its own probe.
+            httpGet: { path: /healthz, port: mcp }
+            initialDelaySeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 30m, memory: 64Mi }
+            limits: { memory: 256Mi }
+      volumes:
+        - name: events
+          persistentVolumeClaim: { claimName: stack-events }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: tokenfuse-mcp-broker, namespace: agent-stack }
+spec:
+  selector: { app: tokenfuse-mcp-broker }
+  ports: [{ name: mcp, port: 4200, targetPort: mcp }]
+---
+# The broker's one outbound connection: typryx, and nothing else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: broker-egress-typryx
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: typryx } }
+      ports:
+        - { protocol: TCP, port: 4320 }
+---
+# typryx must accept the connection the rule above allows. This is the FIRST
+# NetworkPolicy naming typryx at all: 51-typryx.yaml shipped with none,
+# reachable by nothing but the operator's own tunnel or port-forward under
+# default-deny, and this is additive beside that rather than a replacement
+# for it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: typryx-ingress-broker
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: typryx } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+      ports:
+        - { protocol: TCP, port: 4320 }
+---
+# Who may ask this broker to call a tool: the same peers 30-network-policy.yaml
+# already admits into the gateway on its own four ports (`planes-ingress`),
+# mirrored onto this broker's one port. NOT `podSelector: {}`, for
+# 47-scopyx.yaml's own reason: every pod in the namespace reaching a
+# credential broker would make the Secret the only control.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: broker-ingress
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { plane: console } }
+        - podSelector: { matchLabels: { plane: money } }
+      ports:
+        - { protocol: TCP, port: 4200 }
+---
+# The matching egress half for the console, additive beside
+# 30-network-policy.yaml's own `console-egress` rather than editing a file
+# that ships to every install (the same choice 47-scopyx.yaml makes with
+# `scopyx-to-policy-plane`).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: console-egress-broker
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { plane: console } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+      ports:
+        - { protocol: TCP, port: 4200 }
