@@ -573,7 +573,7 @@ run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
 run_case "secret-keys-agree: no installer left to judge" fail \
 	'./scripts/secret-keys-agree.sh' \
 	"$(py 'import os
-for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh"):
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "delegation/up.sh"):
     os.remove(f)')" \
 	"measured NOTHING"
 
@@ -818,6 +818,37 @@ run_case "hub-entry-is-narrow: the file is removed" fail \
 	"$(py 'import os
 os.remove("manifests/53-hub-entry.yaml")')" \
 	"This measured nothing"
+
+# The delegation plane (GOTCHAS 105, invariant 24) must stay opt-in the same
+# way the hub entry does: three cases, the manifest joining the default apply
+# set, a delegation env var leaking into a manifest the default apply set
+# DOES install, and the subject taken away entirely.
+run_case "delegation-off-by-default: the manifest joins the default apply" fail \
+	'./scripts/delegation-off-by-default.sh' \
+	"$(py 'edit("manifests/kustomization.yaml",
+    "  - 40-routines-and-secrets.yaml\n",
+    "  - 40-routines-and-secrets.yaml\n  - 54-delegation.yaml\n")')" \
+	"is listed in manifests/kustomization.yaml"
+
+run_case "delegation-off-by-default: a delegation env var leaks into the default gateway manifest" fail \
+	'./scripts/delegation-off-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml",
+    "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n",
+    "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n            - { name: TOKENFUSE_DELEGATION_ISSUER, value: \"http://vouchryx:4310\" }\n")')" \
+	"a delegation env var, in the manifest"
+
+run_case "delegation-off-by-default: up.sh re-applies the namespace and drops its Pod Security labels" fail \
+	'./scripts/delegation-off-by-default.sh' \
+	"$(py 'edit("delegation/up.sh",
+    "say \"writing the trusted issuer into vouchryx-trusted-issuers\"\n",
+    "say \"writing the trusted issuer into vouchryx-trusted-issuers\"\nkubectl create namespace \"$NS\" --dry-run=client -o yaml | kubectl apply -f - >/dev/null\n")')" \
+	"applies a Namespace object"
+
+run_case "delegation-off-by-default: the subject taken away entirely" fail \
+	'./scripts/delegation-off-by-default.sh' \
+	"$(py 'import os
+os.remove("manifests/54-delegation.yaml")')" \
+	"measured nothing"
 
 echo
 if [ -n "$(git status --porcelain)" ]; then

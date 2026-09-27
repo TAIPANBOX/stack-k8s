@@ -1,0 +1,37 @@
+# Gives the console what it needs to revoke a delegation chain from its own
+# `delegation_revoke` command (admin-only, passkey-gated) instead of a bare
+# `curl`. Applied by `delegation/up.sh`, never by `kubectl apply -k`:
+#
+#   kubectl -n agent-stack patch deployment genaryx-console \
+#     --patch-file manifests/54-delegation-console-patch.yaml
+#
+# Mirrors stack-up's own `GENARYX_VOUCHRYX_URL` / `GENARYX_VOUCHRYX_REVOKE_KEY_FILE`
+# pair: the second is a PATH, never the key's content, so the console reads it
+# the same way it would read any other file-mounted credential and this patch
+# never carries a secret value itself.
+#
+# To go back to no delegation at all:
+#
+#   kubectl -n agent-stack patch deployment genaryx-console --type strategic \
+#     --patch-file manifests/54-delegation-console-unpatch.yaml
+#
+# NOT `kubectl apply -k manifests/`: see
+# manifests/54-delegation-gateway-unpatch.yaml's header for why that does not
+# work (a `kubectl patch --patch-file` never touches the
+# `last-applied-configuration` annotation apply's own diff reads).
+# delegation/down.sh uses this patch, not apply.
+spec:
+  template:
+    spec:
+      containers:
+        - name: console
+          env:
+            - { name: GENARYX_VOUCHRYX_URL, value: "http://vouchryx:4310" }
+            - { name: GENARYX_VOUCHRYX_REVOKE_KEY_FILE, value: "/etc/vouchryx/revoke/revoke.key" }
+          volumeMounts:
+            - { name: vouchryx-revoke-key, mountPath: /etc/vouchryx/revoke, readOnly: true }
+      volumes:
+        - name: vouchryx-revoke-key
+          secret:
+            secretName: vouchryx-keys
+            items: [{ key: revoke_key, path: revoke.key }]

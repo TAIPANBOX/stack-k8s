@@ -93,6 +93,12 @@ jobs:
       - name: the hub entry routes exactly the seven allowed paths (invariant 23)
         run: ./scripts/hub-entry-is-narrow.sh
 
+      # manifests/54-delegation.yaml (vouchryx) is opt-in, applied only by
+      # delegation/up.sh, never by the default apply set. See CLAUDE.md
+      # invariant 24 and GOTCHAS.md entry 105.
+      - name: delegation is off by default (invariant 24)
+        run: ./scripts/delegation-off-by-default.sh
+
       # No workload in this stack talks to the Kubernetes API from inside a
       # pod, so the projected token every pod gets for the namespace default
       # ServiceAccount is a live credential with nothing to authorize and

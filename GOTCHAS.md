@@ -3774,6 +3774,30 @@ vouchryx becomes a required component with a signing key provisioned at
 install and its JWKS fetched before the gateway starts, which stack-up does
 behind `--with-delegation` and this repository does not do yet.
 
+**Fixed 2026-09-27.** `manifests/54-delegation.yaml` and `delegation/up.sh`
+add vouchryx as an opt-in delegation plane, off by default: `kubectl apply -k
+manifests/` still installs nothing that verifies a chain, and turning it on
+is `./delegation/up.sh --issuer ... --audience ... --jwks-file ...`, which
+refuses before applying anything unless all three are given (CLAUDE.md
+invariant 24). It mints vouchryx's signing key and revoke key once, into the
+`vouchryx-keys` Secret, reused on every later run, and patches
+`tokenfuse-gateway` and `genaryx-console` with the two `TOKENFUSE_DELEGATION_*`
+/ `GENARYX_VOUCHRYX_*` variable sets through `kubectl patch --patch-file`
+rather than through a manifest, so `kubectl apply -k manifests/`
+(`delegation/down.sh`'s own last step) reverts both.
+
+Measured the same day, on the exact shape this entry already named as the
+risk: a JWKS minted by `vouchryx-demo keygen` names its key `vx-lab`, which is
+not the RFC 7638 thumbprint vouchryx actually signs with, and every token
+this gateway saw was refused `BadToken`. `delegation/up.sh` does not make
+that mistake: it fetches vouchryx's OWN served JWKS from
+`/.well-known/jwks.json` after the pod is Ready and hands that to the
+gateway, never the operator's own upstream JWKS (which is a different file,
+for a different purpose: the operator's IdP that vouchryx itself trusts).
+See `go-to-market-2026-09/evidence/forge-n4-n10-2026-09-27/SUMMARY.md`,
+section N3, for the lab run this repeats the shape of, and this PR's own
+forge transcript for the run against these exact files.
+
 ## 107. A one-replica plane sits on a dead node for five minutes, because that is the default
 
 **Platform.** Fixed here by invariant 21. Kubernetes adds a NoExecute toleration of 300 s for
@@ -3893,3 +3917,82 @@ the forge k3d cluster, 2026-09-27, twice: `15 passed, 1 failed`, the one failure
 changed. The script now waits, bounded at 60 s per pod, for all four to be gone before it prints
 its result. Nothing about a real stack was wrong; the check was reading the test's own residue.
 
+## 113. `kubectl apply -k` does not revert a `kubectl patch --patch-file`, because the patch never touched the annotation apply reads
+
+**Ours, and fixed.** `delegation/down.sh`'s first version undid
+`manifests/54-delegation-gateway-patch.yaml` and
+`manifests/54-delegation-console-patch.yaml` by re-running `kubectl apply -k
+manifests/`, on the strength of invariant 14's own words, "apply reverts what
+it manages", and `55-copilot-cloud.yaml`'s header suggesting the same move
+for its own patch. Measured on forge, 2026-09-27: every
+`TOKENFUSE_DELEGATION_*` env var and the `vouchryx-jwks` volume were still on
+the live `tokenfuse-gateway` Deployment after the apply.
+
+The mechanism invariant 14 describes is a three-way diff between what
+`apply` applied LAST time (recorded in the
+`kubectl.kubernetes.io/last-applied-configuration` annotation), what it wants
+to apply NOW, and what is actually live. `kubectl patch --patch-file` writes
+straight to the live object and never touches that annotation, so from
+apply's point of view the desired state never changed, and it computes an
+empty diff for the fields the patch touched. The invariant's own trap
+example (`TRAILRYX_TRUST_DOMAIN`) is not this: an operator's hand-edit to a
+field the KUSTOMIZATION already governs is what apply correctly reverts; a
+field added by something OTHER than apply, that apply was never told to want
+differently, is not.
+
+Met a second time in the same session, by accident: the first (wrong)
+`down.sh` also ran `kubectl apply -k manifests/` for this reason, and its
+side effect reverted this forge cluster's own `TRAILRYX_TRUST_DOMAIN` from
+`taipanbox.dev` back to the `00-base.yaml` placeholder, `verify.sh`'s
+`TRAILRYX_TRUST_DOMAIN is 'set-me.invalid'` failing on a cluster nothing else
+had touched. Fixed by hand (`kubectl patch configmap stack-wiring` back to
+the operator's value, then a rollout restart of the two pods that had
+already started with the placeholder) before the run continued; this is the
+exact shape invariant 14 already names, met while working around a different
+gap in the same mechanism.
+
+The fix: two more `kubectl patch --patch-file` bodies
+(`manifests/54-delegation-gateway-unpatch.yaml`,
+`manifests/54-delegation-console-unpatch.yaml`), each carrying a
+strategic-merge-patch `$patch: delete` directive per field the enabling
+patch added, keyed by that list's own merge key (`name` for `env` and
+`volumes`, `mountPath` for `volumeMounts`, which is NOT `name` and is the
+part that is easy to get wrong: the first attempt at the unpatch file used
+`name` for the volumeMount and the API server refused it outright,
+`does not contain declared merge key: mountPath`). `delegation/down.sh` now
+patches with these instead of re-applying the kustomization at all.
+
+
+## 114. Applying a bare Namespace drops the Pod Security labels the install put on it
+
+**Ours, and fixed.** `delegation/up.sh`'s first version made sure the namespace
+existed with `kubectl create namespace "$NS" --dry-run=client -o yaml |
+kubectl apply -f -`, a common idiom that is harmless on an empty cluster and
+destructive on this one. The install applies `agent-stack` with
+`pod-security.kubernetes.io/enforce: restricted`; apply's three-way merge sees
+those labels in the object it last applied and absent from the bare one, and
+removes them. Measured on forge, 2026-09-27 (stack-k8s v1.1.16, k3d): after one
+`delegation/up.sh` and its `down.sh`, `kubectl get ns agent-stack
+--show-labels` showed only `kubernetes.io/metadata.name`, and
+`security-tests.sh` went from 24/0/3 to 23/1/3 on "the namespace refuses a
+privileged pod": a privileged pod was ACCEPTED. Nothing else looked wrong, and
+verify.sh stayed 16/0/1. Restored on forge with `kubectl label ns agent-stack
+pod-security.kubernetes.io/enforce=restricted
+pod-security.kubernetes.io/enforce-version=latest --overwrite`.
+
+The fix: an opt-in script requires the installed namespace and refuses without
+it; it never applies one. *(gate: `scripts/delegation-off-by-default.sh` fails
+on any script under `delegation/` that applies a Namespace object; one case in
+`gates-have-teeth.sh`.)*
+
+Two more found in the same review, neither a platform surprise: the gateway's
+`TOKENFUSE_DELEGATION_AUDIENCE` was the operator's `--audience`, which is the
+`aud` the upstream IdP stamps on tokens FOR vouchryx, not the `aud` vouchryx
+stamps on the tokens it mints (the exchange's `audience`, or `VOUCHRYX_ISSUER`),
+so any `--audience` other than `http://vouchryx:4310` refused every delegated
+call; it is now empty, the choice stack-single makes. And
+`--revocations-interval-ms` was accepted and printed but never applied: the
+patch carried 12000 whatever the flag said. Both measured red on forge before
+the fix (a correct token refused `delegation_refused`; the gateway env 12000
+after `--revocations-interval-ms 1000`) and green after (accepted; 1000, a
+revoked subject refused 1.4 s after the revoke).

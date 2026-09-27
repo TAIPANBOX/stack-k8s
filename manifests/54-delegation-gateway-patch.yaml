@@ -1,0 +1,60 @@
+# Points the gateway's delegation door at vouchryx. Applied by
+# `delegation/up.sh`, never by `kubectl apply -k`:
+#
+#   kubectl -n agent-stack patch deployment tokenfuse-gateway \
+#     --patch-file manifests/54-delegation-gateway-patch.yaml
+#
+# Off by default (CLAUDE.md invariant 24): the default 10-planes.yaml carries
+# none of TOKENFUSE_DELEGATION_ISSUER/JWKS/AUDIENCE/URL/REVOCATIONS, so a
+# default install's gateway verifies no delegation chain at all and
+# `on_behalf_of` travels as a claim the caller wrote (GOTCHAS 105).
+#
+# TOKENFUSE_DELEGATION_JWKS names a FILE, and it is deliberately not the
+# operator's upstream JWKS: it is vouchryx's OWN served JWKS, fetched by
+# delegation/up.sh from vouchryx's `/.well-known/jwks.json` once the pod is
+# Ready and stored in the `vouchryx-jwks` ConfigMap mounted below. Getting this
+# wrong is the trap this manifest's own header names: a JWKS minted any other
+# way (`vouchryx-demo keygen` names its key `vx-lab`) does not carry the RFC
+# 7638 thumbprint vouchryx actually signs with, and every token is refused
+# `BadToken`.
+#
+# To go back to no delegation at all:
+#
+#   kubectl -n agent-stack patch deployment tokenfuse-gateway --type strategic \
+#     --patch-file manifests/54-delegation-gateway-unpatch.yaml
+#
+# NOT `kubectl apply -k manifests/`. That looks right (CLAUDE.md invariant 14:
+# "apply reverts what it manages") and is wrong: `kubectl patch --patch-file`
+# never touches the `last-applied-configuration` annotation apply's own
+# three-way diff reads, so apply sees no change to make and leaves these env
+# vars and this volume exactly where this patch put them. See
+# manifests/54-delegation-gateway-unpatch.yaml's own header, and
+# delegation/down.sh, which uses it instead.
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          env:
+            - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
+            - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
+            # Empty: accept the token whatever `aud` vouchryx minted it for,
+            # the choice stack-single makes too. NOT the operator's --audience:
+            # that is the `aud` the upstream IdP puts on tokens it issues FOR
+            # vouchryx, while a token vouchryx mints carries the exchange's
+            # `audience` parameter, or VOUCHRYX_ISSUER when none is asked for.
+            # The two agree only when the operator happens to pass
+            # --audience http://vouchryx:4310; any other value would refuse
+            # every delegated call `Audience`, silently to the caller.
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "" }
+            # The gateway's own reachable address, for the DPoP htu it checks
+            # a caller's proof against. Service DNS, in-cluster, the same
+            # shape as VOUCHRYX_ISSUER above.
+            - { name: TOKENFUSE_DELEGATION_URL, value: "http://tokenfuse-gateway:4100" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS, value: "http://vouchryx:4310/v1/revocations" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, value: "12000" }
+          volumeMounts:
+            - { name: vouchryx-jwks, mountPath: /etc/tokenfuse/delegation, readOnly: true }
+      volumes:
+        - name: vouchryx-jwks
+          configMap: { name: vouchryx-jwks }

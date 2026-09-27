@@ -108,6 +108,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/planes-leave-a-dead-node.sh # invariant 21
 ./scripts/longhorn-releases-a-dead-node.sh # invariant 22; GOTCHAS 109
 ./scripts/hub-entry-is-narrow.sh  # invariant 23
+./scripts/delegation-off-by-default.sh # invariant 24; GOTCHAS 105
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -570,6 +571,63 @@ an absent invariant.
     `hub/down.sh` deletes the Service first for the reason that entry states.
     *(gate: `scripts/hub-entry-is-narrow.sh`, seven cases in `scripts/gates-have-teeth.sh`;
     scenarios in `features/a-site-reaches-the-hub-over-one-narrow-door.feature`)*
+
+24. **The delegation plane is off by default, and turning it on needs a trusted
+    upstream issuer named in advance.** GOTCHAS.md entry 105 is the gap this
+    closes: the gateway's delegation door only verifies a chain when
+    `TOKENFUSE_DELEGATION_ISSUER` and `TOKENFUSE_DELEGATION_JWKS` are set, and
+    nothing here set them, so `on_behalf_of` travelled as a claim the caller
+    wrote and a wardryx policy carrying `deny_if_chain_unproven` or
+    `require_root_principal` refused only callers honest enough to say they
+    had not proven it.
+
+    `@decided 2026-09-27`: the launchers offer vouchryx as an opt-in
+    delegation plane, off by default, so a gateway can verify a proved
+    delegation chain instead of trusting a claimed one.
+
+    `manifests/54-delegation.yaml` (vouchryx: a Deployment, a ClusterIP
+    Service, three NetworkPolicies and the `vouchryx-state` PersistentVolumeClaim)
+    is not in `manifests/kustomization.yaml`'s `resources:`, the same
+    treatment as `45-heraldyx.yaml` and `47-scopyx.yaml`. `delegation/up.sh`
+    is the only path that applies it, and it refuses before applying anything
+    unless the operator has already supplied a trusted upstream issuer,
+    audience and JWKS file: there is no defensible default trusted issuer,
+    the same reason `00-base.yaml` ships `TRAILRYX_TRUST_DOMAIN` as a
+    placeholder rather than a guess (invariant 14). The gateway and the
+    console only learn about vouchryx through two `kubectl patch
+    --patch-file` bodies (`manifests/54-delegation-gateway-patch.yaml`,
+    `manifests/54-delegation-console-patch.yaml`), the same shape
+    `55-copilot-cloud.yaml` already uses. `delegation/down.sh` reverses each
+    with its own `$patch: delete` counterpart
+    (`manifests/54-delegation-gateway-unpatch.yaml`,
+    `manifests/54-delegation-console-unpatch.yaml`) rather than by
+    re-applying the kustomization the way `55-copilot-cloud.yaml`'s own
+    header suggests: **that was tried first and does not work.**
+    `kubectl patch --patch-file` never touches the
+    `kubectl.kubernetes.io/last-applied-configuration` annotation `apply`'s
+    own three-way diff reads, so `kubectl apply -k manifests/` sees no
+    difference between what it applied last time and what it wants now, and
+    leaves the patch's additions exactly where they are. Measured 2026-09-27
+    on forge: every `TOKENFUSE_DELEGATION_*` env var was still on the live
+    Deployment after `kubectl apply -k manifests/`, and the same apply also
+    reverted `stack-wiring`'s `TRAILRYX_TRUST_DOMAIN` from the operator's own
+    value back to the placeholder, invariant 14's own trap, met in the
+    process of trying to work around a different one.
+
+    The signing key and the revoke key are minted once, into the
+    `vouchryx-keys` Secret, and reused on every later run, the same stance
+    `hub/add-site.sh` takes on a site's keys. **The trap that made this
+    entry:** vouchryx signs with the RFC 7638 thumbprint of its own signing
+    key as `kid`, and a JWKS minted any other way (`vouchryx-demo keygen`
+    names its key `vx-lab`) refuses every token `BadToken`. `delegation/up.sh`
+    fetches vouchryx's own served JWKS from `/.well-known/jwks.json` after it
+    is Ready, through a `kubectl port-forward` rather than through the
+    Service (the NetworkPolicy below admits only the gateway and the
+    console), and hands that to the gateway, never the operator's own JWKS.
+    *(gate: `scripts/delegation-off-by-default.sh`, three cases in
+    `scripts/gates-have-teeth.sh`: the manifest joining the default apply
+    set, a delegation env var leaking into the default gateway or console
+    manifest, and the subject taken away entirely.)*
 
 ## Decisions that have no gate yet
 

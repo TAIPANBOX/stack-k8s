@@ -86,6 +86,7 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | Deployment | `48-scopyx-browser.yaml`, the same plane with a real browser, for pages that assemble themselves. **Replaces 47's Deployment rather than running beside it**, so a cluster cannot round-robin an agent's fetches between a browser and a fetcher that runs no JavaScript. Costs 267 MB of pull against 3.5 MB. Read its header: PodSecurity `restricted` decides the sandbox question for you | |
 | Deployment + PVC + Service | `51-typryx.yaml`, the typed-answer plane: a typed question answered with a probability, scored later against what actually happened. **Not in the default apply**: a whole plane somebody may simply not want. Backend is `stub` (free, no outbound call) in every launcher. Refuses to start without a credential, the same as scopyx. Its journal is on the shared `stack-events` bus | |
 | Deployment + Service + NetworkPolicy x4 | `52-tokenfuse-mcp-broker.yaml`, tokenfuse's own MCP credential broker fronting typryx. **Not in the default apply, applied by the same `--with-typed` flag as 51-typryx.yaml, right after it**. Free, reaches nowhere but typryx itself. Refuses to start without its own credential | |
+| Deployment + Service + PVC + NetworkPolicy x3 | `54-delegation.yaml`, vouchryx, the delegation-token service. **Not in the default apply, applied by `delegation/up.sh`**, which also refuses before applying anything unless a trusted upstream issuer, audience and JWKS file are given. Reachable only from the gateway and the console. See "The delegation plane" below | |
 | Patch (Deployment) | `55-copilot-cloud.yaml`: points the console's copilot, Felyx, at a real Anthropic model instead of the local Ollama default. **Not in the default apply, opt-in, and METERED**: every conversation is billed by the model provider to the key's owner, on a bill separate from the cluster, so it needs a Secret holding your own API key and a manual `kubectl patch` naming this file. See its own header before applying | |
 | Namespace labels + NetworkPolicy x2 | `60-harden-neighbours.yaml`: Pod Security `restricted` plus default-deny ingress and egress for the cluster's `default` namespace, i.e. hardening for a namespace this stack does not own (`security-tests.sh` check 12 reports on the gap this closes). **Not in the default apply**: it changes a namespace that belongs to whoever runs the cluster, and it WILL stop anything already running in `default`. Read its header before applying | |
 
@@ -129,6 +130,9 @@ tunnel/         the operator's way in: WireGuard, TLS, and the console behind
 hub/            a second site's way IN: up.sh, add-site.sh, down.sh for
                 manifests/53-hub-entry.yaml, the hub's one metered public
                 entry. See "A second site" below
+delegation/     the delegation plane's opt-in: up.sh, down.sh for
+                manifests/54-delegation.yaml (vouchryx). See "The delegation
+                plane" below
 manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm).
                 Three files are opt-in and outside the default apply, each
                 applied by hand: 45-heraldyx.yaml (notifications), 55-copilot-
@@ -331,6 +335,74 @@ here: a second real customer site (the lab's second site was a k3d cluster
 sharing a home network with the operator's own machine), a hub outage longer
 than a minute, and a stolen site key, which the edge does not itself bind to
 an address.
+
+## The delegation plane
+
+`on_behalf_of` normally travels as a claim the caller wrote: nothing here
+verifies it, and a wardryx policy carrying `deny_if_chain_unproven` or
+`require_root_principal` refuses only callers honest enough to say they did
+not prove it (GOTCHAS.md entry 105). `@decided 2026-09-27`: the launchers
+offer vouchryx as an opt-in delegation plane, off by default, so a gateway can
+verify a proved delegation chain instead of trusting a claimed one.
+
+```bash
+./delegation/up.sh --issuer https://idp.example.com \
+                    --audience http://vouchryx:4310 \
+                    --jwks-file /path/to/your-idp-jwks.json
+```
+
+All three flags are required, and checked BEFORE anything is applied to the
+cluster (CLAUDE.md invariant 24): there is no defensible default trusted
+issuer, the same reason `TRAILRYX_TRUST_DOMAIN` ships as a placeholder rather
+than a guess. `--issuer` and `--audience` are your own IdP's `iss` and the
+`aud` it puts on the subject/actor tokens it issues for use with this
+vouchryx instance; `--jwks-file` is that IdP's public JWKS.
+
+The script mints vouchryx's signing key and its revoke key once, into the
+`vouchryx-keys` Secret, and reuses both on every later run rather than
+rotating them (a rotation revokes nothing, it only orphans a revocation
+recorded under the old key). It then fetches vouchryx's OWN served JWKS from
+`/.well-known/jwks.json`, once the pod is Ready, and hands that to the
+gateway, never the operator's own upstream JWKS: a JWKS minted any other way
+does not carry the RFC 7638 thumbprint vouchryx actually signs with, and every
+token is refused `BadToken` (measured on this exact cluster shape, 2026-09-27).
+Both the gateway and the console then learn about vouchryx through a
+`kubectl patch --patch-file`, the same shape `55-copilot-cloud.yaml` already
+uses, never through a manifest kustomize applies:
+
+```bash
+./delegation/down.sh                  # keeps vouchryx-keys and the trusted
+                                       # issuer, so ./delegation/up.sh with
+                                       # the same flags reuses them
+./delegation/down.sh --delete-secrets # also removes them
+```
+
+`down.sh` reverses each `kubectl patch --patch-file` with its own
+`$patch: delete` counterpart, rather than by re-applying the kustomization:
+`kubectl patch` never touches the `last-applied-configuration` annotation
+`kubectl apply`'s three-way diff reads, so `kubectl apply -k manifests/` does
+not remove what a patch added (measured 2026-09-27; it also reverted an
+unrelated operator setting, `TRAILRYX_TRUST_DOMAIN`, back to its placeholder
+in the process, CLAUDE.md invariant 14's own trap).
+
+**Reachable only from the gateway and the console.** `manifests/54-delegation.yaml`
+is a ClusterIP Service plus a NetworkPolicy admitting port 4310 from nothing
+else, the same lab shape measured on forge 2026-09-27 (only money-plane pods
+reach 4310). Revoking a subject and confirming the refusal:
+
+```bash
+REVOKE_KEY=$(kubectl -n agent-stack get secret vouchryx-keys -o jsonpath='{.data.revoke_key}' | base64 -d)
+kubectl -n agent-stack port-forward svc/vouchryx 14310:4310 &
+curl -X POST http://127.0.0.1:14310/v1/revoke \
+  -H "Authorization: Bearer $REVOKE_KEY" \
+  -d '{"subject":"agent://acme.example/example","actor":"you","reason":"testing"}'
+```
+
+or from the console's own `delegation_revoke` command (admin-only,
+passkey-gated), wired to `GENARYX_VOUCHRYX_URL` and
+`GENARYX_VOUCHRYX_REVOKE_KEY_FILE` by the same patch that enables it. A
+revocation is persisted on its own volume (`vouchryx-state`), so it survives a
+vouchryx pod restart.
 
 ## Status
 

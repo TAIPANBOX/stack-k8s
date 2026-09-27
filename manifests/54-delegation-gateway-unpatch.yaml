@@ -1,0 +1,39 @@
+# Reverses manifests/54-delegation-gateway-patch.yaml. Applied by
+# delegation/down.sh:
+#
+#   kubectl -n agent-stack patch deployment tokenfuse-gateway \
+#     --type strategic --patch-file manifests/54-delegation-gateway-unpatch.yaml
+#
+# NOT `kubectl apply -k manifests/`. That was tried first and does not work:
+# `kubectl patch --patch-file` never touches the
+# `kubectl.kubernetes.io/last-applied-configuration` annotation `kubectl
+# apply` uses to compute its own three-way diff, so from apply's point of
+# view nothing changed between what it applied last time and what it wants to
+# apply now, and it leaves the patch's additions exactly where they are.
+# Measured 2026-09-27 on forge: after `kubectl apply -k manifests/`, every
+# `TOKENFUSE_DELEGATION_*` env var and the `vouchryx-jwks` volume were still
+# on the live Deployment. This is CLAUDE.md invariant 14's own trap
+# ("apply reverts what it manages") meeting a case it does not cover: a field
+# `apply` was never told it manages.
+#
+# `$patch: delete` is a strategic-merge-patch directive: paired with the
+# list's own merge key (`name` for `env` and `volumes`, `mountPath` for
+# `volumeMounts`, which is NOT `name` and is the one part of this that is
+# easy to get wrong), it removes exactly the named element rather than
+# replacing the whole list.
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          env:
+            - { name: TOKENFUSE_DELEGATION_ISSUER, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_JWKS, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_URL, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, $patch: delete }
+          volumeMounts:
+            - { mountPath: /etc/tokenfuse/delegation, $patch: delete }
+      volumes:
+        - { name: vouchryx-jwks, $patch: delete }
