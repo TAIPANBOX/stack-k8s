@@ -437,7 +437,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v1.0.3
+          image: ghcr.io/taipanbox/wardryx:v1.1.0
           imagePullPolicy: IfNotPresent
           # Single-dash flags, exactly as up.sh calls it.
           args:
