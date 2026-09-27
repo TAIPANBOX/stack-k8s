@@ -285,7 +285,7 @@ else:
 # with nothing noticing. Same fault, same gate, the other file it now reads.
 run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
 	'./scripts/pinned-images.sh' \
-	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.1.14", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.1.17", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
 	"moves: a pod can come back different"
 
 # The default apply set must not publish anything to the world, and must not
@@ -848,6 +848,28 @@ run_case "delegation-off-by-default: the subject taken away entirely" fail \
 	'./scripts/delegation-off-by-default.sh' \
 	"$(py 'import os
 os.remove("manifests/54-delegation.yaml")')" \
+	"measured nothing"
+
+# Felyx through the gateway (invariant 25): the base URL moved off the gateway,
+# a remote opt-in reintroduced anywhere, a harmless comment, and the subject gone.
+run_case "felyx-through-the-gateway: the base URL points past the gateway" fail \
+	'./scripts/felyx-through-the-gateway.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "GENARYX_COPILOT_BASE_URL, value: \"http://tokenfuse-gateway:4100\"", "GENARYX_COPILOT_BASE_URL, value: \"https://api.anthropic.com\"")')" \
+	"would not reach its model through this stack's gateway"
+
+run_case "felyx-through-the-gateway: a manifest sets the remote opt-in again" fail \
+	'./scripts/felyx-through-the-gateway.sh' \
+	"$(py 'edit("manifests/55-copilot-cloud.yaml", "            - { name: GENARYX_COPILOT_MODEL, value: \"claude-sonnet-5\" }\n", "            - { name: GENARYX_COPILOT_MODEL, value: \"claude-sonnet-5\" }\n            - { name: GENARYX_COPILOT_ALLOW_REMOTE, value: \"1\" }\n")')" \
+	"would skip the residency check"
+
+run_case "felyx-through-the-gateway: a comment about the copilot changes" pass \
+	'./scripts/felyx-through-the-gateway.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "# A reference, not the key: the copilot resolves env:NAME itself.", "# A reference, never the key: the copilot resolves env:NAME itself.")')"
+
+run_case "felyx-through-the-gateway: the console manifest taken away" fail \
+	'./scripts/felyx-through-the-gateway.sh' \
+	"$(py 'import os
+os.remove("manifests/20-console.yaml")')" \
 	"measured nothing"
 
 echo

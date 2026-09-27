@@ -1,9 +1,12 @@
-# Felyx, the console's copilot, pointed at a cloud model instead of a local one.
+# Felyx, the console's copilot, given a key and a larger model.
 #
-# NOT in kustomization.yaml, for the same reason 50-loadbalancer.yaml is not:
-# applying it starts a meter, and on somebody else's account. 20-console.yaml
-# ships `GENARYX_COPILOT_PROVIDER=ollama` so a default install talks to a model
-# on the operator's own machines and nothing leaves the cluster.
+# NOT in kustomization.yaml: applying it starts a meter, on somebody else's
+# account. Since 2026-09-27 the default (20-console.yaml) already points Felyx
+# at Anthropic THROUGH this stack's own gateway, by its Service name, with its
+# agent id in the trust domain, so every Felyx call is priced, budgeted and
+# policy-checked like any agent's; it only lacks a key. Creating the
+# `stack-copilot` Secret and restarting the console is enough to turn it on.
+# This patch adds one thing on top: a larger model than the default Haiku.
 #
 # Apply it deliberately, and only after the Secret exists:
 #
@@ -22,12 +25,13 @@
 # the person whose key it is. Use a key with a spend limit, and revoke it when
 # the run ends.
 #
-# GENARYX_COPILOT_ALLOW_REMOTE is the interesting line. The copilot refuses a
-# non-local endpoint unless something states that opt-in explicitly, so a URL
-# alone cannot send a prompt off the box. That guard is the product's own, and
-# it is why this file has to set four variables rather than two.
+# No GENARYX_COPILOT_ALLOW_REMOTE any more. It used to send Felyx straight to
+# api.anthropic.com, past the gateway, and on a cluster whose CNI enforces
+# NetworkPolicy the console has no egress to the internet at all
+# (30-network-policy.yaml: the gateway is the only pod allowed out), so that
+# path could not work here and would have bypassed the meter where it did.
 #
-# To go back to local-first, delete the Secret and re-apply the manifests:
+# To go back to the default model, delete the Secret and re-apply the manifests:
 #
 #   kubectl -n agent-stack delete secret stack-copilot
 #   kubectl apply -k manifests/
@@ -43,7 +47,6 @@ spec:
             # the secret value reaches exactly one process and appears in no
             # config file.
             - { name: GENARYX_COPILOT_API_KEY_REF, value: "env:GENARYX_COPILOT_KEY" }
-            - { name: GENARYX_COPILOT_ALLOW_REMOTE, value: "1" }
             - name: GENARYX_COPILOT_KEY
               valueFrom:
                 secretKeyRef:

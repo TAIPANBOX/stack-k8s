@@ -53,6 +53,7 @@ step "the gateway's semantic cache is off in every install" "./scripts/gateway-c
 step "a plane leaves a dead node and drains" "./scripts/planes-leave-a-dead-node.sh"
 step "Longhorn releases a dead node's volumes" "./scripts/longhorn-releases-a-dead-node.sh"
 step "the hub entry routes exactly the seven allowed paths" "./scripts/hub-entry-is-narrow.sh"
+step "Felyx reaches its model through the gateway" "./scripts/felyx-through-the-gateway.sh"
 step "delegation is off by default" "./scripts/delegation-off-by-default.sh"
 
 echo

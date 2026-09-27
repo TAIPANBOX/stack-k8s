@@ -629,6 +629,27 @@ an absent invariant.
     set, a delegation env var leaking into the default gateway or console
     manifest, and the subject taken away entirely.)*
 
+25. **Felyx, the console's copilot, reaches its model through this stack's own
+    gateway, by default.** `@decided 2026-09-27`: the launchers route Felyx
+    through the stack's gateway by default, with its agent id in the trust
+    domain. `manifests/20-console.yaml` points it at
+    `http://tokenfuse-gateway:4100` by Service name, allow-lists that one name
+    for its residency check (`GENARYX_COPILOT_LOCAL_HOSTNAMES`, genaryx
+    invariant 14: resolved on every connection, cluster addresses only), and
+    names it `agent://$(TRAILRYX_TRUST_DOMAIN)/genaryx/felyx`, so its calls are
+    priced, budgeted and policy-checked like any agent's. No key ships: the
+    `stack-copilot` Secret is optional, and without it Felyx reports itself not
+    configured. Nothing in `manifests/` sets `GENARYX_COPILOT_ALLOW_REMOTE`,
+    which would skip the residency check and go around the meter (and on a
+    cluster enforcing `30-network-policy.yaml` could not reach the internet
+    anyway: the gateway is the only pod allowed out). Measured on forge
+    2026-09-27 with console v1.1.17: with a dummy key Felyx reported
+    `endpoint http://tokenfuse-gateway:4100, local: true` and its question came
+    back as the provider's 401 through the gateway; with the allow-list removed
+    it refused the endpoint; with no Secret it said the key is not set.
+    *(gate: `scripts/felyx-through-the-gateway.sh`; four cases in
+    `gates-have-teeth.sh`; `features/felyx-goes-through-the-gateway.feature`)*
+
 ## Decisions that have no gate yet
 
 This list is debt, and it is here to stay visible rather than to be tidy.
