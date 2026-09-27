@@ -321,7 +321,12 @@ the same way every other credential in this stack already is; TLS here is
 transport, not authentication.
 
 @measured 2026-09-26 on GCP (N2/G2): 17 of 17 outcomes in a local test with
-no cloud, 12 of 12 from the public internet against a live entry. NOT proven
+no cloud, 12 of 12 from the public internet against a live entry.
+@measured 2026-09-27 on GCP, this manifest and these scripts as committed:
+`hub/up.sh` 66 s to both certificates, `hub/add-site.sh` minting a site that
+then called through the hub and appeared by name on `/v1/gateways`, a second
+`add-site.sh` for the same name refused, 16 of 16 from the public internet,
+`hub/down.sh` leaving no forwarding rule or target pool behind. NOT proven
 here: a second real customer site (the lab's second site was a k3d cluster
 sharing a home network with the operator's own machine), a hub outage longer
 than a minute, and a stolen site key, which the edge does not itself bind to
