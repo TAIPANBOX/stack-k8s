@@ -3962,3 +3962,37 @@ part that is easy to get wrong: the first attempt at the unpatch file used
 `does not contain declared merge key: mountPath`). `delegation/down.sh` now
 patches with these instead of re-applying the kustomization at all.
 
+
+## 114. Applying a bare Namespace drops the Pod Security labels the install put on it
+
+**Ours, and fixed.** `delegation/up.sh`'s first version made sure the namespace
+existed with `kubectl create namespace "$NS" --dry-run=client -o yaml |
+kubectl apply -f -`, a common idiom that is harmless on an empty cluster and
+destructive on this one. The install applies `agent-stack` with
+`pod-security.kubernetes.io/enforce: restricted`; apply's three-way merge sees
+those labels in the object it last applied and absent from the bare one, and
+removes them. Measured on forge, 2026-09-27 (stack-k8s v1.1.16, k3d): after one
+`delegation/up.sh` and its `down.sh`, `kubectl get ns agent-stack
+--show-labels` showed only `kubernetes.io/metadata.name`, and
+`security-tests.sh` went from 24/0/3 to 23/1/3 on "the namespace refuses a
+privileged pod": a privileged pod was ACCEPTED. Nothing else looked wrong, and
+verify.sh stayed 16/0/1. Restored on forge with `kubectl label ns agent-stack
+pod-security.kubernetes.io/enforce=restricted
+pod-security.kubernetes.io/enforce-version=latest --overwrite`.
+
+The fix: an opt-in script requires the installed namespace and refuses without
+it; it never applies one. *(gate: `scripts/delegation-off-by-default.sh` fails
+on any script under `delegation/` that applies a Namespace object; one case in
+`gates-have-teeth.sh`.)*
+
+Two more found in the same review, neither a platform surprise: the gateway's
+`TOKENFUSE_DELEGATION_AUDIENCE` was the operator's `--audience`, which is the
+`aud` the upstream IdP stamps on tokens FOR vouchryx, not the `aud` vouchryx
+stamps on the tokens it mints (the exchange's `audience`, or `VOUCHRYX_ISSUER`),
+so any `--audience` other than `http://vouchryx:4310` refused every delegated
+call; it is now empty, the choice stack-single makes. And
+`--revocations-interval-ms` was accepted and printed but never applied: the
+patch carried 12000 whatever the flag said. Both measured red on forge before
+the fix (a correct token refused `delegation_refused`; the gateway env 12000
+after `--revocations-interval-ms 1000`) and green after (accepted; 1000, a
+revoked subject refused 1.4 s after the revoke).

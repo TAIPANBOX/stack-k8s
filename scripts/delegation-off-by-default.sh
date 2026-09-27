@@ -96,6 +96,23 @@ for path in (DEFAULT_GATEWAY, DEFAULT_CONSOLE):
             "the default apply set installs. Those may only arrive through "
             "delegation/up.sh's kubectl patch, never through a manifest.")
 
+# The opt-in scripts turn a plane on in an installed stack; none may apply a
+# Namespace object, because a bare one drops the install's Pod Security labels
+# through apply's three-way merge (GOTCHAS 114).
+NS_APPLY = re.compile(r"create\s+namespace\b[^\n]*\|\s*kubectl\s+apply|kind:\s*Namespace")
+scripts = sorted(pathlib.Path("delegation").glob("*.sh"))
+if not scripts:
+    errors.append("delegation/ holds no script, so this measured nothing about namespace handling")
+for path in scripts:
+    for n, line in enumerate(path.read_text().splitlines(), 1):
+        if line.lstrip().startswith("#"):
+            continue
+        if NS_APPLY.search(line):
+            errors.append(
+                f"{path}:{n} applies a Namespace object; an opt-in script must "
+                "require the installed namespace, never re-apply it (its Pod "
+                "Security labels would be dropped)")
+
 if errors:
     for e in errors:
         print(f"FAIL: {e}")

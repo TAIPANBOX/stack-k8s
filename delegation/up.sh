@@ -67,6 +67,9 @@ if [ -n "$missing" ]; then
    guess (CLAUDE.md invariant 14). Nothing was applied to the cluster."
 fi
 
+case "$REVOCATIONS_INTERVAL_MS" in
+  ''|*[!0-9]*|0) die "--revocations-interval-ms must be a positive whole number of milliseconds, got '$REVOCATIONS_INTERVAL_MS'. Nothing was applied to the cluster." ;;
+esac
 [ -f "$JWKS_FILE" ] || die "--jwks-file $JWKS_FILE does not exist. Nothing was applied to the cluster."
 python3 -c "
 import json, sys
@@ -95,7 +98,13 @@ k() { kubectl -n "$NS" "$@"; }
 # is a ConfigMap and not a Secret.
 say "writing the trusted issuer into vouchryx-trusted-issuers"
 TRUSTED_ISSUERS_LINE="${ISSUER}|${AUDIENCE}|/etc/vouchryx/trusted/idp.jwks.json"
-kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+# The namespace must already exist: this turns a plane on in an installed
+# stack, it does not install one. Never `kubectl apply` a bare Namespace here:
+# apply's three-way merge drops every label the install put on it that the
+# bare object lacks, Pod Security's `enforce: restricted` first (measured
+# 2026-09-27 on forge: security-tests.sh then saw a privileged pod ACCEPTED).
+kubectl get namespace "$NS" >/dev/null 2>&1 \
+  || die "namespace $NS does not exist: install the stack first. Nothing was applied to the cluster."
 k create configmap vouchryx-trusted-issuers \
   --from-literal="issuer=${ISSUER}" \
   --from-literal="audience=${AUDIENCE}" \
@@ -179,6 +188,10 @@ echo "   stored in the vouchryx-jwks ConfigMap"
 # ---- point the gateway and the console at it -------------------------------
 say "patching tokenfuse-gateway (delegation door on)"
 k patch deployment tokenfuse-gateway --patch-file "$ROOT/manifests/54-delegation-gateway-patch.yaml" >/dev/null
+# The patch file carries the product default (12000); the flag's value is set
+# here, so the interval this script reports below is the one the gateway runs.
+k set env deployment/tokenfuse-gateway -c gateway \
+  "TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS=${REVOCATIONS_INTERVAL_MS}" >/dev/null
 k rollout status deployment/tokenfuse-gateway --timeout=120s \
   || die "tokenfuse-gateway did not roll out after the patch. kubectl -n $NS describe pod -l app=tokenfuse-gateway"
 

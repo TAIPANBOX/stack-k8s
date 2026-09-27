@@ -38,8 +38,15 @@ spec:
           env:
             - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
             - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
-            - name: TOKENFUSE_DELEGATION_AUDIENCE
-              valueFrom: { configMapKeyRef: { name: vouchryx-trusted-issuers, key: audience } }
+            # Empty: accept the token whatever `aud` vouchryx minted it for,
+            # the choice stack-single makes too. NOT the operator's --audience:
+            # that is the `aud` the upstream IdP puts on tokens it issues FOR
+            # vouchryx, while a token vouchryx mints carries the exchange's
+            # `audience` parameter, or VOUCHRYX_ISSUER when none is asked for.
+            # The two agree only when the operator happens to pass
+            # --audience http://vouchryx:4310; any other value would refuse
+            # every delegated call `Audience`, silently to the caller.
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "" }
             # The gateway's own reachable address, for the DPoP htu it checks
             # a caller's proof against. Service DNS, in-cluster, the same
             # shape as VOUCHRYX_ISSUER above.

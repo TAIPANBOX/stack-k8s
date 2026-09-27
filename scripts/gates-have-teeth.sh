@@ -837,6 +837,13 @@ run_case "delegation-off-by-default: a delegation env var leaks into the default
     "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n            - { name: TOKENFUSE_DELEGATION_ISSUER, value: \"http://vouchryx:4310\" }\n")')" \
 	"a delegation env var, in the manifest"
 
+run_case "delegation-off-by-default: up.sh re-applies the namespace and drops its Pod Security labels" fail \
+	'./scripts/delegation-off-by-default.sh' \
+	"$(py 'edit("delegation/up.sh",
+    "say \"writing the trusted issuer into vouchryx-trusted-issuers\"\n",
+    "say \"writing the trusted issuer into vouchryx-trusted-issuers\"\nkubectl create namespace \"$NS\" --dry-run=client -o yaml | kubectl apply -f - >/dev/null\n")')" \
+	"applies a Namespace object"
+
 run_case "delegation-off-by-default: the subject taken away entirely" fail \
 	'./scripts/delegation-off-by-default.sh' \
 	"$(py 'import os
