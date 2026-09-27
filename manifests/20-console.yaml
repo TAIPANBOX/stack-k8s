@@ -45,7 +45,7 @@ spec:
           # five source commits are labels on it: `docker inspect` answers
           # "which qryx is in this console", and that is the question an
           # incident asks.
-          image: ghcr.io/taipanbox/genaryx-console:v1.1.14
+          image: ghcr.io/taipanbox/genaryx-console:v1.1.17
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef: { name: stack-wiring }
@@ -89,9 +89,31 @@ spec:
             # Scan the checked-out stack, not $HOME: pointing qryx at a home
             # directory is what made the Evidence tab hang on the box.
             - { name: GENARYX_SCAN_TARGET, value: "/srv/ui" }
-            # Felyx stays local-first here. A cluster that wants a cloud model
-            # sets these from a Secret it created itself; nothing is baked in.
-            - { name: GENARYX_COPILOT_PROVIDER, value: "ollama" }
+            # Felyx, the console's copilot, talks to its model THROUGH this
+            # stack's own gateway, so its calls are priced, budgeted and
+            # policy-checked like any agent's, under its own agent id.
+            # @decided 2026-09-27: the launchers route Felyx through the
+            # stack's gateway by default, with its agent id in the trust domain.
+            # Its residency check refuses any endpoint it cannot prove local;
+            # the gateway is reached by its Service name, allow-listed below
+            # and resolved on every connection to cluster addresses only
+            # (genaryx invariant 14, console v1.1.17 on). No key ships: until
+            # the operator creates the `stack-copilot` Secret, Felyx says it is
+            # not configured and the rest of the console works as before.
+            #   kubectl -n agent-stack create secret generic stack-copilot \
+            #     --from-file=api_key=/path/to/a/file/holding/the/key
+            #   kubectl -n agent-stack rollout restart deployment/genaryx-console
+            - { name: GENARYX_COPILOT_PROVIDER, value: "anthropic" }
+            - { name: GENARYX_COPILOT_BASE_URL, value: "http://tokenfuse-gateway:4100" }
+            - { name: GENARYX_COPILOT_LOCAL_HOSTNAMES, value: "tokenfuse-gateway" }
+            - { name: GENARYX_COPILOT_MODEL, value: "claude-haiku-4-5" }
+            # From stack-wiring (envFrom above), so the id follows the trust
+            # domain the install set rather than a default.
+            - { name: GENARYX_COPILOT_AGENT_ID, value: "agent://$(TRAILRYX_TRUST_DOMAIN)/genaryx/felyx" }
+            # A reference, not the key: the copilot resolves env:NAME itself.
+            - { name: GENARYX_COPILOT_API_KEY_REF, value: "env:GENARYX_COPILOT_KEY" }
+            - name: GENARYX_COPILOT_KEY
+              valueFrom: { secretKeyRef: { name: stack-copilot, key: api_key, optional: true } }
             # The five sensitive commands (kill a run, set a budget, decide an
             # approval, issue a device, revoke one) must not run on a session
             # cookie alone: a stolen session should not be able to pull the
