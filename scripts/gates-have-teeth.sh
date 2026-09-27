@@ -573,7 +573,7 @@ run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
 run_case "secret-keys-agree: no installer left to judge" fail \
 	'./scripts/secret-keys-agree.sh' \
 	"$(py 'import os
-for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh"):
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "delegation/up.sh"):
     os.remove(f)')" \
 	"measured NOTHING"
 
