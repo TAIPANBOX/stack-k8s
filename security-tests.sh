@@ -651,6 +651,14 @@ for ns in $($KUBECTL get ns -o jsonpath='{.items[*].metadata.name}'); do
   fi
 done
 
+# GOTCHAS 112: every probe pod above is deleted with --wait=false, so a
+# verify.sh started the moment this script returns found one still
+# Terminating and failed its "every pod Running or Completed" check on a
+# healthy stack. Wait for them to be gone before reporting, bounded.
+for p in sec-probe-notify sec-probe sec-privileged sec-forged; do
+  kc wait --for=delete "pod/$p" --timeout=60s >/dev/null 2>&1 || true
+done
+
 head_ "result"
 printf '  %d passed, %d failed, %d noted\n\n' "$pass" "$fail" "$warn"
 exit "$fail"

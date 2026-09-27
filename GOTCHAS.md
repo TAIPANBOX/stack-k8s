@@ -3881,3 +3881,15 @@ when the bill for a cluster believed to be gone keeps arriving. Measured 2026-09
 Service first took the forwarding rule, its target pool and two `k8s-*` firewall rules down in
 about 3 seconds; `terraform destroy` afterward had nothing of Kubernetes' own making left to trip
 over.
+
+## 112. security-tests.sh returned while its own probe pods were still terminating
+
+**Ours, and fixed.** `security-tests.sh` starts four probe pods (`sec-probe-notify`, `sec-probe`,
+`sec-privileged`, `sec-forged`) and deletes each with `--wait=false`, so the script returned while
+the last one was still `Terminating`. `verify.sh` counts every pod that is neither Running nor
+Completed as a failure, so a verify started right after it failed on a healthy stack. Measured on
+the forge k3d cluster, 2026-09-27, twice: `15 passed, 1 failed`, the one failure
+`sec-forged 1/1 Terminating 11s`, and `16 passed, 0 failed` a few seconds later with nothing
+changed. The script now waits, bounded at 60 s per pod, for all four to be gone before it prints
+its result. Nothing about a real stack was wrong; the check was reading the test's own residue.
+
