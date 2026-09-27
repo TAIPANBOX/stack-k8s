@@ -1,0 +1,49 @@
+# Points the gateway's delegation door at vouchryx. Applied by
+# `delegation/up.sh`, never by `kubectl apply -k`:
+#
+#   kubectl -n agent-stack patch deployment tokenfuse-gateway \
+#     --patch-file manifests/54-delegation-gateway-patch.yaml
+#
+# Off by default (CLAUDE.md invariant 24): the default 10-planes.yaml carries
+# none of TOKENFUSE_DELEGATION_ISSUER/JWKS/AUDIENCE/URL/REVOCATIONS, so a
+# default install's gateway verifies no delegation chain at all and
+# `on_behalf_of` travels as a claim the caller wrote (GOTCHAS 105).
+#
+# TOKENFUSE_DELEGATION_JWKS names a FILE, and it is deliberately not the
+# operator's upstream JWKS: it is vouchryx's OWN served JWKS, fetched by
+# delegation/up.sh from vouchryx's `/.well-known/jwks.json` once the pod is
+# Ready and stored in the `vouchryx-jwks` ConfigMap mounted below. Getting this
+# wrong is the trap this manifest's own header names: a JWKS minted any other
+# way (`vouchryx-demo keygen` names its key `vx-lab`) does not carry the RFC
+# 7638 thumbprint vouchryx actually signs with, and every token is refused
+# `BadToken`.
+#
+# To go back to no delegation at all:
+#
+#   kubectl apply -k manifests/
+#
+# `apply -k` reverts what it manages (CLAUDE.md invariant 14's own words) and
+# these env vars and this volume are fields of a Deployment `10-planes.yaml`
+# already manages, so re-applying the kustomization strips them back out; this
+# is delegation/down.sh's own last step, not a new mechanism.
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          env:
+            - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
+            - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
+            - name: TOKENFUSE_DELEGATION_AUDIENCE
+              valueFrom: { configMapKeyRef: { name: vouchryx-trusted-issuers, key: audience } }
+            # The gateway's own reachable address, for the DPoP htu it checks
+            # a caller's proof against. Service DNS, in-cluster, the same
+            # shape as VOUCHRYX_ISSUER above.
+            - { name: TOKENFUSE_DELEGATION_URL, value: "http://tokenfuse-gateway:4100" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS, value: "http://vouchryx:4310/v1/revocations" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, value: "12000" }
+          volumeMounts:
+            - { name: vouchryx-jwks, mountPath: /etc/tokenfuse/delegation, readOnly: true }
+      volumes:
+        - name: vouchryx-jwks
+          configMap: { name: vouchryx-jwks }

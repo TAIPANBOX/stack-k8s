@@ -1,0 +1,225 @@
+# The delegation plane: vouchryx, a token service that turns "this agent says
+# it acts for that principal" into a chain the gateway can verify rather than
+# a claim it has to trust. GOTCHAS.md entry 105 named the gap this closes:
+# nothing here turned delegation on, so `on_behalf_of` travelled as whatever a
+# caller wrote, and a wardryx policy carrying `deny_if_chain_unproven` or
+# `require_root_principal` refused only callers honest enough to say they had
+# not proven it.
+#
+# @decided 2026-09-27: the launchers offer vouchryx as an opt-in delegation
+# plane, off by default, so a gateway can verify a proved delegation chain
+# instead of trusting a claimed one.
+#
+# NOT in the default `apply -k` set, for the same reason 45-heraldyx.yaml and
+# 47-scopyx.yaml are not: it is a whole plane an operator may not want, and
+# turning it on is a decision about the fleet's trust model, not a default
+# anybody should inherit by running the standard install command. Applied
+# only by `delegation/up.sh`, which also:
+#
+#   - refuses before applying anything here unless the operator has already
+#     supplied a trusted upstream issuer, audience and JWKS file (CLAUDE.md
+#     invariant 24; there is no defensible default the way there is for
+#     TRAILRYX_TRUST_DOMAIN, because a delegation door with a built-in
+#     trusted issuer would be a door this repository holds the key to);
+#   - generates the signing key and the revoke key into the `vouchryx-keys`
+#     Secret, once, reused on every later run;
+#   - fetches vouchryx's OWN served JWKS from `/.well-known/jwks.json` after
+#     it is Ready and hands it to the gateway. This is not decoration: a JWKS
+#     minted by `vouchryx-demo keygen` names its key `vx-lab`, vouchryx signs
+#     with the RFC 7638 thumbprint as `kid`, and every token is refused
+#     `BadToken` against the mismatched key (measured 2026-09-27 on this exact
+#     cluster shape, and in go-to-market-2026-09/evidence/forge-n4-n10-2026-09-27/SUMMARY.md,
+#     section N3);
+#   - patches `tokenfuse-gateway` and `genaryx-console` to point at it.
+#
+# Reachable only from the gateway and the console: a ClusterIP Service plus a
+# NetworkPolicy that admits port 4310 from nothing else, mirroring the lab
+# NetworkPolicies measured on forge the same day (only money-plane pods reach
+# 4310).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vouchryx-state
+  namespace: agent-stack
+  labels: { app: vouchryx, plane: money }
+spec:
+  # One writer, one pod: ordinary RWO. Holds VOUCHRYX_REVOCATIONS_PATH, so a
+  # revocation survives a pod restart (requirement 3 below) rather than
+  # resetting to "nothing revoked" the moment the pod is rescheduled.
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vouchryx
+  namespace: agent-stack
+  labels: { app: vouchryx, plane: money }
+spec:
+  replicas: 1
+  # One RWO state volume (the revocation store), so never two pods at once:
+  # a rolling update would wait for a second pod that cannot attach the same
+  # disk, and sit there. Same reasoning as tokenfuse-cloud in 10-planes.yaml.
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: vouchryx } }
+  template:
+    metadata:
+      labels: { app: vouchryx, plane: money }
+    spec:
+      # No workload here talks to the Kubernetes API; see CLAUDE.md
+      # invariant 15. Without this every pod carries a projected token for
+      # the namespace default ServiceAccount, bound to nothing today but
+      # usable by a compromised container for discovery and SelfSubjectReview,
+      # and by any future RBAC binding an operator adds to `default`.
+      automountServiceAccountToken: false
+      # 65532 is the distroless nonroot uid this image ships (the same image
+      # runs `vouchryx-demo` too, via a command override, so nothing here
+      # needs a second image).
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      # Leave a dead node in 30 s, not the default 300 s. CLAUDE.md
+      # invariant 21. This pod holds a ReadWriteOnce claim (the revocation
+      # store); on Longhorn, once evicted, it is force-deleted and its volume
+      # released (the installers set node-down-pod-deletion-policy), so the
+      # replacement attaches it elsewhere. On storage that cannot move a
+      # volume (k3d's local-path) the replacement waits Pending for the node,
+      # exactly as before.
+      tolerations:
+        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+        - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+      containers:
+        - name: vouchryx
+          image: ghcr.io/taipanbox/vouchryx:v0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/vouchryx"]
+          env:
+            # vouchryx binds 127.0.0.1 by DEFAULT. In a pod that default fails
+            # exactly the way tokenfuse-cloud's does in 10-planes.yaml: the
+            # container runs, the readiness probe fails forever, because
+            # kubelet probes the pod IP and the Service has no endpoint to
+            # send to. 0.0.0.0 is the pod's own network namespace, which the
+            # NetworkPolicy below is what actually narrows: ClusterIP, no
+            # NodePort, no hostPort, and ingress admitted from exactly the
+            # gateway and the console.
+            - { name: VOUCHRYX_ADDR, value: "0.0.0.0:4310" }
+            # This vouchryx instance's own address: the `iss` it puts on every
+            # token it mints, and the `aud` an upstream-issued subject/actor
+            # token must carry to be accepted here. In-cluster Service DNS,
+            # not localhost: the one substantive change from stack-up's
+            # up.sh, which wires this to 127.0.0.1 because there it genuinely
+            # is one host.
+            - { name: VOUCHRYX_ISSUER, value: "http://vouchryx:4310" }
+            - name: VOUCHRYX_SIGNING_KEY
+              value: "/etc/vouchryx/keys/signing.pem"
+            # The operator's own upstream issuer(s): iss|aud|jwks-path, one
+            # per line. delegation/up.sh refuses to apply this manifest at
+            # all unless it already has this value (CLAUDE.md invariant 24),
+            # so there is no permissive default here to fall back to.
+            - name: VOUCHRYX_TRUSTED_ISSUERS
+              valueFrom: { configMapKeyRef: { name: vouchryx-trusted-issuers, key: trusted_issuers } }
+            # The revocation bearer: a plain 32-byte hex credential, not a
+            # signing key, generated by delegation/up.sh the same way
+            # hub/add-site.sh mints a site key. Never printed to a log; see
+            # that script's own header.
+            - name: VOUCHRYX_REVOKE_KEYS
+              valueFrom: { secretKeyRef: { name: vouchryx-keys, key: revoke_key } }
+            # Persisted on the volume above, so a revocation survives a pod
+            # restart. Losing this path is not a smaller version of
+            # delegation, it is delegation that forgets what it revoked.
+            - { name: VOUCHRYX_REVOCATIONS_PATH, value: "/var/lib/stack/delegation/revocations.ndjson" }
+            # Journalled on the same shared bus every other plane's history
+            # lives on (README, "Fact 1").
+            - { name: VOUCHRYX_EVENTS_PATH, value: "/var/lib/stack/events/vouchryx.ndjson" }
+          ports: [{ name: http, containerPort: 4310 }]
+          volumeMounts:
+            - { name: signing-key, mountPath: /etc/vouchryx/keys, readOnly: true }
+            - { name: trusted-issuer-jwks, mountPath: /etc/vouchryx/trusted, readOnly: true }
+            - { name: delegation-state, mountPath: /var/lib/stack/delegation }
+            - { name: events, mountPath: /var/lib/stack/events }
+          # Stop taking traffic before stopping: the endpoint leaves the
+          # Service while this sleeps. CLAUDE.md invariant 21.
+          lifecycle: { preStop: { sleep: { seconds: 5 } } }
+          readinessProbe:
+            httpGet: { path: /.well-known/jwks.json, port: http }
+            initialDelaySeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+      volumes:
+        - name: signing-key
+          secret:
+            secretName: vouchryx-keys
+            items: [{ key: signing.pem, path: signing.pem }]
+        # The operator's own upstream IdP JWKS, delivered here at enable time
+        # by delegation/up.sh, and referenced by the trusted_issuers key in
+        # VOUCHRYX_TRUSTED_ISSUERS above. A ConfigMap, not a Secret: a JWKS is
+        # a set of PUBLIC keys, the other half of the key pair that signed the
+        # operator's subject/actor tokens, and holds nothing this cluster
+        # needs to keep confidential.
+        - name: trusted-issuer-jwks
+          configMap: { name: vouchryx-trusted-issuers, items: [{ key: idp.jwks.json, path: idp.jwks.json }] }
+        - name: delegation-state
+          persistentVolumeClaim: { claimName: vouchryx-state }
+        - name: events
+          persistentVolumeClaim: { claimName: stack-events }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: vouchryx, namespace: agent-stack, labels: { app: vouchryx, plane: money } }
+spec:
+  type: ClusterIP
+  selector: { app: vouchryx }
+  ports: [{ name: http, port: 4310, targetPort: http }]
+---
+# Requirement 4: a ClusterIP Service reachable by nothing but the gateway
+# (which polls /v1/revocations and verifies chains against the JWKS it was
+# handed at enable time) and the console (which posts /v1/revoke). Not added
+# to `manifests/53-hub-entry.yaml`'s door: the hub entry is opt-in on its own
+# and unrelated to this plane, and nothing routes vouchryx through it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vouchryx-ingress
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: vouchryx } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: tokenfuse-gateway } }
+        - podSelector: { matchLabels: { plane: console } }
+      ports:
+        - { protocol: TCP, port: 4310 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-egress-vouchryx
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-gateway } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: vouchryx } }
+      ports:
+        - { protocol: TCP, port: 4310 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: console-egress-vouchryx
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { plane: console } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: vouchryx } }
+      ports:
+        - { protocol: TCP, port: 4310 }

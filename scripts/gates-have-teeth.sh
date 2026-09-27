@@ -819,6 +819,30 @@ run_case "hub-entry-is-narrow: the file is removed" fail \
 os.remove("manifests/53-hub-entry.yaml")')" \
 	"This measured nothing"
 
+# The delegation plane (GOTCHAS 105, invariant 24) must stay opt-in the same
+# way the hub entry does: three cases, the manifest joining the default apply
+# set, a delegation env var leaking into a manifest the default apply set
+# DOES install, and the subject taken away entirely.
+run_case "delegation-off-by-default: the manifest joins the default apply" fail \
+	'./scripts/delegation-off-by-default.sh' \
+	"$(py 'edit("manifests/kustomization.yaml",
+    "  - 40-routines-and-secrets.yaml\n",
+    "  - 40-routines-and-secrets.yaml\n  - 54-delegation.yaml\n")')" \
+	"is listed in manifests/kustomization.yaml"
+
+run_case "delegation-off-by-default: a delegation env var leaks into the default gateway manifest" fail \
+	'./scripts/delegation-off-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml",
+    "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n",
+    "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n            - { name: TOKENFUSE_DELEGATION_ISSUER, value: \"http://vouchryx:4310\" }\n")')" \
+	"a delegation env var, in the manifest"
+
+run_case "delegation-off-by-default: the subject taken away entirely" fail \
+	'./scripts/delegation-off-by-default.sh' \
+	"$(py 'import os
+os.remove("manifests/54-delegation.yaml")')" \
+	"measured nothing"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'

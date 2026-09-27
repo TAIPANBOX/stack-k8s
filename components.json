@@ -52,6 +52,7 @@
           "tokenfuse-gateway",
           "tokenfuse-mcp-broker",
           "typryx",
+          "vouchryx",
           "wardryx"
         ],
         "schedules_routines": {
@@ -71,7 +72,8 @@
           "scopyx-events",
           "stack-events",
           "trailryx-records",
-          "typryx-state"
+          "typryx-state",
+          "vouchryx-state"
         ],
         "namespace": "agent-stack",
         "runs_as_sidecar": {
@@ -98,6 +100,10 @@
         "costcrew_crew_moved_from_manual_to_routine": {
           "value": "costcrew-crew, mapped to costcrew-run, v0.2.0",
           "why": "@yurii 2026-09-03, \"do it all\": un-suspend the crew CronJob, with the console's own cadence switch as the inner guard. costcrew v0.2.0's runner understands `-due`, so this CronJob no longer needs Kubernetes suspend to stay safe: it fires daily and `-due` refuses anything but cadence-due work with exit 2 (not a failure) unless a person has turned cadence on at the console's /cadence page, and never spends past the smaller of `-ceiling` and the console's own `cadence.ceiling_cents`. It is therefore no longer a Job TEMPLATE in Kubernetes' sense, and the manual_jobs bucket, which manifest-is-true.sh requires to carry `suspend: true`, would be false about it. Moved to schedules_routines instead.\\n\\nRecorded rather than resolved: estate-gates' C5 maps CronJobs to governance routines through its own ROUTINE_KIND, a table that lives in that repository, and `costcrew-run` is not in it yet. C5 will report `c5.routine-unmapped` for this pair until a person updates ROUTINE_KIND there, in a change to that repository, which this change does not make and this repository's own CLAUDE.md forbids making from here. Same shape as GOTCHAS 93: two correct rules, one repository apart, disagreeing until somebody closes the gap on purpose."
+        },
+        "delegation_plane_is_opt_in": {
+          "value": "vouchryx (Deployment + Service + 3 NetworkPolicies + the vouchryx-state PVC), applied by delegation/up.sh",
+          "why": "@decided 2026-09-27: the launchers offer vouchryx as an opt-in delegation plane, off by default, so a gateway can verify a proved delegation chain instead of trusting a claimed one. GOTCHAS.md entry 105 named the gap: with nothing turning it on, on_behalf_of travelled as a claim the caller wrote. delegation/up.sh refuses to apply anything until the operator supplies a trusted upstream issuer, audience and JWKS file (CLAUDE.md invariant 24; scripts/delegation-off-by-default.sh), mints vouchryx's signing key and revoke key once into the vouchryx-keys Secret (reused on every later run, never regenerated), and patches tokenfuse-gateway and genaryx-console with two kubectl patch --patch-file bodies (manifests/54-delegation-gateway-patch.yaml, manifests/54-delegation-console-patch.yaml) rather than a manifest kustomize applies, the same shape 55-copilot-cloud.yaml already uses. vouchryx-state is one more of the metered persistent claims 00-base.yaml's own comment already counts."
         },
         "typryx_journal_is_on_the_shared_bus_and_the_broker_fronts_it_by_configuration": {
           "value": "TYPRYX_EVENTS on stack-events (typryx.ndjson); tokenfuse-mcp-broker deployed with TOKENFUSE_MCP_UPSTREAMS=typryx=http://typryx:4320/mcp",

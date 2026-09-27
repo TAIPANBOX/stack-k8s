@@ -3774,6 +3774,30 @@ vouchryx becomes a required component with a signing key provisioned at
 install and its JWKS fetched before the gateway starts, which stack-up does
 behind `--with-delegation` and this repository does not do yet.
 
+**Fixed 2026-09-27.** `manifests/54-delegation.yaml` and `delegation/up.sh`
+add vouchryx as an opt-in delegation plane, off by default: `kubectl apply -k
+manifests/` still installs nothing that verifies a chain, and turning it on
+is `./delegation/up.sh --issuer ... --audience ... --jwks-file ...`, which
+refuses before applying anything unless all three are given (CLAUDE.md
+invariant 24). It mints vouchryx's signing key and revoke key once, into the
+`vouchryx-keys` Secret, reused on every later run, and patches
+`tokenfuse-gateway` and `genaryx-console` with the two `TOKENFUSE_DELEGATION_*`
+/ `GENARYX_VOUCHRYX_*` variable sets through `kubectl patch --patch-file`
+rather than through a manifest, so `kubectl apply -k manifests/`
+(`delegation/down.sh`'s own last step) reverts both.
+
+Measured the same day, on the exact shape this entry already named as the
+risk: a JWKS minted by `vouchryx-demo keygen` names its key `vx-lab`, which is
+not the RFC 7638 thumbprint vouchryx actually signs with, and every token
+this gateway saw was refused `BadToken`. `delegation/up.sh` does not make
+that mistake: it fetches vouchryx's OWN served JWKS from
+`/.well-known/jwks.json` after the pod is Ready and hands that to the
+gateway, never the operator's own upstream JWKS (which is a different file,
+for a different purpose: the operator's IdP that vouchryx itself trusts).
+See `go-to-market-2026-09/evidence/forge-n4-n10-2026-09-27/SUMMARY.md`,
+section N3, for the lab run this repeats the shape of, and this PR's own
+forge transcript for the run against these exact files.
+
 ## 107. A one-replica plane sits on a dead node for five minutes, because that is the default
 
 **Platform.** Fixed here by invariant 21. Kubernetes adds a NoExecute toleration of 300 s for
