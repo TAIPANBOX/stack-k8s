@@ -107,6 +107,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/gateway-cache-is-off.sh # invariant 20
 ./scripts/planes-leave-a-dead-node.sh # invariant 21
 ./scripts/longhorn-releases-a-dead-node.sh # invariant 22; GOTCHAS 109
+./scripts/hub-entry-is-narrow.sh  # invariant 23
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -551,6 +552,24 @@ an absent invariant.
     behind GOTCHAS 90, 101 and 102.
     *(gate: `scripts/longhorn-releases-a-dead-node.sh`, four cases in
     `scripts/gates-have-teeth.sh`; GOTCHAS 109)*
+
+23. **The hub's one public entry for a remote site routes exactly the seven paths a gateway
+    needs, and nothing else.** `manifests/53-hub-entry.yaml` is opt-in, applied by `hub/up.sh`,
+    never by the default `apply -k`: unlike every other gate in this list, its whole job is to
+    publish something on purpose (`@decided 2026-09-26`: customers will not install a VPN to use
+    this stack), so nothing above catches a route that widens, a missing catch-all, or a
+    capability added beyond `NET_BIND_SERVICE` - all three would still be valid YAML, still pass
+    kubeconform, still keep `automountServiceAccountToken` false. Only reading the Caddyfile's own
+    route list, embedded in the manifest's ConfigMap, catches a route that grew.
+
+    @measured 2026-09-26 on GCP (N2/G2): 17 of 17 outcomes locally (Caddy plus the manifest's own
+    security context against two stub planes, no cloud) and 12 of 12 from the public internet
+    against a live entry (the three polls and decide 200, no key 401, the console and every
+    non-routed path 404, plain HTTP 308 to HTTPS). The container's capabilities trap is GOTCHAS
+    110; the LoadBalancer existing outside Terraform's own bookkeeping is GOTCHAS 111, and
+    `hub/down.sh` deletes the Service first for the reason that entry states.
+    *(gate: `scripts/hub-entry-is-narrow.sh`, seven cases in `scripts/gates-have-teeth.sh`;
+    scenarios in `features/a-site-reaches-the-hub-over-one-narrow-door.feature`)*
 
 ## Decisions that have no gate yet
 

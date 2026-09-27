@@ -691,7 +691,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.1.1\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.2.0\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 # A one-replica plane that keeps the default 300 s toleration sits on a dead
@@ -766,6 +766,57 @@ run_case "longhorn-releases-a-dead-node: no Longhorn installer left" fail \
 	"$(py 'import os
 for f in ["install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"]:
     os.remove(f)')" \
+	"This measured nothing"
+
+# The hub entry's whole job is to publish something on purpose, so nothing
+# above stops a route from widening: it would still be valid YAML, still pass
+# kubeconform, still keep automountServiceAccountToken false. Only reading the
+# Caddyfile's own route list catches a route that grew.
+run_case "hub-entry-is-narrow: a route is added" fail \
+	'./scripts/hub-entry-is-narrow.sh' \
+	"$(py 'edit("manifests/53-hub-entry.yaml",
+    "path /v1/units /v1/budgets /v1/unit-budgets /v1/kills",
+    "path /v1/units /v1/budgets /v1/unit-budgets /v1/kills /v1/runs")')" \
+	"beyond the allowed seven"
+
+run_case "hub-entry-is-narrow: a route's method widens" fail \
+	'./scripts/hub-entry-is-narrow.sh' \
+	"$(py 'edit("manifests/53-hub-entry.yaml",
+    "        method POST\n        path /v1/ingest\n",
+    "        method GET\n        path /v1/ingest\n")')" \
+	"missing route(s)"
+
+run_case "hub-entry-is-narrow: the catch-all is removed" fail \
+	'./scripts/hub-entry-is-narrow.sh' \
+	"$(py 'edit("manifests/53-hub-entry.yaml",
+    "      handle {\n        respond 404\n      }\n",
+    "")')" \
+	"no catch-all"
+
+run_case "hub-entry-is-narrow: a capability is added" fail \
+	'./scripts/hub-entry-is-narrow.sh' \
+	"$(py 'edit("manifests/53-hub-entry.yaml",
+    "capabilities: { drop: [\"ALL\"], add: [\"NET_BIND_SERVICE\"] }",
+    "capabilities: { drop: [\"ALL\"], add: [\"NET_BIND_SERVICE\", \"NET_ADMIN\"] }")')" \
+	"only NET_BIND_SERVICE is allowed"
+
+run_case "hub-entry-is-narrow: the file joins the default apply" fail \
+	'./scripts/hub-entry-is-narrow.sh' \
+	"$(py 'edit("manifests/kustomization.yaml",
+    "  - 40-routines-and-secrets.yaml\n",
+    "  - 40-routines-and-secrets.yaml\n  - 53-hub-entry.yaml\n")')" \
+	"is listed in manifests/kustomization.yaml"
+
+run_case "hub-entry-is-narrow: a comment line in the Caddyfile is not a fault" pass \
+	'./scripts/hub-entry-is-narrow.sh' \
+	"$(py 'edit("manifests/53-hub-entry.yaml",
+    "    cloud.{$HUB_HOST} {",
+    "    # a harmless comment about the cloud site\n    cloud.{$HUB_HOST} {")')"
+
+run_case "hub-entry-is-narrow: the file is removed" fail \
+	'./scripts/hub-entry-is-narrow.sh' \
+	"$(py 'import os
+os.remove("manifests/53-hub-entry.yaml")')" \
 	"This measured nothing"
 
 echo

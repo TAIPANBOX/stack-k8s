@@ -1,0 +1,279 @@
+# The hub's one public entry point for a remote site's gateway. A customer
+# who runs several sites has ONE hub (tokenfuse Cloud, wardryx, policy-db) and
+# a gateway at each site; a site reaches the hub over outbound HTTPS to this
+# one address, authenticated by the planes' own keys, `@decided 2026-09-26`:
+# customers will not install a VPN to use this stack, so the usual answer
+# (WireGuard, see tunnel/) is not the answer for a fleet of sites.
+#
+# Caddy terminates TLS (Let's Encrypt, HTTP-01, so a name under sslip.io needs
+# no DNS zone of its own) and exposes EXACTLY the seven routes a remote
+# gateway calls (read from tokenfuse's own `crates/gateway/src/cloudsink.rs`
+# and `wardryx.rs`): Cloud `POST /v1/ingest` and `GET /v1/units`,
+# `/v1/budgets`, `/v1/unit-budgets`, `/v1/kills`; wardryx `POST /v1/decide`
+# and `/v1/filter-tools`. Everything else, the console included, answers 404
+# here and stays reachable only from inside the cluster. TLS is transport:
+# every one of those seven routes still needs its own site key or wardryx
+# key, checked by the plane it reaches, exactly as it is checked today.
+#
+# `scripts/hub-entry-is-narrow.sh` (CLAUDE.md invariant 23) parses this file's
+# own Caddyfile block and fails the moment the routed set, the catch-all, or
+# the container's capabilities drift from the paragraph above.
+#
+# @measured 2026-09-26 on GCP (N2/G2), one hub (three e2-standard-2 nodes) and
+# one remote site: the local allowlist test (Caddy plus two stub planes, no
+# cloud) was 17 of 17 as intended; from the public internet against the live
+# entry, 12 of 12 (the three polls and decide 200, no key 401, the console and
+# every non-routed path 404, plain HTTP 308 to HTTPS). Four cross-site drills
+# through it: a fleet view naming both sites, one wardryx policy written once
+# freezing both, a cut link failing the remote site closed while the hub kept
+# serving and replaying the queue once restored, and a kill issued from the
+# hub reaching the remote gateway in under 4 seconds. `security-tests.sh` on
+# the hub with this entry live: 26 of 26, 0 failed, the entry itself named as
+# a note ("published Services: hub-ingress:LoadBalancer, deliberate only if
+# you meant to open a public entry point").
+#
+# THE CAPABILITY TRAP, measured the same day: the first apply failed with
+# `exec /usr/bin/caddy: operation not permitted`. The official image's
+# `/usr/bin/caddy` carries the `cap_net_bind_service` FILE capability, and
+# with every Linux capability dropped the kernel refuses the exec outright,
+# before Caddy's own code runs at all. PodSecurity `restricted` allows adding
+# back exactly one capability, and this is the one: `NET_BIND_SERVICE`,
+# nothing else.
+#
+# NOT in kustomization.yaml, for 50-loadbalancer.yaml's reason and a second
+# one on top of it. It is METERED the same way: the Service below is
+# `type: LoadBalancer`, which on GCP is a real forwarding rule billed hourly
+# from the moment it exists (about USD 0.025/hour, measured 2026-09-26;
+# PORTABILITY.md section 3 has the Hetzner and AWS figures for the same
+# object shape). And unlike every other opt-in manifest here, this one
+# publishes a real product surface to the whole internet on purpose: a
+# second site's whole reason to exist. Applying it is a decision about who
+# else may reach this cluster, which an install must never make by itself.
+#
+# Kubernetes creates the load balancer, NOT Terraform, the same fact
+# 50-loadbalancer.yaml's header states for the console's own balancer:
+# delete this Service BEFORE `terraform destroy` (`hub/down.sh` does this
+# first and waits for it to be gone), or the forwarding rule, target pool and
+# firewall rules the cloud controller made are still there, still billing,
+# and in the way of the destroy.
+#
+#   kubectl apply -f manifests/53-hub-entry.yaml
+#   ./hub/up.sh                     # waits for the address, writes it into
+#                                    # the ConfigMap below, waits for both
+#                                    # certificates, prints the two URLs
+#   ./hub/add-site.sh SITE_NAME     # mints that site's two keys
+#   ./hub/down.sh                   # deletes the Service first, then the rest
+#
+# HUB_HOST comes from the ConfigMap below, not from `kubectl set env`: a
+# `set env` sticks only until the next `kubectl apply -k`, or until this
+# manifest is re-applied by hand, and reverts silently the moment either one
+# runs again (the same trap CLAUDE.md invariant 14 names for
+# TRAILRYX_TRUST_DOMAIN). Reading it from a ConfigMap key means `hub/up.sh`
+# patches DATA, which `kubectl apply -f` does not own and cannot revert.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stack-hub-entry
+  namespace: agent-stack
+data:
+  # Rewritten by hub/up.sh once the LoadBalancer has an address: either the
+  # operator's own domain (--host) or <a-b-c-d>.sslip.io derived from it. The
+  # placeholder matches nothing DNS would ever resolve, on purpose: an
+  # operator who applies this file and skips hub/up.sh gets a Caddy that
+  # answers on its own address literally, with no certificate for it, rather
+  # than one that silently serves under someone else's name.
+  host: "unset.invalid"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hub-ingress
+  namespace: agent-stack
+data:
+  Caddyfile: |
+    {
+      admin off
+      http_port 8080
+      https_port 8443
+    }
+    cloud.{$HUB_HOST} {
+      @ingest {
+        method POST
+        path /v1/ingest
+      }
+      @polls {
+        method GET
+        path /v1/units /v1/budgets /v1/unit-budgets /v1/kills
+      }
+      handle @ingest {
+        reverse_proxy tokenfuse-cloud:8080
+      }
+      handle @polls {
+        reverse_proxy tokenfuse-cloud:8080
+      }
+      handle {
+        respond 404
+      }
+    }
+    wardryx.{$HUB_HOST} {
+      @decide {
+        method POST
+        path /v1/decide /v1/filter-tools
+      }
+      handle @decide {
+        reverse_proxy wardryx:8090
+      }
+      handle {
+        respond 404
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hub-ingress
+  namespace: agent-stack
+  labels: { app: hub-ingress, plane: edge }
+spec:
+  replicas: 1
+  # No ReadWriteOnce claim (the ACME state below is an emptyDir, so a fresh
+  # pod re-requests its certificate either way), but two Caddy pods racing
+  # the SAME HTTP-01 challenge on the SAME two names is worse than the ACME
+  # rate limit an emptyDir already risks: Recreate keeps it to one pod, one
+  # challenge, at a time. NOT PROVEN: certificate persistence across a
+  # restart; see hub/up.sh's header and the feature file for what this
+  # trades away.
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: hub-ingress } }
+  template:
+    metadata:
+      labels: { app: hub-ingress, plane: edge }
+    spec:
+      # No workload here talks to the Kubernetes API; see CLAUDE.md
+      # invariant 15.
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: caddy
+          # Pinned by digest, not by the upstream tag: `scripts/pinned-images.sh`
+          # allows an upstream tag BY NAME only where the tag is meant to float
+          # (postgres:16-alpine, to pick up patch releases of the database
+          # holding fleet policy). Caddy has no such reason here, so this is the
+          # ordinary case, pinned like everything else in this repo.
+          # sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+          # is caddy:2.11.4-alpine's own multi-arch index digest, verified
+          # 2026-09-26 with `docker buildx imagetools inspect caddy:2.11.4-alpine`.
+          # Re-run that command before moving this pin.
+          image: caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+          args: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+          env:
+            - name: HUB_HOST
+              valueFrom: { configMapKeyRef: { name: stack-hub-entry, key: host } }
+            - { name: XDG_DATA_HOME, value: /data }
+            - { name: XDG_CONFIG_HOME, value: /config }
+          ports:
+            - { name: http, containerPort: 8080 }
+            - { name: https, containerPort: 8443 }
+          # Caddy's own admin API is off (see the Caddyfile above), so there is
+          # no HTTP health endpoint to probe without opening one. A TCP probe on
+          # 8443 is enough to know the process is up and listening; it cannot
+          # tell a live certificate from an expired one, which is this file's
+          # own "NOT proven" (see the feature file).
+          readinessProbe:
+            tcpSocket: { port: https }
+            initialDelaySeconds: 2
+          # NET_BIND_SERVICE, and only it: the official image's /usr/bin/caddy
+          # carries that file capability, and with ALL dropped the kernel
+          # refuses the exec ("exec /usr/bin/caddy: operation not permitted",
+          # measured on the first apply, 2026-09-26). PodSecurity restricted
+          # allows adding exactly this one.
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"], add: ["NET_BIND_SERVICE"] } }
+          volumeMounts:
+            - { name: config, mountPath: /etc/caddy }
+            - { name: data, mountPath: /data }
+            - { name: xdg, mountPath: /config }
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { memory: 128Mi }
+      volumes:
+        - name: config
+          configMap: { name: hub-ingress }
+        - { name: data, emptyDir: {} }
+        - { name: xdg, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hub-ingress
+  namespace: agent-stack
+spec:
+  # METERED, see the header. Kubernetes provisions this, not Terraform:
+  # hub/down.sh deletes it and waits before touching anything else.
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector: { app: hub-ingress }
+  ports:
+    - { name: http, port: 80, targetPort: 8080 }
+    - { name: https, port: 443, targetPort: 8443 }
+---
+# In from anywhere on 8080/8443: ACME's HTTP-01 challenge needs the world on
+# 80, and a remote site is, by this file's whole purpose, anywhere. Out only
+# to the two planes it fronts, and to Let's Encrypt. DNS needs no rule of its
+# own here: `allow-dns` in 30-network-policy.yaml already admits every pod in
+# this namespace, `podSelector: {}`, and 30 is always applied before this
+# opt-in file could matter.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hub-ingress
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: hub-ingress } }
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 8443 }
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: tokenfuse-cloud } }
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - podSelector: { matchLabels: { app: wardryx } }
+      ports:
+        - { protocol: TCP, port: 8090 }
+    - to:
+        # Never back into the cluster or any private range: an egress rule
+        # that allows 0.0.0.0/0 without these is a hole, not a rule, the same
+        # exception gateway-egress-internet carries in 30-network-policy.yaml.
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - { protocol: TCP, port: 443 }
+---
+# The mirror of the rule above: tokenfuse-cloud and wardryx must accept the
+# connection the edge's own egress rule allows. `planes-ingress` in
+# 30-network-policy.yaml already admits `plane: console` and `plane: money`
+# into these two ports; this admits the edge to exactly the two it fronts,
+# additive beside that file rather than an edit to it (the same pattern
+# 52-tokenfuse-mcp-broker.yaml's own `typryx-ingress-broker` uses).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: planes-from-hub-ingress
+  namespace: agent-stack
+spec:
+  podSelector: { matchExpressions: [{ key: app, operator: In, values: [tokenfuse-cloud, wardryx] }] }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: hub-ingress } }
+      ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 8090 }

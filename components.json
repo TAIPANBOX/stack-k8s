@@ -44,6 +44,7 @@
           "costcrew",
           "genaryx-console",
           "heraldyx",
+          "hub-ingress",
           "idryx",
           "policy-db",
           "scopyx",
@@ -85,6 +86,10 @@
         "the_loadbalancer_is_excluded_on_purpose": {
           "value": "genaryx-console-lb",
           "why": "A cloud load balancer is metered, so it sits outside the default kustomization and a default install never creates it. stack-single reaches the same place with caddy. estate-gates records this as a decision rather than a gap."
+        },
+        "hub_entry_is_opt_in_and_metered": {
+          "value": "manifests/53-hub-entry.yaml (hub-ingress Deployment + type:LoadBalancer Service), applied by hub/up.sh",
+          "why": "@decided 2026-09-26: a customer with several sites reaches one hub over outbound HTTPS to a single public entry, authenticated by the planes' own keys, with no VPN. Like genaryx-console-lb, this is a second type:LoadBalancer Service outside the default kustomization for the same reason: it is metered from the moment it exists (a GCP forwarding rule, about USD 0.025/hour) and Kubernetes provisions it, not Terraform, so it is deleted before a Terraform teardown (hub/down.sh does this first). Unlike every other opt-in manifest here, it also publishes a real product surface on purpose: exactly seven routes to tokenfuse-cloud and wardryx, held narrow by scripts/hub-entry-is-narrow.sh (invariant 23) rather than by being unreachable."
         },
         "focus_export_runs_as_a_sidecar": {
           "value": "focus-export in the tokenfuse-gateway pod",
