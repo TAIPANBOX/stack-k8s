@@ -5,12 +5,23 @@
 #   ./delegation/down.sh [--delete-secrets]
 #
 # Requirement 5: removes what up.sh added, and restores the gateway (and the
-# console) to their default env by re-applying the kustomization, the same
-# mechanism 55-copilot-cloud.yaml's own header already documents ("delete the
-# Secret and re-apply the manifests"). `kubectl apply -k` reverts what it
-# manages (CLAUDE.md invariant 14's own words), and the delegation env vars
-# and the volumes that carry them are fields of Deployments the kustomization
-# already manages, so this is not a new mechanism, it is the same one.
+# console) to their default env.
+#
+# NOT by re-applying the kustomization. That was tried first, on the theory
+# that `kubectl apply -k` reverts what it manages (CLAUDE.md invariant 14's
+# own words) the same way 55-copilot-cloud.yaml's header says "delete the
+# Secret and re-apply the manifests" undoes ITS patch. It does not work for
+# a `kubectl patch --patch-file`: that command never touches the
+# `kubectl.kubernetes.io/last-applied-configuration` annotation `apply`'s own
+# three-way diff reads, so apply sees no difference between what it applied
+# last time and what it wants now, and leaves the patch's additions exactly
+# where they are. Measured 2026-09-27 on forge: every TOKENFUSE_DELEGATION_*
+# env var and the vouchryx-jwks volume were still on the live Deployment
+# after `kubectl apply -k manifests/`. So this script explicitly reverses
+# each patch with its own `$patch: delete` counterpart
+# (manifests/54-delegation-gateway-unpatch.yaml,
+# manifests/54-delegation-console-unpatch.yaml), which is the same mechanism
+# `up.sh` uses to add the fields, run in reverse.
 #
 # Leaves the vouchryx-keys Secret and the vouchryx-trusted-issuers ConfigMap
 # in place by default, the same stance hub/down.sh takes on stack-keys: taking
@@ -51,12 +62,17 @@ k() { kubectl -n "$NS" "$@"; }
 say "removing manifests/54-delegation.yaml (vouchryx, its NetworkPolicies, its PVC)"
 kubectl delete -f "$ROOT/manifests/54-delegation.yaml" --ignore-not-found=true --wait=true 2>&1 | sed 's/^/   /'
 
-say "restoring tokenfuse-gateway and genaryx-console to their default env"
-kubectl apply -k "$ROOT/manifests" 2>&1 | sed 's/^/   /'
+say "restoring tokenfuse-gateway to its default env"
 if k get deployment tokenfuse-gateway >/dev/null 2>&1; then
+  k patch deployment tokenfuse-gateway --type strategic \
+    --patch-file "$ROOT/manifests/54-delegation-gateway-unpatch.yaml" >/dev/null
   k rollout status deployment/tokenfuse-gateway --timeout=120s || true
 fi
+
+say "restoring genaryx-console to its default env"
 if k get deployment genaryx-console >/dev/null 2>&1; then
+  k patch deployment genaryx-console --type strategic \
+    --patch-file "$ROOT/manifests/54-delegation-console-unpatch.yaml" >/dev/null
   k rollout status deployment/genaryx-console --timeout=120s || true
 fi
 

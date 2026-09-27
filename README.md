@@ -377,9 +377,13 @@ uses, never through a manifest kustomize applies:
 ./delegation/down.sh --delete-secrets # also removes them
 ```
 
-`kubectl apply -k manifests/` reverts what it manages, so `down.sh`'s own last
-step is that same apply: the delegation env vars and the volumes that carry
-them are fields of Deployments the kustomization already manages.
+`down.sh` reverses each `kubectl patch --patch-file` with its own
+`$patch: delete` counterpart, rather than by re-applying the kustomization:
+`kubectl patch` never touches the `last-applied-configuration` annotation
+`kubectl apply`'s three-way diff reads, so `kubectl apply -k manifests/` does
+not remove what a patch added (measured 2026-09-27; it also reverted an
+unrelated operator setting, `TRAILRYX_TRUST_DOMAIN`, back to its placeholder
+in the process, CLAUDE.md invariant 14's own trap).
 
 **Reachable only from the gateway and the console.** `manifests/54-delegation.yaml`
 is a ClusterIP Service plus a NetworkPolicy admitting port 4310 from nothing

@@ -144,7 +144,13 @@ say "fetching vouchryx's own JWKS (its /.well-known/jwks.json, not the operator'
 PF_LOG="$(mktemp)"
 kubectl -n "$NS" port-forward svc/vouchryx 14310:4310 >"$PF_LOG" 2>&1 &
 PF_PID=$!
-trap 'kill "$PF_PID" 2>/dev/null; rm -f "$PF_LOG" "$JWKS_TMP" 2>/dev/null' EXIT
+# Under `set -e`, a failing command INSIDE an EXIT trap overrides the
+# script's own exit status, which is what happened here the first time this
+# ran on forge: the script printed "up" and every step had already succeeded,
+# but `kill "$PF_PID"` found the port-forward already reaped (the main flow
+# above kills it explicitly) and the whole run reported exit 1 anyway. Each
+# cleanup command needs its own `|| true`, not a shared one after the `;`.
+trap 'kill "$PF_PID" 2>/dev/null || true; rm -f "$PF_LOG" "$JWKS_TMP" 2>/dev/null || true' EXIT
 JWKS_TMP="$(mktemp)"
 ok=0
 for _ in $(seq 1 30); do

@@ -1,0 +1,23 @@
+# Reverses manifests/54-delegation-console-patch.yaml. Applied by
+# delegation/down.sh:
+#
+#   kubectl -n agent-stack patch deployment genaryx-console \
+#     --type strategic --patch-file manifests/54-delegation-console-unpatch.yaml
+#
+# See manifests/54-delegation-gateway-unpatch.yaml's own header for why this
+# is a `kubectl patch` with explicit `$patch: delete` directives rather than
+# `kubectl apply -k manifests/`: the latter does not remove what a
+# `kubectl patch --patch-file` added, because that patch never touched the
+# `last-applied-configuration` annotation apply's own three-way diff reads.
+spec:
+  template:
+    spec:
+      containers:
+        - name: console
+          env:
+            - { name: GENARYX_VOUCHRYX_URL, $patch: delete }
+            - { name: GENARYX_VOUCHRYX_REVOKE_KEY_FILE, $patch: delete }
+          volumeMounts:
+            - { mountPath: /etc/vouchryx/revoke, $patch: delete }
+      volumes:
+        - { name: vouchryx-revoke-key, $patch: delete }

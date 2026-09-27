@@ -3917,3 +3917,48 @@ the forge k3d cluster, 2026-09-27, twice: `15 passed, 1 failed`, the one failure
 changed. The script now waits, bounded at 60 s per pod, for all four to be gone before it prints
 its result. Nothing about a real stack was wrong; the check was reading the test's own residue.
 
+## 113. `kubectl apply -k` does not revert a `kubectl patch --patch-file`, because the patch never touched the annotation apply reads
+
+**Ours, and fixed.** `delegation/down.sh`'s first version undid
+`manifests/54-delegation-gateway-patch.yaml` and
+`manifests/54-delegation-console-patch.yaml` by re-running `kubectl apply -k
+manifests/`, on the strength of invariant 14's own words, "apply reverts what
+it manages", and `55-copilot-cloud.yaml`'s header suggesting the same move
+for its own patch. Measured on forge, 2026-09-27: every
+`TOKENFUSE_DELEGATION_*` env var and the `vouchryx-jwks` volume were still on
+the live `tokenfuse-gateway` Deployment after the apply.
+
+The mechanism invariant 14 describes is a three-way diff between what
+`apply` applied LAST time (recorded in the
+`kubectl.kubernetes.io/last-applied-configuration` annotation), what it wants
+to apply NOW, and what is actually live. `kubectl patch --patch-file` writes
+straight to the live object and never touches that annotation, so from
+apply's point of view the desired state never changed, and it computes an
+empty diff for the fields the patch touched. The invariant's own trap
+example (`TRAILRYX_TRUST_DOMAIN`) is not this: an operator's hand-edit to a
+field the KUSTOMIZATION already governs is what apply correctly reverts; a
+field added by something OTHER than apply, that apply was never told to want
+differently, is not.
+
+Met a second time in the same session, by accident: the first (wrong)
+`down.sh` also ran `kubectl apply -k manifests/` for this reason, and its
+side effect reverted this forge cluster's own `TRAILRYX_TRUST_DOMAIN` from
+`taipanbox.dev` back to the `00-base.yaml` placeholder, `verify.sh`'s
+`TRAILRYX_TRUST_DOMAIN is 'set-me.invalid'` failing on a cluster nothing else
+had touched. Fixed by hand (`kubectl patch configmap stack-wiring` back to
+the operator's value, then a rollout restart of the two pods that had
+already started with the placeholder) before the run continued; this is the
+exact shape invariant 14 already names, met while working around a different
+gap in the same mechanism.
+
+The fix: two more `kubectl patch --patch-file` bodies
+(`manifests/54-delegation-gateway-unpatch.yaml`,
+`manifests/54-delegation-console-unpatch.yaml`), each carrying a
+strategic-merge-patch `$patch: delete` directive per field the enabling
+patch added, keyed by that list's own merge key (`name` for `env` and
+`volumes`, `mountPath` for `volumeMounts`, which is NOT `name` and is the
+part that is easy to get wrong: the first attempt at the unpatch file used
+`name` for the volumeMount and the API server refused it outright,
+`does not contain declared merge key: mountPath`). `delegation/down.sh` now
+patches with these instead of re-applying the kustomization at all.
+

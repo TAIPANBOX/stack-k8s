@@ -597,9 +597,22 @@ an absent invariant.
     console only learn about vouchryx through two `kubectl patch
     --patch-file` bodies (`manifests/54-delegation-gateway-patch.yaml`,
     `manifests/54-delegation-console-patch.yaml`), the same shape
-    `55-copilot-cloud.yaml` already uses, so `kubectl apply -k manifests/`
-    reverts both (invariant 14's "apply reverts what it manages"), which is
-    `delegation/down.sh`'s own last step.
+    `55-copilot-cloud.yaml` already uses. `delegation/down.sh` reverses each
+    with its own `$patch: delete` counterpart
+    (`manifests/54-delegation-gateway-unpatch.yaml`,
+    `manifests/54-delegation-console-unpatch.yaml`) rather than by
+    re-applying the kustomization the way `55-copilot-cloud.yaml`'s own
+    header suggests: **that was tried first and does not work.**
+    `kubectl patch --patch-file` never touches the
+    `kubectl.kubernetes.io/last-applied-configuration` annotation `apply`'s
+    own three-way diff reads, so `kubectl apply -k manifests/` sees no
+    difference between what it applied last time and what it wants now, and
+    leaves the patch's additions exactly where they are. Measured 2026-09-27
+    on forge: every `TOKENFUSE_DELEGATION_*` env var was still on the live
+    Deployment after `kubectl apply -k manifests/`, and the same apply also
+    reverted `stack-wiring`'s `TRAILRYX_TRUST_DOMAIN` from the operator's own
+    value back to the placeholder, invariant 14's own trap, met in the
+    process of trying to work around a different one.
 
     The signing key and the revoke key are minted once, into the
     `vouchryx-keys` Secret, and reused on every later run, the same stance

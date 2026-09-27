@@ -10,9 +10,16 @@
 # the same way it would read any other file-mounted credential and this patch
 # never carries a secret value itself.
 #
-# To go back to no delegation at all: `kubectl apply -k manifests/` strips
-# this back out, the same as the gateway patch beside it (CLAUDE.md
-# invariant 14's "apply reverts what it manages").
+# To go back to no delegation at all:
+#
+#   kubectl -n agent-stack patch deployment genaryx-console --type strategic \
+#     --patch-file manifests/54-delegation-console-unpatch.yaml
+#
+# NOT `kubectl apply -k manifests/`: see
+# manifests/54-delegation-gateway-unpatch.yaml's header for why that does not
+# work (a `kubectl patch --patch-file` never touches the
+# `last-applied-configuration` annotation apply's own diff reads).
+# delegation/down.sh uses this patch, not apply.
 spec:
   template:
     spec:

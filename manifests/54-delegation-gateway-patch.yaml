@@ -20,12 +20,16 @@
 #
 # To go back to no delegation at all:
 #
-#   kubectl apply -k manifests/
+#   kubectl -n agent-stack patch deployment tokenfuse-gateway --type strategic \
+#     --patch-file manifests/54-delegation-gateway-unpatch.yaml
 #
-# `apply -k` reverts what it manages (CLAUDE.md invariant 14's own words) and
-# these env vars and this volume are fields of a Deployment `10-planes.yaml`
-# already manages, so re-applying the kustomization strips them back out; this
-# is delegation/down.sh's own last step, not a new mechanism.
+# NOT `kubectl apply -k manifests/`. That looks right (CLAUDE.md invariant 14:
+# "apply reverts what it manages") and is wrong: `kubectl patch --patch-file`
+# never touches the `last-applied-configuration` annotation apply's own
+# three-way diff reads, so apply sees no change to make and leaves these env
+# vars and this volume exactly where this patch put them. See
+# manifests/54-delegation-gateway-unpatch.yaml's own header, and
+# delegation/down.sh, which uses it instead.
 spec:
   template:
     spec:
