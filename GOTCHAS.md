@@ -3832,3 +3832,52 @@ wardryx kept answering `/healthz` 200 and deciding throughout, with `/readyz` 50
 and freezes. Invariant 21's first version had excluded exactly these workloads on the premise
 that early eviction cannot move a ReadWriteOnce volume, which is true of k3d's local-path, where
 it was written, and false of Longhorn. Evidence: `go-to-market-2026-09/evidence/gcp-g1-2026-09-26/`.
+
+## 110. Dropping ALL capabilities can refuse the exec itself, before the binary's own code runs
+
+**Upstream.** `manifests/53-hub-entry.yaml`'s Caddy container ships PodSecurity's own
+recommended posture, `capabilities: { drop: ["ALL"] }`, the same as every other container in
+this namespace. The first apply died anyway: `exec /usr/bin/caddy: operation not permitted`, the
+kernel refusing to start the process at all, before a single line of Caddy's own code ran.
+
+The cause is the official `caddy:2.11.4-alpine` image itself: its `/usr/bin/caddy` carries a
+Linux FILE capability (`cap_net_bind_service`, set with `setcap` at image build time), the
+mechanism that lets the binary bind a port under 1024 while running as a non-root user. Dropping
+every capability from the container is not the same operation as a binary simply not USING one:
+when a binary asks the kernel for a capability its own file metadata claims but the calling
+process's capability set does not grant, `execve()` itself refuses, `EPERM`, and no amount of
+retrying, no log line from the application, explains why. Measured on GCP 2026-09-26 (N2/G2):
+reproduced locally with the pod's exact security context before touching a cluster a second
+time, fixed by adding back exactly `NET_BIND_SERVICE`, the one capability PodSecurity
+`restricted` allows adding at all.
+
+**The rule worth carrying to the next image that binds a low port as non-root:** `drop: ["ALL"]`
+is not free to assume works with every upstream image that manages to run privileged-port code
+without being root. Check what the image's own binary is doing to earn that (a file capability,
+a wrapper that already ran as root and dropped down, or something else) before assuming the
+container will simply start.
+
+## 111. A `type: LoadBalancer` Service is provisioned outside Terraform's own bookkeeping
+
+**Platform.** Kubernetes' cloud-controller-manager, not Terraform, creates the actual load
+balancer behind a `type: LoadBalancer` Service: a real forwarding rule on GCP, an NLB on AWS, an
+lb11 on Hetzner, billed hourly from the moment the controller finishes provisioning it. Neither
+`cloud/gcp/main.tf` nor `cloud/aws/main.tf` declares this object, so `terraform destroy` has
+never heard of it and cannot remove it: on GCP the forwarding rule alone is enough to make the
+whole VPC undeletable, and on AWS the NLB sits inside the subnet Terraform is trying to tear
+down, which fails with a `DependencyViolation`.
+
+Already true of `50-loadbalancer.yaml`, the console's own balancer, and both
+`cloud/gcp/teardown.sh` and `cloud/aws/teardown.sh` already sweep every `type=LoadBalancer`
+Service in the cluster BEFORE `terraform destroy`, for exactly this reason (checked while
+building `manifests/53-hub-entry.yaml`: neither teardown script needed a change, because
+neither one is scoped to a single Service by name). `manifests/53-hub-entry.yaml` and `hub/`
+inherit the same fact rather than introducing a new one: `hub/down.sh` deletes the
+`hub-ingress` Service and waits for it to be gone before removing anything else, the same
+order the two cloud teardown scripts already use for the console's own balancer.
+
+**What this costs when it is forgotten:** not a failed apply, a failed TEARDOWN, discovered only
+when the bill for a cluster believed to be gone keeps arriving. Measured 2026-09-26: deleting the
+Service first took the forwarding rule, its target pool and two `k8s-*` firewall rules down in
+about 3 seconds; `terraform destroy` afterward had nothing of Kubernetes' own making left to trip
+over.

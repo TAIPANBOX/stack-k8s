@@ -126,6 +126,9 @@ security-tests.sh  attack it: every fix below re-run as a standing check, from
                 the exact count varies with what a given cloud exposes
 tunnel/         the operator's way in: WireGuard, TLS, and the console behind
                 both. Nothing here is published; see tunnel/README.md
+hub/            a second site's way IN: up.sh, add-site.sh, down.sh for
+                manifests/53-hub-entry.yaml, the hub's one metered public
+                entry. See "A second site" below
 manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm).
                 Three files are opt-in and outside the default apply, each
                 applied by hand: 45-heraldyx.yaml (notifications), 55-copilot-
@@ -279,6 +282,55 @@ without the broker, is unchanged, over your own tunnel or
 ```bash
 kubectl -n agent-stack port-forward svc/typryx 4320:4320
 ```
+
+## A second site
+
+Use this when a customer runs more than one site and wants ONE hub (this
+cluster's tokenfuse Cloud, wardryx and policy store) with a gateway at each
+site, reached with no VPN (`@decided 2026-09-26`). `manifests/53-hub-entry.yaml`
+is the hub's one public entry: Caddy in front, terminating TLS with a free
+Let's Encrypt certificate, exposing exactly the seven routes a remote gateway
+calls and 404 to everything else, the console included. It needs
+tokenfuse-cloud v1.2.0 or newer, which names a site from its own Cloud key.
+
+```bash
+./hub/up.sh                     # applies the entry, waits for its address and
+                                 # both certificates, prints the two URLs
+./hub/add-site.sh acme-warehouse   # mints that site's two keys, writes
+                                    # site-acme-warehouse.env
+```
+
+Then, on the site itself, set the four variables `hub/add-site.sh` wrote
+(`TOKENFUSE_CLOUD_URL`, `TOKENFUSE_CLOUD_KEY`, `TOKENFUSE_WARDRYX_URL`,
+`TOKENFUSE_WARDRYX_KEY`) on that site's own gateway, the same way any other
+setting reaches it.
+
+**Metered.** The entry is a `type: LoadBalancer` Service, same shape as
+`50-loadbalancer.yaml`: a real forwarding rule billed hourly from the moment
+it exists (about USD 0.025/hour on GCP), created by Kubernetes rather than
+Terraform, so `hub/down.sh` deletes it first, before anything else, the same
+order `cloud/gcp/teardown.sh` and `cloud/aws/teardown.sh` already use for the
+console's own balancer.
+
+**What stays inside.** Every other Service in this namespace, the console
+included, is unreachable through this entry: it proxies to exactly
+tokenfuse-cloud and wardryx, on the seven paths named above, held narrow by
+`scripts/hub-entry-is-narrow.sh` (CLAUDE.md invariant 23) rather than by
+being merely unadvertised. A site's key is checked by the plane it reaches
+the same way every other credential in this stack already is; TLS here is
+transport, not authentication.
+
+@measured 2026-09-26 on GCP (N2/G2): 17 of 17 outcomes in a local test with
+no cloud, 12 of 12 from the public internet against a live entry.
+@measured 2026-09-27 on GCP, this manifest and these scripts as committed:
+`hub/up.sh` 66 s to both certificates, `hub/add-site.sh` minting a site that
+then called through the hub and appeared by name on `/v1/gateways`, a second
+`add-site.sh` for the same name refused, 16 of 16 from the public internet,
+`hub/down.sh` leaving no forwarding rule or target pool behind. NOT proven
+here: a second real customer site (the lab's second site was a k3d cluster
+sharing a home network with the operator's own machine), a hub outage longer
+than a minute, and a stolen site key, which the edge does not itself bind to
+an address.
 
 ## Status
 
