@@ -84,7 +84,7 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | Deployment + PVC + NetworkPolicy | `heraldyx`, the notifier. **Not in the default apply**, see "Being told, rather than watching" below. No Service and no port: it reads the event log and sends mail, so nothing calls it | |
 | Deployment + PVC + Service + NetworkPolicy x4 | `47-scopyx.yaml`, the web-egress enforcement point. **Not in the default apply**: it opens 80 and 443 to the whole public internet on behalf of agents, which is the widest grant in the namespace and the one decision an operator most needs to have made themselves. Refuses to start without a credential, deliberately | |
 | Deployment | `48-scopyx-browser.yaml`, the same plane with a real browser, for pages that assemble themselves. **Replaces 47's Deployment rather than running beside it**, so a cluster cannot round-robin an agent's fetches between a browser and a fetcher that runs no JavaScript. Costs 267 MB of pull against 3.5 MB. Read its header: PodSecurity `restricted` decides the sandbox question for you | |
-| Deployment + PVC + Service | `51-typryx.yaml`, the typed-answer plane: a typed question answered with a probability, scored later against what actually happened. **Not in the default apply**: a whole plane somebody may simply not want. Backend is `stub` (free, no outbound call) in every launcher. Refuses to start without a credential, the same as scopyx. Its journal is on the shared `stack-events` bus | |
+| Deployment + PVC + Service | `51-typryx.yaml`, the typed-answer plane: a typed question answered with a probability, scored later against what actually happened. **Not in the default apply**: a whole plane somebody may simply not want. Backend is `stub` (free, no outbound call) unless a launcher is given `--typed-mode` (see "Typed answers: choose where your data goes"). Refuses to start without a credential, the same as scopyx. Its journal is on the shared `stack-events` bus | |
 | Deployment + Service + NetworkPolicy x4 | `52-tokenfuse-mcp-broker.yaml`, tokenfuse's own MCP credential broker fronting typryx. **Not in the default apply, applied by the same `--with-typed` flag as 51-typryx.yaml, right after it**. Free, reaches nowhere but typryx itself. Refuses to start without its own credential | |
 | Deployment + Service + PVC + NetworkPolicy x3 | `54-delegation.yaml`, vouchryx, the delegation-token service. **Not in the default apply, applied by `delegation/up.sh`**, which also refuses before applying anything unless a trusted upstream issuer, audience and JWKS file are given. Reachable only from the gateway and the console. See "The delegation plane" below | |
 | Patch (Deployment) | `55-copilot-cloud.yaml`: moves the console's copilot, Felyx, to a larger model. By default Felyx already reaches Anthropic through this stack's own gateway (by its Service name, under `agent://<trust domain>/genaryx/felyx`, metered and policy-checked like any agent) and needs only the `stack-copilot` Secret holding your key; without it Felyx says it is not configured. **Not in the default apply, opt-in, and METERED**: every conversation is billed by the model provider to the key's owner, on a bill separate from the cluster. See its own header before applying | |
@@ -250,11 +250,11 @@ it says what it leaves open.
 
 ### The typed-answer plane
 
-`typryx` is off by default for a smaller reason than heraldyx or scopyx: it
-reaches nowhere outbound (its backend is `stub`, free and deterministic in
-every launcher) and enforces nothing, it is simply a whole plane somebody may
-not want. `./deploy.sh --with-typed` applies it after the kustomization; by
-hand it is
+`typryx` is off by default for a smaller reason than heraldyx or scopyx: with
+`--with-typed` alone it reaches nowhere outbound (its backend is `stub`, free and
+deterministic) and enforces nothing, it is simply a whole plane somebody may not
+want. `./deploy.sh --with-typed` applies it after the kustomization on the stub;
+the next section is how to give it a real backend. By hand the stub is
 
 ```bash
 kubectl apply -f manifests/51-typryx.yaml
@@ -286,6 +286,87 @@ without the broker, is unchanged, over your own tunnel or
 ```bash
 kubectl -n agent-stack port-forward svc/typryx 4320:4320
 ```
+
+### Typed answers: choose where your data goes
+
+`@decided 2026-09-30`: a customer picks where the data of a typed answer goes,
+from three modes, and the launchers ask. Nothing is chosen for you: the default
+sends nothing anywhere, because Jev is a paid service and either real mode is a
+data-egress decision. The flags are the same on `deploy.sh`,
+`cloud/gcp/deploy-gcp.sh` and `cloud/aws/deploy-aws.sh`, and `typed/mode.sh`
+holds the one copy of their checks.
+
+| Mode | Flags | What leaves the cluster | Measured, 2026-09-30 |
+|---|---|---|---|
+| off (default) | none, or `--typed-mode off` | Nothing. typryx is not deployed. | no typryx, a constant default answer: 25.1% accuracy |
+| stub | `--with-typed` alone | Nothing. Free and deterministic, it answers nobody's real question. | none, it is a stand-in |
+| jev | `--typed-mode jev --typed-jev-key-file PATH` | The named fields of each question go to TypeSafe's hosted API, a paid service billed to your key. Only the fields a template names are sent. | 87.1% accuracy, ECE 0.042, p50 229 ms |
+| own-model | `--typed-mode own-model --typed-model-url URL --typed-model-name NAME` (optional: `--typed-model-key-file PATH`, `--typed-model-cidr CIDR`) | Nothing, if the URL is a model server you run (Ollama, vLLM, any OpenAI-compatible one) inside your cluster or network. If the URL is a hosted service, what you send it. | qwen2.5:7b on an 8-vCPU CPU VM: 70.0% accuracy, ECE 0.273, p50 2130 ms |
+
+`@measured` on the 434-question frozen test in typryx-evalset, run 2026-09-30,
+one run per row. Read the numbers as one model on one test set: the own-model row
+is a 7B model on CPU before any fine-tuning or calibration on your own data, so
+it is a floor for that mode and not its ceiling, and nothing here measures what a
+tuned model would score.
+
+```bash
+# Jev: the key is a file on the machine running the launcher
+./deploy.sh --servers 1.2.3.4,1.2.3.5,1.2.3.6 --typed-mode jev \
+  --typed-jev-key-file ~/keys/jev.key
+
+# Your own model, on your own hardware
+./deploy.sh --servers 1.2.3.4,1.2.3.5,1.2.3.6 --typed-mode own-model \
+  --typed-model-url http://10.0.0.20:11434/v1 --typed-model-name qwen2.5:7b
+```
+
+How each mode behaves, because the defaults are deliberate:
+
+- **The key is a file, never a value.** `--typed-jev-key-file` (and the optional
+  `--typed-model-key-file`) name a file. The launcher checks it exists and is not
+  empty before it installs anything, and refuses by name if not. It becomes a
+  Kubernetes Secret (`typryx-jev-key`, `typryx-model-key`) built on stdin,
+  mounted into the pod as a file, and `TYPRYX_JEV_KEY_FILE` (or
+  `TYPRYX_OPENAI_KEY_FILE`) points at it. It is never an environment value, never
+  in a ConfigMap, never on a command line, never printed, and never in a rendered
+  manifest. There is deliberately no flag that takes the key itself.
+- **The URL ends in `/v1`.** `--typed-model-url` must, and must not carry
+  credentials. `--typed-model-name` is required with it.
+- **typryx gets one way out, and only in these two modes.** The stack is
+  default-deny, so each real mode adds a NetworkPolicy, `typryx-egress-model`:
+  Jev gets port 443 to the public internet with the private ranges excluded; an
+  own model gets exactly the address and port in its URL (an IP literal becomes a
+  `/32`, `name.namespace.svc` becomes that namespace). A model reached by a host
+  name on your own LAN needs `--typed-model-cidr` to say which network, because a
+  NetworkPolicy cannot match a name.
+- **Flags of another mode are refused, not ignored**, so a Jev key file next to
+  `own-model` is an error rather than a key quietly not used. `--with-typed`
+  together with `--typed-mode off` is refused as a contradiction.
+- **Switching modes is an ordinary re-run**, because each mode is rendered whole
+  and applied, not patched. `off` does not remove a typryx an earlier run
+  installed, and switching back to the stub leaves `typryx-egress-model` and the
+  key Secrets behind (an `apply` does not prune; this repository does not delete
+  keys on its own initiative). Remove them yourself if you want them gone:
+  `kubectl -n agent-stack delete networkpolicy typryx-egress-model`.
+- **The door key is unchanged.** `typryx-keys` is still made by hand, in every
+  mode, as above.
+
+**Training on your own data.** `@decided 2026-09-30`: we do not fine-tune or
+ship models for customers. A customer can fine-tune and calibrate their own model
+on their own data, and typryx gives them what they need to do it: it records
+each question and the answer it gave, you post what actually happened to
+`/v1/outcome`, and `typryx calibration` scores the model against those truths
+(Brier score and expected calibration error, grouped by template, backend and model). The truths you post
+are your own data. Answers a hosted backend returns are not suitable as training
+labels for another model, so check your provider's terms before using them that
+way. An opt-in local training log, `TYPRYX_TRAINING_DIR`, off by default, is
+**planned** in typryx and needs a release there first; nothing in this
+repository sets it yet.
+
+**Not proven.** This was checked without a cluster: every mode renders to a
+schema-valid manifest (`kubeconform --strict`) and the gate in
+`scripts/typed-mode-is-honest.sh` holds the rules above. A pod starting with the
+key Secret mounted, and the egress rule reaching a real model, have not been run
+through these launchers.
 
 ## A second site
 

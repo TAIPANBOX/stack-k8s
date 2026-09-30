@@ -54,21 +54,30 @@
 # answered.
 #
 #
-# ## The backend is `stub`, on purpose, in every launcher
+# ## The backend is `stub` as committed, and the launchers can choose another
 #
 # `stub` is free, deterministic and makes no outbound call: it is the only
-# backend that belongs in a manifest nobody has to pay to apply. The image
-# also ships `openai-logprobs` and `jev`, both metered or external, and
-# neither is set here. An operator who wants one switches it by hand on the
-# running Deployment:
+# backend that belongs in a manifest nobody has to pay to apply, so it is what
+# this file carries and what `--with-typed` alone deploys. The image also ships
+# `openai-logprobs` and `jev`, both metered or external. `@decided 2026-09-30`:
+# the operator chooses where the data of a typed answer goes, and the launchers
+# ask. `typed/mode.sh` renders this file for the choice (jev, own-model or off;
+# README, "Typed answers: choose where your data goes") by rewriting exactly
+# three lines below: TYPRYX_BACKEND, the `events` volumeMount and the
+# `stack-events` volume. It refuses if any of the three stops being unique, so
+# reword them only together with typed/mode.sh. The stub render is this file
+# unchanged, byte for byte (scripts/typed-mode-is-honest.sh).
+#
+# By hand, without the launchers, the old way still works and is a decision
+# with a bill attached, made once:
 #
 #   kubectl -n agent-stack set env deploy/typryx \
 #     TYPRYX_BACKEND=openai-logprobs \
 #     TYPRYX_OPENAI_URL=<url> TYPRYX_OPENAI_MODEL=<model> \
 #     TYPRYX_OPENAI_KEY_FILE=<path inside the pod, optional>
 #
-# and that is a decision with a bill attached, made once, not a default this
-# file carries.
+# but a later `apply -f` of this file puts the stub back, the trap invariant 24
+# names for `kubectl patch`. Use the launcher flags.
 #
 # `TYPRYX_MAX_CALLS_PER_HOUR` is left unset on purpose: the image's own
 # default of 1000 is a sane ceiling and this file has no reason to move it.

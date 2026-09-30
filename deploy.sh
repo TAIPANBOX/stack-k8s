@@ -44,11 +44,27 @@
 # scores those probabilities against truths recorded later. Off by
 # default because it is a whole plane somebody may simply not want, the same
 # reason `--with-finops` (the two cloud deploys) is off by default for
-# costcrew. Its backend is `stub`, free and making no outbound call, in every
-# launcher; see manifests/51-typryx.yaml for how an operator switches it. The
+# costcrew. Its backend is `stub`, free and making no outbound call, unless
+# `--typed-mode` (below) chooses another; see manifests/51-typryx.yaml. The
 # same flag also applies tokenfuse's MCP broker in front of it
 # (manifests/52-tokenfuse-mcp-broker.yaml), free and outbound to nothing but
 # typryx itself.
+#
+# `--typed-mode jev|own-model|off` chooses where the data of a typed answer goes
+# (`@decided 2026-09-30`), default off. `--with-typed` alone keeps the stub
+# backend exactly as before.
+#   jev        the named fields leave the cluster for TypeSafe's hosted API, a
+#              paid service. `--typed-jev-key-file PATH` (required) becomes a
+#              Secret mounted as a file; the key is never a value, a ConfigMap
+#              or an argument. Missing or empty, this refuses before installing.
+#   own-model  your own OpenAI-compatible model on your own hardware.
+#              `--typed-model-url URL` (ends in /v1) and `--typed-model-name
+#              NAME` are required; `--typed-model-key-file PATH` and
+#              `--typed-model-cidr CIDR` (the network the egress rule admits, for
+#              a model named by a host name on your LAN) are optional.
+#   off        nothing is deployed for typryx.
+# typed/mode.sh holds the validation and the rendering, one copy for all three
+# launchers; see README.md, "Typed answers: choose where your data goes".
 set -euo pipefail
 
 SERVERS=""; AGENTS=""; SSH_KEY="${SSH_KEY:-}"
@@ -94,6 +110,16 @@ TRUST_DOMAIN="${TRUST_DOMAIN:-}"
 # want; nothing it does spends money, so this is a smaller decision than
 # --with-finops, but it is still a plane nobody asked for by default.
 WITH_TYPED="${WITH_TYPED:-0}"
+# Where the typed answers' data goes (typed/mode.sh holds the one copy of the
+# validation and the rendering; `@decided 2026-09-30`). Empty means "not chosen":
+# with --with-typed alone that is the stub, without it typryx is not deployed.
+# A key is a FILE path and never a value on this command line.
+TYPED_MODE="${TYPED_MODE:-}"
+TYPED_JEV_KEY_FILE="${TYPED_JEV_KEY_FILE:-}"
+TYPED_MODEL_URL="${TYPED_MODEL_URL:-}"
+TYPED_MODEL_NAME="${TYPED_MODEL_NAME:-}"
+TYPED_MODEL_KEY_FILE="${TYPED_MODEL_KEY_FILE:-}"
+TYPED_MODEL_CIDR="${TYPED_MODEL_CIDR:-}"
 REF="${REF:-main}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/TAIPANBOX/stack-k8s}"
@@ -118,6 +144,12 @@ while [ $# -gt 0 ]; do
     --smtp-user)      SMTP_USER="$2"; shift 2 ;;
     --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --with-typed)    WITH_TYPED=1; shift ;;
+    --typed-mode)    TYPED_MODE="$2"; shift 2 ;;
+    --typed-jev-key-file)   TYPED_JEV_KEY_FILE="$2"; shift 2 ;;
+    --typed-model-url)      TYPED_MODEL_URL="$2"; shift 2 ;;
+    --typed-model-name)     TYPED_MODEL_NAME="$2"; shift 2 ;;
+    --typed-model-key-file) TYPED_MODEL_KEY_FILE="$2"; shift 2 ;;
+    --typed-model-cidr)     TYPED_MODEL_CIDR="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     -h|--help)       awk 'NR>1 && /^#/ {print; next} NR>1 {exit}' "$0" | sed -E 's/^# ?//'; exit 0 ;;
@@ -166,6 +198,22 @@ else
     || die "could not fetch the repo; check the network, or clone it and run ./deploy.sh"
 fi
 [ -d "$ROOT/manifests" ] || die "no manifests/ in $ROOT"
+
+# ---- the typed data mode, refused BEFORE anything is installed ---------------
+# typed/mode.sh is the one copy of this check (CLAUDE.md invariant 26). Run here
+# so a missing Jev key file is found in a second, not after fifteen minutes of
+# building. It prints what leaves the cluster in the chosen mode.
+TYPED_ARGS=()
+[ "$WITH_TYPED" = 1 ] && TYPED_ARGS+=(--with-typed)
+[ -n "$TYPED_MODE" ] && TYPED_ARGS+=(--typed-mode "$TYPED_MODE")
+[ -n "$TYPED_JEV_KEY_FILE" ] && TYPED_ARGS+=(--typed-jev-key-file "$TYPED_JEV_KEY_FILE")
+[ -n "$TYPED_MODEL_URL" ] && TYPED_ARGS+=(--typed-model-url "$TYPED_MODEL_URL")
+[ -n "$TYPED_MODEL_NAME" ] && TYPED_ARGS+=(--typed-model-name "$TYPED_MODEL_NAME")
+[ -n "$TYPED_MODEL_KEY_FILE" ] && TYPED_ARGS+=(--typed-model-key-file "$TYPED_MODEL_KEY_FILE")
+[ -n "$TYPED_MODEL_CIDR" ] && TYPED_ARGS+=(--typed-model-cidr "$TYPED_MODEL_CIDR")
+"$ROOT/typed/mode.sh" check ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} \
+  || die "the typed-answer flags were refused, so nothing has been installed yet."
+TYPED_EFFECTIVE="$("$ROOT/typed/mode.sh" mode ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"})"
 
 # ---- 0b. the tunnel's two names, asked BEFORE the long part -----------------
 # Asked here rather than at the end, and the ordering is the whole point: the
@@ -526,15 +574,20 @@ fi
 
 # The typed-answer plane, applied from its own file for the same reason
 # heraldyx, scopyx and costcrew are: it is not in the kustomization, so it
-# arrives only when somebody asked for it. It needs a typryx-keys Secret the
-# operator creates by hand (manifests/51-typryx.yaml's own header shows the
-# command); without one the pod stays in CrashLoopBackOff, which is the
-# intended signal, the same as scopyx.
-if [ "$WITH_TYPED" = 1 ]; then
-  say "typed: applying the typryx plane (backend stub, no outbound call)"
-  k_ "apply -f /root/stack-k8s/manifests/51-typryx.yaml"
-  say "typed: applying tokenfuse's MCP broker in front of it"
-  k_ "apply -f /root/stack-k8s/manifests/52-tokenfuse-mcp-broker.yaml"
+# arrives only when somebody asked for it. typed/mode.sh renders it for the
+# mode chosen (the stub for --with-typed alone, byte for byte manifests/51 and
+# 52) and, for jev or an own model with a key, the Secret the Deployment mounts,
+# which is piped over stdin and never passed as an argument or written down.
+# It still needs a typryx-keys Secret the operator creates by hand
+# (manifests/51-typryx.yaml's own header shows the command); without one the pod
+# stays in CrashLoopBackOff, which is the intended signal, the same as scopyx.
+if [ "$TYPED_EFFECTIVE" != off ]; then
+  say "typed: applying the typryx plane (mode $TYPED_EFFECTIVE) and tokenfuse's MCP broker in front of it"
+  if [ "$("$ROOT/typed/mode.sh" has-secrets ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"})" = yes ]; then
+    "$ROOT/typed/mode.sh" secrets ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} | k_ "-n agent-stack apply -f -" >/dev/null \
+      || die "could not apply the typed-answer key Secret"
+  fi
+  "$ROOT/typed/mode.sh" render ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} | k_ "apply -f -"
 fi
 
 say "waiting for rollouts"

@@ -872,6 +872,67 @@ run_case "felyx-through-the-gateway: the console manifest taken away" fail \
 os.remove("manifests/20-console.yaml")')" \
 	"measured nothing"
 
+# The typed-answer data mode (invariant 26): the jev key refusing a missing or
+# blank file, the key becoming an environment value, the committed default
+# leaving the stub, a ConfigMap sneaking into a render, a launcher losing a flag
+# or its early check or applying manifests/51 around the mode, the manifest
+# drifting from the three lines typed/mode.sh rewrites, a harmless comment, and
+# the subject gone.
+run_case "typed-mode-is-honest: jev stops refusing a missing key file" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "key_file_ok() { # path flag", "key_file_ok() { return 0 # path flag")')" \
+	"jev without a key file refuses"
+
+run_case "typed-mode-is-honest: a blank key file is accepted" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "grep -q \x27[^[:space:]]\x27 \"$1\"", "true")')" \
+	"a blank file"
+
+run_case "typed-mode-is-honest: the jev key becomes an environment value" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "- { name: TYPRYX_JEV_KEY_FILE, value: \"/etc/typryx/jev/key\" }", "- { name: TYPRYX_JEV_KEY, value: \"fake-test-key-not-a-real-key-7f3a9c2e\" }")')" \
+	"an environment value"
+
+run_case "typed-mode-is-honest: the committed default stops being the stub" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/51-typryx.yaml", "- { name: TYPRYX_BACKEND, value: \"stub\" }", "- { name: TYPRYX_BACKEND, value: \"jev\" }")')" \
+	"lost the stub backend"
+
+run_case "typed-mode-is-honest: a ConfigMap is rendered for a mode" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "      public_peer | egress_policy 443 ;;", "      printf -- \"---\\nkind: ConfigMap\\n\"; public_peer | egress_policy 443 ;;")')" \
+	"a ConfigMap is rendered"
+
+run_case "typed-mode-is-honest: manifests/51 drifts from the lines the modes rewrite" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/51-typryx.yaml", "            - { name: events, mountPath: /var/lib/stack/events }", "            - { name: events,  mountPath: /var/lib/stack/events }")')" \
+	"no longer carries the three lines"
+
+run_case "typed-mode-is-honest: a launcher loses a typed flag" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "    --typed-model-url)      TYPED_MODEL_URL=\"$2\"; shift 2 ;;\n", "")')" \
+	"does not parse --typed-model-url"
+
+run_case "typed-mode-is-honest: a launcher stops checking before it installs" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/typed/mode.sh\" check ", "\"$ROOT/typed/mode.sh\" mode ")')" \
+	"never runs typed/mode.sh check"
+
+run_case "typed-mode-is-honest: a launcher applies manifests/51 around the mode" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("deploy.sh", "  \"$ROOT/typed/mode.sh\" render ${TYPED_ARGS[@]+\"${TYPED_ARGS[@]}\"} | k_ \"apply -f -\"", "  k_ \"apply -f /root/stack-k8s/manifests/51-typryx.yaml\"")')" \
+	"bypassing the mode"
+
+run_case "typed-mode-is-honest: a comment in typed/mode.sh changes" pass \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "# Private ranges a public egress rule must never reach back into (the same list", "# Private ranges a public egress rule must never reach back into (the very list")')"
+
+run_case "typed-mode-is-honest: typed/mode.sh taken away" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'import os
+os.remove("typed/mode.sh")')" \
+	"measured nothing"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'

@@ -161,6 +161,13 @@ jobs:
       - name: every manifest is a document Kubernetes would accept
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/manifests-valid.sh
 
+      # After kubeconform is installed, because this gate validates every mode
+      # typed/mode.sh can render, strictly, with it. The typed-answer data mode
+      # is a bill and a data-egress decision, so it is asked for by name and the
+      # key never becomes a literal. See CLAUDE.md invariant 26.
+      - name: the typed-answer data mode is honest (invariant 26)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/typed-mode-is-honest.sh
+
       # Last, because it mutates tracked files and restores them. It needs a
       # clean tree and says so plainly, so it also reports any earlier step
       # that starts writing into the checkout.

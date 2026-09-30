@@ -109,6 +109,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/longhorn-releases-a-dead-node.sh # invariant 22; GOTCHAS 109
 ./scripts/hub-entry-is-narrow.sh  # invariant 23
 ./scripts/delegation-off-by-default.sh # invariant 24; GOTCHAS 105
+./scripts/typed-mode-is-honest.sh # invariant 26; needs kubeconform on PATH
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -649,6 +650,51 @@ an absent invariant.
     it refused the endpoint; with no Secret it said the key is not set.
     *(gate: `scripts/felyx-through-the-gateway.sh`; four cases in
     `gates-have-teeth.sh`; `features/felyx-goes-through-the-gateway.feature`)*
+
+26. **The typed-answer data mode is chosen on purpose, and what a mode renders is
+    what it says.** `@decided 2026-09-30`: a customer picks one of three data
+    modes for typed answers (Jev, where named fields leave for TypeSafe's hosted
+    API; their own model on their own hardware; or off), and the launchers ask.
+    The default stays off, and `--with-typed` alone keeps the free stub backend
+    exactly as before, because choosing Jev is a bill and a data-egress decision
+    nobody should get by default.
+
+    `typed/mode.sh` is the one copy of the validation and the rendering; the
+    three launchers (`deploy.sh`, `cloud/gcp/deploy-gcp.sh`,
+    `cloud/aws/deploy-aws.sh`) only parse `--typed-mode`, `--typed-jev-key-file`,
+    `--typed-model-url`, `--typed-model-name`, `--typed-model-key-file` and
+    `--typed-model-cidr` and hand them over, the shape GOTCHAS 90, 101 and 102
+    record drifting when a block is copied. They run `typed/mode.sh check`
+    BEFORE the install, so a missing key file is refused in a second rather than
+    after a build. The Jev key is a file the operator names: it becomes a Secret
+    built on stdin, is mounted as a file, and `TYPRYX_JEV_KEY_FILE` points at it.
+    It is never an environment value, never in a ConfigMap, never an argument,
+    never printed, and `typed/mode.sh secrets` refuses a terminal. Each mode
+    also renders a NetworkPolicy, `typryx-egress-model`, because
+    `30-network-policy.yaml` is default-deny and typryx otherwise cannot reach
+    its backend. Modes are rendered whole rather than patched, for invariant
+    24's reason: `kubectl patch` leaves the last-applied annotation alone, so a
+    later apply of the stub would leave the patched backend in place.
+
+    `TYPRYX_TRAINING_DIR` (typryx's opt-in local training log) is planned in
+    typryx and needs a release first; nothing here sets it.
+
+    **What it does not cover.** No cluster was involved: that the pod starts
+    with the mounted Secret, and that the egress rule reaches a real model, need
+    a live run, which invariants 4 and 5 already say this repository cannot hold
+    in a gate. Switching back to the stub leaves `typryx-egress-model` and the
+    key Secrets behind (`apply` does not prune, and keys are not deleted on this
+    repository's own initiative); `--typed-mode off` does not remove a typryx an
+    earlier run installed.
+    *(gate: `scripts/typed-mode-is-honest.sh`, run in both callers after
+    kubeconform is installed. Eleven cases in `scripts/gates-have-teeth.sh`: a
+    missing key file accepted, a blank one accepted, the key as an environment
+    value, the committed default leaving the stub, a ConfigMap in a render,
+    manifests/51 drifting from the three lines the modes rewrite, a launcher
+    losing a flag, a launcher not checking before it installs, a launcher
+    applying manifests/51 around the mode, a harmless comment (must pass), and
+    the subject taken away. Scenarios in
+    `features/typed-answers-choose-where-your-data-goes.feature`.)*
 
 ## Decisions that have no gate yet
 
