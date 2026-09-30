@@ -35,7 +35,7 @@
 #      (kubeconform, as manifests-valid.sh does);
 #   8. every launcher parses every flag, refuses BEFORE it installs anything,
 #      and renders through typed/mode.sh. Launchers are FOUND by what makes them
-#      one (they parse --with-typed), never listed.
+#      one (they apply the manifests and parse --with-typed), never listed.
 #
 # AND IT REFUSES TO REPORT OK ON NOTHING: no typed/mode.sh, no manifests/51, no
 # launcher, or no kubeconform is reported and fails.
@@ -279,7 +279,14 @@ for label, args in variants.items():
 FLAGS = ("--typed-mode", "--typed-jev-key-file", "--typed-model-url",
          "--typed-model-name", "--typed-model-key-file", "--typed-model-cidr")
 tracked = subprocess.run(["git", "ls-files", "*.sh"], capture_output=True, text=True).stdout.split()
-launchers = [p for p in tracked if re.search(r"^\s*--with-typed\)", pathlib.Path(p).read_text(), re.M)]
+# A launcher is a script that applies the manifests to a cluster it is talking to
+# (the same subject deploy-flags-agree.sh finds) AND offers --with-typed. typed/mode.sh
+# parses --with-typed too, and is the thing being held, not a launcher.
+def is_launcher(path):
+    text = pathlib.Path(path).read_text()
+    return (re.search(r"^\s*--with-typed\)", text, re.M) is not None
+            and re.search(r'^[^#]*k_ "apply -k[^"]*manifests"', text, re.M) is not None)
+launchers = [p for p in tracked if is_launcher(p)]
 if not launchers:
     print("FAIL: no launcher parses --with-typed, so this measured nothing about the launchers.")
     sys.exit(1)
