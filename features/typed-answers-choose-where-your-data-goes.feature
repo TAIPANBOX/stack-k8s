@@ -62,3 +62,34 @@ Feature: typed answers, choose where your data goes
     When kubeconform validates it strictly
     Then it passes
     # -> typed-mode-is-honest.sh check "7 every rendered mode validates"
+
+  Scenario: the training log is off unless asked for
+    Given no --typed-training flag
+    When typed/mode.sh renders any mode
+    Then TYPRYX_TRAINING_DIR is in none of them
+    # -> typed-mode-is-honest.sh check "9 training is off unless asked"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the training log is on without the flag"
+
+  Scenario: the training log adds one variable and no disk
+    Given --typed-training with typryx deployed in any mode
+    When typed/mode.sh renders
+    Then the only lines added are TYPRYX_TRAINING_DIR and its comment
+    And the directory is on the typryx-state claim typryx already had, never on the shared events bus
+    And no PersistentVolumeClaim exists beyond typryx-state
+    # -> typed-mode-is-honest.sh checks "10 training adds no volume, claim or policy", "10 training has a writable home", "10 training stays off the shared bus" and "10 no new disk"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the training flag provisions a claim", "...the training directory is under no mount", "...lands on the shared bus" and "...brings another object"
+
+  Scenario: the training log needs a typryx to write it
+    Given --typed-training with no --with-typed, or with --typed-mode off
+    When the launcher starts
+    Then it refuses before it installs anything, naming --typed-training
+    And every launcher parses the flag and hands it to typed/mode.sh
+    # -> typed-mode-is-honest.sh checks "11 training needs typryx" and "11 launchers hand --typed-training to typed/mode.sh"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the training flag is accepted with no typryx", "a launcher loses --typed-training" and "a launcher stops forwarding --typed-training"
+
+  Scenario: the pinned typryx is one that reads the training variable
+    Given every reference to ghcr.io/taipanbox/typryx in the repository
+    When the gate reads them
+    Then they name one tag, and it is v0.3.0 or later
+    # -> typed-mode-is-honest.sh checks "12 one typryx tag" and "12 typryx reads the training variable"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the typryx pin goes back before the training log" and "a document names a second typryx tag"

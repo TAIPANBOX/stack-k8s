@@ -279,8 +279,8 @@ kubectl -n agent-stack create secret generic tokenfuse-mcp-broker-keys \
 
 `manifests/52-tokenfuse-mcp-broker.yaml` has the full story: why two Secrets
 rather than one, what its NetworkPolicies admit, and what was measured
-through it on kind (it needs typryx v0.2.0 or later, which is what
-`51-typryx.yaml` pins; GOTCHAS 106). Reaching typryx directly,
+through it on kind (it needs typryx v0.2.0 or later; `51-typryx.yaml` pins
+v0.3.0; GOTCHAS 106). Reaching typryx directly,
 without the broker, is unchanged, over your own tunnel or
 
 ```bash
@@ -352,21 +352,59 @@ How each mode behaves, because the defaults are deliberate:
 
 **Training on your own data.** `@decided 2026-09-30`: we do not fine-tune or
 ship models for customers. A customer can fine-tune and calibrate their own model
-on their own data, and typryx gives them what they need to do it: it records
-each question and the answer it gave, you post what actually happened to
-`/v1/outcome`, and `typryx calibration` scores the model against those truths
-(Brier score and expected calibration error, grouped by template, backend and model). The truths you post
-are your own data. Answers a hosted backend returns are not suitable as training
-labels for another model, so check your provider's terms before using them that
-way. An opt-in local training log, `TYPRYX_TRAINING_DIR`, off by default, is
-**planned** in typryx and needs a release there first; nothing in this
-repository sets it yet.
+on their own data, and typryx gives them what they need to do it. Add
+`--typed-training` to any launcher, next to `--with-typed` or a `--typed-mode`,
+and typryx (v0.3.0 or later, which `51-typryx.yaml` pins) keeps a local training
+log: one line per answered question holding the state the template let through
+and the identity of the answer, never the backend's answer or its probabilities.
+You post what actually happened to `/v1/outcome`, and `typryx export --training`
+pairs each logged question with that human truth. The truths you post are your
+own data. Answers a hosted backend returns are not suitable as training labels
+for another model (TypeSafe's agreement forbids it for Jev), which is why the log
+holds none.
 
-**Not proven.** This was checked without a cluster: every mode renders to a
-schema-valid manifest (`kubeconform --strict`) and the gate in
-`scripts/typed-mode-is-honest.sh` holds the rules above. A pod starting with the
-key Secret mounted, and the egress rule reaching a real model, have not been run
-through these launchers.
+```bash
+./deploy.sh --servers 1.2.3.4,1.2.3.5,1.2.3.6 --typed-mode own-model \
+  --typed-model-url http://10.0.0.20:11434/v1 --typed-model-name qwen2.5:7b \
+  --typed-training
+
+# later, on your own machine; stdout is the training file, stderr the counts
+kubectl -n agent-stack exec deploy/typryx -- /usr/local/bin/typryx export --training \
+  --training-dir /var/lib/typryx/training --ledger /var/lib/typryx/ledger > train.jsonl
+```
+
+- **Off by default, and byte for byte.** Without the flag no mode renders the
+  variable, and every render is exactly what it was before the flag existed. With
+  it, each mode gains one environment variable, `TYPRYX_TRAINING_DIR`, and a
+  comment; no volume, claim or policy comes with it. `--typed-training` with no
+  typryx to write it (no `--with-typed`, or `--typed-mode off`) is refused.
+- **No new disk.** A PersistentVolumeClaim provisions a real disk that is billed
+  from creation on a cloud cluster, so a flag does not add one. The log is a
+  directory (`/var/lib/typryx/training`) on `typryx-state`, the claim typryx
+  already has for its ledger. That is also where it is useful: the export pairs
+  the log with truths on the ledger, so a log that died with the pod beside a
+  ledger that survives it would have nothing to pair with. It is not on
+  `stack-events`, the shared bus other planes read, because it holds question
+  text.
+- **How long it lives, and how big it gets.** As long as the `typryx-state`
+  claim: deleting the claim or the namespace ends it, and a pod restart does not.
+  It shares that claim's 1Gi with the ledger, and typryx never rotates or deletes
+  the file, so watch its size yourself. The file is plain text at rest on the
+  claim's disk (typryx creates it `0600`); treat it as you treat the ledger. A
+  bigger or separate volume is a claim of your own, which is a spending decision
+  that is yours to make and apply, not something a launcher flag does for you.
+- **What typryx does not do.** It does not train, host or ship a model. The
+  fine-tune happens with your own tooling on your own hardware, and you then
+  serve the tuned model behind `--typed-mode own-model`.
+
+**Not proven.** This was checked without a cluster: every mode, with and
+without `--typed-training`, renders to a schema-valid manifest
+(`kubeconform --strict`) and the gate in `scripts/typed-mode-is-honest.sh` holds
+the rules above. A pod starting with the key Secret mounted, the egress rule
+reaching a real model, typryx writing `training.ndjson` on the `typryx-state`
+claim (it is meant to be writable there, like the ledger beside it, by the same
+`fsGroup`), and the `kubectl exec` export above, have not been run through these
+launchers.
 
 ## A second site
 

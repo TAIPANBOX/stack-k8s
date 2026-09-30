@@ -35,7 +35,20 @@
 #      (kubeconform, as manifests-valid.sh does);
 #   8. every launcher parses every flag, refuses BEFORE it installs anything,
 #      and renders through typed/mode.sh. Launchers are FOUND by what makes them
-#      one (they apply the manifests and parse --with-typed), never listed.
+#      one (they apply the manifests and parse --with-typed), never listed;
+#   9. the training log (--typed-training, typryx's TYPRYX_TRAINING_DIR) is off
+#      unless asked for: without the flag no mode renders the variable, and with
+#      it the ONLY lines a mode gains are that variable and its comment, so no
+#      volume, claim or policy rides in with it;
+#  10. with it on, the directory is under a writable mount of a volume the pod
+#      already had (the root filesystem is read-only), never under the shared
+#      events bus, and no PersistentVolumeClaim exists beyond the one
+#      manifests/51 always carried: a claim provisions a billed disk on a cloud
+#      cluster, so it is a spending decision the operator makes, not a flag;
+#  11. the flag refuses when typryx is not deployed, and every launcher parses
+#      it and hands it to typed/mode.sh;
+#  12. every typryx image reference in the repository names one tag, and it is
+#      v0.3.0 or later, the first release that reads TYPRYX_TRAINING_DIR.
 #
 # AND IT REFUSES TO REPORT OK ON NOTHING: no typed/mode.sh, no manifests/51, no
 # launcher, or no kubeconform is reported and fails.
@@ -256,12 +269,15 @@ variants = {
                                     "http://ollama:11434/v1", "--typed-model-name", "m"],
 }
 rendered = 0
+every = dict(variants)
 for label, args in variants.items():
+    every[label + " + training"] = args + ["--typed-training"]
+for label, args in every.items():
     r = run("render", *args)
     f = tmp / ("render-" + re.sub(r"\W+", "-", label) + ".yaml")
     f.write_text(r.stdout)
     body = r.stdout
-    if label != "stub":
+    if not label.startswith("stub"):
         s = run("secrets", *args).stdout
         body += ("---\n" + s) if s else ""
         f.write_text(body)
@@ -277,7 +293,8 @@ for label, args in variants.items():
 
 # 8. launchers, found by what makes them one
 FLAGS = ("--typed-mode", "--typed-jev-key-file", "--typed-model-url",
-         "--typed-model-name", "--typed-model-key-file", "--typed-model-cidr")
+         "--typed-model-name", "--typed-model-key-file", "--typed-model-cidr",
+         "--typed-training")
 tracked = subprocess.run(["git", "ls-files", "*.sh"], capture_output=True, text=True).stdout.split()
 # A launcher is a script that applies the manifests to a cluster it is talking to
 # (the same subject deploy-flags-agree.sh finds) AND offers --with-typed. typed/mode.sh
@@ -312,6 +329,139 @@ for p in launchers:
     direct = [n for n, l in live if re.search(r"apply -f [^|]*manifests/5[12]-", l)]
     check("8 launchers render through typed/mode.sh", not direct,
           f"{p} line {direct[:1]} applies manifests/51 or 52 directly, bypassing the mode")
+    check("11 launchers hand --typed-training to typed/mode.sh",
+          any(re.search(r"TYPED_ARGS\+=\(--typed-training\)", l) for _, l in live),
+          f"{p} parses --typed-training but never adds it to the arguments it gives typed/mode.sh")
+
+# ---- the training log (typryx v0.3.0, TYPRYX_TRAINING_DIR) ------------------
+# Comments and blank lines are not configuration; the checks below read code.
+def code_of(text):
+    return re.sub(r"(?m)^\s*#.*$", "", text)
+
+def pvcs(text):
+    names = []
+    for doc in re.split(r"(?m)^---\s*$", text):
+        if re.search(r"(?m)^kind: PersistentVolumeClaim\s*$", doc):
+            m = re.search(r"(?m)^  name: ([\w.-]+)\s*$", doc)
+            names.append(m.group(1) if m else "?")
+    return names
+
+# 9. off unless asked, and asking adds an environment variable and nothing else
+import difflib
+for label, args in variants.items():
+    off = run("render", *args).stdout
+    on_r = run("render", *args, "--typed-training")
+    on = on_r.stdout
+    check("9 training is off unless asked", on_r.returncode == 0 and on != "",
+          f"{label}: --typed-training did not render (exit {on_r.returncode}): {on_r.stderr.strip()[:160]}")
+    check("9 training is off unless asked", "TYPRYX_TRAINING_DIR" not in code_of(off),
+          f"{label}: TYPRYX_TRAINING_DIR is rendered WITHOUT --typed-training")
+    check("9 training is off unless asked", on.count("TYPRYX_TRAINING_DIR") >= 1
+          and re.search(r'\{\s*name:\s*TYPRYX_TRAINING_DIR,\s*value:\s*"[^"]+"\s*\}', code_of(on)) is not None,
+          f"{label}: --typed-training does not set TYPRYX_TRAINING_DIR")
+    removed, added = [], []
+    for d in difflib.ndiff(off.splitlines(), on.splitlines()):
+        if d.startswith("- "):
+            removed.append(d[2:])
+        elif d.startswith("+ "):
+            added.append(d[2:])
+    check("10 training adds no volume, claim or policy", not removed,
+          f"{label}: --typed-training REMOVED lines from the render: {removed[:2]}")
+    stray = [l for l in added if l.strip() and not l.lstrip().startswith("#")
+             and "TYPRYX_TRAINING_DIR" not in l]
+    check("10 training adds no volume, claim or policy", not stray,
+          f"{label}: --typed-training added more than the variable: {stray[:2]}")
+
+# 10. where the directory lives
+for label, args in variants.items():
+    on = run("render", *args, "--typed-training").stdout
+    off = run("render", *args).stdout
+    code = code_of(on)
+    m = re.search(r'name:\s*TYPRYX_TRAINING_DIR,\s*value:\s*"([^"]+)"', code)
+    if not m:
+        continue  # already reported above
+    path = m.group(1)
+    mounts = re.findall(r"\{\s*name:\s*([\w-]+),\s*mountPath:\s*([^\s,}]+)([^}]*)\}", code)
+    under = [(n, mp, rest) for n, mp, rest in mounts
+             if path == mp.rstrip("/") or path.startswith(mp.rstrip("/") + "/")]
+    check("10 training has a writable home", bool(under),
+          f"{label}: TYPRYX_TRAINING_DIR={path} is under no volumeMount, and the root filesystem is read-only")
+    if under:
+        n, mp, rest = max(under, key=lambda t: len(t[1]))
+        check("10 training has a writable home", "readOnly" not in rest,
+              f"{label}: {path} is under {mp}, which is mounted read-only")
+        vol = re.search(r"(?m)^        - name: " + re.escape(n) + r"\n(          [^\n]*\n)+", on)
+        body = vol.group(0) if vol else ""
+        check("10 training has a writable home", vol is not None and
+              ("persistentVolumeClaim" in body or "emptyDir" in body),
+              f"{label}: the volume {n} behind {path} is neither a claim nor an emptyDir, so it is not writable")
+        check("10 training stays off the shared bus", "stack-events" not in body and n != "events",
+              f"{label}: the training log would live on the shared events claim, which other planes read")
+    check("10 no new disk", pvcs(on) == pvcs(off) == ["typryx-state"],
+          f"{label}: claims with the flag {pvcs(on)}, without {pvcs(off)}; only the typryx-state "
+          "manifests/51 already carries is allowed. A claim is a billed disk.")
+    check("10 no new disk", "volumeClaimTemplates" not in code and "kind: StatefulSet" not in code
+          and on.count("emptyDir") == off.count("emptyDir"),
+          f"{label}: --typed-training added a volume source")
+
+# 11. it is refused when there is no typryx to write a log, and never silently
+for label, args in (
+    ("no mode at all", ["--typed-training"]),
+    ("--typed-mode off", ["--typed-mode", "off", "--typed-training"]),
+):
+    r = run("check", *args)
+    check("11 training needs typryx", r.returncode != 0 and "--typed-training" in r.stderr,
+          f"{label}: accepted (exit {r.returncode}) or did not name the flag")
+    check("11 training needs typryx", run("render", *args).stdout == "", f"{label}: still rendered")
+for label, args in (("stub", ["--with-typed"]), ("jev", JEV), ("own-model", OWN)):
+    r = run("check", *args, "--typed-training")
+    check("11 training says what it does", r.returncode == 0 and "training" in r.stderr.lower()
+          and "no new disk" in r.stderr.lower(),
+          f"{label}: `check --typed-training` exited {r.returncode} and did not say where the log lives")
+    check("11 training says what it does", "training" not in run("check", *args).stderr.lower(),
+          f"{label}: the notice talks about a training log nobody asked for")
+    check("11 training leaves the mode alone",
+          run("mode", *args, "--typed-training").stdout == run("mode", *args).stdout
+          and run("secrets", *args, "--typed-training").stdout == run("secrets", *args).stdout
+          and run("has-secrets", *args, "--typed-training").stdout == run("has-secrets", *args).stdout,
+          f"{label}: --typed-training changed the mode, the Secrets or has-secrets")
+
+# 12. one typryx tag everywhere, and it is one that reads TYPRYX_TRAINING_DIR
+MIN_TYPRYX = (0, 3, 0)
+refs = []
+for path in subprocess.run(["git", "ls-files"], capture_output=True, text=True).stdout.split():
+    # GOTCHAS.md is the dated ledger: entry 106 names v0.1.0 because that is what was
+    # pinned when the trap was met, and history is not reworded in place.
+    # The two scripts that hold this rule carry stale tags as text on purpose (the
+    # harness plants one to prove this check fails on it), so they are not pins.
+    if path in ("GOTCHAS.md", "scripts/gates-have-teeth.sh", "scripts/typed-mode-is-honest.sh"):
+        continue
+    try:
+        text = pathlib.Path(path).read_text()
+    except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
+        continue
+    for lineno, line in enumerate(text.splitlines(), 1):
+        # Only a TAGGED reference is a pin; a bare image name in prose is not.
+        for mm in re.finditer(r"ghcr\.io/taipanbox/typryx:([^\s\"'`,)]+)", line):
+            refs.append((path, lineno, mm.group(1)))
+if not refs:
+    print("FAIL: no reference to ghcr.io/taipanbox/typryx in any tracked file, so this measured nothing "
+          "about the typryx pin.")
+    sys.exit(1)
+tags = sorted({t for _, _, t in refs})
+check("12 one typryx tag", len(tags) == 1,
+      f"typryx is referenced at {len(tags)} different tags {tags}: "
+      + ", ".join(f"{p}:{n}={t}" for p, n, t in refs[:6]))
+for t in tags:
+    mv = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", t or "")
+    check("12 typryx reads the training variable",
+          mv is not None and tuple(int(x) for x in mv.groups()) >= MIN_TYPRYX,
+          f"typryx tag {t!r} is older than v{'.'.join(map(str, MIN_TYPRYX))}, which is where "
+          "TYPRYX_TRAINING_DIR starts to exist; an older image ignores it and writes nothing")
+for label, args in every.items():
+    img = re.findall(r"image: (ghcr\.io/taipanbox/typryx:\S+)", run("render", *args).stdout)
+    check("12 one typryx tag", len(img) == 1 and (not tags or img[0].endswith(":" + tags[0])),
+          f"{label}: the render's typryx image is {img}")
 
 shutil.rmtree(tmp, ignore_errors=True)
 if errors:
@@ -322,5 +472,7 @@ if errors:
     sys.exit(1)
 print(f"OK: typed/mode.sh renders nothing by default, the stub for --with-typed alone, refuses a jev "
       f"key file that is missing or empty, never renders a key as a literal, and {rendered} modes "
-      f"validate strictly; {len(launchers)} launcher(s) parse every flag and refuse before installing.")
+      f"(each with and without the training log) validate strictly; the training log adds one variable "
+      f"and no disk; {len(launchers)} launcher(s) parse every flag and refuse before installing; "
+      f"{len(refs)} typryx image reference(s) agree on {tags[0]}.")
 PY

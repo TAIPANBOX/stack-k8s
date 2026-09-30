@@ -27,6 +27,9 @@
 #            --typed-model-cidr CIDR      own-model only; optional; the network
 #                                         the egress rule admits, for a model
 #                                         named by a host name on your own LAN
+#            --typed-training             opt in to typryx's local training log
+#                                         (TYPRYX_TRAINING_DIR); off by default;
+#                                         needs typryx deployed (any mode but off)
 #
 # `@decided 2026-09-30`: a customer chooses where the data of a typed answer
 # goes, from three modes, and the launchers ask.
@@ -61,8 +64,24 @@
 # The door key (`typryx-keys`, TYPRYX_KEYS) is unchanged and still operator
 # made, in every mode; 51-typryx.yaml's header shows the command.
 #
-# NOT DONE HERE: TYPRYX_TRAINING_DIR (an opt-in local training log) is planned
-# in typryx and needs a release first. Nothing here sets it.
+# THE TRAINING LOG. `@decided 2026-09-30`: typryx keeps an opt-in local log of
+# the questions it answered, so a customer can fine-tune and calibrate a model of
+# their own on their own data; we do not train or ship models. --typed-training
+# sets TYPRYX_TRAINING_DIR (typryx v0.3.0 or later) and changes nothing else: one
+# environment variable and its comment, in any mode. Without the flag no mode
+# renders it, and the render is byte for byte what it was before the flag existed.
+#
+# WHERE IT LIVES, AND WHY THERE IS NO NEW DISK. A PersistentVolumeClaim
+# provisions a real disk that is billed from creation (00-base.yaml, GOTCHAS 81),
+# so a flag must not add one: that is the operator's spending decision. The
+# directory is a subdirectory of the claim typryx ALREADY has, `typryx-state`,
+# which holds its ledger at /var/lib/typryx/ledger. That is also the only place
+# it is useful: a log is paired with the human truths recorded on the ledger
+# (`typryx export --training`), so a log on storage that dies with the pod, next
+# to a ledger that survives it, would be a log with nothing to pair with. It is
+# NOT put on stack-events, the shared bus other planes read: it holds question
+# text. It lives as long as that claim does. scripts/typed-mode-is-honest.sh
+# holds all of this.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -87,9 +106,12 @@ MODEL_URL=""
 MODEL_NAME=""
 MODEL_KEY_FILE=""
 MODEL_CIDR=""
+TRAINING=0
+TRAINING_DIR="/var/lib/typryx/training"
 while [ $# -gt 0 ]; do
   case "$1" in
     --with-typed) WITH_TYPED=1; shift ;;
+    --typed-training) TRAINING=1; shift ;;
     --typed-mode|--typed-jev-key-file|--typed-model-url|--typed-model-name|--typed-model-key-file|--typed-model-cidr)
       [ $# -ge 2 ] && [ -n "$2" ] || refuse "$1 needs a value"
       case "$1" in
@@ -123,6 +145,10 @@ case "$MODE" in
   jev|own-model) EFFECTIVE="$MODE" ;;
   *) refuse "unknown --typed-mode '$MODE': it is jev, own-model or off" ;;
 esac
+
+if [ "$TRAINING" = 1 ] && [ "$EFFECTIVE" = off ]; then
+  refuse "--typed-training needs typryx deployed to write a log: add --with-typed, or choose --typed-mode jev or own-model"
+fi
 
 if [ "$EFFECTIVE" != jev ] && [ -n "$JEV_KEY_FILE" ]; then
   refuse "--typed-jev-key-file only goes with --typed-mode jev (this run is: $EFFECTIVE)"
@@ -235,16 +261,37 @@ render_typryx() { # env-fragment mount-fragment volume-fragment
   printf '%s\n' "$out"
 }
 
+# The training log is ONE environment variable on the container. It adds no volume:
+# TRAINING_DIR is under /var/lib/typryx, the mount of the typryx-state claim the
+# ledger already uses (see the header). Given an environment fragment, print it
+# with the training variable after it when --typed-training was given, unchanged
+# otherwise, so that a run without the flag renders what it always did.
+with_training() { # env-fragment
+  printf '%s' "$1"
+  if [ "$TRAINING" = 1 ]; then
+    printf '\n            # Opt-in local training log (--typed-training), typryx v0.3.0 or later: the egressed state of\n'
+    printf '            # each answered question, never the backend answer. A directory on the typryx-state claim the\n'
+    printf '            # ledger already uses: no new disk, and it lives as long as that claim.\n'
+    printf '            - { name: TYPRYX_TRAINING_DIR, value: "%s" }' "$TRAINING_DIR"
+  fi
+  printf '\n'
+}
+
 render() {
   case "$EFFECTIVE" in
     off) return 0 ;;
     stub)
-      cat "$M51"; printf -- '---\n'; cat "$M52" ;;
+      if [ "$TRAINING" = 1 ]; then
+        render_typryx "$(with_training '            - { name: TYPRYX_BACKEND, value: "stub" }')" "" ""
+      else
+        cat "$M51"
+      fi
+      printf -- '---\n'; cat "$M52" ;;
     jev)
       render_typryx \
-        '            - { name: TYPRYX_BACKEND, value: "jev" }
+        "$(with_training '            - { name: TYPRYX_BACKEND, value: "jev" }
             # The key is a FILE mounted from the typryx-jev-key Secret, never an environment value.
-            - { name: TYPRYX_JEV_KEY_FILE, value: "/etc/typryx/jev/key" }' \
+            - { name: TYPRYX_JEV_KEY_FILE, value: "/etc/typryx/jev/key" }')" \
         '            - { name: jev-key, mountPath: /etc/typryx/jev, readOnly: true }' \
         '        - name: jev-key
           secret: { secretName: typryx-jev-key, defaultMode: 0440 }'
@@ -262,7 +309,7 @@ render() {
         vol_frag='        - name: model-key
           secret: { secretName: typryx-model-key, defaultMode: 0440 }'
       fi
-      render_typryx "$env_frag" "$mount_frag" "$vol_frag"
+      render_typryx "$(with_training "$env_frag")" "$mount_frag" "$vol_frag"
       printf -- '---\n'; cat "$M52"
       case "$HOSTKIND" in
         ip)    cidr="$HOST/32"; if [ -n "$MODEL_CIDR" ]; then cidr="$MODEL_CIDR"; fi
@@ -304,6 +351,9 @@ has_secrets() {
 }
 
 notice() {
+  if [ "$TRAINING" = 1 ]; then
+    printf 'typed: training log ON (--typed-training). typryx appends the egressed state of each answered question to training.ndjson in %s, on the typryx-state claim it already has: no new disk, and the log lives as long as that claim.\n       It never holds the backend'"'"'s answer. Read how to export it, and why it adds no disk, in README "Typed answers: choose where your data goes".\n' "$TRAINING_DIR" >&2
+  fi
   case "$EFFECTIVE" in
     jev)
       printf 'typed: mode jev. The named fields of every typed question leave the cluster for TypeSafe'"'"'s hosted API, a paid service billed to your key.\n       typryx caps calls at TYPRYX_MAX_CALLS_PER_HOUR (default 1000). The key is a Secret mounted as a file and is never printed.\n' >&2 ;;

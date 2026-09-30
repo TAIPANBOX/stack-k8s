@@ -48,7 +48,9 @@
 # the same credential either way.
 #
 # Needs typryx v0.2.0 or later: v0.1.0 predates typryx#6 and ignores this
-# variable (GOTCHAS 106). @measured on kind v0.33, 2026-09-26,
+# variable (GOTCHAS 106). This file pins v0.3.0, the first release that also
+# reads TYPRYX_TRAINING_DIR (below) and accepts a distribution rounded to four
+# decimals. @measured on kind v0.33, 2026-09-26,
 # with 30-network-policy.yaml, 51-typryx.yaml and 52-tokenfuse-mcp-broker.yaml applied as committed: an ask
 # through the broker, its key only a `{{secret:typryx_key}}` handle, was
 # answered.
@@ -78,6 +80,14 @@
 #
 # but a later `apply -f` of this file puts the stub back, the trap invariant 24
 # names for `kubectl patch`. Use the launcher flags.
+#
+# The opt-in training log (`--typed-training`, `@decided 2026-09-30`) is not in
+# this file either: typed/mode.sh adds ONE environment variable,
+# `TYPRYX_TRAINING_DIR=/var/lib/typryx/training`, and nothing else. That is a
+# directory on the `typryx-state` claim below, which the ledger already uses, so
+# it provisions no new disk (a claim is billed from creation) and it lives as
+# long as that claim. It is NOT on `stack-events`, the shared bus other planes
+# read, because it holds question text. Off, this file is unchanged.
 #
 # `TYPRYX_MAX_CALLS_PER_HOUR` is left unset on purpose: the image's own
 # default of 1000 is a sane ceiling and this file has no reason to move it.
@@ -194,7 +204,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: typryx
-          image: ghcr.io/taipanbox/typryx:v0.2.0
+          image: ghcr.io/taipanbox/typryx:v0.3.0
           imagePullPolicy: IfNotPresent
           # ENTRYPOINT defaults to `serve`; TYPRYX_ADDR and TYPRYX_TEMPLATES
           # are baked into the image (0.0.0.0:4320, the three example
