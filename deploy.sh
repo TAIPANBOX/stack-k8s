@@ -63,6 +63,12 @@
 #              `--typed-model-cidr CIDR` (the network the egress rule admits, for
 #              a model named by a host name on your LAN) are optional.
 #   off        nothing is deployed for typryx.
+# `--typed-training` (off by default; any mode but off) opts in to typryx's local
+# training log, TYPRYX_TRAINING_DIR (`@decided 2026-09-30`): the egressed state
+# of each answered question, for fine-tuning a model of your own on your own
+# data. It adds one environment variable and NO disk: the log is a directory on
+# the typryx-state claim typryx already has, and lives as long as that claim. A
+# claim of its own would be a billed disk, which is your decision, not a flag's.
 # typed/mode.sh holds the validation and the rendering, one copy for all three
 # launchers; see README.md, "Typed answers: choose where your data goes".
 set -euo pipefail
@@ -120,6 +126,8 @@ TYPED_MODEL_URL="${TYPED_MODEL_URL:-}"
 TYPED_MODEL_NAME="${TYPED_MODEL_NAME:-}"
 TYPED_MODEL_KEY_FILE="${TYPED_MODEL_KEY_FILE:-}"
 TYPED_MODEL_CIDR="${TYPED_MODEL_CIDR:-}"
+# typryx's opt-in local training log; off unless asked (typed/mode.sh).
+TYPED_TRAINING="${TYPED_TRAINING:-0}"
 REF="${REF:-main}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
 REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/TAIPANBOX/stack-k8s}"
@@ -150,6 +158,7 @@ while [ $# -gt 0 ]; do
     --typed-model-name)     TYPED_MODEL_NAME="$2"; shift 2 ;;
     --typed-model-key-file) TYPED_MODEL_KEY_FILE="$2"; shift 2 ;;
     --typed-model-cidr)     TYPED_MODEL_CIDR="$2"; shift 2 ;;
+    --typed-training)       TYPED_TRAINING=1; shift ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     -h|--help)       awk 'NR>1 && /^#/ {print; next} NR>1 {exit}' "$0" | sed -E 's/^# ?//'; exit 0 ;;
@@ -211,6 +220,7 @@ TYPED_ARGS=()
 [ -n "$TYPED_MODEL_NAME" ] && TYPED_ARGS+=(--typed-model-name "$TYPED_MODEL_NAME")
 [ -n "$TYPED_MODEL_KEY_FILE" ] && TYPED_ARGS+=(--typed-model-key-file "$TYPED_MODEL_KEY_FILE")
 [ -n "$TYPED_MODEL_CIDR" ] && TYPED_ARGS+=(--typed-model-cidr "$TYPED_MODEL_CIDR")
+[ "$TYPED_TRAINING" = 1 ] && TYPED_ARGS+=(--typed-training)
 "$ROOT/typed/mode.sh" check ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} \
   || die "the typed-answer flags were refused, so nothing has been installed yet."
 TYPED_EFFECTIVE="$("$ROOT/typed/mode.sh" mode ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"})"

@@ -933,6 +933,72 @@ run_case "typed-mode-is-honest: typed/mode.sh taken away" fail \
 os.remove("typed/mode.sh")')" \
 	"measured nothing"
 
+# The training log (invariant 26, typryx v0.3.0): off unless asked, one variable
+# and no disk when on. A default that leaks it, an extra object riding in with
+# it, a real PersistentVolumeClaim (a billed disk) riding in with it, a
+# directory on no mount, a directory on the shared events bus, the flag accepted
+# with no typryx to write it, a launcher that loses or stops forwarding the flag,
+# a stale typryx pin, a second tag in a document, the pin subject gone, and a
+# harmless comment (must pass).
+run_case "typed-mode-is-honest: the training log is on without the flag" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "TRAINING=0\nTRAINING_DIR=", "TRAINING=1\nTRAINING_DIR=")')" \
+	"WITHOUT --typed-training"
+
+run_case "typed-mode-is-honest: the training flag brings another object" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "printf \x27            - { name: TYPRYX_TRAINING_DIR, value: \"%s\" }\x27 \"$TRAINING_DIR\"", "printf \x27            - { name: TYPRYX_TRAINING_DIR, value: \"%s\" }\n            - { name: TYPRYX_EXTRA, value: \"x\" }\x27 \"$TRAINING_DIR\"")')" \
+	"added more than the variable"
+
+run_case "typed-mode-is-honest: the training flag provisions a claim" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "      printf -- \x27---\\n\x27; cat \"$M52\" ;;\n    jev)", "      printf -- \x27---\\n\x27; cat \"$M52\"; if [ \"$TRAINING\" = 1 ]; then printf -- \x27---\\napiVersion: v1\\nkind: PersistentVolumeClaim\\nmetadata:\\n  name: typryx-training\\n\x27; fi ;;\n    jev)")')" \
+	"A claim is a billed disk"
+
+run_case "typed-mode-is-honest: the training directory is under no mount" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "TRAINING_DIR=\"/var/lib/typryx/training\"", "TRAINING_DIR=\"/srv/training\"")')" \
+	"is under no volumeMount"
+
+run_case "typed-mode-is-honest: the training log lands on the shared bus" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "TRAINING_DIR=\"/var/lib/typryx/training\"", "TRAINING_DIR=\"/var/lib/stack/events/training\"")')" \
+	"shared events claim"
+
+run_case "typed-mode-is-honest: the training flag is accepted with no typryx" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "if [ \"$TRAINING\" = 1 ] && [ \"$EFFECTIVE\" = off ]; then", "if false; then")')" \
+	"11 training needs typryx"
+
+run_case "typed-mode-is-honest: a launcher loses --typed-training" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "    --typed-training)       TYPED_TRAINING=1; shift ;;\n", "")')" \
+	"does not parse --typed-training"
+
+run_case "typed-mode-is-honest: a launcher stops forwarding --typed-training" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("deploy.sh", "[ \"$TYPED_TRAINING\" = 1 ] && TYPED_ARGS+=(--typed-training)\n", "")')" \
+	"never adds it to the arguments"
+
+run_case "typed-mode-is-honest: the typryx pin goes back before the training log" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.3.0", "image: ghcr.io/taipanbox/typryx:v0.2.0")')" \
+	"older than v0.3.0"
+
+run_case "typed-mode-is-honest: a document names a second typryx tag" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("README.md", "### The typed-answer plane\n", "### The typed-answer plane\n\nOlder: ghcr.io/taipanbox/typryx:v0.3.1\n")')" \
+	"different tags"
+
+run_case "typed-mode-is-honest: the typryx image is no longer named" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.3.0", "image: example.invalid/typ:v0.3.0")')" \
+	"measured nothing about the typryx pin"
+
+run_case "typed-mode-is-honest: a comment in the training section changes" pass \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "# WHERE IT LIVES, AND WHY THERE IS NO NEW DISK.", "# WHERE IT LIVES, AND WHY THERE IS NO NEW DISK, in short.")')"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'

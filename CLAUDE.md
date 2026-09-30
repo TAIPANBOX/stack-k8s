@@ -676,8 +676,20 @@ an absent invariant.
     24's reason: `kubectl patch` leaves the last-applied annotation alone, so a
     later apply of the stub would leave the patched backend in place.
 
-    `TYPRYX_TRAINING_DIR` (typryx's opt-in local training log) is planned in
-    typryx and needs a release first; nothing here sets it.
+    **The training log is opt-in and adds no disk.** `@decided 2026-09-30`: a
+    customer can fine-tune and calibrate a model of their own on their own data,
+    and typryx v0.3.0's `TYPRYX_TRAINING_DIR` is what gives them the data;
+    `--typed-training` (off by default, any mode but off) sets it, on all three
+    launchers through `typed/mode.sh`. Off, every mode renders exactly what it
+    did before the flag existed. On, a mode gains that one variable and its
+    comment and nothing else: the directory is `/var/lib/typryx/training`, on the
+    `typryx-state` claim typryx already had for its ledger, because a
+    PersistentVolumeClaim is a billed disk from creation (`00-base.yaml`, GOTCHAS
+    81) and so a spending decision the operator makes, never a flag's side
+    effect. It is not on `stack-events`, the shared bus other planes read, since
+    it holds question text, and it lives as long as the `typryx-state` claim. The
+    pin is v0.3.0 everywhere, because an older image ignores the variable and
+    writes nothing while the render says otherwise.
 
     **What it does not cover.** No cluster was involved: that the pod starts
     with the mounted Secret, and that the egress rule reaches a real model, need
@@ -687,13 +699,21 @@ an absent invariant.
     repository's own initiative); `--typed-mode off` does not remove a typryx an
     earlier run installed.
     *(gate: `scripts/typed-mode-is-honest.sh`, run in both callers after
-    kubeconform is installed. Eleven cases in `scripts/gates-have-teeth.sh`: a
+    kubeconform is installed. Twenty-three cases in `scripts/gates-have-teeth.sh`: a
     missing key file accepted, a blank one accepted, the key as an environment
     value, the committed default leaving the stub, a ConfigMap in a render,
     manifests/51 drifting from the three lines the modes rewrite, a launcher
     losing a flag, a launcher not checking before it installs, a launcher
     applying manifests/51 around the mode, a harmless comment (must pass), and
-    the subject taken away. Scenarios in
+    the subject taken away; then for the training log: it on without the flag,
+    another object riding in with it, a real PersistentVolumeClaim riding in with
+    it, a directory under no mount, a directory on the shared bus, the flag
+    accepted with no typryx, a launcher losing it, a launcher not forwarding it,
+    the pin going back to v0.2.0, a second tag in a document, the pin subject
+    gone, and a harmless comment (must pass). The pin check reads every tracked
+    file except `GOTCHAS.md`, the dated ledger, which keeps the tag that was
+    current when each entry was written, and the two scripts that plant a stale
+    tag as text to prove the check fails on it. Scenarios in
     `features/typed-answers-choose-where-your-data-goes.feature`.)*
 
 ## Decisions that have no gate yet
