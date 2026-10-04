@@ -37,10 +37,16 @@ Feature: a typed risk signal reaches a policy hold only through the MCP broker
     # -> gates-have-teeth.sh "typed-mode-is-honest: the broker keeps asking wardryx directly", "typed-mode-is-honest: the broker fails open" and "typed-mode-is-honest: the broker uses the admin key"
 
   Scenario: the broker waits longer than the proxy may take
-    Given the proxy may take 1000 ms to ask typryx before it forwards without a signal
-    When the broker's own wait is not longer
+    Given the proxy may take 3000 ms to ask typryx, and up to 5000 ms if raised, before it forwards without a signal
+    When the broker's own wait is not longer than that longest ask
     Then the gate fails, because every slow answer would turn into a refusal
-    # -> gates-have-teeth.sh "typed-mode-is-honest: the broker waits less than the proxy may take"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the broker waits less than the proxy may take" and "typed-mode-is-honest: the broker waits less than the proxy's longest ask"
+
+  Scenario: the proxy's deadline is too short for an own model on CPU
+    Given an own model on CPU measured a median of 2,130 ms
+    When the proxy's ask deadline is 1000 ms
+    Then the gate fails, because most own-model answers would be dropped
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the proxy's ask deadline is too short for an own model"
 
   Scenario: the proxy answers from the backend the operator chose
     Given the typed mode chose jev or an own model

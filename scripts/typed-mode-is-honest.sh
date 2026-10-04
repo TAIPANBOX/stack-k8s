@@ -481,6 +481,8 @@ def doc_named(rendered, kind, name):
 
 
 RISK = ["--typed-risk-signal"]
+# typryx v0.4.0 refuses TYPRYX_PROXY_ASK_TIMEOUT_MS above this (cmd/typryx/wardryxproxy.go).
+PROXY_MAX_ASK_MS = 5000
 
 # 13. off unless asked
 for label, args in variants.items():
@@ -567,8 +569,12 @@ for label, args in risk_variants.items():
           f"{label}: the broker does not use the viewer key wardryx_gateway: {benv.get('TOKENFUSE_WARDRYX_KEY')!r}")
     try:
         mcp_ms, ask_ms = int(benv["TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS"]), int(penv["TYPRYX_PROXY_ASK_TIMEOUT_MS"])
-        check("14 deadlines nest", mcp_ms > ask_ms,
-              f"{label}: the broker waits {mcp_ms} ms for a proxy that may take {ask_ms} ms to ask typryx")
+        check("14 deadlines nest", mcp_ms > max(ask_ms, PROXY_MAX_ASK_MS),
+              f"{label}: the broker waits {mcp_ms} ms for a proxy that may take {ask_ms} ms to ask typryx "
+              f"(and up to {PROXY_MAX_ASK_MS} ms if raised): the wait must exceed the longest ask")
+        check("14 deadlines fit the backends", ask_ms >= 3000,
+              f"{label}: the proxy's ask deadline is {ask_ms} ms; an own model on CPU measured p50 2,130 ms "
+              "(typryx-evalset bench), so below 3000 ms most own-model answers are dropped")
     except (KeyError, ValueError):
         check("14 deadlines nest", False, f"{label}: the broker's or the proxy's deadline is not set")
     check("14 broker only", sum(1 for v in [env_of(d).get("TOKENFUSE_WARDRYX_URL") for d in docs_of(out)]

@@ -1219,12 +1219,22 @@ run_case "typed-mode-is-honest: the broker uses the admin key" fail \
 
 run_case "typed-mode-is-honest: the broker waits less than the proxy may take" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"1500\\\"", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"500\\\"")')" \
+	"$(py 'edit("typed/mode.sh", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"7000\\\"", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"500\\\"")')" \
 	"14 deadlines nest"
+
+run_case "typed-mode-is-honest: the broker waits less than the proxy's longest ask" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"7000\\\"", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"4000\\\"")')" \
+	"the wait must exceed the longest ask"
+
+run_case "typed-mode-is-honest: the proxy's ask deadline is too short for an own model" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"3000\"", "TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"1000\"")')" \
+	"most own-model answers are dropped"
 
 run_case "typed-mode-is-honest: the proxy gets a journal on the shared bus" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "            - \x7b name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"1000\" \x7d\n", "            - \x7b name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"1000\" \x7d\n            - \x7b name: TYPRYX_EVENTS, value: \"/var/lib/stack/events/typryx.ndjson\" \x7d\n")')" \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "            - \x7b name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"3000\" \x7d\n", "            - \x7b name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"3000\" \x7d\n            - \x7b name: TYPRYX_EVENTS, value: \"/var/lib/stack/events/typryx.ndjson\" \x7d\n")')" \
 	"the proxy sets TYPRYX_EVENTS"
 
 run_case "typed-mode-is-honest: the proxy inherits the training log" fail \

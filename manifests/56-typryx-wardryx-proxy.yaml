@@ -74,13 +74,18 @@
 #
 # `TYPRYX_PROXY_ASK_TIMEOUT_MS` is the most a slow typryx may add to one decision,
 # and past it the request is forwarded untouched (no signal, never a refusal).
-# The proxy's own default is 150 ms, which a hosted backend with a median near
-# 230 ms (the 2026-09-30 Jev measurement) would miss most of the time, silently
-# leaving every `hold_if_signal` rule with nothing to read. 1000 ms is set here,
-# and the broker's own wait for this proxy is 1500 ms
-# (`TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS`, added by typed/mode.sh). Both are
-# `@claude` figures for the MCP path, not measured; the LLM gateway's 250 ms is
-# untouched because it does not come through here.
+# The proxy's own default is 150 ms, which neither real backend would meet: Jev's
+# median is near 230 ms, and an own model on CPU is slower still (measured p50
+# 2,130 ms for qwen2.5:7b on 8 vCPU, typryx-evalset bench, 2026-09-30), so 1000
+# ms would drop most own-model answers and silently leave every `hold_if_signal`
+# rule with nothing to read. 3000 ms is set here (the proxy accepts at most 5000
+# ms), and the broker's own wait for this proxy is 7000 ms
+# (`TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS`, added by typed/mode.sh): it must exceed
+# the proxy's LONGEST possible ask (5000 ms), not only the configured one, so
+# that raising the ask can never turn a slow answer into a refusal. The same
+# figures stack-single uses (stack-single#88). Chosen from those two
+# measurements, not measured on a cluster; the LLM gateway's 250 ms is untouched
+# because it does not come through here.
 #
 # ## The NetworkPolicies, one pair per edge
 #
@@ -132,7 +137,7 @@ spec:
             - { name: TYPRYX_ALLOW_OPEN_BIND, value: "1" }
             # wardryx's own Service, the same URL the gateway uses.
             - { name: TYPRYX_PROXY_UPSTREAM, value: "http://wardryx:8090" }
-            - { name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: "1000" }
+            - { name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: "3000" }
           ports: [{ name: proxy, containerPort: 4330 }]
           volumeMounts:
             - { name: tmp, mountPath: /tmp }

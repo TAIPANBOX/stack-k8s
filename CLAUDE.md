@@ -836,10 +836,14 @@ an absent invariant.
     `TYPRYX_ALLOW_OPEN_BIND=1` because it must bind the pod address and the broker
     can send only an `Authorization` header, never `X-Typryx-Key`, so its door is
     the one NetworkPolicy that admits the broker alone (four edges: broker ->
-    proxy -> wardryx, one peer and one port each); the proxy's ask deadline is 1000
-    ms and the broker's wait 1500 ms, not the proxy's default 150, which a hosted
-    backend with a median near 230 ms would miss most of the time and leave every
-    rule with nothing to read; the broker fails closed.
+    proxy -> wardryx, one peer and one port each); the proxy's ask deadline is 3000
+    ms (typryx accepts at most 5000) and the broker's wait 7000 ms, the figures
+    stack-single uses (stack-single#88), not the proxy's default 150: Jev's median
+    is near 230 ms, and an own model on CPU measured p50 2,130 ms (qwen2.5:7b, 8
+    vCPU, typryx-evalset bench, 2026-09-30), so 1000 ms would drop most own-model
+    answers and leave every rule with nothing to read. The broker's wait must
+    exceed the proxy's LONGEST ask (5000), not only the configured one; the
+    broker fails closed.
     *(gate: `scripts/typed-mode-is-honest.sh`, sections 13 to 15, with the stub,
     jev and own-model modes each rendered with the flag, two of them with the
     training log too; 21 cases in `scripts/gates-have-teeth.sh`; scenarios in

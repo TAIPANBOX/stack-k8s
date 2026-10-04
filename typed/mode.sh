@@ -355,8 +355,8 @@ render_broker() {
       print "            - { name: TOKENFUSE_WARDRYX_FAILMODE, value: \"closed\" }"
       print "            - { name: TOKENFUSE_WARDRYX_TIMEOUT_MS, value: \"250\" }"
       print "            # A tool call may wait longer than a model call: the proxy'"'"'s own ask may take up to"
-      print "            # TYPRYX_PROXY_ASK_TIMEOUT_MS (1000) before it forwards without a signal."
-      print "            - { name: TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \"1500\" }"
+      print "            # TYPRYX_PROXY_ASK_TIMEOUT_MS (3000, at most 5000) before it forwards without a signal."
+      print "            - { name: TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \"7000\" }"
       print "            - { name: TOKENFUSE_WARDRYX_CACHE_TTL_MS, value: \"3000\" }"
       n++; next
     }

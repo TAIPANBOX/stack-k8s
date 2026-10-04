@@ -513,8 +513,10 @@ schema-valid manifests (`kubeconform --strict`), the gate in
 a container against a stand-in wardryx. A pod behind these NetworkPolicies, wardryx
 holding a real call on a real signal, the broker's decision reaching the proxy in
 a cluster, and the latency the proxy adds with a hosted backend, have not been run
-through these launchers. The proxy's ask deadline (1000 ms) and the broker's wait
-(1500 ms) are chosen, not measured. The proxy binds the pod address with
+through these launchers. The proxy's ask deadline (3000 ms) and the broker's wait
+(7000 ms, longer than the most the proxy will accept, 5000 ms) are chosen from
+the Jev median (about 230 ms) and an own model's measured median on CPU (2,130 ms
+for qwen2.5:7b on 8 vCPU), not measured on a cluster. The proxy binds the pod address with
 `TYPRYX_ALLOW_OPEN_BIND=1`, because the broker cannot send an `X-Typryx-Key`; its
 door is the one NetworkPolicy that admits the broker alone.
 
