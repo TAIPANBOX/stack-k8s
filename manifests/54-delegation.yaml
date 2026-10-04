@@ -90,7 +90,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: vouchryx
-          image: ghcr.io/taipanbox/vouchryx:v0.1.0
+          image: ghcr.io/taipanbox/vouchryx:v0.2.0
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/vouchryx"]
           env:

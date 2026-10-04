@@ -55,7 +55,7 @@ spec:
           # 2026-09-02 on v0.4.3, the published
           # image carries /usr/local/bin/tokenfuse-cloud exactly as the local
           # build did.
-          image: ghcr.io/taipanbox/tokenfuse-control-plane:v1.4.1
+          image: ghcr.io/taipanbox/tokenfuse-control-plane:v1.5.0
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse-cloud"]
           env:
@@ -183,7 +183,7 @@ spec:
           # called `tokenfuse`. Measured 2026-09-01 on v0.4.1 and 2026-09-02 on
           # v0.4.3 by listing /usr/local/bin
           # in the published image, which is the only way to know.
-          image: ghcr.io/taipanbox/tokenfuse:v1.4.1
+          image: ghcr.io/taipanbox/tokenfuse:v1.5.0
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse"]
           env:
@@ -221,6 +221,25 @@ spec:
             # enforce, not observe: an over-budget call gets a hard 402 rather
             # than a log line. This is the whole point of the gateway.
             - { name: TOKENFUSE_MODE, value: "enforce" }
+            # The operator's ceiling on a run's budget (tokenfuse v1.5.0,
+            # invariant 73). A run's budget used to come from
+            # `x-fuse-budget-usd`, the header the AGENT sends, and the next call
+            # of an open run could widen it: with no client keys, no identity
+            # map and no unit caps, the per-run ceiling was whatever the agent
+            # said. A budget that comes from the caller header, a policy default
+            # or the built-in default is lowered to this figure on every call; a
+            # caller may always ask for less, and the answer to a clamped call
+            # carries `x-fuse-budget-clamped`.
+            #
+            # 5.00 is the gateway's own built-in run budget, so an ordinary run
+            # is unchanged and only a caller-declared LARGER budget is clamped.
+            # It does NOT lower a budget the Cloud sets (tokenfuse does not clamp
+            # those), and it bounds each run, not an agent's total spend.
+            # `--run-budget-ceiling USD` on the three deploy scripts changes it,
+            # after the apply, because `kubectl apply -k` puts this figure back
+            # (the same ordering as TRAILRYX_TRUST_DOMAIN, invariant 14).
+            # scripts/run-budget-ceiling-is-set.sh holds it (invariant 28).
+            - { name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: "5.00" }
             # Two settings the gateway leaves OFF by default, and this stack
             # must not, because they are the difference between a deployment
             # that is governed and one that only looks governed.
@@ -350,7 +369,7 @@ spec:
           # one thing worth checking before swapping a distroless-looking image
           # in underneath it: measured 2026-09-01 on v0.4.1 and 2026-09-02 on
           # v0.4.3, the published image has one (/usr/bin/dash).
-          image: ghcr.io/taipanbox/tokenfuse:v1.4.1
+          image: ghcr.io/taipanbox/tokenfuse:v1.5.0
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
@@ -450,7 +469,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v1.1.3
+          image: ghcr.io/taipanbox/wardryx:v1.2.0
           imagePullPolicy: IfNotPresent
           # Single-dash flags, exactly as up.sh calls it.
           args:
@@ -553,7 +572,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: idryx
-          image: ghcr.io/taipanbox/idryx:v1.0.0
+          image: ghcr.io/taipanbox/idryx:v1.1.0
           imagePullPolicy: IfNotPresent
           # Double-dash flags here, and :8081 because idryx's own default 8080
           # collides with the cloud plane. Both quirks are up.sh's, kept so the

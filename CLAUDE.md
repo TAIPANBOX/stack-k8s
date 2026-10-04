@@ -110,9 +110,17 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/longhorn-releases-a-dead-node.sh # invariant 22; GOTCHAS 109
 ./scripts/hub-entry-is-narrow.sh  # invariant 23
 ./scripts/delegation-off-by-default.sh # invariant 24; GOTCHAS 105
-./scripts/typed-mode-is-honest.sh # invariant 26; needs kubeconform on PATH
+./scripts/felyx-through-the-gateway.sh # invariant 25
+./scripts/typed-mode-is-honest.sh # invariants 26 and 29; needs kubeconform on PATH
+./scripts/run-budget-ceiling-is-set.sh # invariant 28 (its flag half is deploy-flags-agree.sh)
+./scripts/bus-names-match-the-source-rule.sh # invariant 30
+./scripts/chain-verifier-watches-the-bus.sh # invariant 31
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
+
+`felyx-through-the-gateway.sh` was in both callers and missing from this list until
+2026-10-04, the same omission the paragraph below records for two others; the
+callers are authoritative, and every gate named here is in both.
 
 `manifest-is-true.sh` and `node-name-is-pinned.sh` were missing from this list until 2026-09-01, and
 `manifest-is-true.sh` was missing from both callers as well, so for its whole
@@ -689,8 +697,10 @@ an absent invariant.
     81) and so a spending decision the operator makes, never a flag's side
     effect. It is not on `stack-events`, the shared bus other planes read, since
     it holds question text, and it lives as long as the `typryx-state` claim. The
-    pin is v0.3.0 everywhere, because an older image ignores the variable and
-    writes nothing while the render says otherwise.
+    pin is v0.4.0 everywhere (v0.3.0 first read the variable; v0.4.0 is the first
+    release with the `wardryx-proxy` subcommand invariant 29 runs), because an
+    older image ignores the variable and writes nothing while the render says
+    otherwise.
 
     **What it does not cover.** No cluster was involved: that the pod starts
     with the mounted Secret, and that the egress rule reaches a real model, need
@@ -754,6 +764,145 @@ an absent invariant.
     `kubectl create --from-file=.../dev/stdin` and `patch --patch-file
     /dev/stdin` behave over ssh on a real k3s, which was checked only with a
     local `kubectl --dry-run=client`.)*
+
+28. **Every gateway container sets the operator's ceiling on a run's budget, and
+    the figure is one the gateway can start on.** tokenfuse v1.5.0 (its
+    invariant 73): a run's budget came from `x-fuse-budget-usd`, the header the
+    AGENT sends, and the next call of an open run could widen it, so in a
+    deployment with no client keys, no identity map and no unit caps the per-run
+    ceiling was whatever the agent said. `TOKENFUSE_MAX_RUN_BUDGET_USD` lowers a
+    budget that came from the caller header, a policy default or the built-in
+    default to that figure on every call; a caller may always ask for less, and
+    a clamped call's answer carries `x-fuse-budget-clamped`. Unset, the gateway
+    has no ceiling, which is what a launcher that forgot the variable ships
+    with nothing reporting it.
+
+    `10-planes.yaml` sets it to `5.00` as a literal on the gateway container
+    (the `focus-export` sidecar and the MCP broker run the same image with a
+    subcommand and are not gateways). `@claude 2026-10-04`: default 5.00 equals
+    tokenfuse's own DEFAULT_RUN_BUDGET, so an ordinary run is unchanged and only
+    a caller-declared larger budget is clamped. It is NOT set on
+    `tokenfuse-cloud` and does not lower a budget the Cloud sets (tokenfuse does
+    not clamp those), and it bounds each run, not an agent's total spend: an
+    agent that opens a new run id gets a new ceiling's worth.
+
+    `--run-budget-ceiling USD` (env `RUN_BUDGET_CEILING`) on all three deploy
+    scripts changes it. It is checked by `budget/ceiling.sh`, the one copy of the
+    validation (the gateway's own grammar: digits and up to six decimals, above
+    zero, no sign or exponent), BEFORE anything is installed, and applied AFTER
+    the last `apply -k` with `kubectl set env`, because `apply -k` puts the
+    declared `5.00` back over anything set before it or by hand (invariant 14's
+    trap, GOTCHAS 90). `set env` changes the pod template, so the gateway rolls
+    to the figure by itself, which a ConfigMap patch would not do for a variable
+    read at start. The price: a re-run that gives no flag rolls the gateway back
+    to 5.00, and one that gives it rolls the gateway twice (apply, then the
+    figure). `@claude 2026-10-04`.
+    *(gate: `scripts/run-budget-ceiling-is-set.sh` for the manifest and
+    `budget/ceiling.sh`, and `scripts/deploy-flags-agree.sh` for the flag, its
+    ordering and its check before the install; 13 and 3 cases in
+    `scripts/gates-have-teeth.sh`; scenarios in
+    `features/the-run-budget-ceiling-is-set.feature`. Not covered: a running
+    gateway clamping a call, which is tokenfuse's own test; and nothing was run
+    on a cluster.)*
+
+29. **The typed risk signal is off unless asked, and when on it is one stateless
+    proxy that only the MCP broker reaches.** `@decided 2026-10-04` (estate
+    audit, wave 1, J2): a typed risk signal may turn a call into a hold for a
+    person and never into a deny, its first consumer is wardryx (v1.2.0, rule
+    `hold_if_signal`), and the signal is recorded so a replay reproduces the
+    decision. `--typed-risk-signal` on the three launchers (through
+    `typed/mode.sh`, like the other typed flags) renders
+    `manifests/56-typryx-wardryx-proxy.yaml`: typryx v0.4.0's `wardryx-proxy`
+    subcommand as its own Deployment, which forwards every request to wardryx and,
+    for a `POST /v1/decide` carrying a pending tool call, adds typryx's answer to
+    the question "what risk class is this call" as a `signals` entry.
+
+    Off by default, and refused when the typed mode is off (nothing to ask).
+    Without the flag every render is byte for byte what it was. With it: the proxy
+    answers from the SAME backend the mode chose for typryx (the same three lines
+    rewritten, the same key Secret mounted, `typryx-egress-model` widened to
+    select both pods and no wider) and holds NO state of its own: no claim, no
+    journal, no ledger, no training log, not the shared bus (a second writer on
+    typryx's hash-chained journal would fork it, and the training log holds
+    question text while the proxy asks about tool-call arguments). Only the
+    broker's `TOKENFUSE_WARDRYX_URL` points at it, with the viewer key and fail
+    closed; the LLM gateway keeps asking wardryx directly, so a typed answer never
+    sits on the model path (J2-DESIGN: a model's median latency would miss the
+    gateway's 250 ms and, fail-closed, refuse calls). No `hold_if_signal` policy is
+    seeded; the README has an example. The broker, which asked wardryx nothing
+    before, now asks about EVERY tool call.
+
+    `@claude 2026-10-04`, choices the spec did not decide: the proxy runs with
+    `TYPRYX_ALLOW_OPEN_BIND=1` because it must bind the pod address and the broker
+    can send only an `Authorization` header, never `X-Typryx-Key`, so its door is
+    the one NetworkPolicy that admits the broker alone (four edges: broker ->
+    proxy -> wardryx, one peer and one port each); the proxy's ask deadline is 3000
+    ms (typryx accepts at most 5000) and the broker's wait 7000 ms, the figures
+    stack-single uses (stack-single#88), not the proxy's default 150: Jev's median
+    is near 230 ms, and an own model on CPU measured p50 2,130 ms (qwen2.5:7b, 8
+    vCPU, typryx-evalset bench, 2026-09-30), so 1000 ms would drop most own-model
+    answers and leave every rule with nothing to read. The broker's wait must
+    exceed the proxy's LONGEST ask (5000), not only the configured one; the
+    broker fails closed.
+    *(gate: `scripts/typed-mode-is-honest.sh`, sections 13 to 15, with the stub,
+    jev and own-model modes each rendered with the flag, two of them with the
+    training log too; 21 cases in `scripts/gates-have-teeth.sh`; scenarios in
+    `features/a-typed-risk-signal-reaches-a-hold-only-through-the-broker.feature`.
+    Not covered: a pod behind these policies, wardryx holding on a signal, and
+    typryx answering through the proxy in a cluster; the proxy was run as a
+    container against a stand-in wardryx and nothing else.)*
+
+30. **Every stream file this launcher puts on the events bus, and every idryx
+    `--load source:path`, is a pair the readers accept.** heraldyx v0.3.0 and
+    idryx v1.1.0 (bus layer 2) refuse an event whose `source` is not allowed for
+    the file it came from: `<source>.ndjson` carries `<source>` for the fourteen
+    registered sources, `tokenfuse-cloud.ndjson` and `tokenfuse-mcp.ndjson` carry
+    `tokenfuse`, and anything else is declared with `HERALDYX_STREAMS` /
+    `IDRYX_STREAMS`. A file named otherwise is counted, alerted once as
+    `foreign_source` and dropped, so a renamed stream or a new plane with its own
+    file silences that plane at the notifier without an error.
+    `@claude 2026-10-04`: this launcher needed no rename and sets neither
+    variable; its nine streams already match (the table is in the pull request
+    that added this). The gate holds it from here.
+    *(gate: `scripts/bus-names-match-the-source-rule.sh`, 7 cases in
+    `scripts/gates-have-teeth.sh`. Not covered: what a producer stamps in
+    `source` (each producer's own code, held across repositories by estate-gates
+    C4), and the streams a tool writes by its own default that no manifest names
+    (qryx, verdryx, engram, the console). The table is a third copy of the two
+    the readers carry and nothing holds the three equal.)*
+
+31. **The on-box chain verifier is in the default install and keeps what it
+    remembers on a claim that already exists.** `@decided 2026-10-04` (estate
+    audit, wave 1, bus layer 3): every stream on the bus is a hash chain
+    (`prev_hash`) and nothing on a box checked one until agent-stack-go v1.1.0's
+    `agent-conform watch-dir`, which turns a break into a `chain_broken` event
+    (high) in its own stream, `agent-conform.ndjson`, on the bus, where heraldyx
+    and the console already read. `40-routines-and-secrets.yaml` runs it as a
+    CronJob every 15 minutes, mapped to the routine `agent-conform` in
+    `components.json`.
+
+    `@claude 2026-10-04`, the state: a CronJob is a new pod per run, so an
+    emptyDir would forget between runs and a persistent break would be announced
+    again every run; a claim of its own is a billed disk (a spending decision for
+    the operator, GOTCHAS 81). So the state file sits beside the output on
+    `stack-events`: no new disk, a second non-stream file on the bus that no
+    reader opens, and the verifier holds the bus read-write, so "writes only its
+    own output and state" is the tool's guarantee and not the mount's. It runs as
+    uid 10002 with `fsGroup: 10001` like the other bus writers. A new break fails
+    the Job on purpose (restart `Never`, `backoffLimit: 0`, so a retry cannot
+    exit 0 over it) and `verify.sh` counts the failed pod as not Running until it
+    ages out. heraldyx v0.3.0 has no catalog sentence for `chain_broken` and
+    renders it with its generic wording ("raised an event this build does not have
+    a description for"), which is neutral and true.
+    *(gate: `scripts/chain-verifier-watches-the-bus.sh`, 13 cases in
+    `scripts/gates-have-teeth.sh`; `manifest-is-true.sh` holds the declaration;
+    scenarios in `features/the-chain-verifier-watches-the-bus.feature`. Not
+    covered: a cluster; that the verifier can read every writer's file on a live
+    RWX volume (the writers create 0644 files, read from their source), and what
+    `prev_hash` cannot see: a writer compromised in its own uid forging its own
+    stream with a valid chain, and truncation from the end. The emptyDir
+    measurement is GOTCHAS 115; that heraldyx's mail does not name the broken
+    stream is GOTCHAS 116.)*
 
 ## Decisions that have no gate yet
 

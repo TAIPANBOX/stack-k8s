@@ -1,0 +1,237 @@
+# typryx's `wardryx-proxy`: the one place a typed risk signal gets onto a policy
+# decision. A small reverse proxy that sits between tokenfuse's MCP broker and
+# wardryx, forwards every request to wardryx unchanged, and, for a
+# `POST /v1/decide` that carries a pending tool call, asks typryx what risk class
+# the call belongs to and adds the answer to the request as a `signals` entry
+# (typryx v0.4.0). wardryx v1.2.0 reads it through a `hold_if_signal` rule, which
+# can turn an allow into a hold for a person and can do nothing else.
+#
+# NOT in kustomization.yaml, and not rendered by anything but `typed/mode.sh`
+# when the operator passes `--typed-risk-signal` (and typryx is deployed in some
+# mode but off). Off by default, for three reasons that are each a decision:
+#
+#   - it changes what the MCP broker does: with the flag the broker asks wardryx
+#     about every `tools/call` (it asked nothing before), so a deny_tool rule or a
+#     hold now reaches the MCP layer;
+#   - in the jev and own-model modes each eligible tool call is one typryx ask,
+#     which is a bill (jev) or a load (own-model);
+#   - a signal is only as good as the backend behind it: the `stub` backend's
+#     probabilities mean nothing.
+#
+# `@decided 2026-10-04` (estate audit, wave 1, J2): the first consumer of a typed
+# risk signal is wardryx, a signal may turn a call into `hold` and never into
+# `deny`, and the signal is recorded so a replay reproduces the decision. The
+# MCP path is where it belongs: a tool call is concrete there, while on the LLM
+# path tools are only offered, and the model's own latency would push most calls
+# past the gateway's 250 ms and, with a fail-closed gateway, refuse them.
+#
+# ## What is wired, and what deliberately is not
+#
+# ONLY the MCP broker's `TOKENFUSE_WARDRYX_URL` points at this proxy (see
+# `typed/mode.sh`, which adds the broker's wardryx settings when the flag is
+# given). The LLM gateway keeps asking wardryx directly, so a slow typed answer
+# can never sit on the model path. No `hold_if_signal` policy is seeded here:
+# without one the proxy adds a signal wardryx ignores, and nothing is held until
+# an operator writes the rule (README, "A typed risk signal"). A rule that would
+# `deny` on a signal is refused by wardryx at load.
+#
+# ## The same backend as typryx, because it is the same typryx
+#
+# The backend configuration (`TYPRYX_BACKEND`, and for jev or an own model the key
+# file and its Secret) is the one the typed mode chose for `typryx`:
+# `typed/mode.sh` rewrites the three marked lines below exactly as it rewrites
+# 51-typryx.yaml's (`TYPRYX_BACKEND`, the `tmp` mount and its volume), so there is
+# one answer to "where does the data of a typed answer go" and not two. It
+# refuses if any of the three stops being unique, so reword them only together
+# with typed/mode.sh. With no mode flags this file is the stub, byte for byte.
+#
+# ## No state, no disk
+#
+# The proxy opens no journal and no ledger: `TYPRYX_EVENTS`, `TYPRYX_LEDGER_DIR`
+# and `TYPRYX_TRAINING_DIR` are unset, so it writes nothing, mounts neither
+# `stack-events` nor `typryx-state`, and a PersistentVolumeClaim (a billed disk)
+# is not needed. Two consequences, said plainly. The tool-call arguments it asks
+# about are never written down here, and are never in the training log either,
+# which holds question text. And a second process never appends to typryx's own
+# journal chain: two writers on one hash-chained file would fork it.
+#
+# ## The door, and why it is open on purpose
+#
+# `TYPRYX_ALLOW_OPEN_BIND=1`. The proxy binds the pod address (loopback would be
+# reachable by nothing) and typryx refuses a non-loopback bind with no
+# `TYPRYX_KEYS`. A key is not an option here: the broker adds one header to the
+# call it makes to wardryx, `Authorization`, and the proxy forwards that header to
+# wardryx untouched, so a caller cannot also present `X-Typryx-Key`. The door is
+# therefore the network: the one NetworkPolicy that admits anything to port 4330
+# names the broker and nothing else, under the namespace's default-deny.
+# What reaching the port without being the broker would buy: one typryx ask per
+# request, capped by `TYPRYX_MAX_CALLS_PER_HOUR` (the image default, 1000, which
+# 51-typryx.yaml leaves alone too); and a forwarded request to wardryx carrying
+# whatever credential the caller brought, which wardryx checks as it always did.
+# The proxy holds no wardryx credential of its own. `@claude 2026-10-04`.
+#
+# ## The deadline
+#
+# `TYPRYX_PROXY_ASK_TIMEOUT_MS` is the most a slow typryx may add to one decision,
+# and past it the request is forwarded untouched (no signal, never a refusal).
+# The proxy's own default is 150 ms, which neither real backend would meet: Jev's
+# median is near 230 ms, and an own model on CPU is slower still (measured p50
+# 2,130 ms for qwen2.5:7b on 8 vCPU, typryx-evalset bench, 2026-09-30), so 1000
+# ms would drop most own-model answers and silently leave every `hold_if_signal`
+# rule with nothing to read. 3000 ms is set here (the proxy accepts at most 5000
+# ms), and the broker's own wait for this proxy is 7000 ms
+# (`TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS`, added by typed/mode.sh): it must exceed
+# the proxy's LONGEST possible ask (5000 ms), not only the configured one, so
+# that raising the ask can never turn a slow answer into a refusal. The same
+# figures stack-single uses (stack-single#88). Chosen from those two
+# measurements, not measured on a cluster; the LLM gateway's 250 ms is untouched
+# because it does not come through here.
+#
+# ## The NetworkPolicies, one pair per edge
+#
+# broker -> proxy (`broker-egress-typryx-proxy`, `typryx-proxy-ingress-broker`) and
+# proxy -> wardryx (`typryx-proxy-egress-wardryx`, `wardryx-ingress-typryx-proxy`):
+# one peer and one port each way, additive beside 30-network-policy.yaml and
+# 52-tokenfuse-mcp-broker.yaml rather than edits to files that ship to every
+# install. The proxy's way out to a model (jev or an own model) is the existing
+# `typryx-egress-model` policy, which typed/mode.sh widens to select this pod as
+# well as typryx, so the proxy reaches exactly what typryx reaches and nothing
+# more.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: typryx-wardryx-proxy
+  namespace: agent-stack
+  labels: { app: typryx-wardryx-proxy, plane: typed }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: typryx-wardryx-proxy } }
+  template:
+    metadata:
+      labels: { app: typryx-wardryx-proxy, plane: typed }
+    spec:
+      # No workload here talks to the Kubernetes API; see CLAUDE.md
+      # invariant 15. Without this every pod carries a projected token for
+      # the namespace default ServiceAccount, bound to nothing today but
+      # usable by a compromised container for discovery and SelfSubjectReview,
+      # and by any future RBAC binding an operator adds to `default`.
+      automountServiceAccountToken: false
+      # 65532:65532 is the uid:gid the typryx image already runs as (distroless),
+      # stated so a change to the image's own user is a visible diff. No fsGroup:
+      # this pod mounts no claim.
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: proxy
+          # The typryx image, as pinned for typryx itself (51-typryx.yaml): the
+          # `wardryx-proxy` subcommand ships in v0.4.0 and later.
+          image: ghcr.io/taipanbox/typryx:v0.4.0
+          imagePullPolicy: IfNotPresent
+          args: ["wardryx-proxy"]
+          env:
+            # Free, deterministic, no outbound call. typed/mode.sh rewrites this
+            # line for the mode chosen, exactly as it does in 51-typryx.yaml.
+            - { name: TYPRYX_BACKEND, value: "stub" }
+            # The pod address, because loopback reaches nothing; open on purpose
+            # and held by the NetworkPolicies below. See the header.
+            - { name: TYPRYX_PROXY_ADDR, value: "0.0.0.0:4330" }
+            - { name: TYPRYX_ALLOW_OPEN_BIND, value: "1" }
+            # wardryx's own Service, the same URL the gateway uses.
+            - { name: TYPRYX_PROXY_UPSTREAM, value: "http://wardryx:8090" }
+            - { name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: "3000" }
+          ports: [{ name: proxy, containerPort: 4330 }]
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+          readinessProbe:
+            # A TCP check, not /healthz: the proxy forwards every request to
+            # wardryx, /healthz included, so an HTTP probe would take this pod
+            # out of the Service whenever wardryx is down and turn wardryx's
+            # outage into the proxy's. A refused connection and a 502 are the
+            # same answer to the broker; its own fail mode decides either way.
+            tcpSocket: { port: proxy }
+            initialDelaySeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 30m, memory: 64Mi }
+            limits: { memory: 256Mi }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata: { name: typryx-wardryx-proxy, namespace: agent-stack }
+spec:
+  selector: { app: typryx-wardryx-proxy }
+  ports: [{ name: proxy, port: 4330, targetPort: proxy }]
+---
+# The broker's way to the proxy: one peer, one port. The broker's other egress
+# (`broker-egress-typryx`, to typryx on 4320) is unchanged and is the only thing
+# it could reach before this flag.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: broker-egress-typryx-proxy
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: typryx-wardryx-proxy } }
+      ports:
+        - { protocol: TCP, port: 4330 }
+---
+# THE DOOR. The only rule that admits anything to the proxy's port, and it names
+# the broker alone: not `plane: money`, which would also admit the gateway and
+# the control plane, and not `podSelector: {}`. The proxy checks no credential
+# of its own, so this is what stands between the port and every other pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: typryx-proxy-ingress-broker
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: typryx-wardryx-proxy } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+      ports:
+        - { protocol: TCP, port: 4330 }
+---
+# The proxy's one upstream: wardryx, on its own port, and nothing else. Its way
+# to a model, when the typed mode has one, is `typryx-egress-model`.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: typryx-proxy-egress-wardryx
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: typryx-wardryx-proxy } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: wardryx } }
+      ports:
+        - { protocol: TCP, port: 8090 }
+---
+# wardryx must accept the connection the rule above allows. `planes-ingress`
+# admits `plane: console` and `plane: money` to 8090 and the proxy is neither
+# (its label is `plane: typed`), so this is additive beside it, and names the
+# proxy alone.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wardryx-ingress-typryx-proxy
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: wardryx } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: typryx-wardryx-proxy } }
+      ports:
+        - { protocol: TCP, port: 8090 }

@@ -31,6 +31,15 @@
 #   1. every deploy script parses `--trust-domain`
 #   2. every one of them applies it AFTER its `apply -k`
 #
+# THE SECOND FLAG, `--run-budget-ceiling` (CLAUDE.md invariant 28), HAS THE SAME
+# SHAPE AND SO THE SAME TWO CHECKS. 10-planes.yaml declares
+# TOKENFUSE_MAX_RUN_BUDGET_USD on the gateway, so `apply -k` puts the declared
+# figure back over anything set before it or by hand, exactly as it does for the
+# trust domain. The only difference is the verb: a ConfigMap key is patched, a
+# Deployment's environment is `set env`, which also rolls the gateway to the new
+# figure by itself. Same rule, one more row in the table below, so the two cannot
+# drift apart in this file the way the three deploy scripts did.
+#
 # The second is the whole reason the flag works. Patching before the
 # kustomization is indistinguishable from patching after it by reading the flag
 # list, and it is silently useless: the apply that follows reverts it. A check
@@ -81,38 +90,47 @@ fi
 problems=0
 checked=0
 
+# flag | what the flag sets | the verb that applies it. One row per flag that has to
+# survive the next `apply -k`; a deploy path must carry every row.
+FLAGS=$(cat <<'ROWS'
+--trust-domain|TRAILRYX_TRUST_DOMAIN|patch
+--run-budget-ceiling|TOKENFUSE_MAX_RUN_BUDGET_USD|set env
+ROWS
+)
+
 for f in $scripts; do
 	checked=$((checked + 1))
 
-	if ! grep -q -- '--trust-domain)' "$f"; then
-		printf 'FAIL: %s does not parse --trust-domain, so this deploy path cannot set\n' "$f"
-		printf '      the one key the manifest deliberately ships invalid.\n'
-		problems=$((problems + 1))
-		continue
-	fi
-
 	# The ordering, by line number, because that is the property. `apply -k` is
-	# what reverts a hand-patch, so the flag has to act after the LAST one.
+	# what reverts a hand-patch, so a flag has to act after the LAST one.
 	apply_line=$(grep -nE '^[^#]*k_ "apply -k[^"]*manifests"' "$f" | tail -1 | cut -d: -f1 || true)
-	patch_line=$(grep -n 'TRAILRYX_TRUST_DOMAIN' "$f" | grep -i 'patch' | tail -1 | cut -d: -f1 || true)
-
 	if [ -z "$apply_line" ]; then
-		printf 'FAIL: %s parses --trust-domain and runs no `apply -k`, so this check\n' "$f"
-		printf '      cannot say whether the patch lands after the kustomization.\n'
+		printf 'FAIL: %s runs no `apply -k`, so this check cannot say whether a flag\n' "$f"
+		printf '      is applied after the kustomization.\n'
 		problems=$((problems + 1))
 		continue
 	fi
-	if [ -z "$patch_line" ]; then
-		printf 'FAIL: %s parses --trust-domain and never patches\n' "$f"
-		printf '      TRAILRYX_TRUST_DOMAIN, so the flag is accepted and does nothing.\n'
-		problems=$((problems + 1))
-		continue
-	fi
-	if [ "$patch_line" -lt "$apply_line" ]; then
-		printf 'FAIL: %s patches the trust domain at line %s, BEFORE its `apply -k` at\n' "$f" "$patch_line"
-		printf '      line %s, so the apply reverts it and the flag is silently useless.\n' "$apply_line"
-		problems=$((problems + 1))
-	fi
+
+	while IFS='|' read -r flag token verb; do
+		if ! grep -q -- "${flag})" "$f"; then
+			printf 'FAIL: %s does not parse %s, so this deploy path cannot set\n' "$f" "$flag"
+			printf '      %s, which the manifest declares and `apply -k` puts back.\n' "$token"
+			problems=$((problems + 1))
+			continue
+		fi
+		patch_line=$(grep -n "$token" "$f" | grep -i "$verb" | tail -1 | cut -d: -f1 || true)
+		if [ -z "$patch_line" ]; then
+			printf 'FAIL: %s parses %s and never applies\n' "$f" "$flag"
+			printf '      %s (%s), so the flag is accepted and does nothing.\n' "$token" "$verb"
+			problems=$((problems + 1))
+			continue
+		fi
+		if [ "$patch_line" -lt "$apply_line" ]; then
+			printf 'FAIL: %s applies %s at line %s, BEFORE its `apply -k` at\n' "$f" "$token" "$patch_line"
+			printf '      line %s, so the apply reverts it and the flag is silently useless.\n' "$apply_line"
+			problems=$((problems + 1))
+		fi
+	done <<<"$FLAGS"
 done
 
 if [ "$problems" -gt 0 ]; then
@@ -120,5 +138,5 @@ if [ "$problems" -gt 0 ]; then
 	exit 1
 fi
 
-printf 'OK: %d deploy script(s), each parsing --trust-domain and patching it after\n' "$checked"
-printf '    its own `apply -k`, which is the only position where it survives.\n'
+printf 'OK: %d deploy script(s), each parsing --trust-domain and --run-budget-ceiling and\n' "$checked"
+printf '    applying each after its own `apply -k`, which is the only position where it survives.\n'

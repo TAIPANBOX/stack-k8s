@@ -3996,3 +3996,56 @@ patch carried 12000 whatever the flag said. Both measured red on forge before
 the fix (a correct token refused `delegation_refused`; the gateway env 12000
 after `--revocations-interval-ms 1000`) and green after (accepted; 1000, a
 revoked subject refused 1.4 s after the revoke).
+
+
+## 115. A CronJob's memory cannot live in an emptyDir, and the only other home for it is a billed disk
+
+**Platform.** A CronJob starts a new pod for every run, and an `emptyDir` lives and
+dies with its pod, so anything a routine must remember between runs is gone before
+the next one starts. Met placing `agent-conform`'s state file (the list of breaks it
+has already announced; invariant 31). The tool announces each `(file, kind, line)`
+once, through that file, so a break that stays broken is one alert and not one every
+fifteen minutes. Measured 2026-10-04 with the pinned `agent-conform:v1.1.0` image
+(uid 10002, read-only root, no capabilities) over a bus with one edited line: with
+the state on a fresh tmpfs per run, three runs wrote three `chain_broken` events for
+the same break (`grep -c chain_broken agent-conform.ndjson` read 3); with the state
+file beside the output on a persistent volume, run 1 announced it (exit 1) and run 3
+exited 0 saying `already reported`. The other persistent home is a claim of its own,
+and a PersistentVolumeClaim is a billed disk from creation (`00-base.yaml`, GOTCHAS
+81), which is the operator's spending decision and not a routine's side effect.
+
+The fix: the state file sits beside the verifier's output on `stack-events`, the claim
+that already exists and has to carry the output anyway for heraldyx and the console to
+see it. No new disk. The cost is stated in the CronJob: a second non-stream file on the
+bus, and a verifier that holds the bus read-write, so that it writes only its own files
+is the tool's guarantee and not the mount's. *(gate: `scripts/chain-verifier-watches-the-
+bus.sh` fails on an emptyDir and on a second claim; two cases in
+`gates-have-teeth.sh`.)*
+
+
+## 116. heraldyx mails a broken chain without saying which stream broke
+
+**Ours, and unfixed in this shape.** heraldyx v0.3.0 has no catalog sentence for
+`chain_broken`, the event the on-box verifier writes (invariant 31), so it renders it
+with its generic fallback, and the data keys that say WHICH stream broke (`file`,
+`line`, `breaks`) are not among the keys it prints. Measured 2026-10-04: heraldyx built
+from its v0.3.0 tag, file delivery, floor `high`, one `chain_broken` from the verifier
+appended to the bus it watched. The mail it wrote, in full, apart from the footer:
+
+```
+Subject: [test-box] agent://agent-conform.internal/verifier: chain_broken
+
+Agent agent://agent-conform.internal/verifier raised an event this build does not
+have a description for.
+Kind prev_hash_mismatch.
+
+What this box already did: Nothing automatic.
+If nobody acts: Open the console to see what the plane that raised it says about it.
+```
+
+It is neutral and true, and it reaches the operator. It does not say that a hash chain
+broke, which stream, or at which line: that is in `agent-conform.ndjson`
+on the bus and in the failed verifier pod's log. Left as it is here because a catalog
+sentence and three allow-listed keys are heraldyx's change, not this repository's.
+Until it lands, an operator who gets this mail reads the failed `agent-conform` Job's
+pod log (`kubectl -n agent-stack logs <pod>`), which names the file and the line.

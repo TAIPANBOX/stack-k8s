@@ -90,6 +90,6 @@ Feature: typed answers, choose where your data goes
   Scenario: the pinned typryx is one that reads the training variable
     Given every reference to ghcr.io/taipanbox/typryx in the repository
     When the gate reads them
-    Then they name one tag, and it is v0.3.0 or later
-    # -> typed-mode-is-honest.sh checks "12 one typryx tag" and "12 typryx reads the training variable"
-    # -> gates-have-teeth.sh "typed-mode-is-honest: the typryx pin goes back before the training log" and "a document names a second typryx tag"
+    Then they name one tag, and it is v0.4.0 or later (v0.3.0 first read the variable, v0.4.0 has the wardryx-proxy subcommand)
+    # -> typed-mode-is-honest.sh checks "12 one typryx tag" and "12 typryx has the wardryx-proxy subcommand"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the typryx pin goes back before the wardryx-proxy" and "a document names a second typryx tag"

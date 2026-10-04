@@ -30,6 +30,10 @@
 #            --typed-training             opt in to typryx's local training log
 #                                         (TYPRYX_TRAINING_DIR); off by default;
 #                                         needs typryx deployed (any mode but off)
+#            --typed-risk-signal          opt in to the typed risk signal: typryx's
+#                                         `wardryx-proxy` between the MCP broker and
+#                                         wardryx; off by default; needs typryx
+#                                         deployed (any mode but off)
 #
 # `@decided 2026-09-30`: a customer chooses where the data of a typed answer
 # goes, from three modes, and the launchers ask.
@@ -82,6 +86,28 @@
 # NOT put on stack-events, the shared bus other planes read: it holds question
 # text. It lives as long as that claim does. scripts/typed-mode-is-honest.sh
 # holds all of this.
+#
+# THE RISK SIGNAL. `@decided 2026-10-04` (estate audit, wave 1, J2): a typed risk
+# signal may turn a call into a hold for a person and never into a deny, and its
+# first consumer is wardryx (v1.2.0, rule `hold_if_signal`). --typed-risk-signal
+# renders three things and changes the LLM path in none of them:
+#
+#   1. manifests/56-typryx-wardryx-proxy.yaml, typryx's `wardryx-proxy` (typryx
+#      v0.4.0) as its own Deployment, given the SAME backend the mode chose for
+#      typryx (the same three lines rewritten, the same key Secret mounted) and
+#      no state of its own, with the NetworkPolicy edges broker -> proxy -> wardryx;
+#   2. the broker (manifests/52) with the wardryx settings it does not have today,
+#      its `TOKENFUSE_WARDRYX_URL` pointing at the proxy. ONLY the broker: the
+#      gateway keeps asking wardryx directly, so a slow typed answer never sits on
+#      the model path (J2-DESIGN: the model's median would miss the gateway's 250 ms
+#      and, fail-closed, refuse calls);
+#   3. `typryx-egress-model`, when the mode has one, widened to select the proxy
+#      pod as well, so the proxy reaches exactly what typryx reaches.
+#
+# It seeds NO policy: nothing is held until an operator writes a `hold_if_signal`
+# rule (README, "A typed risk signal"). It is refused when typryx is not deployed:
+# there is nothing to ask. Without the flag every render is byte for byte what it
+# was before the flag existed, which scripts/typed-mode-is-honest.sh holds.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -89,6 +115,7 @@ ROOT="$(cd "$HERE/.." && pwd)"
 NS="agent-stack"
 M51="$ROOT/manifests/51-typryx.yaml"
 M52="$ROOT/manifests/52-tokenfuse-mcp-broker.yaml"
+M56="$ROOT/manifests/56-typryx-wardryx-proxy.yaml"
 
 # Private ranges a public egress rule must never reach back into (the same list
 # 30-network-policy.yaml's gateway-egress-internet carries).
@@ -108,10 +135,12 @@ MODEL_KEY_FILE=""
 MODEL_CIDR=""
 TRAINING=0
 TRAINING_DIR="/var/lib/typryx/training"
+RISK=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --with-typed) WITH_TYPED=1; shift ;;
     --typed-training) TRAINING=1; shift ;;
+    --typed-risk-signal) RISK=1; shift ;;
     --typed-mode|--typed-jev-key-file|--typed-model-url|--typed-model-name|--typed-model-key-file|--typed-model-cidr)
       [ $# -ge 2 ] && [ -n "$2" ] || refuse "$1 needs a value"
       case "$1" in
@@ -148,6 +177,10 @@ esac
 
 if [ "$TRAINING" = 1 ] && [ "$EFFECTIVE" = off ]; then
   refuse "--typed-training needs typryx deployed to write a log: add --with-typed, or choose --typed-mode jev or own-model"
+fi
+
+if [ "$RISK" = 1 ] && [ "$EFFECTIVE" = off ]; then
+  refuse "--typed-risk-signal needs typryx deployed to produce a signal: add --with-typed, or choose --typed-mode jev or own-model"
 fi
 
 if [ "$EFFECTIVE" != jev ] && [ -n "$JEV_KEY_FILE" ]; then
@@ -231,8 +264,14 @@ emit_secret() { # secret-name file
 }
 
 egress_policy() { # port, then the peer lines on stdin
+  local selector='{ matchLabels: { app: typryx } }'
+  if [ "$RISK" = 1 ]; then
+    # The proxy answers from the same backend, so it needs the same way out, no wider:
+    # the one policy selects both pods rather than a second policy carrying a copy.
+    selector='{ matchExpressions: [{ key: app, operator: In, values: [typryx, typryx-wardryx-proxy] }] }'
+  fi
   printf -- '---\n# typryx is default-deny on egress like every pod here. This is its one way out,\n# one peer and one port, added because the mode chosen at deploy time needs a backend.\n'
-  printf 'apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: { name: typryx-egress-model, namespace: %s }\nspec:\n  podSelector: { matchLabels: { app: typryx } }\n  policyTypes: ["Egress"]\n  egress:\n    - to:\n' "$NS"
+  printf 'apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: { name: typryx-egress-model, namespace: %s }\nspec:\n  podSelector: %s\n  policyTypes: ["Egress"]\n  egress:\n    - to:\n' "$NS" "$selector"
   cat
   printf '      ports:\n        - { protocol: TCP, port: %s }\n' "$1"
 }
@@ -244,20 +283,27 @@ public_peer() {
 # Rewrite the three anchor lines of manifests/51 for a mode. An anchor that is
 # not found exactly once is a refusal: a render that silently emitted the stub
 # while claiming jev would be the worst answer this file could give.
-render_typryx() { # env-fragment mount-fragment volume-fragment
-  local out
-  out="$(ENV_FRAG="$1" MOUNT_FRAG="$2" VOL_FRAG="$3" awk '
+render_typryx() { # env-fragment mount-fragment volume-fragment [file mount-anchor volume-anchor]
+  local out file="${4:-$M51}" a2 a3
+  # The anchors default to manifests/51's; a caller rendering another file names its own.
+  if [ $# -ge 6 ]; then
+    a2="$5"; a3="$6"
+  else
+    a2='            - { name: events, mountPath: /var/lib/stack/events }'
+    a3='          persistentVolumeClaim: { claimName: stack-events }'
+  fi
+  out="$(ENV_FRAG="$1" MOUNT_FRAG="$2" VOL_FRAG="$3" A2="$a2" A3="$a3" awk '
     BEGIN {
       a1 = "            - { name: TYPRYX_BACKEND, value: \"stub\" }"
-      a2 = "            - { name: events, mountPath: /var/lib/stack/events }"
-      a3 = "          persistentVolumeClaim: { claimName: stack-events }"
+      a2 = ENVIRON["A2"]
+      a3 = ENVIRON["A3"]
     }
     $0 == a1 { print ENVIRON["ENV_FRAG"]; n1++; next }
     $0 == a2 { print; if (ENVIRON["MOUNT_FRAG"] != "") print ENVIRON["MOUNT_FRAG"]; n2++; next }
     $0 == a3 { print; if (ENVIRON["VOL_FRAG"] != "") print ENVIRON["VOL_FRAG"]; n3++; next }
     { print }
     END { if (n1 != 1 || n2 != 1 || n3 != 1) exit 3 }
-  ' "$M51")" || refuse "manifests/51-typryx.yaml no longer carries the three lines this mode rewrites (TYPRYX_BACKEND stub, the events mount, the stack-events volume), exactly once each. Fix typed/mode.sh with it."
+  ' "$file")" || refuse "${file#"$ROOT"/} no longer carries the three lines this mode rewrites (TYPRYX_BACKEND stub, its mount, its volume), exactly once each. Fix typed/mode.sh with it."
   printf '%s\n' "$out"
 }
 
@@ -277,25 +323,83 @@ with_training() { # env-fragment
   printf '\n'
 }
 
+# The broker's wardryx settings, which only the risk signal adds. Without the flag the
+# broker is manifests/52 byte for byte and asks wardryx nothing (it has no wardryx
+# configuration at all). With it, ONLY the broker's wardryx URL moves to the proxy: the
+# LLM gateway in 10-planes.yaml keeps asking wardryx directly. Inserted after the
+# `TOKENFUSE_EVENTS_PATH` line, which must be there exactly once.
+#
+# fail closed, like the gateway: a plane whose job is to say no says no when it cannot ask.
+# The cost is that every tool call through the broker is refused while wardryx or the proxy
+# is down, which the notice says. The key is the VIEWER key the gateway uses (`wardryx_gateway`
+# in stack-keys, minted by every installer): /v1/decide needs any authenticated principal, and
+# an admin key here would let the enforcement point rewrite the policy it enforces.
+render_broker() {
+  if [ "$RISK" = 0 ]; then
+    cat "$M52"
+    return
+  fi
+  local out
+  out="$(awk '
+    BEGIN { a = "            - { name: TOKENFUSE_EVENTS_PATH, value: \"/var/lib/stack/events/tokenfuse-mcp.ndjson\" }" }
+    $0 == a {
+      print
+      print "            # The typed risk signal (--typed-risk-signal, CLAUDE.md invariant 29): the broker asks"
+      print "            # wardryx about every tools/call, and asks THROUGH typryx'"'"'s wardryx-proxy, which adds the"
+      print "            # risk class of the pending call as a signal. Only this container: the LLM gateway keeps"
+      print "            # asking wardryx directly. Fail closed, as the gateway does; the viewer key, as the gateway does."
+      print "            - { name: TOKENFUSE_WARDRYX_MODE, value: \"enforce\" }"
+      print "            - { name: TOKENFUSE_WARDRYX_URL, value: \"http://typryx-wardryx-proxy:4330\" }"
+      print "            - name: TOKENFUSE_WARDRYX_KEY"
+      print "              valueFrom: { secretKeyRef: { name: stack-keys, key: wardryx_gateway } }"
+      print "            - { name: TOKENFUSE_WARDRYX_FAILMODE, value: \"closed\" }"
+      print "            - { name: TOKENFUSE_WARDRYX_TIMEOUT_MS, value: \"250\" }"
+      print "            # A tool call may wait longer than a model call: the proxy'"'"'s own ask may take up to"
+      print "            # TYPRYX_PROXY_ASK_TIMEOUT_MS (3000, at most 5000) before it forwards without a signal."
+      print "            - { name: TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \"7000\" }"
+      print "            - { name: TOKENFUSE_WARDRYX_CACHE_TTL_MS, value: \"3000\" }"
+      n++; next
+    }
+    { print }
+    END { if (n != 1) exit 3 }
+  ' "$M52")" || refuse "manifests/52-tokenfuse-mcp-broker.yaml no longer carries its TOKENFUSE_EVENTS_PATH line exactly once, which is where the risk signal's wardryx settings are inserted. Fix typed/mode.sh with it."
+  printf '%s\n' "$out"
+}
+
+# One typed mode, whole: typryx (manifests/51, rewritten for the mode), the broker in front
+# of it, and, only with the risk signal, the proxy given the SAME backend (the same three
+# lines rewritten in manifests/56, the same key Secret mounted). The training log belongs to
+# typryx alone: the proxy opens no journal, no ledger and no training log, and asks about
+# tool-call arguments it must not write down.
+emit_mode() { # env-fragment mount-fragment volume-fragment   (the backend, WITHOUT the training log)
+  if [ "$EFFECTIVE" = stub ] && [ "$TRAINING" = 0 ]; then
+    cat "$M51"
+  else
+    render_typryx "$(with_training "$1")" "$2" "$3"
+  fi
+  printf -- '---\n'
+  render_broker
+  if [ "$RISK" = 1 ]; then
+    printf -- '---\n'
+    render_typryx "$1" "$2" "$3" "$M56" \
+      '            - { name: tmp, mountPath: /tmp }' \
+      '          emptyDir: {}'
+  fi
+}
+
 render() {
   case "$EFFECTIVE" in
     off) return 0 ;;
     stub)
-      if [ "$TRAINING" = 1 ]; then
-        render_typryx "$(with_training '            - { name: TYPRYX_BACKEND, value: "stub" }')" "" ""
-      else
-        cat "$M51"
-      fi
-      printf -- '---\n'; cat "$M52" ;;
+      emit_mode '            - { name: TYPRYX_BACKEND, value: "stub" }' "" "" ;;
     jev)
-      render_typryx \
-        "$(with_training '            - { name: TYPRYX_BACKEND, value: "jev" }
+      emit_mode \
+        '            - { name: TYPRYX_BACKEND, value: "jev" }
             # The key is a FILE mounted from the typryx-jev-key Secret, never an environment value.
-            - { name: TYPRYX_JEV_KEY_FILE, value: "/etc/typryx/jev/key" }')" \
+            - { name: TYPRYX_JEV_KEY_FILE, value: "/etc/typryx/jev/key" }' \
         '            - { name: jev-key, mountPath: /etc/typryx/jev, readOnly: true }' \
         '        - name: jev-key
           secret: { secretName: typryx-jev-key, defaultMode: 0440 }'
-      printf -- '---\n'; cat "$M52"
       public_peer | egress_policy 443 ;;
     own-model)
       local env_frag mount_frag vol_frag
@@ -309,8 +413,7 @@ render() {
         vol_frag='        - name: model-key
           secret: { secretName: typryx-model-key, defaultMode: 0440 }'
       fi
-      render_typryx "$(with_training "$env_frag")" "$mount_frag" "$vol_frag"
-      printf -- '---\n'; cat "$M52"
+      emit_mode "$env_frag" "$mount_frag" "$vol_frag"
       case "$HOSTKIND" in
         ip)    cidr="$HOST/32"; if [ -n "$MODEL_CIDR" ]; then cidr="$MODEL_CIDR"; fi
                printf '        - ipBlock:\n            cidr: %s\n' "$cidr" | egress_policy "$PORT" ;;
@@ -331,6 +434,8 @@ render() {
                fi ;;
       esac ;;
   esac
+  # The proxy's edges (broker -> proxy -> wardryx) are objects of their own, rendered with it
+  # by emit_mode through manifests/56; nothing to add here for the stub, which has no egress.
 }
 
 secrets() {
@@ -353,6 +458,16 @@ has_secrets() {
 notice() {
   if [ "$TRAINING" = 1 ]; then
     printf 'typed: training log ON (--typed-training). typryx appends the egressed state of each answered question to training.ndjson in %s, on the typryx-state claim it already has: no new disk, and the log lives as long as that claim.\n       It never holds the backend'"'"'s answer. Read how to export it, and why it adds no disk, in README "Typed answers: choose where your data goes".\n' "$TRAINING_DIR" >&2
+  fi
+  if [ "$RISK" = 1 ]; then
+    printf 'typed: risk signal ON (--typed-risk-signal). typryx'"'"'s wardryx-proxy now sits between tokenfuse'"'"'s MCP broker and wardryx (manifests/56), answering from the same backend as typryx. The LLM gateway keeps asking wardryx directly.\n' >&2
+    printf '       The broker, which asked wardryx nothing before, now asks it about EVERY tool call, and fails closed: while wardryx or the proxy is down, tool calls through the broker are refused.\n' >&2
+    printf '       No policy is seeded. Nothing is held until you write a hold_if_signal rule (README "A typed risk signal"); a rule that would deny on a signal is refused by wardryx.\n' >&2
+    case "$EFFECTIVE" in
+      stub) printf '       The stub backend answers every call the same way and its probabilities mean nothing: a hold_if_signal rule on them would hold on noise.\n' >&2 ;;
+      jev)  printf '       Each tool call that carries a name and whole arguments is one Jev ask, a paid call, and the tool name, arguments and target leave the cluster; the proxy has its own hourly cap (TYPRYX_MAX_CALLS_PER_HOUR, default 1000).\n' >&2 ;;
+      own-model) printf '       Each tool call that carries a name and whole arguments is one ask of your model; the tool name, arguments and target go to it.\n' >&2 ;;
+    esac
   fi
   case "$EFFECTIVE" in
     jev)
