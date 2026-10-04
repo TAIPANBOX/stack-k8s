@@ -79,6 +79,14 @@ jobs:
       - name: the gateway's semantic cache is off in every install
         run: ./scripts/gateway-cache-is-off.sh
 
+      # Added 2026-10-04 (estate audit, wave 1). POST /v1/fuse/declassify lifts
+      # a run's taint label and its credential is optional in the gateway, so a
+      # launcher that sets none leaves it open to anything that reaches port
+      # 4100. The key is minted into stack-keys by every installer, on stdin.
+      # See CLAUDE.md invariant 27.
+      - name: the gateway's declassify key is minted per cluster, never a literal (invariant 27)
+        run: ./scripts/declassify-is-keyed.sh
+
       - name: a plane that can move leaves a dead node and drains (invariant 21)
         run: ./scripts/planes-leave-a-dead-node.sh
 

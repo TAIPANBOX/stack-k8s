@@ -50,6 +50,7 @@ step "every installer creates every Secret key the manifests read" "./scripts/se
 step "every installer reuses the cluster token before it installs" "./scripts/k3s-token-is-reused.sh"
 step "the GCP preflight keeps what the operator wrote in terraform.tfvars" "./scripts/preflight-keeps-tfvars.sh"
 step "the gateway's semantic cache is off in every install" "./scripts/gateway-cache-is-off.sh"
+step "the gateway's declassify key is minted per cluster" "./scripts/declassify-is-keyed.sh"
 step "a plane leaves a dead node and drains" "./scripts/planes-leave-a-dead-node.sh"
 step "Longhorn releases a dead node's volumes" "./scripts/longhorn-releases-a-dead-node.sh"
 step "the hub entry routes exactly the seven allowed paths" "./scripts/hub-entry-is-narrow.sh"

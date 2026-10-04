@@ -105,6 +105,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/k3s-token-is-reused.sh  # invariant 18; GOTCHAS 102
 ./scripts/preflight-keeps-tfvars.sh # invariant 19; GOTCHAS 103
 ./scripts/gateway-cache-is-off.sh # invariant 20
+./scripts/declassify-is-keyed.sh  # invariant 27
 ./scripts/planes-leave-a-dead-node.sh # invariant 21
 ./scripts/longhorn-releases-a-dead-node.sh # invariant 22; GOTCHAS 109
 ./scripts/hub-entry-is-narrow.sh  # invariant 23
@@ -715,6 +716,44 @@ an absent invariant.
     current when each entry was written, and the two scripts that plant a stale
     tag as text to prove the check fails on it. Scenarios in
     `features/typed-answers-choose-where-your-data-goes.feature`.)*
+
+27. **The gateway's declassify key is minted per cluster, comes from the
+    `stack-keys` Secret, and travels on stdin.** `@decided 2026-10-04` (estate
+    audit, wave 1): the tokenfuse gateway's `POST /v1/fuse/declassify` lifts a
+    run's taint label, the release valve for its agent firewall. It is not
+    behind `TOKENFUSE_ADMIN_KEYS`; its own credential, `TOKENFUSE_DECLASSIFY_KEY`
+    (presented as `x-fuse-declassify-key`), is optional in the gateway, and with
+    it unset anything that can reach port 4100 can clear a run, recorded only as
+    `authenticated: false`. No manifest set it. Now the gateway container in
+    `10-planes.yaml` reads it from `stack-keys`, key `declassify_key`, never a
+    literal and never `optional`, and all three installers (`install.sh`,
+    `cloud/gcp/install-gcp.sh`, `cloud/aws/install-aws.sh`) mint it with 24 random
+    bytes: on a fresh cluster in the `create secret generic stack-keys` block, on
+    a cluster whose Secret already exists by a read-before-write patch, as
+    gateway_admin's migration does. Unlike every other key in that Secret, this
+    one never rides the ssh command line: the create block is fed by a pipe and
+    carries `--from-file=declassify_key=/dev/stdin`, the patch uses `--patch-file
+    /dev/stdin`, so neither `--from-literal` nor `patch -p` ever holds it (the
+    audit found `--from-literal` values on ssh argv; the other keys still ride
+    it, and moving them is not done here). The installers say where the key lives
+    and that clearing a run needs it, and print only the command to read it.
+    Nothing in this estate calls the endpoint, so minting a key closes it by
+    default and breaks nothing. The reader is tokenfuse's `declassify.rs`,
+    declared in its `components.json`. An existing cluster applied with
+    `kubectl apply -k` and no installer run has no `declassify_key`, so its
+    gateway pod sits in `CreateContainerConfigError` until an installer is run
+    (same shape as GOTCHAS 97, and deliberate: `optional` would leave the
+    endpoint open silently).
+    *(gate: `scripts/declassify-is-keyed.sh`, subjects found like invariant 20's
+    (gateway containers by image and command) plus the tracked scripts that run
+    `create secret generic stack-keys`; that every installer creates the key at
+    all is invariant 17's `secret-keys-agree.sh`, which reads this manifest
+    reference like any other; teeth in `scripts/gates-have-teeth.sh`; scenarios
+    in `features/the-declassify-key-is-minted.feature`. Not covered: a running
+    gateway refusing a call with no key, which needs a live cluster, and that
+    `kubectl create --from-file=.../dev/stdin` and `patch --patch-file
+    /dev/stdin` behave over ssh on a real k3s, which was checked only with a
+    local `kubectl --dry-run=client`.)*
 
 ## Decisions that have no gate yet
 

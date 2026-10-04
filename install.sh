@@ -660,7 +660,19 @@ if ! k_ "-n agent-stack get secret stack-keys" >/dev/null 2>&1; then
   WARDRYX_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   WARDRYX_GATEWAY_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   GATEWAY_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-  k_ "-n agent-stack create secret generic stack-keys \
+  # declassify_key is the credential for the gateway's POST /v1/fuse/declassify,
+  # which lifts a run's taint label and is not behind gateway_admin: the gateway
+  # takes its own key (TOKENFUSE_DECLASSIFY_KEY, read from the header
+  # x-fuse-declassify-key), and with none set anything that reaches the gateway
+  # port can clear a run, recorded only as `authenticated: false`. Nothing in
+  # this stack calls the endpoint, so minting a key closes it and breaks
+  # nothing. It is the one value here that does NOT ride the ssh command line:
+  # an argument is readable in the process table of both ends, so it goes in on
+  # stdin (`--from-file=declassify_key=/dev/stdin`) and `printf` is a builtin,
+  # so it is on no argv at all. scripts/declassify-is-keyed.sh holds that.
+  DECLASSIFY_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  printf '%s' "$DECLASSIFY_SECRET" | k_ "-n agent-stack create secret generic stack-keys \
+      --from-file=declassify_key=/dev/stdin \
       --from-literal=cloud_keys='$CLOUD_SECRET:default:admin' \
       --from-literal=cloud_admin='$CLOUD_SECRET' \
       --from-literal=wardryx_keys='$WARDRYX_ADMIN_SECRET:default:admin,$WARDRYX_GATEWAY_SECRET:default:viewer' \
@@ -668,6 +680,9 @@ if ! k_ "-n agent-stack get secret stack-keys" >/dev/null 2>&1; then
       --from-literal=wardryx_gateway='$WARDRYX_GATEWAY_SECRET' \
       --from-literal=gateway_admin='$GATEWAY_ADMIN_SECRET'" >/dev/null
   echo "   created secret stack-keys"
+  echo "   declassify_key in it is what clearing a run's taint label needs (POST /v1/fuse/declassify on the gateway,"
+  echo "   sent as x-fuse-declassify-key). Nothing prints it; read it with:"
+  echo "     kubectl -n agent-stack get secret stack-keys -o jsonpath='{.data.declassify_key}' | base64 -d"
 else
   echo "   secret stack-keys already exists, left as is"
   # Every cluster installed before today has a stack-keys Secret with no
@@ -687,6 +702,19 @@ else
     GATEWAY_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     k_ "-n agent-stack patch secret stack-keys --type merge -p '{\"stringData\":{\"gateway_admin\":\"$GATEWAY_ADMIN_SECRET\"}}'" >/dev/null
     echo "   added gateway_admin to the existing stack-keys secret"
+  fi
+
+  # The same for declassify_key, which clusters installed before it existed do
+  # not have: the gateway Deployment now reads it, so an absent key is a pod
+  # that never starts, not a value to leave alone. Same discipline as above,
+  # read before write with no `|| true` (a failed read must stop here, not
+  # rotate a live key), and the new value goes in on STDIN, never as an
+  # argument: `-p '{...}'` would put it on the ssh command line.
+  DECLASSIFY_B64="$(k_ "-n agent-stack get secret stack-keys -o jsonpath={.data.declassify_key}")"
+  if [ -z "$DECLASSIFY_B64" ]; then
+    DECLASSIFY_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    printf '%s' "{\"stringData\":{\"declassify_key\":\"$DECLASSIFY_SECRET\"}}" | k_ "-n agent-stack patch secret stack-keys --type merge --patch-file /dev/stdin" >/dev/null
+    echo "   added declassify_key to the existing stack-keys secret (read it: kubectl -n agent-stack get secret stack-keys -o jsonpath='{.data.declassify_key}' | base64 -d)"
   fi
 fi
 
