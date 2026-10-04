@@ -205,6 +205,19 @@ spec:
             # it, the console.
             - name: TOKENFUSE_ADMIN_KEYS
               valueFrom: { secretKeyRef: { name: stack-keys, key: gateway_admin } }
+            # POST /v1/fuse/declassify lifts a run's taint label (the release
+            # valve for the gateway's agent firewall) and is NOT behind the
+            # admin key above: it takes its own credential, presented as
+            # `x-fuse-declassify-key`, and that credential is optional in the
+            # gateway. Unset, anything that can reach port 4100 can clear a run
+            # and the event records only `authenticated: false`. So it is set
+            # here, from the stack-keys Secret every installer mints it into
+            # (never a literal, never `optional`), and only whoever can read
+            # that Secret holds it. Nothing in this stack calls the endpoint.
+            # Read by tokenfuse's crates/gateway/src/declassify.rs.
+            # scripts/declassify-is-keyed.sh holds it (CLAUDE.md invariant 27).
+            - name: TOKENFUSE_DECLASSIFY_KEY
+              valueFrom: { secretKeyRef: { name: stack-keys, key: declassify_key } }
             # enforce, not observe: an over-budget call gets a hard 402 rather
             # than a log line. This is the whole point of the gateway.
             - { name: TOKENFUSE_MODE, value: "enforce" }

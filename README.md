@@ -97,6 +97,24 @@ Nothing here bakes a credential into an image, and nothing here ships one.
 policy store's database password and its approval secret, straight into Secrets
 on your own cluster. This repo never sees them.
 
+One of them is easy to miss because nothing in the stack uses it: the gateway's
+`POST /v1/fuse/declassify` (the release valve for its agent firewall: a person
+reviews a run and the taint label comes off it) is not behind the gateway's
+admin key. It has a key of its own, `x-fuse-declassify-key`, and the gateway
+treats it as optional, so with none set anything that reaches port 4100 can
+clear a run. The installers therefore mint `declassify_key` into the
+`stack-keys` Secret (the gateway reads it as `TOKENFUSE_DECLASSIFY_KEY`) and
+pass it in on stdin, never as a command-line argument. Clearing a run needs it:
+
+```bash
+kubectl -n agent-stack get secret stack-keys -o jsonpath='{.data.declassify_key}' | base64 -d
+```
+
+A cluster installed before this key existed gets it the next time an installer
+runs against it. Applying the manifests alone leaves its gateway pod waiting
+for a key that is not there, which is deliberate: an optional key would start
+the gateway with the endpoint open.
+
 That is a correction, not a design note. The manifests used to hand out
 `TOKENFUSE_CLOUD_ALLOW_DEVKEY=1`, which makes the literal string `devkey` an
 admin bearer, and to leave `WARDRYX_KEYS` unset, which makes the policy plane

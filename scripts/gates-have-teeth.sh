@@ -694,6 +694,84 @@ run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.4.1\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
+# The gateway's declassify key (invariant 27). POST /v1/fuse/declassify lifts a
+# run's taint label and its credential is optional in the gateway, so a
+# container that does not carry the key leaves the endpoint open to anything
+# that reaches port 4100. Four ways the manifest half goes wrong, and the
+# mirror faults in the installers, where the key must come in on stdin.
+run_case "declassify-is-keyed: the gateway container loses TOKENFUSE_DECLASSIFY_KEY" fail \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_DECLASSIFY_KEY\n              valueFrom: { secretKeyRef: { name: stack-keys, key: declassify_key } }\n", "")')" \
+	"no TOKENFUSE_DECLASSIFY_KEY env var"
+
+run_case "declassify-is-keyed: the key becomes a literal in the manifest" fail \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "              valueFrom: { secretKeyRef: { name: stack-keys, key: declassify_key } }\n", "              value: \"change-me\"\n")')" \
+	"set from a literal value"
+
+run_case "declassify-is-keyed: the key is marked optional" fail \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "key: declassify_key } }", "key: declassify_key, optional: true } }")')" \
+	"marked optional"
+
+run_case "declassify-is-keyed: the gateway reads some other key of the Secret" fail \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "key: declassify_key } }", "key: gateway_admin } }")')" \
+	"not stack-keys/declassify_key"
+
+# The key travels on stdin. An argument is readable in the process table of
+# both ends of the ssh, and the audit found --from-literal values on ssh argv.
+run_case "declassify-is-keyed: an installer passes the key with --from-literal" fail \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'edit("install.sh", "      --from-file=declassify_key=/dev/stdin \\\n", "      --from-literal=declassify_key=\x27$DECLASSIFY_SECRET\x27 \\\n")')" \
+	"puts declassify_key on a command line with --from-literal"
+
+run_case "declassify-is-keyed: an installer migrates the key with patch -p" fail \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "    printf \x27%s\x27 \"{\\\"stringData\\\":{\\\"declassify_key\\\":\\\"$DECLASSIFY_SECRET\\\"}}\" | k_ \"-n agent-stack patch secret stack-keys --type merge --patch-file /dev/stdin\" >/dev/null\n", "    k_ \"-n agent-stack patch secret stack-keys --type merge -p \x27{\\\"stringData\\\":{\\\"declassify_key\\\":\\\"$DECLASSIFY_SECRET\\\"}}\x27\" >/dev/null\n")')" \
+	"patches declassify_key on a command line"
+
+run_case "declassify-is-keyed: an installer creates the Secret without piping the key in" fail \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "  printf \x27%s\x27 \"$DECLASSIFY_SECRET\" | k_ \"-n agent-stack create secret generic " "stack-keys", "  k_ \"-n agent-stack create secret generic " "stack-keys")')" \
+	"never creates declassify_key from stdin"
+
+run_case "declassify-is-keyed: an installer never gives an existing Secret the key" fail \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'edit("install.sh", "--patch-file /dev/stdin\" >/dev/null\n    echo \"   added declassify_key", "--patch-file /tmp/p\" >/dev/null\n    echo \"   added declassify_key")')" \
+	"has no stdin patch for declassify_key"
+
+# The subjects taken away: the gateway container's image line is what makes it
+# a subject, and with no installer left there is nothing to read the mint from.
+# Each must say it measured nothing, never OK.
+run_case "declassify-is-keyed: no gateway container left to judge" fail \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.4.1\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"measured nothing about the declassify key"
+
+run_case "declassify-is-keyed: no installer left to read" fail \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'import os
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh"):
+    os.remove(f)')" \
+	"NOTHING about how the declassify key travels"
+
+# What it must not catch. A sidecar running the same image on a subcommand
+# never serves the route; a reworded comment is not a change to the key; and
+# the other keys of the Secret still ride --from-literal, which this gate does
+# not police (that is an older finding, named in the gate's header).
+run_case "declassify-is-keyed: a subcommand sidecar is not a gateway container" pass \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "command: [\"/bin/sh\", \"-c\"]", "command: [\"/usr/local/bin/tokenfuse\"]")')"
+
+run_case "declassify-is-keyed: a comment beside the key is reworded" pass \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "Nothing in this stack calls the endpoint.", "Nothing in this stack calls that endpoint.")')"
+
+run_case "declassify-is-keyed: another key of the Secret still rides --from-literal" pass \
+	'./scripts/declassify-is-keyed.sh' \
+	"$(py 'edit("install.sh", "      --from-literal=cloud_admin=\x27$CLOUD_SECRET\x27 \\\n", "      --from-literal=cloud_admin=\x27$CLOUD_SECRET\x27 \\\n      --from-literal=spare=\x27$CLOUD_SECRET\x27 \\\n")')"
+
 # A one-replica plane that keeps the default 300 s toleration sits on a dead
 # node for five minutes after it is marked NotReady: 360 s of a refused gateway
 # on 2026-09-26 (invariant 21). The first occurrence of each line below is the
