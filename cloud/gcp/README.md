@@ -181,6 +181,12 @@ purpose, and `verify.sh`, which this command runs at the end, fails on the
 placeholder: without the flag the record plane seals under a domain nobody
 owns, or refuses everything as foreign, and neither is loud anywhere else.
 
+`--run-budget-ceiling USD` lowers the most one run may be allowed to carry
+(tokenfuse v1.5.0; the gateway ships with 5.00, its own built-in run budget, so
+an ordinary run is unchanged). Give it on every run: `apply -k` puts the declared
+figure back, and the flag is applied after it. See "The run-budget ceiling" in
+the root README.
+
 Add `--console-token <github-token>` if the Genaryx console is wanted. Without
 it the open stack still deploys and still enforces, but there is no control
 room, and the browser freeze proof cannot be reproduced.

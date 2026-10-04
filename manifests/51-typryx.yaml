@@ -48,9 +48,10 @@
 # the same credential either way.
 #
 # Needs typryx v0.2.0 or later: v0.1.0 predates typryx#6 and ignores this
-# variable (GOTCHAS 106). This file pins v0.3.0, the first release that also
-# reads TYPRYX_TRAINING_DIR (below) and accepts a distribution rounded to four
-# decimals. @measured on kind v0.33, 2026-09-26,
+# variable (GOTCHAS 106). This file pins v0.4.0, the first release with the
+# `wardryx-proxy` subcommand that manifests/56 runs from this same image (v0.3.0
+# was the first to read TYPRYX_TRAINING_DIR, below, and to accept a distribution
+# rounded to four decimals). @measured on kind v0.33, 2026-09-26,
 # with 30-network-policy.yaml, 51-typryx.yaml and 52-tokenfuse-mcp-broker.yaml applied as committed: an ask
 # through the broker, its key only a `{{secret:typryx_key}}` handle, was
 # answered.
@@ -204,7 +205,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: typryx
-          image: ghcr.io/taipanbox/typryx:v0.3.0
+          image: ghcr.io/taipanbox/typryx:v0.4.0
           imagePullPolicy: IfNotPresent
           # ENTRYPOINT defaults to `serve`; TYPRYX_ADDR and TYPRYX_TEMPLATES
           # are baked into the image (0.0.0.0:4320, the three example

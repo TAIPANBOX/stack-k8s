@@ -112,6 +112,29 @@ jobs:
       - name: delegation is off by default (invariant 24)
         run: ./scripts/delegation-off-by-default.sh
 
+      # Added 2026-10-04 (estate audit, wave 1), tokenfuse v1.5.0 invariant 73.
+      # A run's budget came from the header the agent sends and the next call
+      # could widen it; the gateway has a ceiling for it and a launcher that
+      # forgets the variable ships as unbounded as 1.4.1. The deploy-path half
+      # (the flag, applied after the apply that reverts it) is in the
+      # deploy-flags-agree step above. See CLAUDE.md invariant 28.
+      - name: the gateway caps what a run may declare (invariant 28)
+        run: ./scripts/run-budget-ceiling-is-set.sh
+
+      # Added 2026-10-04. heraldyx v0.3.0 and idryx v1.1.0 refuse an event whose
+      # source is not allowed for the file it was read from, so a stream this
+      # launcher names differently, or a --load pair naming the wrong source,
+      # silences a plane without an error. See CLAUDE.md invariant 30.
+      - name: every bus file is a name the readers accept (invariant 30)
+        run: ./scripts/bus-names-match-the-source-rule.sh
+
+      # Added 2026-10-04. The on-box chain verifier (agent-stack-go v1.1.0):
+      # in the default install, every 15 minutes, on the bus, its memory on a
+      # claim that already exists, a new break kept visible. See CLAUDE.md
+      # invariant 31.
+      - name: the chain verifier watches the bus (invariant 31)
+        run: ./scripts/chain-verifier-watches-the-bus.sh
+
       # No workload in this stack talks to the Kubernetes API from inside a
       # pod, so the projected token every pod gets for the namespace default
       # ServiceAccount is a live credential with nothing to authorize and

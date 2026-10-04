@@ -48,7 +48,23 @@
 #  11. the flag refuses when typryx is not deployed, and every launcher parses
 #      it and hands it to typed/mode.sh;
 #  12. every typryx image reference in the repository names one tag, and it is
-#      v0.3.0 or later, the first release that reads TYPRYX_TRAINING_DIR.
+#      v0.4.0 or later: v0.3.0 first read TYPRYX_TRAINING_DIR, and v0.4.0 is the
+#      first release that has the `wardryx-proxy` subcommand;
+#  13. the typed risk signal (--typed-risk-signal, CLAUDE.md invariant 29) is off
+#      unless asked: without the flag no mode renders the proxy, a wardryx setting
+#      on the broker, or a widened egress policy;
+#  14. with it on, in every mode: one proxy Deployment on the same typryx tag, the
+#      SAME backend as typryx (the same environment and the same key mount), no
+#      state of its own (no claim, no journal, no ledger, no training log, not
+#      the shared bus); the broker, and ONLY the broker, asks wardryx through it
+#      (the gateway keeps its direct URL, fail closed, viewer key); the four
+#      NetworkPolicy edges broker -> proxy -> wardryx name exactly one peer on
+#      one port and nothing selects the proxy for ingress but the broker; the
+#      model egress policy selects the proxy too, and no wider; no
+#      hold_if_signal policy is seeded anywhere; and every render validates
+#      strictly;
+#  15. the flag is refused when typryx is not deployed, names itself, and says
+#      what it does when accepted; every launcher parses and forwards it.
 #
 # AND IT REFUSES TO REPORT OK ON NOTHING: no typed/mode.sh, no manifests/51, no
 # launcher, or no kubeconform is reported and fails.
@@ -294,7 +310,7 @@ for label, args in every.items():
 # 8. launchers, found by what makes them one
 FLAGS = ("--typed-mode", "--typed-jev-key-file", "--typed-model-url",
          "--typed-model-name", "--typed-model-key-file", "--typed-model-cidr",
-         "--typed-training")
+         "--typed-training", "--typed-risk-signal")
 tracked = subprocess.run(["git", "ls-files", "*.sh"], capture_output=True, text=True).stdout.split()
 # A launcher is a script that applies the manifests to a cluster it is talking to
 # (the same subject deploy-flags-agree.sh finds) AND offers --with-typed. typed/mode.sh
@@ -326,12 +342,15 @@ for p in launchers:
               f"{p} checks the typed flags at line {min(chk)}, AFTER the install at line {min(inst)}: "
               "a missing key file would be found after fifteen minutes of building")
     check("8 launchers render through typed/mode.sh", bool(ren), f"{p} never renders through typed/mode.sh")
-    direct = [n for n, l in live if re.search(r"apply -f [^|]*manifests/5[12]-", l)]
+    direct = [n for n, l in live if re.search(r"apply -f [^|]*manifests/5[126]-", l)]
     check("8 launchers render through typed/mode.sh", not direct,
           f"{p} line {direct[:1]} applies manifests/51 or 52 directly, bypassing the mode")
     check("11 launchers hand --typed-training to typed/mode.sh",
           any(re.search(r"TYPED_ARGS\+=\(--typed-training\)", l) for _, l in live),
           f"{p} parses --typed-training but never adds it to the arguments it gives typed/mode.sh")
+    check("15 launchers hand --typed-risk-signal to typed/mode.sh",
+          any(re.search(r"TYPED_ARGS\+=\(--typed-risk-signal\)", l) for _, l in live),
+          f"{p} parses --typed-risk-signal but never adds it to the arguments it gives typed/mode.sh")
 
 # ---- the training log (typryx v0.3.0, TYPRYX_TRAINING_DIR) ------------------
 # Comments and blank lines are not configuration; the checks below read code.
@@ -426,8 +445,236 @@ for label, args in (("stub", ["--with-typed"]), ("jev", JEV), ("own-model", OWN)
           and run("has-secrets", *args, "--typed-training").stdout == run("has-secrets", *args).stdout,
           f"{label}: --typed-training changed the mode, the Secrets or has-secrets")
 
-# 12. one typryx tag everywhere, and it is one that reads TYPRYX_TRAINING_DIR
-MIN_TYPRYX = (0, 3, 0)
+# ---- the typed risk signal (typryx v0.4.0 wardryx-proxy, wardryx v1.2.0) ----
+M56 = pathlib.Path("manifests/56-typryx-wardryx-proxy.yaml")
+M10 = pathlib.Path("manifests/10-planes.yaml")
+for p in (M56, M10):
+    if not p.exists():
+        print(f"FAIL: {p} does not exist, so this measured nothing about the typed risk signal.")
+        sys.exit(1)
+
+
+def docs_of(text):
+    return [d for d in re.split(r"(?m)^---\s*$", text) if re.search(r"(?m)^kind:\s*\w+", d)]
+
+
+def kind_name(d):
+    k = re.search(r"(?m)^kind:\s*(\w+)", d).group(1)
+    n = re.search(r"(?m)^  name:\s*([\w.-]+)", d) or re.search(r"(?m)^metadata:\s*\{\s*name:\s*([\w.-]+)", d)
+    return k, (n.group(1) if n else "?")
+
+
+def env_of(doc):
+    """name -> raw text of the entry, for the flow and the block spelling."""
+    out = {}
+    code = code_of(doc)
+    for m in re.finditer(r"\{\s*name:\s*(\w+)\s*,\s*value:\s*\"([^\"]*)\"\s*\}", code):
+        out[m.group(1)] = m.group(2)
+    for m in re.finditer(r"- name:\s*(\w+)\n\s*valueFrom:\s*(\{[^\n]*\})", code):
+        out[m.group(1)] = m.group(2)
+    return out
+
+
+def doc_named(rendered, kind, name):
+    hits = [d for d in docs_of(rendered) if kind_name(d) == (kind, name)]
+    return hits[0] if len(hits) == 1 else None
+
+
+RISK = ["--typed-risk-signal"]
+
+# 13. off unless asked
+for label, args in variants.items():
+    off = run("render", *args).stdout
+    code = code_of(off)
+    check("13 risk signal is off unless asked", "typryx-wardryx-proxy" not in code,
+          f"{label}: the proxy appears in the render WITHOUT --typed-risk-signal")
+    check("13 risk signal is off unless asked", "TOKENFUSE_WARDRYX" not in code,
+          f"{label}: the broker carries a wardryx setting WITHOUT --typed-risk-signal")
+    check("13 risk signal is off unless asked", "values: [typryx, typryx-wardryx-proxy]" not in code,
+          f"{label}: the egress policy selects the proxy WITHOUT --typed-risk-signal")
+
+# Every mode, and the two with the training log ON as well: the log holds question text, and the
+# proxy asks about tool-call arguments, so it must never inherit the variable.
+base_of = dict(variants)
+base_of["stub + training"] = variants["stub"] + ["--typed-training"]
+base_of["jev + training"] = variants["jev"] + ["--typed-training"]
+risk_variants = {k: v + RISK for k, v in base_of.items()}
+rendered_risk = 0
+for label, args in risk_variants.items():
+    r = run("render", *args)
+    out = r.stdout
+    check("14 risk signal renders", r.returncode == 0 and out != "",
+          f"{label}: exited {r.returncode}: {r.stderr.strip()[:160]}")
+    if not out:
+        continue
+    code = code_of(out)
+    proxy = doc_named(out, "Deployment", "typryx-wardryx-proxy")
+    typryx = doc_named(out, "Deployment", "typryx")
+    broker = doc_named(out, "Deployment", "tokenfuse-mcp-broker")
+    check("14 one proxy", proxy is not None, f"{label}: no single Deployment typryx-wardryx-proxy in the render")
+    check("14 typryx is still there", typryx is not None and broker is not None,
+          f"{label}: the render lost typryx or the broker")
+    if proxy is None or typryx is None or broker is None:
+        continue
+    penv, tenv, benv = env_of(proxy), env_of(typryx), env_of(broker)
+
+    # the same typryx tag as typryx itself, and the subcommand that exists in it
+    ptag = re.findall(r"image: ghcr\.io/taipanbox/typryx:(\S+)", proxy)
+    ttag = re.findall(r"image: ghcr\.io/taipanbox/typryx:(\S+)", typryx)
+    check("14 same typryx tag", len(ptag) == 1 and ptag == ttag,
+          f"{label}: the proxy runs typryx {ptag}, typryx runs {ttag}")
+    check("14 runs the subcommand", re.search(r'args:\s*\["wardryx-proxy"\]', code_of(proxy)) is not None,
+          f"{label}: the proxy container does not run `typryx wardryx-proxy`")
+
+    # the SAME backend as typryx: one answer to where the data goes
+    backend_keys = sorted(k for k in set(tenv) | set(penv)
+                          if k in ("TYPRYX_BACKEND",) or k.startswith(("TYPRYX_JEV_", "TYPRYX_OPENAI_")))
+    check("14 same backend", all(tenv.get(k) == penv.get(k) for k in backend_keys) and backend_keys,
+          f"{label}: typryx and the proxy disagree on the backend: "
+          + ", ".join(f"{k}: {tenv.get(k)!r} vs {penv.get(k)!r}" for k in backend_keys if tenv.get(k) != penv.get(k)))
+    keymounts = lambda doc: sorted(re.findall(r"\{\s*name:\s*([\w-]*key[\w-]*),\s*mountPath:\s*([^\s,}]+)", code_of(doc)))
+    check("14 same backend", keymounts(typryx) == keymounts(proxy),
+          f"{label}: typryx mounts keys {keymounts(typryx)} but the proxy mounts {keymounts(proxy)}")
+
+    # no state of its own, and never the bus
+    for banned in ("TYPRYX_EVENTS", "TYPRYX_LEDGER_DIR", "TYPRYX_TRAINING_DIR"):
+        check("14 no state", banned not in penv, f"{label}: the proxy sets {banned}")
+    if "training" in label:
+        check("14 no state", "TYPRYX_TRAINING_DIR" in tenv,
+              f"{label}: --typed-training no longer reaches typryx itself, so the proxy check above proves nothing")
+    check("14 no state", "persistentVolumeClaim" not in code_of(proxy) and "stack-events" not in code_of(proxy)
+          and "typryx-state" not in code_of(proxy),
+          f"{label}: the proxy mounts a claim, the shared bus or typryx's state")
+    check("14 no state", pvcs(out) == ["typryx-state"], f"{label}: claims in the render are {pvcs(out)}")
+    pc = code_of(proxy)
+    check("14 hardened", "automountServiceAccountToken: false" in pc and "readOnlyRootFilesystem: true" in pc
+          and 'drop: ["ALL"]' in pc and "allowPrivilegeEscalation: false" in pc and "runAsNonRoot: true" in pc,
+          f"{label}: the proxy lost a hardening line")
+
+    # the door is open on purpose, so it must be held by the network and by nothing else
+    check("14 the door", penv.get("TYPRYX_ALLOW_OPEN_BIND") == "1" and penv.get("TYPRYX_PROXY_ADDR", "").startswith("0.0.0.0:"),
+          f"{label}: the proxy's bind and open-bind setting are not what the NetworkPolicy door assumes")
+    check("14 upstream", penv.get("TYPRYX_PROXY_UPSTREAM") == "http://wardryx:8090",
+          f"{label}: the proxy's upstream is {penv.get('TYPRYX_PROXY_UPSTREAM')!r}, not wardryx's own Service")
+
+    # ONLY the broker asks wardryx through the proxy
+    check("14 broker asks through the proxy", benv.get("TOKENFUSE_WARDRYX_URL") == "http://typryx-wardryx-proxy:4330",
+          f"{label}: the broker's TOKENFUSE_WARDRYX_URL is {benv.get('TOKENFUSE_WARDRYX_URL')!r}")
+    check("14 broker asks through the proxy", benv.get("TOKENFUSE_WARDRYX_MODE") == "enforce"
+          and benv.get("TOKENFUSE_WARDRYX_FAILMODE") == "closed",
+          f"{label}: the broker's wardryx mode or fail mode is not enforce/closed")
+    check("14 broker asks through the proxy", "key: wardryx_gateway" in benv.get("TOKENFUSE_WARDRYX_KEY", ""),
+          f"{label}: the broker does not use the viewer key wardryx_gateway: {benv.get('TOKENFUSE_WARDRYX_KEY')!r}")
+    try:
+        mcp_ms, ask_ms = int(benv["TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS"]), int(penv["TYPRYX_PROXY_ASK_TIMEOUT_MS"])
+        check("14 deadlines nest", mcp_ms > ask_ms,
+              f"{label}: the broker waits {mcp_ms} ms for a proxy that may take {ask_ms} ms to ask typryx")
+    except (KeyError, ValueError):
+        check("14 deadlines nest", False, f"{label}: the broker's or the proxy's deadline is not set")
+    check("14 broker only", sum(1 for v in [env_of(d).get("TOKENFUSE_WARDRYX_URL") for d in docs_of(out)]
+                                if v and "typryx-wardryx-proxy" in v) == 1,
+          f"{label}: more than one workload points its wardryx URL at the proxy")
+
+    # the NetworkPolicy edges
+    def policy(name):
+        return doc_named(out, "NetworkPolicy", name)
+    edges = (
+        ("broker-egress-typryx-proxy", "tokenfuse-mcp-broker", "Egress", "typryx-wardryx-proxy", "4330"),
+        ("typryx-proxy-ingress-broker", "typryx-wardryx-proxy", "Ingress", "tokenfuse-mcp-broker", "4330"),
+        ("typryx-proxy-egress-wardryx", "typryx-wardryx-proxy", "Egress", "wardryx", "8090"),
+        ("wardryx-ingress-typryx-proxy", "wardryx", "Ingress", "typryx-wardryx-proxy", "8090"),
+    )
+    for name, selects, direction, peer, port in edges:
+        d = policy(name)
+        if d is None:
+            check("14 edges", False, f"{label}: no NetworkPolicy {name}")
+            continue
+        dc = code_of(d)
+        check("14 edges", f"podSelector: {{ matchLabels: {{ app: {selects} }} }}" in dc
+              and f'policyTypes: ["{direction}"]' in dc
+              and len(re.findall(r"podSelector:", dc)) == 2
+              and f"podSelector: {{ matchLabels: {{ app: {peer} }} }}" in dc
+              and re.findall(r"port:\s*(\d+)", dc) == [port],
+              f"{label}: {name} is not exactly {selects} {direction} {peer}:{port}")
+        check("14 edges", "podSelector: {}" not in dc and "namespaceSelector" not in dc and "ipBlock" not in dc,
+              f"{label}: {name} admits or reaches more than the one named peer")
+    # nothing else may let anything into the proxy
+    ingress_to_proxy = [kind_name(d)[1] for d in docs_of(out)
+                        if kind_name(d)[0] == "NetworkPolicy" and "app: typryx-wardryx-proxy" in code_of(d).split("ingress:")[0]
+                        and "Ingress" in code_of(d)]
+    check("14 the door", ingress_to_proxy == ["typryx-proxy-ingress-broker"],
+          f"{label}: ingress policies selecting the proxy: {ingress_to_proxy}; the one door is typryx-proxy-ingress-broker")
+
+    # the model egress follows the mode and selects both pods, no wider
+    egress = doc_named(out, "NetworkPolicy", "typryx-egress-model")
+    if label.startswith("stub"):
+        check("14 model egress", egress is None, f"{label}: the stub rendered a model egress policy")
+    else:
+        check("14 model egress", egress is not None and "values: [typryx, typryx-wardryx-proxy]" in egress,
+              f"{label}: typryx-egress-model does not select the proxy, which answers from the same backend")
+        base_egress = doc_named(run("render", *base_of[label]).stdout, "NetworkPolicy", "typryx-egress-model")
+        norm = lambda d: re.sub(r"podSelector:[^\n]*\n", "", code_of(d)) if d else None
+        check("14 model egress", base_egress is not None and norm(egress) == norm(base_egress),
+              f"{label}: the proxy's way out is not exactly typryx's: the peers or ports differ")
+
+    # nothing seeded
+    check("14 nothing is held by default", "hold_if_signal" not in code,
+          f"{label}: the render seeds a hold_if_signal policy; none is shipped, the operator writes it")
+
+    # strict schema
+    f = tmp / ("risk-" + re.sub(r"\W+", "-", label) + ".yaml")
+    body = out
+    sec = run("secrets", *args).stdout
+    body += ("---\n" + sec) if sec else ""
+    f.write_text(body)
+    v = subprocess.run([kc, "-strict", "-summary", "-skip", "Secret", str(f)], capture_output=True, text=True)
+    check("14 every risk render validates", v.returncode == 0, f"{label}: {(v.stdout + v.stderr).strip()[:200]}")
+    rendered_risk += 1
+
+    # the key is still never a literal, with the proxy carrying it too
+    if label == "jev":
+        check("14 jev key is a file in the proxy too", FAKE not in out and not any(x in out for x in b64s(FAKE)),
+              "the jev key reached the render through the proxy")
+
+# nothing in the repository seeds a hold_if_signal policy
+for path in subprocess.run(["git", "ls-files", "manifests"], capture_output=True, text=True).stdout.split():
+    try:
+        text = pathlib.Path(path).read_text()
+    except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
+        continue
+    check("14 nothing is held by default", "hold_if_signal" not in code_of(text),
+          f"{path} seeds a hold_if_signal policy; none is shipped, the operator writes it (README)")
+
+# the LLM gateway keeps asking wardryx directly, whatever the flag
+gw = [d for d in docs_of(M10.read_text()) if kind_name(d) == ("Deployment", "tokenfuse-gateway")]
+check("14 the gateway is untouched", len(gw) == 1 and env_of(gw[0]).get("TOKENFUSE_WARDRYX_URL") == "http://wardryx:8090"
+      and env_of(gw[0]).get("TOKENFUSE_WARDRYX_FAILMODE") == "closed",
+      "the gateway no longer asks wardryx directly, or no longer fails closed: the typed answer must never sit on the model path")
+
+# 15. refused with no typryx, named, and says what it does
+for label, args in (("no mode at all", RISK), ("--typed-mode off", ["--typed-mode", "off"] + RISK)):
+    r = run("check", *args)
+    check("15 risk signal needs typryx", r.returncode != 0 and "--typed-risk-signal" in r.stderr,
+          f"{label}: accepted (exit {r.returncode}) or did not name the flag")
+    for verb in ("render", "secrets"):
+        check("15 risk signal needs typryx", run(verb, *args).stdout == "", f"{label}: `{verb}` still printed a manifest")
+for label, args in (("stub", ["--with-typed"]), ("jev", JEV), ("own-model", OWN)):
+    r = run("check", *args, *RISK)
+    err = r.stderr.lower()
+    check("15 risk signal says what it does", r.returncode == 0 and "every tool call" in err and "fails closed" in err
+          and "no policy is seeded" in err,
+          f"{label}: `check --typed-risk-signal` exited {r.returncode} and did not say that the broker now asks about "
+          "every tool call, fails closed, and that no policy is seeded")
+    check("15 risk signal says what it does", "risk signal" not in run("check", *args).stderr.lower(),
+          f"{label}: the notice talks about a risk signal nobody asked for")
+    check("15 risk signal leaves the mode alone",
+          run("mode", *args, *RISK).stdout == run("mode", *args).stdout
+          and run("secrets", *args, *RISK).stdout == run("secrets", *args).stdout
+          and run("has-secrets", *args, *RISK).stdout == run("has-secrets", *args).stdout,
+          f"{label}: --typed-risk-signal changed the mode, the Secrets or has-secrets")
+
+# 12. one typryx tag everywhere, and it is one that has the wardryx-proxy subcommand
+MIN_TYPRYX = (0, 4, 0)
 refs = []
 for path in subprocess.run(["git", "ls-files"], capture_output=True, text=True).stdout.split():
     # GOTCHAS.md is the dated ledger: entry 106 names v0.1.0 because that is what was
@@ -454,14 +701,19 @@ check("12 one typryx tag", len(tags) == 1,
       + ", ".join(f"{p}:{n}={t}" for p, n, t in refs[:6]))
 for t in tags:
     mv = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", t or "")
-    check("12 typryx reads the training variable",
+    check("12 typryx has the wardryx-proxy subcommand",
           mv is not None and tuple(int(x) for x in mv.groups()) >= MIN_TYPRYX,
-          f"typryx tag {t!r} is older than v{'.'.join(map(str, MIN_TYPRYX))}, which is where "
-          "TYPRYX_TRAINING_DIR starts to exist; an older image ignores it and writes nothing")
+          f"typryx tag {t!r} is older than v{'.'.join(map(str, MIN_TYPRYX))}, which is where the "
+          "`wardryx-proxy` subcommand starts to exist (and v0.3.0 is where TYPRYX_TRAINING_DIR does); "
+          "an older image refuses the subcommand, or ignores the variable and writes nothing")
 for label, args in every.items():
     img = re.findall(r"image: (ghcr\.io/taipanbox/typryx:\S+)", run("render", *args).stdout)
     check("12 one typryx tag", len(img) == 1 and (not tags or img[0].endswith(":" + tags[0])),
           f"{label}: the render's typryx image is {img}")
+for label, args in risk_variants.items():
+    img = re.findall(r"image: (ghcr\.io/taipanbox/typryx:\S+)", run("render", *args).stdout)
+    check("12 one typryx tag", len(img) == 2 and len(set(img)) == 1 and (not tags or img[0].endswith(":" + tags[0])),
+          f"{label}: typryx and its proxy should both run the one pinned tag, the render names {img}")
 
 shutil.rmtree(tmp, ignore_errors=True)
 if errors:
@@ -473,6 +725,7 @@ if errors:
 print(f"OK: typed/mode.sh renders nothing by default, the stub for --with-typed alone, refuses a jev "
       f"key file that is missing or empty, never renders a key as a literal, and {rendered} modes "
       f"(each with and without the training log) validate strictly; the training log adds one variable "
-      f"and no disk; {len(launchers)} launcher(s) parse every flag and refuse before installing; "
+      f"and no disk; the risk signal is off unless asked and, on, adds one stateless proxy with typryx's own "
+      f"backend ({rendered_risk} render(s) validate); {len(launchers)} launcher(s) parse every flag and refuse before installing; "
       f"{len(refs)} typryx image reference(s) agree on {tags[0]}.")
 PY

@@ -105,7 +105,7 @@ spec:
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: costcrew
-          image: ghcr.io/taipanbox/costcrew:v0.2.0
+          image: ghcr.io/taipanbox/costcrew:v0.3.0
           imagePullPolicy: IfNotPresent
           args:
             - "-addr"
@@ -265,7 +265,7 @@ spec:
           securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
           containers:
             - name: crew
-              image: ghcr.io/taipanbox/costcrew:v0.2.0
+              image: ghcr.io/taipanbox/costcrew:v0.3.0
               imagePullPolicy: IfNotPresent
               # Overrides the image's ENTRYPOINT (the console server): this is
               # the other binary in the image, and it is the only one ever

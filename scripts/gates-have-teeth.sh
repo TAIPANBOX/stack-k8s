@@ -59,6 +59,15 @@
 # version and the harness version differ only in how many layers of quoting sit
 # between the text and python, which is exactly the difference nobody sees.
 #
+# TWO BRACE PAIRS IN ONE py BLOCK, AGAIN
+#
+# The hazard below came back on 2026-10-04: 18 of 57 new cases failed their first
+# run, the mutation silently rewritten to a no-op or the needle to the edit
+# script's own text, because each carried a manifest line like `{ name: X, value:
+# "5.00" }` twice in one `py '...'` block. A literal brace in a py block is not
+# safe on bash 3.2 whatever the count looks like, so the cases added that day
+# spell every brace \x7b and \x7d and nothing else in them can be expanded.
+#
 # A CASE CAN PASS IN CI AND MISBEHAVE LOCALLY
 #
 # On bash 3.2, which is the bash on this machine, an unquoted brace pair
@@ -524,7 +533,7 @@ run_case "deploy-flags-agree: a deploy path stops taking --trust-domain" fail \
 run_case "deploy-flags-agree: the flag is accepted and patches nothing" fail \
 	'./scripts/deploy-flags-agree.sh' \
 	"$(py 'edit("deploy.sh", "TRAILRYX_TRUST_DOMAIN\\\":\\\"$TRUST_DOMAIN", "TRAILRYX_TRUST_DOMAI_N\\\":\\\"$TRUST_DOMAIN")')" \
-	"never patches"
+	"never applies"
 
 run_case "deploy-flags-agree: no deploy path left to judge" fail \
 	'./scripts/deploy-flags-agree.sh' \
@@ -691,7 +700,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.4.1\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.5.0\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 # The gateway's declassify key (invariant 27). POST /v1/fuse/declassify lifts a
@@ -746,7 +755,7 @@ run_case "declassify-is-keyed: an installer never gives an existing Secret the k
 # Each must say it measured nothing, never OK.
 run_case "declassify-is-keyed: no gateway container left to judge" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.4.1\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.5.0\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the declassify key"
 
 run_case "declassify-is-keyed: no installer left to read" fail \
@@ -1030,7 +1039,7 @@ run_case "typed-mode-is-honest: the training flag brings another object" fail \
 
 run_case "typed-mode-is-honest: the training flag provisions a claim" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "      printf -- \x27---\\n\x27; cat \"$M52\" ;;\n    jev)", "      printf -- \x27---\\n\x27; cat \"$M52\"; if [ \"$TRAINING\" = 1 ]; then printf -- \x27---\\napiVersion: v1\\nkind: PersistentVolumeClaim\\nmetadata:\\n  name: typryx-training\\n\x27; fi ;;\n    jev)")')" \
+	"$(py 'edit("typed/mode.sh", "  render_broker\n  if [ \"$RISK\" = 1 ]; then\n", "  render_broker\n  if [ \"$TRAINING\" = 1 ]; then printf -- \x27---\\napiVersion: v1\\nkind: PersistentVolumeClaim\\nmetadata:\\n  name: typryx-training\\n\x27; fi\n  if [ \"$RISK\" = 1 ]; then\n")')" \
 	"A claim is a billed disk"
 
 run_case "typed-mode-is-honest: the training directory is under no mount" fail \
@@ -1058,10 +1067,10 @@ run_case "typed-mode-is-honest: a launcher stops forwarding --typed-training" fa
 	"$(py 'edit("deploy.sh", "[ \"$TYPED_TRAINING\" = 1 ] && TYPED_ARGS+=(--typed-training)\n", "")')" \
 	"never adds it to the arguments"
 
-run_case "typed-mode-is-honest: the typryx pin goes back before the training log" fail \
+run_case "typed-mode-is-honest: the typryx pin goes back before the wardryx-proxy" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.3.0", "image: ghcr.io/taipanbox/typryx:v0.2.0")')" \
-	"older than v0.3.0"
+	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.0", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
+	"older than v0.4.0"
 
 run_case "typed-mode-is-honest: a document names a second typryx tag" fail \
 	'./scripts/typed-mode-is-honest.sh' \
@@ -1070,12 +1079,343 @@ run_case "typed-mode-is-honest: a document names a second typryx tag" fail \
 
 run_case "typed-mode-is-honest: the typryx image is no longer named" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.3.0", "image: example.invalid/typ:v0.3.0")')" \
+	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.0", "image: example.invalid/typ:v0.4.0")
+edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.0", "image: example.invalid/typ:v0.4.0")')" \
 	"measured nothing about the typryx pin"
 
 run_case "typed-mode-is-honest: a comment in the training section changes" pass \
 	'./scripts/typed-mode-is-honest.sh' \
 	"$(py 'edit("typed/mode.sh", "# WHERE IT LIVES, AND WHY THERE IS NO NEW DISK.", "# WHERE IT LIVES, AND WHY THERE IS NO NEW DISK, in short.")')"
+
+# The run-budget ceiling (invariant 28, tokenfuse v1.5.0 invariant 73). A run's
+# budget came from the header the AGENT sends and the next call could widen it;
+# TOKENFUSE_MAX_RUN_BUDGET_USD bounds it, and a launcher that forgets the variable
+# ships a gateway as unbounded as 1.4.1 with nothing reporting it. The faults: the
+# variable gone, a figure the gateway refuses to start on, a figure that is not the
+# documented default, a value from somewhere other than a literal, a copy on the
+# control plane (which would read as if the Cloud's budgets were clamped), the one
+# copy of the validation going loose or tight, a deploy path that checks too late,
+# stops taking the flag, applies it before the apply that reverts it, or accepts it
+# and applies nothing; then a comment (must pass) and both subjects taken away.
+run_case "run-budget-ceiling-is-set: the gateway container loses the ceiling" fail \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d\n", "")')" \
+	"no TOKENFUSE_MAX_RUN_BUDGET_USD env var"
+
+run_case "run-budget-ceiling-is-set: the ceiling is a word the gateway refuses" fail \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"five\" \x7d")')" \
+	"is not a positive decimal"
+
+run_case "run-budget-ceiling-is-set: the ceiling is zero" fail \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"0.00\" \x7d")')" \
+	"is not a positive decimal"
+
+run_case "run-budget-ceiling-is-set: the ceiling drifts from the documented default" fail \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"10.00\" \x7d")')" \
+	"is not the documented default"
+
+run_case "run-budget-ceiling-is-set: the ceiling comes from somewhere other than a literal" fail \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d\n", "            - name: TOKENFUSE_MAX_RUN_BUDGET_USD\n              valueFrom: \x7b configMapKeyRef: \x7b name: stack-wiring, key: TOKENFUSE_MAX_RUN_BUDGET_USD, optional: true \x7d \x7d\n")')" \
+	"not as a literal value"
+
+run_case "run-budget-ceiling-is-set: the control plane carries the ceiling" fail \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: PORT, value: \"8080\" \x7d\n", "            - \x7b name: PORT, value: \"8080\" \x7d\n            - \x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d\n")')" \
+	"not a gateway container"
+
+run_case "run-budget-ceiling-is-set: budget/ceiling.sh accepts zero" fail \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'edit("budget/ceiling.sh", "  \"\") refuse \"\x27$value\x27 is zero.", "  \"\") : \"\x27$value\x27 is zero.")')" \
+	"accepted '0'"
+
+run_case "run-budget-ceiling-is-set: budget/ceiling.sh accepts a sign and an exponent" fail \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'edit("budget/ceiling.sh", "re=\x27^[0-9]\x7b1,12\x7d(\\.[0-9]\x7b1,6\x7d)?$\x27", "re=\x27^[0-9eE.+-]+$\x27")')" \
+	"accepted '-1'"
+
+run_case "run-budget-ceiling-is-set: budget/ceiling.sh refuses a figure the gateway accepts" fail \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'edit("budget/ceiling.sh", "(\\.[0-9]\x7b1,6\x7d)?$\x27", "(\\.[0-9]\x7b1,2\x7d)?$\x27")')" \
+	"refused '2.123456'"
+
+run_case "run-budget-ceiling-is-set: a deploy path stops checking the figure before it installs" fail \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/budget/ceiling.sh\" check ", "\"$ROOT/budget/ceiling.sh\" true ")')" \
+	"never runs budget/ceiling.sh check"
+
+run_case "run-budget-ceiling-is-set: a comment next to the ceiling changes" pass \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "# The operator\x27s ceiling on a run\x27s budget (tokenfuse v1.5.0,", "# The operator\x27s ceiling on the budget of a run (tokenfuse v1.5.0,")')"
+
+run_case "run-budget-ceiling-is-set: no gateway container left to judge" fail \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')" \
+	"measured nothing about the run-budget ceiling"
+
+run_case "run-budget-ceiling-is-set: budget/ceiling.sh taken away" fail \
+	'./scripts/run-budget-ceiling-is-set.sh' \
+	"$(py 'import os
+os.remove("budget/ceiling.sh")')" \
+	"does not exist"
+
+# The other half of invariant 28, in deploy-flags-agree.sh beside the trust domain:
+# `apply -k` puts the declared figure back, so the flag has to act after it.
+run_case "deploy-flags-agree: a deploy path stops taking --run-budget-ceiling" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "    --run-budget-ceiling) RUN_BUDGET_CEILING=\"$2\"; shift 2 ;;\n", "")')" \
+	"does not parse --run-budget-ceiling"
+
+run_case "deploy-flags-agree: the ceiling flag is accepted and applies nothing" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'edit("deploy.sh", "set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_MAX_RUN_BUDGET_USD=", "set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_MAX_RUN_BUDGET_US=")')" \
+	"never applies"
+
+run_case "deploy-flags-agree: the ceiling is applied BEFORE the apply that reverts it" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'import re
+p = "cloud/gcp/deploy-gcp.sh"
+s = open(p).read()
+start = s.index("# The run-budget ceiling, set AFTER the kustomization")
+end = s.index("fi\n", s.index("could not set the run-budget ceiling on the gateway")) + 3
+block = s[start:end]
+s = s[:start] + s[end:]
+a = "k_ \"apply -k /root/stack-k8s/manifests\"\n"
+assert s.count(a) == 1
+s = s.replace(a, block + a)
+open(p, "w").write(s)')" \
+	"BEFORE its \`apply -k\`"
+
+# The risk signal (invariant 29, wardryx v1.2.0 hold_if_signal, typryx v0.4.0
+# wardryx-proxy). Off unless asked; on, one stateless proxy with typryx's own
+# backend, only the broker asking through it, one door, nothing seeded.
+run_case "typed-mode-is-honest: the risk signal is on without the flag" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "TRAINING_DIR=\"/var/lib/typryx/training\"\nRISK=0\n", "TRAINING_DIR=\"/var/lib/typryx/training\"\nRISK=1\n")')" \
+	"WITHOUT --typed-risk-signal"
+
+run_case "typed-mode-is-honest: the gateway is pointed at the proxy" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_WARDRYX_URL, value: \"http://wardryx:8090\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_URL, value: \"http://typryx-wardryx-proxy:4330\" \x7d")')" \
+	"must never sit on the model path"
+
+run_case "typed-mode-is-honest: the broker keeps asking wardryx directly" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "TOKENFUSE_WARDRYX_URL, value: \\\"http://typryx-wardryx-proxy:4330\\\"", "TOKENFUSE_WARDRYX_URL, value: \\\"http://wardryx:8090\\\"")')" \
+	"the broker's TOKENFUSE_WARDRYX_URL is"
+
+run_case "typed-mode-is-honest: the broker fails open" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "TOKENFUSE_WARDRYX_FAILMODE, value: \\\"closed\\\"", "TOKENFUSE_WARDRYX_FAILMODE, value: \\\"open\\\"")')" \
+	"not enforce/closed"
+
+run_case "typed-mode-is-honest: the broker uses the admin key" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "key: wardryx_gateway \x7d \x7d", "key: wardryx_admin \x7d \x7d")')" \
+	"does not use the viewer key"
+
+run_case "typed-mode-is-honest: the broker waits less than the proxy may take" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"1500\\\"", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"500\\\"")')" \
+	"14 deadlines nest"
+
+run_case "typed-mode-is-honest: the proxy gets a journal on the shared bus" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "            - \x7b name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"1000\" \x7d\n", "            - \x7b name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"1000\" \x7d\n            - \x7b name: TYPRYX_EVENTS, value: \"/var/lib/stack/events/typryx.ndjson\" \x7d\n")')" \
+	"the proxy sets TYPRYX_EVENTS"
+
+run_case "typed-mode-is-honest: the proxy inherits the training log" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "render_typryx \"$1\" \"$2\" \"$3\" \"$M56\"", "render_typryx \"$(with_training \"$1\")\" \"$2\" \"$3\" \"$M56\"")')" \
+	"the proxy sets TYPRYX_TRAINING_DIR"
+
+run_case "typed-mode-is-honest: the proxy answers from another backend than typryx" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "render_typryx \"$1\" \"$2\" \"$3\" \"$M56\"", "render_typryx \x27            - \x7b name: TYPRYX_BACKEND, value: \"stub\" \x7d\x27 \"\" \"\" \"$M56\"")')" \
+	"disagree on the backend"
+
+run_case "typed-mode-is-honest: the door admits every pod" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "  ingress:\n    - from:\n        - podSelector: \x7b matchLabels: \x7b app: tokenfuse-mcp-broker \x7d \x7d\n      ports:\n        - \x7b protocol: TCP, port: 4330 \x7d", "  ingress:\n    - from:\n        - podSelector: \x7b\x7d\n      ports:\n        - \x7b protocol: TCP, port: 4330 \x7d")')" \
+	"admits or reaches more than the one named peer"
+
+run_case "typed-mode-is-honest: the model egress leaves the proxy out" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "  if [ \"$RISK\" = 1 ]; then\n    # The proxy answers from the same backend", "  if false; then\n    # The proxy answers from the same backend")')" \
+	"does not select the proxy"
+
+run_case "typed-mode-is-honest: a hold_if_signal policy is seeded" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/00-base.yaml", "      deny_tool:\n        - shell_exec\n", "      deny_tool:\n        - shell_exec\n    - name: seeded\n      target: agent://*\n      hold_if_signal: \x7b name: action.risk_class, values: [destructive], min_probability: 0.8 \x7d\n")')" \
+	"seeds a hold_if_signal policy"
+
+run_case "typed-mode-is-honest: the risk flag is accepted with no typryx" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("typed/mode.sh", "if [ \"$RISK\" = 1 ] && [ \"$EFFECTIVE\" = off ]; then", "if false; then")')" \
+	"15 risk signal needs typryx"
+
+run_case "typed-mode-is-honest: a launcher loses --typed-risk-signal" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "    --typed-risk-signal)    TYPED_RISK_SIGNAL=1; shift ;;\n", "")')" \
+	"does not parse --typed-risk-signal"
+
+run_case "typed-mode-is-honest: a launcher stops forwarding --typed-risk-signal" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("deploy.sh", "[ \"$TYPED_RISK_SIGNAL\" = 1 ] && TYPED_ARGS+=(--typed-risk-signal)\n", "")')" \
+	"15 launchers hand --typed-risk-signal"
+
+run_case "typed-mode-is-honest: the proxy runs another typryx tag than typryx" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.0", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
+	"different tags"
+
+run_case "typed-mode-is-honest: the proxy runs the service, not the proxy" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "args: [\"wardryx-proxy\"]", "args: [\"serve\"]")')" \
+	"does not run \`typryx wardryx-proxy\`"
+
+run_case "typed-mode-is-honest: the proxy forwards to something other than wardryx" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "value: \"http://wardryx:8090\" \x7d", "value: \"http://wardryx.other:8090\" \x7d")')" \
+	"not wardryx's own Service"
+
+run_case "typed-mode-is-honest: manifests/56 drifts from the lines the modes rewrite" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "            - \x7b name: tmp, mountPath: /tmp \x7d", "            - \x7b name: tmp,  mountPath: /tmp \x7d")')" \
+	"no longer carries the three lines"
+
+run_case "typed-mode-is-honest: a comment in manifests/56 changes" pass \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "# ## No state, no disk\n", "# ## No state and no disk\n")')"
+
+run_case "typed-mode-is-honest: manifests/56 taken away" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'import os
+os.remove("manifests/56-typryx-wardryx-proxy.yaml")')" \
+	"does not exist"
+
+# The chain verifier (invariant 31, agent-stack-go v1.1.0 `agent-conform watch-dir`).
+# The failures worth guarding are the quiet ones: suspended, in an opt-in file, watching
+# the wrong directory, writing a stream no reader opens, remembering in a place that
+# forgets, a second claim (a billed disk), a retry that hides the failure, no way to
+# create its file, the money plane's uid, an image that has no such subcommand.
+run_case "chain-verifier: the verifier is suspended" fail \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "  schedule: \"*/15 * * * *\"\n", "  schedule: \"*/15 * * * *\"\n  suspend: true\n")')" \
+	"suspended"
+
+run_case "chain-verifier: the verifier runs hourly" fail \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "  schedule: \"*/15 * * * *\"\n", "  schedule: \"0 * * * *\"\n")')" \
+	"not at least every 15 minutes"
+
+run_case "chain-verifier: the verifier watches a directory that is not the bus" fail \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m", "                - \"/var/lib/stack\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m")')" \
+	"not the bus"
+
+run_case "chain-verifier: the verifier writes a stream named for another writer" fail \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events/agent-conform.ndjson\"\n", "                - \"/var/lib/stack/events/wardryx.ndjson\"\n")')" \
+	"inside the bus (its name is the source"
+
+run_case "chain-verifier: the verifier remembers in an emptyDir" fail \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              emptyDir: \x7b\x7d\n")')" \
+	"mounts an emptyDir"
+
+run_case "chain-verifier: the verifier is given a claim of its own" fail \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n", "                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n            - name: conform-state\n              persistentVolumeClaim: \x7b claimName: agent-conform-state \x7d\n")')" \
+	"a billed disk"
+
+run_case "chain-verifier: a failed pass is retried into silence" fail \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "      backoffLimit: 0\n      template:\n        spec:\n          restartPolicy: Never\n", "      backoffLimit: 0\n      template:\n        spec:\n          restartPolicy: OnFailure\n")')" \
+	"a retry exits 0"
+
+run_case "chain-verifier: the verifier cannot create its file on the bus" fail \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "runAsUser: 10002, runAsGroup: 10002, fsGroup: 10001,", "runAsUser: 10002, runAsGroup: 10002,")')" \
+	"no fsGroup 10001"
+
+run_case "chain-verifier: the verifier shares the money plane's uid" fail \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "runAsUser: 10002, runAsGroup: 10002,", "runAsUser: 10001, runAsGroup: 10002,")')" \
+	"its own and not the money plane"
+
+run_case "chain-verifier: the image has no watch-dir" fail \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/agent-conform:v1.1.0", "image: ghcr.io/taipanbox/agent-conform:v1.0.2")')" \
+	"older than v1.1.0"
+
+run_case "chain-verifier: the verifier is in an opt-in file" fail \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'import re
+p = "manifests/40-routines-and-secrets.yaml"
+s = open(p).read()
+i = s.index("# The on-box chain verifier.")
+doc = s[i:]
+s = s[:i].rstrip("\n")
+s = s[:s.rindex("---")].rstrip("\n") + "\n"
+open(p, "w").write(s)
+open("manifests/57-agent-conform.yaml", "w").write(doc)')" \
+	"does not run the verifier"
+
+run_case "chain-verifier: a comment on the verifier changes" pass \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "# EVERY 15 MINUTES, as a CronJob, because the work is one pass over the bus and", "# EVERY 15 MINUTES, as a CronJob, since the work is one pass over the bus and")')"
+
+run_case "chain-verifier: no verifier left to judge" fail \
+	'./scripts/chain-verifier-watches-the-bus.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/agent-conform:v1.1.0", "image: ghcr.io/taipanbox/agent-conform-other:v1.1.0")')" \
+	"measured nothing about the verifier"
+
+# The bus file names (invariant 30). heraldyx v0.3.0 and idryx v1.1.0 refuse an event
+# whose source is not allowed for its file, so a stream renamed, or a --load pair that
+# names the wrong source, silences a plane without an error.
+run_case "bus-names: a stream is named for no source the readers know" fail \
+	'./scripts/bus-names-match-the-source-rule.sh' \
+	"$(py 'edit("manifests/00-base.yaml", "WARDRYX_EVENTS_PATH: \"/var/lib/stack/events/wardryx.ndjson\"", "WARDRYX_EVENTS_PATH: \"/var/lib/stack/events/policy-events.ndjson\"")')" \
+	"named for no source the readers know"
+
+run_case "bus-names: an idryx --load pair names a source the file may not carry" fail \
+	'./scripts/bus-names-match-the-source-rule.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \"tokenfuse:/var/lib/stack/events/tokenfuse.ndjson\"", "            - \"wardryx:/var/lib/stack/events/tokenfuse.ndjson\"")')" \
+	"may carry"
+
+run_case "bus-names: an idryx --load path is not a stream file" fail \
+	'./scripts/bus-names-match-the-source-rule.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \"tokenfuse:/var/lib/stack/events/tokenfuse.ndjson\"", "            - \"tokenfuse:/var/lib/stack/events/tokenfuse.log\"")')" \
+	"names no *.ndjson file"
+
+run_case "bus-names: a renamed stream that the notifier declares is not a fault" pass \
+	'./scripts/bus-names-match-the-source-rule.sh' \
+	"$(py 'edit("manifests/00-base.yaml", "WARDRYX_EVENTS_PATH: \"/var/lib/stack/events/wardryx.ndjson\"", "WARDRYX_EVENTS_PATH: \"/var/lib/stack/events/policy-events.ndjson\"")
+edit("manifests/45-heraldyx.yaml", "            - \x7b name: HERALDYX_EVENTS, value: \"/var/lib/stack/events\" \x7d\n", "            - \x7b name: HERALDYX_EVENTS, value: \"/var/lib/stack/events\" \x7d\n            - \x7b name: HERALDYX_STREAMS, value: \"policy-events=wardryx\" \x7d\n")')"
+
+run_case "bus-names: the control plane and the broker keep their tokenfuse rows" pass \
+	'./scripts/bus-names-match-the-source-rule.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "tokenfuse-mcp.ndjson\" \x7d", "tokenfuse-mcp.ndjson\" \x7d  ")')"
+
+run_case "bus-names: a comment names a stream that does not exist" pass \
+	'./scripts/bus-names-match-the-source-rule.sh' \
+	"$(py 'edit("manifests/00-base.yaml", "  EVENTS_DIR: \"/var/lib/stack/events\"\n", "  EVENTS_DIR: \"/var/lib/stack/events\"\n  # was /var/lib/stack/events/oops.ndjson once\n")')"
+
+run_case "bus-names: no stream path left to judge" fail \
+	'./scripts/bus-names-match-the-source-rule.sh' \
+	"$(py 'import pathlib
+n = 0
+for path in list(pathlib.Path("manifests").glob("*.yaml")) + list(pathlib.Path("typed").glob("*.sh")):
+    s = path.read_text()
+    if "/var/lib/stack/events/" in s:
+        path.write_text(s.replace("/var/lib/stack/events/", "/var/lib/stack/evnts/"))
+        n += 1
+assert n, "no file named the bus"')" \
+	"measured nothing about the bus file names"
 
 echo
 if [ -n "$(git status --porcelain)" ]; then

@@ -57,6 +57,9 @@ step "the hub entry routes exactly the seven allowed paths" "./scripts/hub-entry
 step "Felyx reaches its model through the gateway" "./scripts/felyx-through-the-gateway.sh"
 step "delegation is off by default" "./scripts/delegation-off-by-default.sh"
 step "the typed data mode is honest" "./scripts/typed-mode-is-honest.sh"
+step "the gateway caps what a run may declare" "./scripts/run-budget-ceiling-is-set.sh"
+step "every bus file is a name the readers accept" "./scripts/bus-names-match-the-source-rule.sh"
+step "the chain verifier watches the bus" "./scripts/chain-verifier-watches-the-bus.sh"
 
 echo
 if [ "$fail" -ne 0 ]; then

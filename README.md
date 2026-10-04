@@ -80,12 +80,14 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | PersistentVolumeClaim (RWX) | the shared event directory | |
 | PersistentVolumeClaim | `verdryx.db`, `engram.engram` stores | |
 | CronJob | three of `routines.sh`'s five governance routines: crypto trend, quality drift, identity sweep (`qryx-trend`, `verdryx-drift`, `idryx-detect`), plus the record seal (`trailryx-seal`, at 5:27, last because it seals what the others did). FinOps export (`focus-export`) cannot run as a CronJob here and does not: its data lives in a per-pod `emptyDir` (GOTCHAS 81), so since 2026-08-28 it runs as a SIDECAR in the `tokenfuse-gateway` pod, hourly, printing rather than storing. The alternative was a PersistentVolumeClaim for the trace directory, which is a billed disk and so a spending decision rather than a fix; `drills` (`mockryx-drill`) is separate: opt-in, suspended below | |
+| CronJob | `agent-conform`, the on-box chain verifier, every 15 minutes: it verifies the `prev_hash` chain of every stream on the shared bus and writes a `chain_broken` event to `agent-conform.ndjson` on the bus when one is broken. In the default apply; keeps its memory beside its output on `stack-events`, so it adds no disk. See "The on-box chain verifier" below | |
 | NetworkPolicy | default-deny, then exactly the paths above | |
 | Deployment + PVC + NetworkPolicy | `heraldyx`, the notifier. **Not in the default apply**, see "Being told, rather than watching" below. No Service and no port: it reads the event log and sends mail, so nothing calls it | |
 | Deployment + PVC + Service + NetworkPolicy x4 | `47-scopyx.yaml`, the web-egress enforcement point. **Not in the default apply**: it opens 80 and 443 to the whole public internet on behalf of agents, which is the widest grant in the namespace and the one decision an operator most needs to have made themselves. Refuses to start without a credential, deliberately | |
 | Deployment | `48-scopyx-browser.yaml`, the same plane with a real browser, for pages that assemble themselves. **Replaces 47's Deployment rather than running beside it**, so a cluster cannot round-robin an agent's fetches between a browser and a fetcher that runs no JavaScript. Costs 267 MB of pull against 3.5 MB. Read its header: PodSecurity `restricted` decides the sandbox question for you | |
 | Deployment + PVC + Service | `51-typryx.yaml`, the typed-answer plane: a typed question answered with a probability, scored later against what actually happened. **Not in the default apply**: a whole plane somebody may simply not want. Backend is `stub` (free, no outbound call) unless a launcher is given `--typed-mode` (see "Typed answers: choose where your data goes"). Refuses to start without a credential, the same as scopyx. Its journal is on the shared `stack-events` bus | |
 | Deployment + Service + NetworkPolicy x4 | `52-tokenfuse-mcp-broker.yaml`, tokenfuse's own MCP credential broker fronting typryx. **Not in the default apply, applied by the same `--with-typed` flag as 51-typryx.yaml, right after it**. Free, reaches nowhere but typryx itself. Refuses to start without its own credential | |
+| Deployment + Service + NetworkPolicy x4 | `56-typryx-wardryx-proxy.yaml`, typryx's `wardryx-proxy`: between the MCP broker and wardryx, it adds the risk class of a pending tool call to the decision request, so a `hold_if_signal` policy can hold the call for a person. **Not in the default apply, rendered only by `--typed-risk-signal`** (off by default, refused when the typed mode is off). No claim, no journal, no ledger: it keeps no state. See "A typed risk signal" below | 4330 |
 | Deployment + Service + PVC + NetworkPolicy x3 | `54-delegation.yaml`, vouchryx, the delegation-token service. **Not in the default apply, applied by `delegation/up.sh`**, which also refuses before applying anything unless a trusted upstream issuer, audience and JWKS file are given. Reachable only from the gateway and the console. See "The delegation plane" below | |
 | Patch (Deployment) | `55-copilot-cloud.yaml`: moves the console's copilot, Felyx, to a larger model. By default Felyx already reaches Anthropic through this stack's own gateway (by its Service name, under `agent://<trust domain>/genaryx/felyx`, metered and policy-checked like any agent) and needs only the `stack-copilot` Secret holding your key; without it Felyx says it is not configured. **Not in the default apply, opt-in, and METERED**: every conversation is billed by the model provider to the key's owner, on a bill separate from the cluster. See its own header before applying | |
 | Namespace labels + NetworkPolicy x2 | `60-harden-neighbours.yaml`: Pod Security `restricted` plus default-deny ingress and egress for the cluster's `default` namespace, i.e. hardening for a namespace this stack does not own (`security-tests.sh` check 12 reports on the gap this closes). **Not in the default apply**: it changes a namespace that belongs to whoever runs the cluster, and it WILL stop anything already running in `default`. Read its header before applying | |
@@ -246,6 +248,34 @@ Then reach the console over your own tunnel (`20-console.yaml` explains why
 there is no public entry point by default), and check the deployment with
 `./verify.sh --freeze` and `./security-tests.sh`.
 
+### The run-budget ceiling
+
+A run's budget used to come from the header the agent sends, and the next call of
+an open run could widen it, so with no client keys, no identity map and no unit
+caps the per-run ceiling was whatever the agent said. Since tokenfuse v1.5.0 the
+gateway has a ceiling the operator sets, and `10-planes.yaml` sets it:
+`TOKENFUSE_MAX_RUN_BUDGET_USD` is `5.00` on the gateway container.
+
+- **What 5.00 means.** It is the gateway's own built-in run budget, so an ordinary
+  run is unchanged and only a budget a caller declares above 5.00 is lowered to
+  it (the answer to a lowered call carries `x-fuse-budget-clamped`). A caller can
+  always ask for less.
+- **What it does not do.** It does not lower a budget the Cloud sets, and it
+  bounds each run, not an agent's total spend: an agent that opens a new run id
+  gets a new ceiling's worth.
+- **Changing it.** `--run-budget-ceiling USD` on `deploy.sh`, `deploy-gcp.sh` and
+  `deploy-aws.sh` (or `RUN_BUDGET_CEILING` in the environment): a positive figure
+  with up to six decimals, no sign, no exponent, checked before anything is
+  installed. It is applied after the manifests, because `apply -k` puts the
+  declared 5.00 back over anything set before it or by hand, and it rolls the
+  gateway to the new figure by itself. Give the flag on every run: a re-run
+  without it returns the gateway to 5.00.
+
+```bash
+./deploy.sh --servers ... --hcloud-token ... --trust-domain acme.example \
+  --run-budget-ceiling 2.50
+```
+
 ### Being told, rather than watching
 
 `deploy.sh` asks for an address for alerts alongside the tunnel and the console
@@ -298,7 +328,7 @@ kubectl -n agent-stack create secret generic tokenfuse-mcp-broker-keys \
 `manifests/52-tokenfuse-mcp-broker.yaml` has the full story: why two Secrets
 rather than one, what its NetworkPolicies admit, and what was measured
 through it on kind (it needs typryx v0.2.0 or later; `51-typryx.yaml` pins
-v0.3.0; GOTCHAS 106). Reaching typryx directly,
+v0.4.0; GOTCHAS 106). Reaching typryx directly,
 without the broker, is unchanged, over your own tunnel or
 
 ```bash
@@ -372,7 +402,7 @@ How each mode behaves, because the defaults are deliberate:
 ship models for customers. A customer can fine-tune and calibrate their own model
 on their own data, and typryx gives them what they need to do it. Add
 `--typed-training` to any launcher, next to `--with-typed` or a `--typed-mode`,
-and typryx (v0.3.0 or later, which `51-typryx.yaml` pins) keeps a local training
+and typryx (v0.3.0 or later; `51-typryx.yaml` pins v0.4.0) keeps a local training
 log: one line per answered question holding the state the template let through
 and the identity of the answer, never the backend's answer or its probabilities.
 You post what actually happened to `/v1/outcome`, and `typryx export --training`
@@ -423,6 +453,101 @@ reaching a real model, typryx writing `training.ndjson` on the `typryx-state`
 claim (it is meant to be writable there, like the ledger beside it, by the same
 `fsGroup`), and the `kubectl exec` export above, have not been run through these
 launchers.
+
+### A typed risk signal
+
+Use this when you want a person to approve a tool call because a classifier says
+it is probably destructive, an external send, or a money movement. It needs
+typryx deployed (`--with-typed`, or a `--typed-mode`), a wardryx of v1.2.0 or
+later, and a policy rule you write. All of it is off by default.
+
+```bash
+./deploy.sh ... --with-typed --typed-risk-signal           # the free stub backend
+./deploy.sh ... --typed-mode jev --typed-jev-key-file ~/jev.key --typed-risk-signal
+```
+
+- **What it adds.** `56-typryx-wardryx-proxy.yaml`, typryx's `wardryx-proxy`, as
+  its own Deployment. It forwards every request to wardryx unchanged. For a
+  `POST /v1/decide` that carries a pending tool call (a name and whole
+  arguments), it asks typryx which of `read_only`, `reversible_change`,
+  `destructive`, `external_send` and `financial` the call belongs to, and adds the
+  answer to the request as a `signals` entry. No answer in time, truncated
+  arguments, or anything unusual: the request is forwarded untouched, never
+  refused. It answers from the same backend you chose for typryx (same key, same
+  egress rule, no wider) and keeps no state: no claim, no journal, no ledger and
+  no training log, so the tool-call arguments it asks about are not written down.
+- **Where it sits.** Only tokenfuse's MCP broker asks wardryx through it. The LLM
+  gateway keeps asking wardryx directly, so a slow typed answer never sits on the
+  model path. The broker asked wardryx nothing before; with the flag it asks about
+  every tool call, fails closed, and uses the same viewer key as the gateway.
+- **What it costs.** Each tool call that carries a name and whole arguments is one
+  typryx ask. In the `jev` mode that is a paid call, and the tool name, arguments
+  and target leave the cluster; the proxy has its own hourly cap
+  (`TYPRYX_MAX_CALLS_PER_HOUR`, default 1000). The `stub` backend's probabilities
+  mean nothing: do not write a rule against them.
+- **What holds nothing.** No policy is seeded. Until you write a `hold_if_signal`
+  rule the signal is added and ignored. A rule can turn an allow into a hold for a
+  person and nothing else; wardryx refuses a rule that would deny on a signal.
+
+An example policy, written once, through the policy API (read the key from the
+cluster, reach wardryx with a port-forward, since the namespace is default-deny):
+
+```bash
+ADMIN_KEY="$(kubectl -n agent-stack get secret stack-keys -o jsonpath='{.data.wardryx_admin}' | base64 -d)"
+kubectl -n agent-stack port-forward svc/wardryx 8090:8090 &
+curl -X PUT localhost:8090/v1/policies/support-risk \
+  -H "Authorization: Bearer $ADMIN_KEY" -H "Content-Type: application/json" \
+  -d '{"target": "agent://acme.example/support/*",
+       "hold_if_signal": {"name": "action.risk_class",
+                          "values": ["destructive", "external_send", "financial"],
+                          "min_probability": 0.8}}'
+```
+
+A call the rule holds waits for a person to approve it in the console; the
+approval is bound to the exact call they read (wardryx v1.2.0), so the same
+arguments re-spaced are another call.
+
+**Not proven.** Checked without a cluster: every mode renders with the flag to
+schema-valid manifests (`kubeconform --strict`), the gate in
+`scripts/typed-mode-is-honest.sh` holds the rules above, and the proxy was run as
+a container against a stand-in wardryx. A pod behind these NetworkPolicies, wardryx
+holding a real call on a real signal, the broker's decision reaching the proxy in
+a cluster, and the latency the proxy adds with a hosted backend, have not been run
+through these launchers. The proxy's ask deadline (1000 ms) and the broker's wait
+(1500 ms) are chosen, not measured. The proxy binds the pod address with
+`TYPRYX_ALLOW_OPEN_BIND=1`, because the broker cannot send an `X-Typryx-Key`; its
+door is the one NetworkPolicy that admits the broker alone.
+
+### The on-box chain verifier
+
+Every stream on the shared bus is a hash chain, and nothing on a box checked one
+until agent-stack-go v1.1.0's `agent-conform watch-dir`. A CronJob in the default
+apply (`agent-conform`, in `40-routines-and-secrets.yaml`) runs it every 15
+minutes over the bus. A break becomes a `chain_broken` event (high) in
+`agent-conform.ndjson` on the bus, where heraldyx and the console already read; a
+chain with no `prev_hash` at all is reported once as `chain_unchained` (low),
+since the field is optional. heraldyx v0.3.0 has no sentence for `chain_broken`
+and renders it with its generic wording ("raised an event this build does not
+have a description for"), which is neutral and true.
+
+- **A new break fails the Job**, once, on purpose: a second signal beside the
+  event, and `verify.sh` counts the failed pod as not Running until it ages out
+  (three are kept). The next run exits 0, because the finding is remembered.
+- **Where it remembers.** In `agent-conform.state.json` beside its output on
+  `stack-events`. An `emptyDir` would forget between runs (each run is a new pod)
+  and announce a persistent break every 15 minutes, and a claim of its own is a
+  billed disk, which is your decision, so it adds none. It holds the bus
+  read-write, runs as uid 10002 with the bus group, and writes only its own output
+  and state because the tool does not write anything else, not because the mount
+  says so.
+- **What it cannot see.** `prev_hash` is unkeyed: a writer compromised in its own
+  uid can forge its own stream with a valid chain, and truncation from the end is
+  invisible. Only signing closes those.
+- **File names.** heraldyx v0.3.0 and idryx v1.1.0 refuse an event whose `source`
+  is not allowed for the file it was read from (`<source>.ndjson` carries
+  `<source>`; `tokenfuse-cloud.ndjson` and `tokenfuse-mcp.ndjson` carry
+  `tokenfuse`). Every stream this launcher names already matches, and
+  `scripts/bus-names-match-the-source-rule.sh` keeps it so.
 
 ## A second site
 

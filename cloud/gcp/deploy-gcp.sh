@@ -29,6 +29,12 @@
 # account rather than on the cluster, which is why it is a flag and not a
 # default, and why the key is a file rather than an argument.
 #
+# `--run-budget-ceiling <usd>` sets the most one run may be allowed to carry, as
+# TOKENFUSE_MAX_RUN_BUDGET_USD on the gateway (tokenfuse v1.5.0). Without it the manifest's
+# 5.00 stands, which is the gateway's own built-in run budget, so an ordinary run is
+# unchanged and only a budget a CALLER declares above it is lowered. It does not lower a
+# budget the Cloud sets. Checked before anything is installed, applied after the
+# kustomization (the only place it survives), and the gateway rolls to it by itself.
 # `--trust-domain <domain>` sets the record plane's trust domain after the
 # manifests are applied, which is the only place it survives: `apply -k`
 # reverts the keys the manifest declares and leaves the ones an operator
@@ -71,6 +77,13 @@
 # data. It adds one environment variable and NO disk: the log is a directory on
 # the typryx-state claim typryx already has, and lives as long as that claim. A
 # claim of its own would be a billed disk, which is your decision, not a flag's.
+# `--typed-risk-signal` (off by default; any mode but off, refused otherwise) puts typryx's
+# `wardryx-proxy` between tokenfuse's MCP broker and wardryx, so the risk class of a pending
+# tool call can reach a wardryx `hold_if_signal` policy (wardryx v1.2.0, typryx v0.4.0). Only
+# the broker's wardryx URL moves to the proxy; the LLM gateway keeps asking wardryx directly.
+# It seeds NO policy: nothing is held until an operator writes a `hold_if_signal` rule (a
+# worked example is in README.md). Each eligible tool call costs one typryx ask, so in the
+# jev mode it is a bill, and the broker starts asking wardryx about every tool call.
 # typed/mode.sh holds the validation and the rendering, one copy for all three
 # launchers; see README.md, "Typed answers: choose where your data goes".
 set -euo pipefail
@@ -111,10 +124,19 @@ TYPED_MODEL_KEY_FILE="${TYPED_MODEL_KEY_FILE:-}"
 TYPED_MODEL_CIDR="${TYPED_MODEL_CIDR:-}"
 # typryx's opt-in local training log; off unless asked (typed/mode.sh).
 TYPED_TRAINING="${TYPED_TRAINING:-0}"
+# The typed risk signal: typryx's `wardryx-proxy` between the MCP broker and wardryx, so a
+# tool call's risk class can reach a `hold_if_signal` policy (wardryx v1.2.0). Off unless
+# asked, and refused when the typed mode is off (typed/mode.sh holds the one copy).
+TYPED_RISK_SIGNAL="${TYPED_RISK_SIGNAL:-0}"
 # The record plane's trust domain. Empty leaves 00-base.yaml's `set-me.invalid`
 # in place, the right default and, measured 2026-09-13, NOT loud by itself:
 # verify.sh is what makes the placeholder red (GOTCHAS 90); see where it is used.
 TRUST_DOMAIN="${TRUST_DOMAIN:-}"
+# The ceiling on the budget one run may carry (tokenfuse v1.5.0, invariant 73; CLAUDE.md
+# invariant 28). Empty leaves 10-planes.yaml's 5.00, the gateway's own built-in run budget.
+# Set, it is checked by budget/ceiling.sh before anything is installed and applied AFTER
+# the kustomization, the only position where it sticks (the same rule as the trust domain).
+RUN_BUDGET_CEILING="${RUN_BUDGET_CEILING:-}"
 # Build tokenfuse, trailryx and costcrew on a node instead of pulling them.
 #
 # Off, since 2026-09-01, because all three are published and pinned in the
@@ -148,7 +170,9 @@ while [ $# -gt 0 ]; do
     --typed-model-key-file) TYPED_MODEL_KEY_FILE="$2"; shift 2 ;;
     --typed-model-cidr)     TYPED_MODEL_CIDR="$2"; shift 2 ;;
     --typed-training)       TYPED_TRAINING=1; shift ;;
+    --typed-risk-signal)    TYPED_RISK_SIGNAL=1; shift ;;
     --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
+    --run-budget-ceiling) RUN_BUDGET_CEILING="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     # The header block, found rather than counted.
@@ -316,9 +340,19 @@ TYPED_ARGS=()
 [ -n "$TYPED_MODEL_KEY_FILE" ] && TYPED_ARGS+=(--typed-model-key-file "$TYPED_MODEL_KEY_FILE")
 [ -n "$TYPED_MODEL_CIDR" ] && TYPED_ARGS+=(--typed-model-cidr "$TYPED_MODEL_CIDR")
 [ "$TYPED_TRAINING" = 1 ] && TYPED_ARGS+=(--typed-training)
+[ "$TYPED_RISK_SIGNAL" = 1 ] && TYPED_ARGS+=(--typed-risk-signal)
 "$ROOT/typed/mode.sh" check ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} \
   || die "the typed-answer flags were refused, so nothing has been installed yet."
 TYPED_EFFECTIVE="$("$ROOT/typed/mode.sh" mode ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"})"
+
+# ---- the run-budget ceiling, refused BEFORE anything is installed -------------
+# budget/ceiling.sh is the one copy of this check (CLAUDE.md invariant 28): a figure the
+# gateway would refuse to start on is found here, in a second, and not as a gateway in
+# CrashLoopBackOff after the install.
+if [ -n "$RUN_BUDGET_CEILING" ]; then
+  "$ROOT/budget/ceiling.sh" check "$RUN_BUDGET_CEILING" \
+    || die "the run-budget ceiling was refused, so nothing has been installed yet."
+fi
 say "using this checkout: $ROOT"
 
 # Same reason as install-gcp.sh section 0: a rebuilt cluster is very likely to be
@@ -609,6 +643,19 @@ if [ -n "$TRUST_DOMAIN" ]; then
   say "trust domain: $TRUST_DOMAIN (set after apply, which is what makes it stick)"
   k_ "-n agent-stack patch cm stack-wiring --type merge -p '{\"data\":{\"TRAILRYX_TRUST_DOMAIN\":\"$TRUST_DOMAIN\"}}'" >/dev/null \
     || die "could not set the trust domain on stack-wiring"
+fi
+
+# The run-budget ceiling, set AFTER the kustomization for the reason the trust domain is:
+# 10-planes.yaml declares TOKENFUSE_MAX_RUN_BUDGET_USD (5.00), and `apply -k` puts the
+# declared value back, so a figure set before it, or by hand, is gone on the next run. `set
+# env` changes the pod template, so the gateway rolls to the new figure by itself; an
+# environment variable read at start is not something a ConfigMap patch would have moved.
+# Without the flag nothing is patched and the manifest's 5.00 stands. It lowers a budget a
+# CALLER declares and does not touch one the Cloud sets (CLAUDE.md invariant 28).
+if [ -n "$RUN_BUDGET_CEILING" ]; then
+  say "run-budget ceiling: $RUN_BUDGET_CEILING USD per run (set after apply, which is what makes it stick)"
+  k_ "-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_MAX_RUN_BUDGET_USD=$RUN_BUDGET_CEILING" >/dev/null \
+    || die "could not set the run-budget ceiling on the gateway"
 fi
 
 # The finops plane, applied from its own file for the same reason heraldyx and

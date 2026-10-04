@@ -129,7 +129,7 @@ spec:
           # The gateway's own image and pin, exactly (see pinned-images.sh
           # and CLAUDE.md invariant 7): this is a subcommand of the same
           # binary, not a separate published artifact.
-          image: ghcr.io/taipanbox/tokenfuse:v1.4.1
+          image: ghcr.io/taipanbox/tokenfuse:v1.5.0
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse"]
           args: ["mcp-broker"]

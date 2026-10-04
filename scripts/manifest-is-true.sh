@@ -141,10 +141,15 @@ compare(
 # other repository, does not yet, so C5 reports `c5.routine-unmapped` for this
 # one pair until somebody updates it there. Recorded in components.json's
 # `declared` bucket rather than hidden, the same shape as GOTCHAS 93.
+#
+# `agent-conform` is the second, added 2026-10-04: the on-box chain verifier
+# (agent-stack-go v1.1.0), a CronJob here and, in the other two launchers, a
+# compose service and a routine. The same situation, the same way out: this
+# repository knows it as a routine and C5's ROUTINE_KIND does not yet.
 ESTATE_ROUTINES = {
     "focus-export", "qryx-trend", "verdryx-drift",
     "idryx-detect", "mockryx-drill", "trailryx-seal",
-    "costcrew-run",
+    "costcrew-run", "agent-conform",
 }
 for local, routine in sorted(schedules.items()):
     if routine not in sorted(ESTATE_ROUTINES):
