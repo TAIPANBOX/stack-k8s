@@ -133,6 +133,12 @@ spec:
         #      namespace, a copy of the NetworkPolicies, and cross-namespace
         #      DNS for wardryx.
         seccompProfile: { type: RuntimeDefault }
+      # Leave a dead node in 30 s, not the default 300 s. CLAUDE.md invariants 21
+      # and 22: one replica, so the default would charge five minutes of outage
+      # after the node is marked NotReady.
+      tolerations:
+        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+        - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: scopyx
           # The `-chromium` variant, pinned like everything else. The plain tag

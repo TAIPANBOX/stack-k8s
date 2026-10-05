@@ -131,6 +131,12 @@ spec:
       # the shared `stack-events` claim, which those two pods' fsGroup leaves
       # 10001:10001 mode 2775.
       securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      # Leave a dead node in 30 s, not the default 300 s. CLAUDE.md invariants 21
+      # and 22: one replica, so the default would charge five minutes of outage
+      # after the node is marked NotReady.
+      tolerations:
+        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+        - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: broker
           # The gateway's own image and pin, exactly (see pinned-images.sh
@@ -163,6 +169,7 @@ spec:
             # the header for what each half does.
             - secretRef: { name: tokenfuse-mcp-broker-keys }
           ports: [{ name: mcp, containerPort: 4200 }]
+          lifecycle: { preStop: { sleep: { seconds: 5 } } }
           volumeMounts:
             - { name: events, mountPath: /var/lib/stack/events }
           readinessProbe:

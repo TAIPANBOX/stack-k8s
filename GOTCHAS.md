@@ -4110,3 +4110,35 @@ release starts reading a new Cloud path, check it against the entry's route list
 change, because the remote site is the only place its absence shows, and it shows as a log
 line, not a failure. *(gate: `scripts/hub-entry-is-narrow.sh` expects the run-spend route; the
 teeth case "the site run-spend route is dropped" fails the gate without it.)*
+
+## 119. The dead-node gate judged only what the kustomization includes, and the hub entry sat on a dead node for 300 s
+
+**Ours, and fixed.** Invariant 21 says every Deployment and StatefulSet leaves a
+dead node within 60 s, and `scripts/planes-leave-a-dead-node.sh` enforced it, but
+it took its subjects from `manifests/kustomization.yaml`. Every opt-in manifest is
+applied by an installer flag or a script on its own (`hub/up.sh` for 53,
+`--with-typed` for 51 and 52, `--typed-risk-signal` for 56, the heraldyx, scopyx
+and costcrew opt-ins), so none of them was a subject, and none of them carried the
+tolerations. The gate said OK over six workloads while the cluster could run fifteen.
+
+Measured on a GCP hub 2026-10-05 (stack-k8s v1.1.27 through `deploy-gcp.sh`,
+`hub/up.sh`, three e2-standard-2), with a remote site's gateway asking the hub's
+wardryx on every call (cache 0, fail closed): `instances stop` of the node that
+carried wardryx, policy-db and hub-ingress. wardryx and policy-db were recreated
+elsewhere about 110 s after the stop and ready about 320 s after it; hub-ingress was
+recreated only after the full 300 s, at about 380 s, and the site's first allowed
+call came at 468 s. 436 s refused at the site, about 4.5 minutes of it the entry's
+default toleration. Every refusal was a fail-closed 403; nothing passed undecided.
+
+The fix: the 30 s tolerations on all eight opt-in workloads, the preStop sleep on
+the two that roll and serve a port (the MCP broker and the typed risk proxy), and the
+gate's subjects are now every `manifests/*.yaml`, found rather than listed. A patch
+file has no top-level kind and is skipped by construction.
+
+Two things it does not change, said so they are not read as fixed. A moved entry
+still re-requests its two certificates, because its ACME state is an emptyDir
+(53's own header): about 70 s and two Let's Encrypt issuances per move, five per
+name per week. And one replica is still an outage while the new pod starts.
+*(gate: `scripts/planes-leave-a-dead-node.sh`, invariant 21; teeth cases "an opt-in
+manifest outside the kustomization drops its toleration" and "an opt-in rolling
+Deployment loses its preStop sleep")*

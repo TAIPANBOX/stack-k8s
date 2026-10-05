@@ -544,6 +544,14 @@ an absent invariant.
     eviction costs nothing: the replacement waits Pending for the node, as it
     would have anyway. GOTCHAS 109.
 
+    "Every" means every manifest, not every manifest the kustomization
+    includes. Until 2026-10-05 the gate read its subjects from
+    `kustomization.yaml`, so the eight opt-in workloads (applied by a flag or
+    by `hub/up.sh` on their own) carried no tolerations and were never judged.
+    Measured on a GCP hub that day: the node carrying hub-ingress stopped, the
+    entry waited the full 300 s, about 4.5 minutes of a 7.3-minute outage at
+    the site. GOTCHAS 119.
+
     **What it does not cover.** One replica still means an outage for as long
     as the new pod takes to start; this shortens the wait, it does not add a
     replica. A network partition, as opposed to a node that is gone, was not

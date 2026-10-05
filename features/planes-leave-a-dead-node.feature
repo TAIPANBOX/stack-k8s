@@ -4,6 +4,11 @@
 # NoExecute toleration before either pod was evicted. The same cluster's rolling upgrade
 # from v1.1.7 cost the gateway 0.8 s (3 refused probes) while the old pod stopped before
 # its endpoint had left the Service. Evidence: go-to-market-2026-09/evidence/forge-k3d-2026-09-26/.
+# @measured 2026-10-05, GCP hub (stack-k8s v1.1.27, three e2-standard-2): the node carrying
+# wardryx, policy-db and hub-ingress stopped; the site was refused for 436 s, about 4.5 minutes
+# of it hub-ingress keeping the default 300 s, because 53-hub-entry.yaml is applied by
+# hub/up.sh and was outside this gate's subject list. Evidence: go-to-market-2026-09/evidence/
+# r2-matrix-2026-10-05/logs/R5-10-hub-node-stop.log.
 # There is no instruction behind this; it comes from the defect, stated here on purpose.
 # Scenarios are bound to cases in scripts/gates-have-teeth.sh by name.
 Feature: a plane leaves a dead node in seconds, takes its volume with it, and drains before it stops
@@ -46,8 +51,20 @@ Feature: a plane leaves a dead node in seconds, takes its volume with it, and dr
     Then planes-leave-a-dead-node.sh passes it, and still judges its tolerations
     # -> gates-have-teeth.sh "planes-leave-a-dead-node: a Recreate Deployment needs no preStop sleep"
 
+  Scenario: an opt-in workload applied outside the kustomization waits the default on a dead node
+    Given every Deployment and StatefulSet in any manifest, applied by default or by a script on its own, tolerates an unreachable node for at most 60 seconds
+    When the hub entry, which hub/up.sh applies outside the kustomization, drops its node.kubernetes.io/unreachable toleration
+    Then planes-leave-a-dead-node.sh fails and names the hub-ingress Deployment and the missing taint
+    # -> gates-have-teeth.sh "planes-leave-a-dead-node: an opt-in manifest outside the kustomization drops its toleration"
+
+  Scenario: an opt-in rolling workload stops without draining
+    Given every container that declares a port in a rolling Deployment, opt-in ones included, sleeps before it stops
+    When the MCP broker loses its preStop sleep
+    Then planes-leave-a-dead-node.sh fails and names the broker container
+    # -> gates-have-teeth.sh "planes-leave-a-dead-node: an opt-in rolling Deployment loses its preStop sleep"
+
   Scenario: no plane left to judge
-    Given no Deployment or StatefulSet is left in what the kustomization includes
+    Given no Deployment or StatefulSet is left in any manifest
     When planes-leave-a-dead-node.sh runs
     Then it fails saying it measured nothing, never OK
     # -> gates-have-teeth.sh "planes-leave-a-dead-node: no Deployment or StatefulSet left to judge"

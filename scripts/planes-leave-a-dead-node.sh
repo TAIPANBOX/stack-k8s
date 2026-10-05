@@ -21,7 +21,7 @@
 #
 # WHAT IS A SUBJECT
 #
-# Every Deployment and StatefulSet the kustomization includes carries NoExecute
+# Every Deployment and StatefulSet in any manifest, applied by default or opt-in, carries NoExecute
 # tolerations for BOTH node.kubernetes.io/unreachable and
 # node.kubernetes.io/not-ready with tolerationSeconds of at most 60.
 #
@@ -39,9 +39,16 @@
 # unset). A Recreate Deployment or a StatefulSet never runs two pods at once,
 # so there is no endpoint hand-over for the sleep to cover.
 #
-# Subjects are found from manifests/kustomization.yaml, not listed, and no
-# subject at all is a failure that says it measured nothing. Parsed by
-# indentation, the same technique and the same helpers as
+# Subjects are every manifests/*.yaml, found rather than listed, and no
+# subject at all is a failure that says it measured nothing. Not only the files
+# manifests/kustomization.yaml includes: until 2026-10-05 that was the subject
+# list, and every opt-in manifest an installer flag or a script applies on its
+# own (hub/up.sh, delegation/up.sh, --with-typed, ...) sat outside it. Measured
+# on GCP that day: the hub node carrying hub-ingress stopped, and the entry
+# kept the default 300 s toleration, about 4.5 of a 7.3-minute outage at the
+# site, while this gate said OK. A patch file (no top-level kind) and
+# secrets.example.yaml are not workloads and are skipped by construction.
+# Parsed by indentation, the same technique and the same helpers as
 # gateway-cache-is-off.sh.
 set -uo pipefail
 
@@ -273,25 +280,13 @@ def check_document(fname, doc_first_line, lines):
 
 subjects = 0
 failures = []
-kustomization = pathlib.Path("manifests/kustomization.yaml")
-text = kustomization.read_text()
-m = re.search(r"^resources:\s*$", text, re.M)
-if not m:
-    print(f"FAIL: no resources: block in {kustomization}, so this measured nothing")
+manifests = sorted(p for p in pathlib.Path("manifests").glob("*.yaml")
+                   if p.name not in ("kustomization.yaml", "secrets.example.yaml"))
+if not manifests:
+    print("FAIL: no manifests/*.yaml at all, so this measured nothing")
     sys.exit(1)
-resources = []
-for line in text[m.end():].splitlines():
-    if not line.strip():
-        continue
-    item = re.match(r"^\s*-\s+(\S+)\s*$", line)
-    if not item:
-        break
-    resources.append(item.group(1))
 
-for rname in resources:
-    path = pathlib.Path("manifests") / rname
-    if not path.exists() or path.name == "secrets.example.yaml":
-        continue
+for path in manifests:
     doc, doc_start = [], 0
     all_lines = path.read_text().split("\n")
     for n, line in enumerate(all_lines + ["---"]):
@@ -306,8 +301,8 @@ for rname in resources:
             doc.append(line)
 
 if subjects == 0:
-    print("FAIL: no Deployment or StatefulSet was found under any manifest")
-    print("      manifests/kustomization.yaml includes. That is not health: the")
+    print("FAIL: no Deployment or StatefulSet was found in any manifests/*.yaml.")
+    print("      That is not health: the")
     print("      planes moved, or this check no longer knows how to find them.")
     print("      This measured nothing about leaving a dead node, and it is not")
     print("      entitled to say OK.")

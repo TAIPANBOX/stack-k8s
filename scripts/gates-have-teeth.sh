@@ -820,10 +820,28 @@ i = s.index("        - name: idryx\n")
 j = s.index("          lifecycle: { preStop: { sleep: { seconds: 5 } } }\n", i)
 open(p, "w").write(s[:j] + s[j + len("          lifecycle: { preStop: { sleep: { seconds: 5 } } }\n"):])')"
 
+# The subject list is every manifests/*.yaml since 2026-10-05, not the
+# kustomization's: an opt-in manifest that a script applies on its own is a
+# workload on the cluster all the same. Measured that day on GCP: hub-ingress
+# (53, applied by hub/up.sh) kept the default 300 s and this gate said OK.
+run_case "planes-leave-a-dead-node: an opt-in manifest outside the kustomization drops its toleration" fail \
+	'./scripts/planes-leave-a-dead-node.sh' \
+	"$(py 'edit("manifests/53-hub-entry.yaml", "        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }\n", "")')" \
+	"Deployment hub-ingress: no toleration for node.kubernetes.io/unreachable"
+
+run_case "planes-leave-a-dead-node: an opt-in rolling Deployment loses its preStop sleep" fail \
+	'./scripts/planes-leave-a-dead-node.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          lifecycle: { preStop: { sleep: { seconds: 5 } } }\n", "")')" \
+	"Deployment tokenfuse-mcp-broker, container broker: serves a port and has no preStop sleep"
+
 run_case "planes-leave-a-dead-node: no Deployment or StatefulSet left to judge" fail \
 	'./scripts/planes-leave-a-dead-node.sh' \
-	"$(py 'for f in ["15-policy-store.yaml", "10-planes.yaml", "20-console.yaml"]:
-    edit("manifests/kustomization.yaml", "  - " + f + "\n", "")')" \
+	"$(py 'import glob, re
+for f in glob.glob("manifests/*.yaml"):
+    s = open(f).read()
+    t = re.sub(r"(?m)^kind: (Deployment|StatefulSet)$", r"kind: \1Gone", s)
+    if t != s:
+        open(f, "w").write(t)')" \
 	"measured nothing about leaving a dead node"
 
 # Longhorn holds a dead node's volumes unless told otherwise; the setting is a
