@@ -117,9 +117,16 @@ spec:
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
       # 65532:65532 is the uid:gid the typryx image already runs as (distroless),
-      # stated so a change to the image's own user is a visible diff. No fsGroup:
-      # this pod mounts no claim.
-      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      # stated so a change to the image's own user is a visible diff.
+      #
+      # fsGroup although this pod mounts no claim: in the jev and own-model modes
+      # typed/mode.sh mounts the key Secret here at 0440, and Kubernetes writes
+      # Secret files owned by root, group fsGroup if the pod has one and root
+      # otherwise. Without it the key is root:root 0440 and the proxy dies at
+      # start with `permission denied` (GOTCHAS 117, CLAUDE.md invariant 32).
+      # 65532, its own group, and not the stack group 10001 typryx carries:
+      # that is for appending to the shared bus, which this pod never touches.
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: proxy
           # The typryx image, as pinned for typryx itself (51-typryx.yaml): the
