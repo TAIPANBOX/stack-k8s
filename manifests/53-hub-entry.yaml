@@ -163,6 +163,17 @@ spec:
       # invariant 15.
       automountServiceAccountToken: false
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      # Leave a dead node in 30 s, not the default 300 s. CLAUDE.md invariants 21
+      # and 22: one replica, so the default would charge five minutes of outage
+      # after the node is marked NotReady.
+      # Measured on GCP 2026-10-05: the node carrying this pod, wardryx and
+      # policy-db stopped; the two planes moved on their 30 s and this entry
+      # waited the full 300 s, about 4.5 minutes of a 7.3-minute outage at the
+      # site. A moved entry still re-requests its certificates (the emptyDir
+      # below); this only stops it waiting on a node that is gone.
+      tolerations:
+        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+        - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: caddy
           # Pinned by digest, not by the upstream tag: `scripts/pinned-images.sh`

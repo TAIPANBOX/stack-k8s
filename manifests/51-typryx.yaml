@@ -203,6 +203,12 @@ spec:
       # groups whatever the volume type, the same fix wardryx already carries
       # in 10-planes.yaml for the same reason.
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      # Leave a dead node in 30 s, not the default 300 s. CLAUDE.md invariants 21
+      # and 22: one replica, so the default would charge five minutes of outage
+      # after the node is marked NotReady.
+      tolerations:
+        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+        - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: typryx
           image: ghcr.io/taipanbox/typryx:v0.4.0

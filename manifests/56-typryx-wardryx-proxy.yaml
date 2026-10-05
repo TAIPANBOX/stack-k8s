@@ -127,6 +127,12 @@ spec:
       # 65532, its own group, and not the stack group 10001 typryx carries:
       # that is for appending to the shared bus, which this pod never touches.
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      # Leave a dead node in 30 s, not the default 300 s. CLAUDE.md invariants 21
+      # and 22: one replica, so the default would charge five minutes of outage
+      # after the node is marked NotReady.
+      tolerations:
+        - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+        - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: proxy
           # The typryx image, as pinned for typryx itself (51-typryx.yaml): the
@@ -146,6 +152,7 @@ spec:
             - { name: TYPRYX_PROXY_UPSTREAM, value: "http://wardryx:8090" }
             - { name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: "3000" }
           ports: [{ name: proxy, containerPort: 4330 }]
+          lifecycle: { preStop: { sleep: { seconds: 5 } } }
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
           readinessProbe:
