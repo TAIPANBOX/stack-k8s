@@ -98,7 +98,7 @@ jobs:
       # Nothing above catches a route that widens, a missing catch-all, or a
       # capability added beyond NET_BIND_SERVICE; only reading the Caddyfile's
       # own route list does. See CLAUDE.md invariant 23.
-      - name: the hub entry routes exactly the seven allowed paths (invariant 23)
+      - name: the hub entry routes exactly the eight allowed paths (invariant 23)
         run: ./scripts/hub-entry-is-narrow.sh
 
       # Felyx is an agent too: its calls go through the gateway, metered and

@@ -22,14 +22,21 @@ Feature: a site reaches the hub over one narrow public door, and nothing else is
   public address, authenticated by the planes' own keys; everything else,
   the console included, stays inside the cluster. The Caddyfile embedded in
   that manifest is the one place this promise can be checked without a
-  cluster: it names exactly seven routes, and every other path a caller
-  might try answers 404.
+  cluster: it names exactly eight routes, and every other path a caller
+  might try answers 404. @decided 2026-10-05: the eighth is the site-scoped
+  run seed, GET /v1/run-spend, and the org-wide GET /v1/runs stays closed.
 
   Scenario: a route is added
-    Given the Caddyfile routes exactly cloud's five paths and wardryx's two
+    Given the Caddyfile routes exactly cloud's six paths and wardryx's two
     When a path is added to one of the allowed matchers
-    Then hub-entry-is-narrow.sh fails and names the route beyond the allowed seven
+    Then hub-entry-is-narrow.sh fails and names the route beyond the allowed eight
     # -> gates-have-teeth.sh "hub-entry-is-narrow: a route is added"
+
+  Scenario: the site run-spend route is dropped
+    Given a remote site's gateway seeds its runs' spend at startup through GET /v1/run-spend
+    When that path is removed from the cloud site's allowed matchers
+    Then hub-entry-is-narrow.sh fails and names the missing run-spend route
+    # -> gates-have-teeth.sh "hub-entry-is-narrow: the site run-spend route is dropped"
 
   Scenario: a route's method widens
     Given every routed matcher pairs one HTTP method with its paths

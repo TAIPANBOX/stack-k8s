@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Enforces CLAUDE.md invariant 23: manifests/53-hub-entry.yaml exposes exactly
-# the seven routes a remote gateway needs and nothing else.
+# the eight routes a remote gateway needs and nothing else.
 #
 # WHY
 #
@@ -19,7 +19,9 @@
 #
 # 1. The Caddyfile embedded in the hub-ingress ConfigMap's `data.Caddyfile`
 #    routes exactly: cloud -> POST /v1/ingest, GET /v1/units /v1/budgets
-#    /v1/unit-budgets /v1/kills; wardryx -> POST /v1/decide /v1/filter-tools.
+#    /v1/unit-budgets /v1/kills /v1/run-spend; wardryx -> POST /v1/decide
+#    /v1/filter-tools. /v1/run-spend is the site-scoped run seed (tokenfuse
+#    invariant 75); /v1/runs, which lists the whole org, is NOT allowed.
 #    A route is counted only if some `handle @matcher { reverse_proxy ... }`
 #    actually wires the matcher to a backend: a matcher defined but never
 #    handled changes nothing a caller can reach, so it is not a subject here.
@@ -186,7 +188,8 @@ for h, c in top:
 
 EXPECTED_ROUTES = {
     "cloud": {("POST", "/v1/ingest"), ("GET", "/v1/units"), ("GET", "/v1/budgets"),
-              ("GET", "/v1/unit-budgets"), ("GET", "/v1/kills")},
+              ("GET", "/v1/unit-budgets"), ("GET", "/v1/kills"),
+              ("GET", "/v1/run-spend")},
     "wardryx": {("POST", "/v1/decide"), ("POST", "/v1/filter-tools")},
 }
 EXPECTED_BACKEND = {"cloud": "tokenfuse-cloud:8080", "wardryx": "wardryx:8090"}
@@ -250,7 +253,7 @@ for site in ("cloud", "wardryx"):
     if missing:
         errors.append(f"{site}: missing route(s): {sorted(missing)}")
     if extra:
-        errors.append(f"{site}: route(s) beyond the allowed seven: {sorted(extra)}")
+        errors.append(f"{site}: route(s) beyond the allowed eight: {sorted(extra)}")
 
 # ---- the container's own posture -------------------------------------------
 if deployment_doc is None:
@@ -278,11 +281,11 @@ if errors:
     for e in errors:
         print(f"FAIL: {e}")
     print()
-    print(f"{len(errors)} way(s) manifests/53-hub-entry.yaml is wider than the seven routes")
+    print(f"{len(errors)} way(s) manifests/53-hub-entry.yaml is wider than the eight routes")
     print("a remote gateway needs. See CLAUDE.md invariant 23.")
     sys.exit(1)
 
-print("OK: manifests/53-hub-entry.yaml routes exactly the seven allowed paths, "
+print("OK: manifests/53-hub-entry.yaml routes exactly the eight allowed paths, "
       "each behind a catch-all 404, drop-ALL-plus-NET_BIND_SERVICE only, "
       "and stays out of the default apply.")
 PY

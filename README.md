@@ -557,9 +557,14 @@ Use this when a customer runs more than one site and wants ONE hub (this
 cluster's tokenfuse Cloud, wardryx and policy store) with a gateway at each
 site, reached with no VPN (`@decided 2026-09-26`). `manifests/53-hub-entry.yaml`
 is the hub's one public entry: Caddy in front, terminating TLS with a free
-Let's Encrypt certificate, exposing exactly the seven routes a remote gateway
+Let's Encrypt certificate, exposing exactly the eight routes a remote gateway
 calls and 404 to everything else, the console included. It needs
 tokenfuse-cloud v1.2.0 or newer, which names a site from its own Cloud key.
+One of the eight, `GET /v1/run-spend`, lets a site's gateway pick up its
+runs' spend after a restart; the Cloud answers it only about that site's own
+runs, and it needs a tokenfuse Cloud and gateway new enough to carry it (an
+older pair keeps working, and a restarted site gateway then counts its runs
+from zero, as before).
 
 ```bash
 ./hub/up.sh                     # applies the entry, waits for its address and
@@ -582,7 +587,7 @@ console's own balancer.
 
 **What stays inside.** Every other Service in this namespace, the console
 included, is unreachable through this entry: it proxies to exactly
-tokenfuse-cloud and wardryx, on the seven paths named above, held narrow by
+tokenfuse-cloud and wardryx, on the eight paths named above, held narrow by
 `scripts/hub-entry-is-narrow.sh` (CLAUDE.md invariant 23) rather than by
 being merely unadvertised. A site's key is checked by the plane it reaches
 the same way every other credential in this stack already is; TLS here is

@@ -565,7 +565,7 @@ an absent invariant.
     *(gate: `scripts/longhorn-releases-a-dead-node.sh`, four cases in
     `scripts/gates-have-teeth.sh`; GOTCHAS 109)*
 
-23. **The hub's one public entry for a remote site routes exactly the seven paths a gateway
+23. **The hub's one public entry for a remote site routes exactly the eight paths a gateway
     needs, and nothing else.** `manifests/53-hub-entry.yaml` is opt-in, applied by `hub/up.sh`,
     never by the default `apply -k`: unlike every other gate in this list, its whole job is to
     publish something on purpose (`@decided 2026-09-26`: customers will not install a VPN to use
@@ -580,7 +580,16 @@ an absent invariant.
     non-routed path 404, plain HTTP 308 to HTTPS). The container's capabilities trap is GOTCHAS
     110; the LoadBalancer existing outside Terraform's own bookkeeping is GOTCHAS 111, and
     `hub/down.sh` deletes the Service first for the reason that entry states.
-    *(gate: `scripts/hub-entry-is-narrow.sh`, seven cases in `scripts/gates-have-teeth.sh`;
+
+    The eighth path is `GET /v1/run-spend` on the cloud host, `@decided 2026-10-05`: a site's
+    gateway reads it at startup to seed its runs' spend (tokenfuse invariant 75), and the Cloud
+    answers it only to a key bound to a site, only about that site's runs, with run id, spend and
+    killed. `GET /v1/runs`, which lists the whole org, stays closed. @measured 2026-10-05 on a GCP
+    hub (go-to-market-2026-09 evidence `forge-gcp-migration-2026-10-05`): without a seed route a
+    restarted site gateway counted only the spend it had seen itself, and a call its run's budget
+    should have refused was admitted. A Cloud older than the route answers it 404 and the gateway
+    falls back to the old behaviour, so the route is safe to ship ahead of the tokenfuse pin.
+    *(gate: `scripts/hub-entry-is-narrow.sh`, eight cases in `scripts/gates-have-teeth.sh`;
     scenarios in `features/a-site-reaches-the-hub-over-one-narrow-door.feature`)*
 
 24. **The delegation plane is off by default, and turning it on needs a trusted
