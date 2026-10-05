@@ -4089,3 +4089,24 @@ proxy pod, its own group rather than the stack group 10001, since it never
 writes to the bus; `scripts/mounted-keys-are-readable.sh` (invariant 32) now
 judges every mounted Secret, ConfigMap and projected file in every manifest and
 every typed render against the pod's user.
+
+
+## 118. A route the hub entry keeps closed breaks a gateway feature only at a remote site
+
+**Ours, and fixed.** tokenfuse's gateway seeds each run's spend from the Cloud at startup
+(tokenfuse invariant 70) by reading `GET /v1/runs`. The hub entry (invariant 23) answers that
+path 404 on purpose, because it lists the whole org. Nothing failed anywhere: in-cluster
+gateways reach the Cloud directly and seed fine, every gate here was green, and the remote
+site's gateway only logged one WARN at startup ("pending run spend could not be seeded").
+Measured 2026-10-05 on a hub migration forge -> GCP -> forge: run `mig-flint` had 2566 uUSD at
+the hub and a 4500 budget; through the GCP hub a call estimated at about 2550 PASSED, because
+the site gateway counted only the 1278 it had seen since it restarted; at home the same call at
+the same budget got 402.
+
+The fix is a narrower route rather than a wider entry: tokenfuse's Cloud answers
+`GET /v1/run-spend` only to a key bound to a site, only about that site's runs (tokenfuse
+invariant 75), and the entry routes that one path. The habit worth keeping: when a gateway
+release starts reading a new Cloud path, check it against the entry's route list in the same
+change, because the remote site is the only place its absence shows, and it shows as a log
+line, not a failure. *(gate: `scripts/hub-entry-is-narrow.sh` expects the run-spend route; the
+teeth case "the site run-spend route is dropped" fails the gate without it.)*
