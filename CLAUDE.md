@@ -116,6 +116,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/bus-names-match-the-source-rule.sh # invariant 30
 ./scripts/chain-verifier-watches-the-bus.sh # invariant 31
 ./scripts/mounted-keys-are-readable.sh # invariant 32; GOTCHAS 117
+./scripts/client-key-ids-are-bare.sh # invariant 33
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -950,6 +951,31 @@ an absent invariant.
     `0dd0011` both CrashLoopBackOff, `permission denied`, key `root:root 440`;
     fixed, both 1/1 Ready, key `root:65532 440`. Not run: the whole stack,
     Calico, or a real Jev or model call.)*
+
+33. **Every example of a tokenfuse client key spec here splits the way tokenfuse
+    splits it: `secret:key_id`, the key id a bare name.** `TOKENFUSE_MCP_KEYS`
+    and `TOKENFUSE_CLIENT_KEYS` are both read by tokenfuse's
+    `ClientKeys::from_spec`, which splits each comma-separated entry on its LAST
+    colon, because a secret may itself contain colons. README.md and
+    `manifests/52-tokenfuse-mcp-broker.yaml` showed the key id as an
+    `agent://` URI, which tokenfuse reads as the secret `<secret>:agent` and the
+    key id `//<domain>/<name>`: the broker starts, the spec counts as usable,
+    and every caller presenting the secret the operator meant is refused 401.
+    @measured `ClientKeys::from_spec` on the README's string, as a scratch unit
+    test at tokenfuse `a99a6a7` (`cargo test -p tokenfuse-gateway --lib`)
+    2026-10-05: one entry, `resolve("pick-a-different-long-secret")` None, key
+    id `//acme.example/broker-caller`. Not hit on a cluster as far as any record
+    shows, so there is no GOTCHAS entry; the examples were corrected to
+    `broker-caller`.
+    *(gate: `scripts/client-key-ids-are-bare.sh`, in both callers, over every
+    tracked file but `GOTCHAS.md`, `evidence/` and the two scripts that plant
+    the shape; it judges literal values in shell (`NAME=value`) and YAML (flow
+    and block `name:`/`value:`) form and fails when it finds none. Six cases in
+    `scripts/gates-have-teeth.sh`; scenarios in
+    `features/a-client-key-example-splits-the-way-tokenfuse-splits-it.feature`.
+    Not covered: a value built from a shell variable, which is not judged; a
+    URI with no `//` after its last colon looks like a correct entry by text;
+    and what an operator types into their own Secret.)*
 
 ## Decisions that have no gate yet
 
