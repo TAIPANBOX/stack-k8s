@@ -4073,6 +4073,16 @@ CrashLoopBackOff. A `kubectl patch` adding `fsGroup` to the proxy pod made it
 log `typryx jev backend configured` and listen on 4330 (a lab workaround on that
 cluster only).
 
+The same through the real launcher, measured the same day by another session:
+`CLUSTER_NAME=stack-p2 cloud/gcp/deploy-gcp.sh ... --typed-mode jev
+--typed-jev-key-file <file> --typed-risk-signal` from `0dd0011` on a fresh
+three-node GCP cluster left the proxy not Ready, and the installer's own verify
+printed `15 passed, 1 failed, 1 noted` with `FAIL 3 pod(s) neither Running nor
+Completed`. So every operator who chose jev and the risk signal got a red verify.
+stack-single at `c0f0dd6` with `TYPED_MODE=jev TYPED_RISK_SIGNAL=1` (compose, on
+AWS) did not have the defect: its install passed every check and the proxy held
+real calls.
+
 Reproduced and the fix proved on kind (v0.33, one node, on the Mac,
 2026-10-05), the proxy Deployment as each render emits it beside the Secrets
 `typed/mode.sh secrets` emits, fake keys: at `0dd0011` both the jev and the
