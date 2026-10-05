@@ -862,9 +862,20 @@ for f in ["install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"]:
 run_case "hub-entry-is-narrow: a route is added" fail \
 	'./scripts/hub-entry-is-narrow.sh' \
 	"$(py 'edit("manifests/53-hub-entry.yaml",
-    "path /v1/units /v1/budgets /v1/unit-budgets /v1/kills",
-    "path /v1/units /v1/budgets /v1/unit-budgets /v1/kills /v1/runs")')" \
-	"beyond the allowed seven"
+    "path /v1/units /v1/budgets /v1/unit-budgets /v1/kills /v1/run-spend",
+    "path /v1/units /v1/budgets /v1/unit-budgets /v1/kills /v1/run-spend /v1/runs")')" \
+	"beyond the allowed eight"
+
+# The site-scoped run seed (tokenfuse invariant 75) is a route a remote
+# gateway needs; dropping it silently brings back the 2026-10-05 defect (a
+# site that restarts counts its runs' spend from zero), so its absence fails
+# the gate rather than reading as "narrower is fine".
+run_case "hub-entry-is-narrow: the site run-spend route is dropped" fail \
+	'./scripts/hub-entry-is-narrow.sh' \
+	"$(py 'edit("manifests/53-hub-entry.yaml",
+    "path /v1/units /v1/budgets /v1/unit-budgets /v1/kills /v1/run-spend",
+    "path /v1/units /v1/budgets /v1/unit-budgets /v1/kills")')" \
+	"missing route(s): [('GET', '/v1/run-spend')]"
 
 run_case "hub-entry-is-narrow: a route's method widens" fail \
 	'./scripts/hub-entry-is-narrow.sh' \

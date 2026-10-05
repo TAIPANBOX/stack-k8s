@@ -6,14 +6,24 @@
 # (WireGuard, see tunnel/) is not the answer for a fleet of sites.
 #
 # Caddy terminates TLS (Let's Encrypt, HTTP-01, so a name under sslip.io needs
-# no DNS zone of its own) and exposes EXACTLY the seven routes a remote
+# no DNS zone of its own) and exposes EXACTLY the eight routes a remote
 # gateway calls (read from tokenfuse's own `crates/gateway/src/cloudsink.rs`
 # and `wardryx.rs`): Cloud `POST /v1/ingest` and `GET /v1/units`,
-# `/v1/budgets`, `/v1/unit-budgets`, `/v1/kills`; wardryx `POST /v1/decide`
-# and `/v1/filter-tools`. Everything else, the console included, answers 404
-# here and stays reachable only from inside the cluster. TLS is transport:
-# every one of those seven routes still needs its own site key or wardryx
-# key, checked by the plane it reaches, exactly as it is checked today.
+# `/v1/budgets`, `/v1/unit-budgets`, `/v1/kills`, `/v1/run-spend`; wardryx
+# `POST /v1/decide` and `/v1/filter-tools`. Everything else, the console
+# included, answers 404 here and stays reachable only from inside the
+# cluster. TLS is transport: every one of those eight routes still needs its
+# own site key or wardryx key, checked by the plane it reaches, exactly as it
+# is checked today.
+#
+# `/v1/run-spend` (tokenfuse invariant 75, @decided 2026-10-05) is the run
+# seed a site gateway reads at startup so a restart or a hub migration does
+# not reset its runs' spend to zero. The Cloud answers it only to a key bound
+# to a site, and only about that site's own runs (run id, spend, killed);
+# any other key is 403. `/v1/runs`, which lists the whole org, stays closed
+# here: measured 2026-10-05 on a GCP hub, a site gateway that could not seed
+# admitted a call its run's budget should have refused. A Cloud older than
+# that route answers it 404 and the gateway falls back to its old behaviour.
 #
 # `scripts/hub-entry-is-narrow.sh` (CLAUDE.md invariant 23) parses this file's
 # own Caddyfile block and fails the moment the routed set, the catch-all, or
@@ -103,7 +113,7 @@ data:
       }
       @polls {
         method GET
-        path /v1/units /v1/budgets /v1/unit-budgets /v1/kills
+        path /v1/units /v1/budgets /v1/unit-budgets /v1/kills /v1/run-spend
       }
       handle @ingest {
         reverse_proxy tokenfuse-cloud:8080

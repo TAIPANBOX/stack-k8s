@@ -138,7 +138,7 @@ fi
 
 say "up"
 cat <<EOF
-   https://cloud.$HOST/    -> tokenfuse-cloud (ingest, units, budgets, unit-budgets, kills)
+   https://cloud.$HOST/    -> tokenfuse-cloud (ingest, units, budgets, unit-budgets, kills, run-spend)
    https://wardryx.$HOST/  -> wardryx (decide, filter-tools)
 
    Next: ./hub/add-site.sh SITE_NAME
