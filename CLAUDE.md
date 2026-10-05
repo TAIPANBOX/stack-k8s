@@ -115,6 +115,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/run-budget-ceiling-is-set.sh # invariant 28 (its flag half is deploy-flags-agree.sh)
 ./scripts/bus-names-match-the-source-rule.sh # invariant 30
 ./scripts/chain-verifier-watches-the-bus.sh # invariant 31
+./scripts/mounted-keys-are-readable.sh # invariant 32; GOTCHAS 117
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -850,7 +851,9 @@ an absent invariant.
     `features/a-typed-risk-signal-reaches-a-hold-only-through-the-broker.feature`.
     Not covered: a pod behind these policies, wardryx holding on a signal, and
     typryx answering through the proxy in a cluster; the proxy was run as a
-    container against a stand-in wardryx and nothing else.)*
+    container against a stand-in wardryx and nothing else. The first cluster
+    run, on 2026-10-05, found the proxy unable to read the key it was given:
+    invariant 32, GOTCHAS 117.)*
 
 30. **Every stream file this launcher puts on the events bus, and every idryx
     `--load source:path`, is a pair the readers accept.** heraldyx v0.3.0 and
@@ -903,6 +906,41 @@ an absent invariant.
     stream with a valid chain, and truncation from the end. The emptyDir
     measurement is GOTCHAS 115; that heraldyx's mail does not name the broken
     stream is GOTCHAS 116.)*
+
+32. **Every file a pod mounts from a Secret, a ConfigMap or a projected volume is
+    readable by the user the pod runs as.** Kubernetes writes those files owned
+    by root, with the pod's `fsGroup` as the group when it has one and root's
+    otherwise, at `defaultMode` (0644 when nothing sets it). A key at 0440, the
+    mode `typed/mode.sh` gives the Jev key and an own model's key, is readable by
+    a non-root pod only through `fsGroup`. `typryx-wardryx-proxy` had none, so
+    `--typed-mode jev --typed-risk-signal` left it in CrashLoopBackOff on
+    `permission denied`, measured on k3d on forge 2026-10-05 and reproduced on
+    kind the same day. GOTCHAS 117. The proxy now carries `fsGroup: 65532`, its
+    own group (`@claude 2026-10-05`: not the stack group 10001 typryx carries,
+    which is for appending to the bus, and the proxy never writes there).
+
+    The rule: every mode a volume sets (its default and each item's) is
+    world-readable, or group-readable with a group the pod will have (`fsGroup`,
+    or gid 0 as its runAsGroup or a supplemental group), or the pod runs as uid
+    0. The owner bit never helps a non-root pod, since the owner is root.
+    *(gate: `scripts/mounted-keys-are-readable.sh`, in both callers, over every
+    pod template in `manifests/*.yaml` (the kind-less `kubectl patch` bodies
+    included, judged on their own securityContext because their target is named
+    elsewhere) and every pod `typed/mode.sh` renders across stub, jev and
+    own-model with and without a key, each with and without
+    `--typed-risk-signal` and `--typed-training`. Red first on `0dd0011`: the
+    four proxy renders that mount a key. 10 cases in
+    `scripts/gates-have-teeth.sh`; scenarios in
+    `features/a-mounted-key-is-readable-by-its-pod.feature`. Not covered: a
+    container-level override of runAsUser or runAsGroup (the pod's values are
+    judged), an image whose own user differs from what the manifest states, and
+    volumes a pod declares but no container mounts (judged anyway).
+    @measured `kind create cluster (v0.33); kubectl apply of the proxy
+    Deployment as typed/mode.sh renders it at 0dd0011 and on this branch, jev
+    and own-model with a key, beside typed/mode.sh secrets` 2026-10-05: at
+    `0dd0011` both CrashLoopBackOff, `permission denied`, key `root:root 440`;
+    fixed, both 1/1 Ready, key `root:65532 440`. Not run: the whole stack,
+    Calico, or a real Jev or model call.)*
 
 ## Decisions that have no gate yet
 

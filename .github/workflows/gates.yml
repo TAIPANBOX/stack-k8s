@@ -128,6 +128,13 @@ jobs:
       - name: every bus file is a name the readers accept (invariant 30)
         run: ./scripts/bus-names-match-the-source-rule.sh
 
+      # Added 2026-10-05. A Secret mounted at 0440 is root-owned, and only the
+      # pod's fsGroup lets a non-root container read it: the typed risk proxy
+      # had none and died at start on the jev key. See CLAUDE.md invariant 32
+      # and GOTCHAS.md entry 117.
+      - name: every mounted key is readable by its pod (invariant 32)
+        run: ./scripts/mounted-keys-are-readable.sh
+
       # Added 2026-10-04. The on-box chain verifier (agent-stack-go v1.1.0):
       # in the default install, every 15 minutes, on the bus, its memory on a
       # claim that already exists, a new break kept visible. See CLAUDE.md

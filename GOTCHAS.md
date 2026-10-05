@@ -4049,3 +4049,43 @@ on the bus and in the failed verifier pod's log. Left as it is here because a ca
 sentence and three allow-listed keys are heraldyx's change, not this repository's.
 Until it lands, an operator who gets this mail reads the failed `agent-conform` Job's
 pod log (`kubectl -n agent-stack logs <pod>`), which names the file and the line.
+
+## 117. The typed risk proxy could not read the key it was given, because its pod had no fsGroup
+
+**Ours, and fixed.** `--typed-risk-signal` with `--typed-mode jev` (or
+`own-model` with a key file) mounts the same key Secret into
+`typryx-wardryx-proxy` that it mounts into `typryx`, at `defaultMode: 0440`.
+Kubernetes writes Secret files owned by root, with the group set to the pod's
+`fsGroup` when it has one and to root's otherwise. `typryx` carries
+`fsGroup: 10001` for the shared bus, so its copy was `root:10001 0440` and it
+read it. The proxy mounts no claim, so `manifests/56-typryx-wardryx-proxy.yaml`
+gave it no `fsGroup`, its copy stayed `root:root 0440`, and uid 65532 could not
+open it:
+
+```
+typryx: TYPRYX_JEV_KEY_FILE=/etc/typryx/jev/key could not be read: open /etc/typryx/jev/key: permission denied
+```
+
+Measured on k3d on forge 2026-10-05, stack-k8s `0dd0011`, by applying
+`typed/mode.sh render --typed-mode jev --typed-jev-key-file <file>
+--typed-risk-signal` exactly as `deploy.sh` does: the proxy went
+CrashLoopBackOff. A `kubectl patch` adding `fsGroup` to the proxy pod made it
+log `typryx jev backend configured` and listen on 4330 (a lab workaround on that
+cluster only).
+
+Reproduced and the fix proved on kind (v0.33, one node, on the Mac,
+2026-10-05), the proxy Deployment as each render emits it beside the Secrets
+`typed/mode.sh secrets` emits, fake keys: at `0dd0011` both the jev and the
+own-model-with-key proxy CrashLoopBackOff with `permission denied`, the files
+`root:root 440` on the node; with `fsGroup: 65532` both 1/1 Ready, the files
+`root:65532 440`, the jev one logging `typryx jev backend configured`. The
+cluster was deleted afterwards.
+
+Every static gate passed it: kubeconform accepts the pod, and
+`typed-mode-is-honest.sh` checked that the proxy mounts the SAME key as typryx,
+which it did. Nothing asked whether the user could open it, and invariant 29
+said plainly that no pod had run behind it. The fix is `fsGroup: 65532` on the
+proxy pod, its own group rather than the stack group 10001, since it never
+writes to the bus; `scripts/mounted-keys-are-readable.sh` (invariant 32) now
+judges every mounted Secret, ConfigMap and projected file in every manifest and
+every typed render against the pod's user.

@@ -1427,6 +1427,66 @@ for path in list(pathlib.Path("manifests").glob("*.yaml")) + list(pathlib.Path("
 assert n, "no file named the bus"')" \
 	"measured nothing about the bus file names"
 
+# invariant 32: every mounted Secret, ConfigMap or projected file is readable by
+# its pod's user. GOTCHAS 117: the typed risk proxy got the jev key at 0440 with
+# no fsGroup, so the file stayed root:root and the proxy died at start.
+run_case "mounted-keys: the risk proxy loses its fsGroup" fail \
+	'./scripts/mounted-keys-are-readable.sh' \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "runAsGroup: 65532, fsGroup: 65532, seccompProfile", "runAsGroup: 65532, seccompProfile")')" \
+	"Deployment/typryx-wardryx-proxy mounts secret volume jev-key at defaultMode 0440"
+
+run_case "mounted-keys: typryx loses the fsGroup that lets it read its key" fail \
+	'./scripts/mounted-keys-are-readable.sh' \
+	"$(py 'edit("manifests/51-typryx.yaml", "runAsGroup: 65532, fsGroup: 10001, seccompProfile", "runAsGroup: 65532, seccompProfile")')" \
+	"Deployment/typryx mounts secret volume jev-key"
+
+run_case "mounted-keys: the model key mode drops its group read" fail \
+	'./scripts/mounted-keys-are-readable.sh' \
+	"$(py 'edit("typed/mode.sh", "secretName: typryx-model-key, defaultMode: 0440", "secretName: typryx-model-key, defaultMode: 0400")')" \
+	"volume model-key at defaultMode 0400"
+
+run_case "mounted-keys: a patch body mounts a key at 0440 with no fsGroup" fail \
+	'./scripts/mounted-keys-are-readable.sh' \
+	"$(py 'edit("manifests/54-delegation-console-patch.yaml", "            secretName: vouchryx-keys\n", "            secretName: vouchryx-keys\n            defaultMode: 0440\n")')" \
+	"patch/manifests/54-delegation-console-patch.yaml mounts secret volume vouchryx-revoke-key"
+
+run_case "mounted-keys: a world-readable key needs no fsGroup" pass \
+	'./scripts/mounted-keys-are-readable.sh' \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "runAsGroup: 65532, fsGroup: 65532, seccompProfile", "runAsGroup: 65532, seccompProfile")
+edit("typed/mode.sh", "secretName: typryx-jev-key, defaultMode: 0440", "secretName: typryx-jev-key, defaultMode: 0444")
+edit("typed/mode.sh", "secretName: typryx-model-key, defaultMode: 0440", "secretName: typryx-model-key, defaultMode: 0444")')"
+
+run_case "mounted-keys: a block-style securityContext with fsGroup is read" pass \
+	'./scripts/mounted-keys-are-readable.sh' \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "      securityContext: \x7b runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: \x7b type: RuntimeDefault \x7d \x7d\n", "      securityContext:\n        runAsNonRoot: true\n        runAsUser: 65532\n        runAsGroup: 65532\n        fsGroup: 65532\n        seccompProfile: \x7b type: RuntimeDefault \x7d\n")')"
+
+run_case "mounted-keys: a block-style securityContext without fsGroup" fail \
+	'./scripts/mounted-keys-are-readable.sh' \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "      securityContext: \x7b runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: \x7b type: RuntimeDefault \x7d \x7d\n", "      securityContext:\n        runAsNonRoot: true\n        runAsUser: 65532\n        runAsGroup: 65532\n        seccompProfile: \x7b type: RuntimeDefault \x7d\n")')" \
+	"Deployment/typryx-wardryx-proxy mounts secret volume jev-key"
+
+run_case "mounted-keys: typed/mode.sh taken away" fail \
+	'./scripts/mounted-keys-are-readable.sh' \
+	"$(py 'import os
+os.remove("typed/mode.sh")')" \
+	"measured nothing about the typed key mounts"
+
+run_case "mounted-keys: no manifests/*.yaml left to read" fail \
+	'./scripts/mounted-keys-are-readable.sh' \
+	"$(py 'import pathlib
+n = 0
+for path in pathlib.Path("manifests").glob("*.yaml"):
+    path.rename(path.with_suffix(".yml"))
+    n += 1
+assert n, "no manifest to rename"')" \
+	"no manifests/*.yaml"
+
+run_case "mounted-keys: no typed render mounts a key" fail \
+	'./scripts/mounted-keys-are-readable.sh' \
+	"$(py 'edit("typed/mode.sh", "secret: \x7b secretName: typryx-jev-key, defaultMode: 0440 \x7d", "configMap: \x7b name: typryx-jev-key \x7d")
+edit("typed/mode.sh", "secret: \x7b secretName: typryx-model-key, defaultMode: 0440 \x7d", "configMap: \x7b name: typryx-model-key \x7d")')" \
+	"no typed render mounts a Secret"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'
