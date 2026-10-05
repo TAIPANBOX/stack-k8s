@@ -12,6 +12,8 @@ cloud/**/terraform.tfstate.*
 cloud/**/*.tfvars*
 cloud/**/kubeconfig.yaml
 cloud/**/tfplan
+# A saved plan (terraform plan -out) can carry account values; plans are made per run, never kept.
+cloud/**/*.plan
 kubeconfig-tunnel.yaml
 
 # The operator's own two names. site.example.yaml is the tracked template.
