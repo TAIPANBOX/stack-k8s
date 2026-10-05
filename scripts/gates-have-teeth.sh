@@ -1498,6 +1498,40 @@ run_case "mounted-keys: no typed render mounts a key" fail \
 edit("typed/mode.sh", "secret: \x7b secretName: typryx-model-key, defaultMode: 0440 \x7d", "configMap: \x7b name: typryx-model-key \x7d")')" \
 	"no typed render mounts a Secret"
 
+# Invariant 33. tokenfuse splits a client key entry on its LAST colon, so an
+# agent:// key id starts fine and refuses the caller's real secret. Quotes in
+# the examples are spelled \x27 and braces \x7b \x7d, per the bash 3.2 note at
+# the top.
+run_case "client-key-ids: the README example goes back to an agent:// key id" fail \
+	'./scripts/client-key-ids-are-bare.sh' \
+	"$(py 'edit("README.md", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:agent://acme.example/broker-caller\x27")')" \
+	"README.md:324: TOKENFUSE_MCP_KEYS entry"
+
+run_case "client-key-ids: the manifest 52 example goes back to an agent:// key id" fail \
+	'./scripts/client-key-ids-are-bare.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:agent://acme.example/broker-caller\x27")')" \
+	"key id '//acme.example/broker-caller'"
+
+run_case "client-key-ids: a YAML flow env entry carries an agent:// key id" fail \
+	'./scripts/client-key-ids-are-bare.sh' \
+	"$(py 'open("README.md", "a").write("\n    env: [ \x7b name: TOKENFUSE_CLIENT_KEYS, value: \"sk-flow:agent://acme.example/flow\" \x7d ]\n")')" \
+	"key id '//acme.example/flow'"
+
+run_case "client-key-ids: a YAML block env entry carries an agent:// key id" fail \
+	'./scripts/client-key-ids-are-bare.sh' \
+	"$(py 'open("README.md", "a").write("\n        - name: TOKENFUSE_MCP_KEYS\n          value: \"sk-block:agent://acme.example/block\"\n")')" \
+	"key id '//acme.example/block'"
+
+run_case "client-key-ids: a secret with colons and a bare key id (must pass)" pass \
+	'./scripts/client-key-ids-are-bare.sh' \
+	"$(py 'edit("README.md", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\x27sk-proj:abc:def:broker-caller,sk-two:research-agent\x27")')"
+
+run_case "client-key-ids: no literal example left to judge" fail \
+	'./scripts/client-key-ids-are-bare.sh' \
+	"$(py 'edit("README.md", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\"$BROKER_KEYS\"")
+edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\"$BROKER_KEYS\"")')" \
+	"measured nothing"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'

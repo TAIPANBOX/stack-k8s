@@ -63,8 +63,15 @@
 #   TYPRYX_KEY="$(kubectl -n agent-stack get secret typryx-keys \
 #     -o jsonpath='{.data.TYPRYX_KEYS}' | base64 -d | cut -d, -f1 | cut -d= -f1)"
 #   kubectl -n agent-stack create secret generic tokenfuse-mcp-broker-keys \
-#     --from-literal=TOKENFUSE_MCP_KEYS='pick-a-different-long-secret:agent://acme.example/broker-caller' \
+#     --from-literal=TOKENFUSE_MCP_KEYS='pick-a-different-long-secret:broker-caller' \
 #     --from-literal=TOKENFUSE_MCP_SECRETS="typryx_key=${TYPRYX_KEY}"
+#
+# The key id (`broker-caller`) is a bare name, never an `agent://` id:
+# tokenfuse's `ClientKeys::from_spec` splits each entry on its LAST colon,
+# because a secret may itself contain colons, so `secret:agent://x/y` would
+# be read as the secret `secret:agent` and the key id `//x/y`. The pod starts
+# and every caller presenting the real secret is refused 401. Held by
+# `scripts/client-key-ids-are-bare.sh`.
 #
 # The two `cut`s pull the bearer out of `TYPRYX_KEYS`' own
 # `key=agent://identity` shape, the same extraction 47-scopyx.yaml's header

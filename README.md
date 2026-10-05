@@ -321,9 +321,14 @@ tokenfuse's MCP broker fronts typryx by configuration since 2026-09-26:
 ```bash
 kubectl apply -f manifests/52-tokenfuse-mcp-broker.yaml
 kubectl -n agent-stack create secret generic tokenfuse-mcp-broker-keys \
-  --from-literal=TOKENFUSE_MCP_KEYS='pick-a-different-long-secret:agent://acme.example/broker-caller' \
+  --from-literal=TOKENFUSE_MCP_KEYS='pick-a-different-long-secret:broker-caller' \
   --from-literal=TOKENFUSE_MCP_SECRETS="typryx_key=$(kubectl -n agent-stack get secret typryx-keys -o jsonpath='{.data.TYPRYX_KEYS}' | base64 -d | cut -d, -f1 | cut -d= -f1)"
 ```
+
+The key id after the colon is a bare name, not an `agent://` id: tokenfuse
+splits each `secret:key_id` entry on its LAST colon, so a URI there turns
+`agent` into the end of the secret and the caller's real secret is refused
+401 (`scripts/client-key-ids-are-bare.sh`).
 
 `manifests/52-tokenfuse-mcp-broker.yaml` has the full story: why two Secrets
 rather than one, what its NetworkPolicies admit, and what was measured

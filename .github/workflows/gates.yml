@@ -135,6 +135,12 @@ jobs:
       - name: every mounted key is readable by its pod (invariant 32)
         run: ./scripts/mounted-keys-are-readable.sh
 
+      # Added 2026-10-05. tokenfuse splits a client key entry on its LAST
+      # colon, so a `secret:agent://...` example starts fine and refuses the
+      # caller's real secret. See CLAUDE.md invariant 33.
+      - name: every client key example splits the way tokenfuse splits it (invariant 33)
+        run: ./scripts/client-key-ids-are-bare.sh
+
       # Added 2026-10-04. The on-box chain verifier (agent-stack-go v1.1.0):
       # in the default install, every 15 minutes, on the bus, its memory on a
       # claim that already exists, a new break kept visible. See CLAUDE.md
