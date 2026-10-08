@@ -38,8 +38,10 @@
 # ("he said 'do it all'"), a paraphrase that is really a quote, or anything in
 # git history: a rewrite here leaves the old text in earlier commits.
 set -uo pipefail
-# The repository this file lives in, whatever directory it was called from.
-cd "$(dirname "$0")" && cd "$(git rev-parse --show-toplevel)" || exit 1
+# The repository this file lives in (it sits in scripts/), whatever directory it
+# was called from. Not `git rev-parse --show-toplevel` from inside scripts/: in a
+# git hook GIT_DIR is set, and then the top level is wherever the shell stands.
+cd "$(dirname "$0")/.." || exit 1
 
 python3 - <<'PY'
 import re

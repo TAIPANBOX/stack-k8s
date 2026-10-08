@@ -1574,7 +1574,7 @@ run_case "no-owner-quotes: an attribution by name" fail \
 	"the owner's name outside a copyright or author line"
 
 run_case "no-owner-quotes: no tracked text file to judge" fail_env \
-	'd="$(mktemp -d)" && git -C "$d" init -q && cp scripts/no-owner-quotes.sh "$d/" && "$d/no-owner-quotes.sh"' \
+	'd="$(mktemp -d)" && git -C "$d" init -q && mkdir "$d/scripts" && cp scripts/no-owner-quotes.sh "$d/scripts/" && "$d/scripts/no-owner-quotes.sh"' \
 	"$(py 'pass')" \
 	"measured NOTHING"
 
