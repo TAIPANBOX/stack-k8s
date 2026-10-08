@@ -143,6 +143,9 @@ spec:
             # deliberate and worth keeping visible.
             - { name: events, mountPath: /var/lib/stack/events }
             - { name: state, mountPath: /var/lib/costcrew }
+            # The one writable directory outside the data, because the root is
+            # read-only. See the `tmp` volume below.
+            - { name: tmp, mountPath: /tmp }
           readinessProbe:
             # /healthz is unauthenticated by design: a load balancer has no
             # password. Every other route is behind the session.
@@ -160,6 +163,25 @@ spec:
           persistentVolumeClaim: { claimName: stack-events }
         - name: state
           persistentVolumeClaim: { claimName: costcrew-state }
+        # A writable temp under a read-only root. SQLite writes a VACUUM's
+        # working copy, and a sort too big for memory, to a temp file, and Go
+        # spools a large upload to one; with no writable directory SQLite
+        # answers `disk I/O error (6410)`, its "no temp path" error. Found by
+        # the v0.4.0 pin (stack-single#93, stack-k8s#133): the first start over
+        # a v0.3.0 store dropped the clear-text session tokens and then could
+        # not VACUUM them out of the file's free pages, and said so only as a
+        # WARNING in the log. Measured on Docker with the same image, read-only
+        # root and a 128 MB tmpfs at /tmp, 2026-10-08: no warning, the file
+        # shrank, the old cookie's bytes gone from app.db and its -wal.
+        #
+        # Memory, because a disk emptyDir that outgrows its sizeLimit gets the
+        # pod EVICTED, while a tmpfs at its limit fails the one statement with
+        # "database or disk is full" and the console carries on. The pages
+        # count against the container's 512Mi limit only while a temp file
+        # exists. The seeded store is 3.4 MB, so 128Mi covers a VACUUM of one
+        # many times that. CLAUDE.md invariant 35.
+        - name: tmp
+          emptyDir: { medium: Memory, sizeLimit: 128Mi }
 ---
 apiVersion: v1
 kind: Service
@@ -349,6 +371,10 @@ spec:
                 # they take turns on it, which is what the emitter's own lock
                 # is for.
                 - { name: events, mountPath: /var/lib/stack/events }
+                # The runner opens the same SQLite store and can be the first
+                # to open it after an upgrade, so it needs the same writable
+                # temp as the console. See the console's `tmp` volume above.
+                - { name: tmp, mountPath: /tmp }
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
@@ -361,6 +387,8 @@ spec:
               persistentVolumeClaim: { claimName: costcrew-state }
             - name: events
               persistentVolumeClaim: { claimName: stack-events }
+            - name: tmp
+              emptyDir: { medium: Memory, sizeLimit: 128Mi }
 ---
 # The widest grant in this file, and the only one. The crew pod reaches a model
 # provider over HTTPS; the console pod is not selected by this rule and stays

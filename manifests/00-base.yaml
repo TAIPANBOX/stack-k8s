@@ -76,7 +76,8 @@ spec:
 # every provider and is billed from creation. Some providers round up to their
 # own minimum, so 2Gi requested is not always 2Gi billed.
 #
-# @yurii 2026-08-28 authorised this claim.
+# @decided 2026-08-28: this claim, and the disk it bills, was agreed before it
+# was added.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

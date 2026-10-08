@@ -1550,6 +1550,80 @@ run_case "client-key-ids: no literal example left to judge" fail \
 edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\"$BROKER_KEYS\"")')" \
 	"measured nothing"
 
+# invariant 34: a public repository carries no quote of the owner, no owner
+# provenance marker and no attribution by name. Every planted string is built
+# from pieces or escapes, so this file never trips the gate it tests.
+run_case "no-owner-quotes: an owner provenance marker" fail \
+	'./scripts/no-owner-quotes.sh' \
+	"$(py 'open("README.md", "a").write("\n`@" + "yur" + "ii 2026-10-08`: keep it.\n")')" \
+	"the owner's provenance marker"
+
+run_case "no-owner-quotes: a quote in Ukrainian" fail \
+	'./scripts/no-owner-quotes.sh' \
+	"$(py 'open("GOTCHAS.md", "a").write("\n\"\u0440\u043e\u0431\u0438 \u0432\u0441\u0435\"\n")')" \
+	"Cyrillic text"
+
+run_case "no-owner-quotes: a quote in guillemets" fail \
+	'./scripts/no-owner-quotes.sh' \
+	"$(py 'open("manifests/49-costcrew.yaml", "a").write("\n# \u00abdo it all\u00bb\n")')" \
+	"a guillemet"
+
+run_case "no-owner-quotes: an attribution by name" fail \
+	'./scripts/no-owner-quotes.sh' \
+	"$(py 'open("components.json", "a").write("\n" + "Yur" + "ii asked for this.\n")')" \
+	"the owner's name outside a copyright or author line"
+
+run_case "no-owner-quotes: no tracked text file to judge" fail_env \
+	'd="$(mktemp -d)" && git -C "$d" init -q && cp scripts/no-owner-quotes.sh "$d/" && "$d/no-owner-quotes.sh"' \
+	"$(py 'pass')" \
+	"measured NOTHING"
+
+run_case "no-owner-quotes: the owner as copyright holder" pass \
+	'./scripts/no-owner-quotes.sh' \
+	"$(py 'open("LICENSE", "a").write("\nCopyright 2026 " + "Yur" + "ii Kost" + "iuk\n")')"
+
+run_case "no-owner-quotes: a decision recorded as @decided and a paraphrase" pass \
+	'./scripts/no-owner-quotes.sh' \
+	"$(py 'open("README.md", "a").write("\n`@decided 2026-10-08`: the console keeps a writable temp.\n")')"
+
+# invariant 35: a read-only container that needs a temp has a writable,
+# size-limited one. GOTCHAS 120: without it SQLite could not VACUUM the old
+# session tokens out of the costcrew store (disk I/O error 6410).
+run_case "temp: the console loses its /tmp mount" fail \
+	'./scripts/read-only-root-has-a-temp.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "            - { name: tmp, mountPath: /tmp }\n          readinessProbe:", "          readinessProbe:")')" \
+	"Deployment/costcrew container costcrew: the root is read-only and nothing writable is mounted at /tmp"
+
+run_case "temp: the crew runner loses its /tmp mount" fail \
+	'./scripts/read-only-root-has-a-temp.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "                - { name: tmp, mountPath: /tmp }\n", "")')" \
+	"CronJob/costcrew-crew container crew: the root is read-only and nothing writable is mounted at /tmp"
+
+run_case "temp: the console's temp loses its sizeLimit" fail \
+	'./scripts/read-only-root-has-a-temp.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "          emptyDir: { medium: Memory, sizeLimit: 128Mi }\n---\napiVersion: v1\nkind: Service", "          emptyDir: { medium: Memory }\n---\napiVersion: v1\nkind: Service")')" \
+	"with no sizeLimit"
+
+run_case "temp: the console's temp is mounted read-only" fail \
+	'./scripts/read-only-root-has-a-temp.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "            - { name: tmp, mountPath: /tmp }\n          readinessProbe:", "            - { name: tmp, mountPath: /tmp, readOnly: true }\n          readinessProbe:")')" \
+	"which is readOnly"
+
+run_case "temp: no container left that needs a temp" fail \
+	'./scripts/read-only-root-has-a-temp.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.4.0", "image: registry.invalid/costcrew:v0.4.0")
+edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.4.0", "image: registry.invalid/costcrew:v0.4.0")')" \
+	"measured NOTHING"
+
+run_case "temp: TMPDIR inside the data volume instead of a /tmp mount" pass \
+	'./scripts/read-only-root-has-a-temp.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "            - { name: tmp, mountPath: /tmp }\n          readinessProbe:", "          readinessProbe:")
+edit("manifests/49-costcrew.yaml", "          env:\n            - name: TRAILRYX_TRUST_DOMAIN", "          env:\n            - name: TMPDIR\n              value: /var/lib/costcrew\n            - name: TRAILRYX_TRUST_DOMAIN")')"
+
+run_case "temp: the temp size changes" pass \
+	'./scripts/read-only-root-has-a-temp.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "sizeLimit: 128Mi", "sizeLimit: 256Mi")')"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'

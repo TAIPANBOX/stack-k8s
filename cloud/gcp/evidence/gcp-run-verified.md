@@ -256,8 +256,9 @@ bytes, not ask for a size.
 
 ## Secrets encryption at rest, verified at last, 2026-07-27
 
-`ДАНІ-K8S-ПРОГОН-2026-07-25.md` named this the first thing to check on a fresh
-cluster, and four fresh clusters went past it because `security-tests.sh`
+The notes from the 2026-07-25 cluster run (kept outside this repository)
+named this the first thing to check on a fresh cluster, and four fresh
+clusters went past it because `security-tests.sh`
 answered `encryption at rest UNVERIFIED` every time: the check wants `etcdctl`,
 and no cloud image has it.
 

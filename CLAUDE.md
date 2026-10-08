@@ -117,6 +117,8 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/chain-verifier-watches-the-bus.sh # invariant 31
 ./scripts/mounted-keys-are-readable.sh # invariant 32; GOTCHAS 117
 ./scripts/client-key-ids-are-bare.sh # invariant 33
+./scripts/no-owner-quotes.sh      # invariant 34
+./scripts/read-only-root-has-a-temp.sh # invariant 35; GOTCHAS 120
 ./scripts/gates-have-teeth.sh     # invariant 9; needs a clean tree
 ```
 
@@ -984,6 +986,60 @@ an absent invariant.
     Not covered: a value built from a shell variable, which is not judged; a
     URI with no `//` after its last colon looks like a correct entry by text;
     and what an operator types into their own Secret.)*
+
+34. **A public repository carries no quote of the owner.** `@decided
+    2026-09-09` (paraphrased): in a public repository there is no verbatim
+    quote of the owner, no provenance marker naming the owner and no sentence
+    attributing a decision to the owner by name. A decision is still recorded,
+    so a later reader does not re-derive it: `@decided YYYY-MM-DD` and a
+    paraphrase in our own words, not edited afterwards. The verbatim words live
+    in private places only. The owner's name as copyright holder or author is
+    ownership, not a quote. @measured `the gate below against origin/main at
+    c0b3fc7` 2026-10-08: 16 findings in 8 files (four owner markers, in
+    GOTCHAS.md 96, components.json, `manifests/00-base.yaml` and a range-run
+    plan; two quotes, one Ukrainian and one English that appeared twice; three
+    more mentions by name in HANDOFF.md and the range findings; a Ukrainian
+    file name and a probe's Ukrainian output, now translated). Each rewritten as `@decided` and a
+    paraphrase, or without the name; zero after.
+    *(gate: `scripts/no-owner-quotes.sh`, over every tracked text file: the
+    owner's marker, any Cyrillic, any guillemet, and the owner's first name or
+    surname outside a copyright, author or maintainer line; it refuses to report
+    OK on no tracked text file; scenarios in
+    `features/public-text-carries-no-owner-quotes.feature`; seven cases in
+    `scripts/gates-have-teeth.sh`, among them a pass case for the owner as
+    copyright holder. Not covered: a quote in English with no name beside it
+    ("the class he asked for" was found by reading, not by the gate), and git
+    history, which keeps whatever an earlier commit said.)*
+
+35. **A container that needs a temp directory and runs with a read-only root
+    has a writable, size-limited one.** SQLite writes a VACUUM's working copy,
+    and a sort too big for memory, to a temp file; Go spools a large upload to
+    one. With `readOnlyRootFilesystem: true` and nothing writable to put it in,
+    SQLite answers `disk I/O error (6410)`, no temp path. Found by the costcrew
+    v0.4.0 pin (#133, and stack-single#93 for the same image): the first start
+    over a v0.3.0 store dropped the clear-text session tokens and then could
+    not VACUUM their bytes out of the file, and said so only as a WARNING, so
+    every gate stayed green. GOTCHAS 120. Both pods that open the costcrew store
+    (the console and `costcrew-crew`, which can be the first to open it after an
+    upgrade) mount a memory emptyDir at `/tmp` with `sizeLimit: 128Mi`. Memory
+    on purpose: a disk emptyDir past its sizeLimit gets the pod evicted, a tmpfs
+    at its limit fails one statement with "database or disk is full". The pages
+    count against the container's 512Mi limit only while a temp file exists.
+    @measured `stack-single scratch compose projects on Docker Desktop, the same
+    image with a read-only root, v0.3.0 with a signed-in session then v0.4.0`
+    2026-10-08: without a temp the warning; with a 128 MB tmpfs at /tmp no
+    warning, `sessions_reset` journaled with `ended: 1`, the old cookie's bytes
+    gone from app.db and its -wal. Not run on a cluster.
+    *(gate: `scripts/read-only-root-has-a-temp.sh`, in both callers, over every
+    container in every pod template in `manifests/*.yaml` whose image is in its
+    `NEEDS_TEMP` list (costcrew today): a read-only root needs a mount at `/tmp`
+    that is not readOnly, or a TMPDIR inside one, and an emptyDir there needs a
+    sizeLimit; it refuses to report OK on no such container. Red first on
+    `c0b3fc7`: both costcrew containers. Teeth cases in
+    `scripts/gates-have-teeth.sh`; scenarios in
+    `features/a-read-only-container-has-a-temp.feature`. Not covered: an image
+    that needs a temp and is not in `NEEDS_TEMP`, whether 128Mi is enough for
+    the store a real cluster grows, and a pod on a running cluster.)*
 
 ## Decisions that have no gate yet
 

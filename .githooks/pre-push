@@ -62,6 +62,8 @@ step "every bus file is a name the readers accept" "./scripts/bus-names-match-th
 step "the chain verifier watches the bus" "./scripts/chain-verifier-watches-the-bus.sh"
 step "every mounted key is readable by its pod" "./scripts/mounted-keys-are-readable.sh"
 step "every client key example has a bare key id" "./scripts/client-key-ids-are-bare.sh"
+step "no quote of the owner in a public file" "./scripts/no-owner-quotes.sh"
+step "a read-only container that needs a temp has one" "./scripts/read-only-root-has-a-temp.sh"
 
 echo
 if [ "$fail" -ne 0 ]; then

@@ -263,7 +263,7 @@ slow; noticing you are the one who is cut off is instant.
 
 ## A note on the operator's link
 
-Yurii's own internet dropped for 5-10 minutes during this run. It does not
+The operator's own internet link dropped for 5-10 minutes during this run. It does not
 affect anything above, and the reason is specific rather than general: nodes 1
 and 2 answered `Permission denied (publickey)`, which is a completed TCP
 connection and a finished handshake in which the server rejected the key. A

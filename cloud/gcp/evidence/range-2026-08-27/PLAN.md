@@ -1,12 +1,12 @@
 # The hour, and what each minute is for
 
-`@yurii 2026-08-27`: "робиш годину, проганяєш, але робиш прогони максимальної
-кількості тестів - від розгортання до різних блокувань, до падіння сервісів".
+`@decided 2026-08-27`: one hour, spent running as many tests as fit in it, from
+deployment through policy blocks to services falling over.
 
 Three nodes, `c3d-highcpu-8`, `europe-west3`. **1.1258 USD/hour**, measured by
 `terraform plan`, not estimated. One hour is 1.13 USD. Three rather than one
 because a single node cannot fail over: node death, partition and quorum are
-exactly the class he asked for, and they cost the same hour.
+exactly the class this hour is for, and they cost the same hour.
 
 ## What already exists, so the hour is not spent rebuilding it
 
