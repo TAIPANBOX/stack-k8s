@@ -86,8 +86,9 @@ Last run: **10 passed, 0 failed.**
    fallback, mirroring the policy plane's `WARDRYX_URL`. Two tests added,
    `cargo test -p genaryx-api --lib money::env` passes 9/9. The console image on
    the build host is built from it.
-4. **Teardown.** Five CPX42 are about EUR 137/month. Yurii's call, and the AWS
-   and GCP comparison runs may want this one alive to compare against.
+4. **Teardown.** Five CPX42 are about EUR 137/month. Whoever pays for them
+   decides, and the AWS and GCP comparison runs may want this one alive to
+   compare against.
 
 ## Next: the same thing on AWS and GCP
 
@@ -97,7 +98,7 @@ this repo that is Hetzner-specific and names its AWS/GCP counterpart, section 3
 is the sheet to fill in. `verify.sh` speaks only kubectl, so the same proofs run
 unchanged on EKS or GKE.
 
-## The standing requirement, in Yurii's words
+## The standing requirement
 
 Every error we hit must be fixed IN THE CODE so a new user installing this
 never meets it. `GOTCHAS.md` now has seventeen, each with the fix that is

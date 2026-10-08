@@ -3344,9 +3344,9 @@ is worth writing down before somebody "fixes" one of them, the same shape as
 entry 93.
 
 Recorded 2026-09-03, when `49-costcrew.yaml` un-suspended `costcrew-crew`.
-`@yurii` 2026-09-03, "do it all", to un-suspending the crew CronJob, with the
-console's own cadence switch as the inner guard, now that costcrew v0.2.0's
-runner understands `-due`.
+`@decided 2026-09-03`: the crew CronJob is un-suspended, with the console's
+own cadence switch as the inner guard, now that costcrew v0.2.0's runner
+understands `-due`.
 
 `manifest-is-true.sh`'s `manual_jobs` bucket exists for exactly one shape: a
 CronJob that is a Job TEMPLATE, shipped suspended, run by a person with
@@ -4142,3 +4142,39 @@ name per week. And one replica is still an outage while the new pod starts.
 *(gate: `scripts/planes-leave-a-dead-node.sh`, invariant 21; teeth cases "an opt-in
 manifest outside the kustomization drops its toleration" and "an opt-in rolling
 Deployment loses its preStop sleep")*
+
+## 120. A read-only root with no writable temp: SQLite could not VACUUM, and said so only as a warning
+
+**Ours, meeting a platform fact.** The platform fact is SQLite's: a VACUUM
+writes its working copy to a temp file, and so does a sort too big for memory,
+and the unix VFS looks for a writable directory (`SQLITE_TMPDIR`, `TMPDIR`,
+`/var/tmp`, `/usr/tmp`, `/tmp`, `.`) and gives up with `disk I/O error (6410)`,
+`SQLITE_IOERR_GETTEMPPATH`, when it finds none. Ours: `49-costcrew.yaml` runs
+the console and the crew runner with `readOnlyRootFilesystem: true` and mounts
+nothing writable but the store and the bus, so there was no such directory.
+
+Found by the costcrew v0.4.0 pin (stack-single#93, this repository's #133). The
+first start of v0.4.0 over a v0.3.0 store migrates the session table: it drops
+the clear-text tokens and then VACUUMs so their bytes leave the file's free
+pages. On a read-only root the drop worked and the VACUUM did not, and the
+console printed `WARNING: old session tokens were dropped but the database could
+not be vacuumed, so a copy may remain in free space: disk I/O error (6410)` and
+carried on serving. Nothing went red: kubeconform accepted the pod, every gate
+here passed, and the bytes the migration exists to erase stayed in the file.
+
+Measured on Docker Desktop with the same image and a read-only root
+(stack-single's compose, 2026-10-08): v0.3.0, one signed-in session, then
+v0.4.0 on the same volume. Without a temp, the warning above and
+an app.db of 3,444,736 bytes. With a 128 MB tmpfs at /tmp, no warning,
+`sessions_reset` journaled with `ended: 1`, app.db 3,284,992 bytes, and the old
+cookie's 43 bytes found 0 times in app.db and in its -wal.
+
+The fix: a memory emptyDir with a sizeLimit at /tmp in both pods that open the
+store, the console and `costcrew-crew` (the runner opens the same store and can
+be the first to after an upgrade). Memory rather than disk on purpose: a disk
+emptyDir past its sizeLimit gets the pod evicted, a tmpfs at its limit fails
+one statement with "database or disk is full". Not run on a cluster: the pod
+shape is validated by kubeconform and judged by the gate, the behaviour was
+measured on Docker.
+*(gate: `scripts/read-only-root-has-a-temp.sh`, invariant 35; teeth cases in
+`scripts/gates-have-teeth.sh`)*

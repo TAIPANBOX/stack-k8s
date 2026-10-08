@@ -99,11 +99,12 @@ Three things make this cheap rather than clever:
 
 The result is stronger than today: **a fully compromised console cannot learn
 the server's private key**, because it never receives one. Measured on the live
-cluster this morning, through the current unix relay:
+cluster this morning, through the current unix relay (the probe's output,
+translated into English here):
 
 ```
-консоль ПРОЧИТАЛА стан демона через реле
-бачить: errno, listen_port, private_key
+the console READ the daemon's state through the relay
+it sees: errno, listen_port, private_key
 ```
 
 The parser discards it, which is careful. Discarding after receipt and never

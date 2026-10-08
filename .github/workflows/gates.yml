@@ -141,6 +141,19 @@ jobs:
       - name: every client key example splits the way tokenfuse splits it (invariant 33)
         run: ./scripts/client-key-ids-are-bare.sh
 
+      # Added 2026-10-08. This repository is public: no quote of the owner,
+      # no owner provenance marker, no attribution by name. See CLAUDE.md
+      # invariant 34.
+      - name: no quote of the owner in a public file (invariant 34)
+        run: ./scripts/no-owner-quotes.sh
+
+      # Added 2026-10-08. The costcrew console and its crew run with a
+      # read-only root, and SQLite needs a temp directory to VACUUM: without
+      # one the v0.4.0 session migration could not erase the old tokens. See
+      # CLAUDE.md invariant 35 and GOTCHAS.md entry 120.
+      - name: a read-only container that needs a temp has one (invariant 35)
+        run: ./scripts/read-only-root-has-a-temp.sh
+
       # Added 2026-10-04. The on-box chain verifier (agent-stack-go v1.1.0):
       # in the default install, every 15 minutes, on the bus, its memory on a
       # claim that already exists, a new break kept visible. See CLAUDE.md
