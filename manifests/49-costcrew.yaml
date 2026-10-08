@@ -111,7 +111,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: costcrew
-          image: ghcr.io/taipanbox/costcrew:v0.3.0
+          image: ghcr.io/taipanbox/costcrew:v0.4.0
           imagePullPolicy: IfNotPresent
           args:
             - "-addr"
@@ -271,11 +271,13 @@ spec:
           securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
           containers:
             - name: crew
-              image: ghcr.io/taipanbox/costcrew:v0.3.0
+              image: ghcr.io/taipanbox/costcrew:v0.4.0
               imagePullPolicy: IfNotPresent
               # Overrides the image's ENTRYPOINT (the console server): this is
-              # the other binary in the image, and it is the only one ever
-              # given a key.
+              # another binary in the same image (since v0.4.0 it carries five:
+              # costcrew, costcrew-run, costcrew-enforce, costcrew-idryxsource,
+              # costcrew-usage; this file runs the first two), and it is the
+              # only one here ever given a key.
               command: ["/usr/local/bin/costcrew-run"]
               args:
                 # First, so it is the first thing a reader of `kubectl get
