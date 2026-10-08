@@ -1616,8 +1616,8 @@ run_case "temp: the console's temp is mounted read-only" fail \
 
 run_case "temp: no container left that needs a temp" fail \
 	'./scripts/read-only-root-has-a-temp.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.4.0", "image: registry.invalid/costcrew:v0.4.0")
-edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.4.0", "image: registry.invalid/costcrew:v0.4.0")')" \
+	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.5.0", "image: registry.invalid/costcrew:v0.5.0")
+edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.5.0", "image: registry.invalid/costcrew:v0.5.0")')" \
 	"measured NOTHING"
 
 run_case "temp: TMPDIR inside the data volume instead of a /tmp mount" pass \
