@@ -1573,8 +1573,13 @@ run_case "no-owner-quotes: an attribution by name" fail \
 	"$(py 'open("components.json", "a").write("\n" + "Yur" + "ii asked for this.\n")')" \
 	"the owner's name outside a copyright or author line"
 
+# A hook runs with GIT_DIR set to the repository being pushed, and neither
+# `git -C` nor a change of directory clears it: `git init` would reinitialise
+# that repository instead of "$d", and the gate's own `git ls-files` would list
+# its files, so the case would pass and read TOOTHLESS. Both calls drop the
+# three variables git exports into a hook (estate-gates C9).
 run_case "no-owner-quotes: no tracked text file to judge" fail_env \
-	'd="$(mktemp -d)" && git -C "$d" init -q && mkdir "$d/scripts" && cp scripts/no-owner-quotes.sh "$d/scripts/" && "$d/scripts/no-owner-quotes.sh"' \
+	'd="$(mktemp -d)" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$d" init -q && mkdir "$d/scripts" && cp scripts/no-owner-quotes.sh "$d/scripts/" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE "$d/scripts/no-owner-quotes.sh"' \
 	"$(py 'pass')" \
 	"measured NOTHING"
 
