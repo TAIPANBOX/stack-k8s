@@ -38,7 +38,8 @@
 # ("he said 'do it all'"), a paraphrase that is really a quote, or anything in
 # git history: a rewrite here leaves the old text in earlier commits.
 set -uo pipefail
-cd "$(git rev-parse --show-toplevel)" || exit 1
+# The repository this file lives in, whatever directory it was called from.
+cd "$(dirname "$0")" && cd "$(git rev-parse --show-toplevel)" || exit 1
 
 python3 - <<'PY'
 import re
@@ -49,10 +50,10 @@ FIRST = "Yur" + "ii"
 LAST = "Kost" + "iuk"
 
 marker = re.compile("@" + FIRST.lower() + r"\b", re.I)
-cyrillic = re.compile("[Ѐ-ԯ]")
-guillemet = re.compile("[«»]")
+cyrillic = re.compile("[\u0400-\u052f]")
+guillemet = re.compile("[\u00ab\u00bb]")
 name = re.compile(r"\b(" + FIRST + "|" + LAST + r")\b", re.I)
-ownership = re.compile(r"copyright|©|\(c\)|\bauthors?\b|\bmaintainers?\b", re.I)
+ownership = re.compile(r"copyright|\u00a9|\(c\)|\bauthors?\b|\bmaintainers?\b", re.I)
 
 out = subprocess.run(["git", "ls-files", "-z"], capture_output=True)
 if out.returncode != 0:
