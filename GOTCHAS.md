@@ -4178,3 +4178,25 @@ shape is validated by kubeconform and judged by the gate, the behaviour was
 measured on Docker.
 *(gate: `scripts/read-only-root-has-a-temp.sh`, invariant 35; teeth cases in
 `scripts/gates-have-teeth.sh`)*
+
+## 121. A teeth case that runs `git -C` into a scratch repository passes, wrongly, when a hook runs it
+
+**Ours, and fixed.** The "no tracked text file to judge" case for
+`no-owner-quotes.sh` (#134) builds an empty repository with
+`git -C "$d" init` and runs the gate there, expecting "measured NOTHING". A git
+hook exports `GIT_DIR` pointing at the repository being pushed, and neither
+`git -C` nor a change of directory clears it. With it set, `git init`
+reinitialised the pushed repository instead of `$d`, and the gate's own
+`git ls-files` listed that repository's files, so the gate passed and the case
+would have read TOOTHLESS. From a terminal it failed correctly, which is why
+nothing here noticed: the fault only exists where nobody debugs from.
+
+Measured 2026-10-08 in a throwaway clone at e6f2917, the case's command run
+with `GIT_DIR` exported: exit 0 and no `.git` in `$d`; without it, the expected
+"measured NOTHING" and exit 1. With both calls prefixed
+`env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE`, exit 1 and "measured
+NOTHING" either way. `gates-have-teeth.sh` is not in `.githooks/pre-push`
+today, so no push reached this; the prefix makes the case independent of who
+calls it. stack-single carries the same case and the same fix.
+*(gate: estate-gates C9, `c9.foreign-git-keeps-the-environment`, which reads
+`scripts/` and `.githooks/` for a `git -C` aimed elsewhere without that prefix)*
