@@ -4211,3 +4211,13 @@ today, so no push reached this; the prefix makes the case independent of who
 calls it. stack-single carries the same case and the same fix.
 *(gate: estate-gates C9, `c9.foreign-git-keeps-the-environment`, which reads
 `scripts/` and `.githooks/` for a `git -C` aimed elsewhere without that prefix)*
+
+## 122. The record plane pinned a trailryx that refused the events a newer TokenFuse writes, and moved past them
+
+**Ours, and fixed.** On 2026-10-12 the TokenFuse pin moved to 1.10.0 on both launchers (stack-single v1.1.26, stack-k8s v1.1.38). That release writes two event types, `call_retained` and `retained_closed`, to the events bus. The record plane's `trailryx-node` was still on v1.0.0, which maps neither type. `trailryx-node events` refused each line as an unknown type and committed its position past it, so the line was never read again. Measured that day with a constructed `call_retained` line taken from trailryx's own test suite, not a live TokenFuse event: v1.0.0 refused it, and v1.2.0 run over the same data directory afterwards reported nothing new.
+
+The pin moved to trailryx-node v1.2.0 in the next releases (stack-single v1.1.27, stack-k8s v1.1.39). That does not repair what was refused. A data directory whose position already passed a refusal does not read those lines again, and trailryx's own 1.2.0 notes say the same of its readers. On each launcher the window ran from the TokenFuse move to the trailryx move.
+
+The gap was a producer pinned ahead of its consumer. A grep on 2026-10-12 found no script under `scripts/` that names both `trailryx` and `tokenfuse`, so nothing here compares the event types a pinned producer writes with the types a pinned consumer maps. The next event type a producer adds would pass every gate in this repository.
+
+*(not enforced: a check comparing the event types of each pinned producer with the event types of each pinned consumer would hold this. The two pins live in different files.)*

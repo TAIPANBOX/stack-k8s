@@ -386,16 +386,16 @@ fi
 # manifests, not from their repositories.
 # trailryx is on this list from 2026-09-01, and its absence was not cosmetic.
 # 40-routines-and-secrets.yaml applies the record-seal CronJob on every cloud,
-# and that CronJob runs `stack/trailryx:dev`, which nothing here ever built. So
-# on GCP and AWS the record plane could never seal anything: the image did not
-# exist on any node. The Hetzner deploy.sh had it and these two did not, which
+# and until the manifests pinned the published trailryx-node image, that CronJob
+# ran `stack/trailryx:dev`, which nothing here ever built. So on GCP and AWS the
+# record plane could never seal anything: the image did not exist on any node. The Hetzner deploy.sh had it and these two did not, which
 # is why it went unnoticed. Measured on a live GCP cluster, the seal job came up
 # `image can't be pulled`, and it only ever fires at 05:27, so the first symptom
 # an operator would get is an empty record and no alert about it.
 #
-# It is BUILT rather than pulled for the reason deploy.sh already gives: the
-# published GHCR image carries `trailryx-ingest` only, and every sealing command
-# lives in `trailryx-node`, which is published nowhere.
+# It is BUILT here, as deploy.sh builds it, from the checkout. The manifests now
+# pull the published trailryx-node image, which carries both sealing binaries,
+# so this build is not what the CronJob runs (images/trailryx.Dockerfile).
 #
 # costcrew joins the list only with --with-finops, for the same reason its
 # manifest is not in the kustomization: a deployment that clones and builds a
