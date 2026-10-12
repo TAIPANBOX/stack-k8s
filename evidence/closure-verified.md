@@ -110,6 +110,26 @@ The first green attempt failed sign-in with 503 because the console reads
 whether it has an operator only at startup (GOTCHAS 50); the harness now
 restarts the console after `set-password`, as the deploy scripts here do.
 
+## Console v1.1.36: the operator with no restart, 2026-10-12
+
+Console v1.1.36 (genaryx#106) picks an operator set while it runs up at the
+next sign-in, so the harness no longer restarts it after `set-password` and
+checks three more things: the console answers, says it has no operator, and
+then, still running, says it has one. `RESTART_AFTER_SET_PASSWORD=1` puts the
+old restart back for an older image. On Docker Compose on the same Mac, with
+`tokenfuse:v1.9.0` and `tokenfuse-control-plane:v1.9.0`:
+
+- `genaryx-console:v1.1.35` (image label `dev.taipanbox.source.genaryx`
+  `2317d80`): 16 failed. `set-password` succeeded, the running console still
+  said it had no operator, and sign-in answered 503, so every close behind it
+  failed. Parts B and D passed, because they recreate the console and a
+  restarted console reads the operator at startup.
+- `genaryx-console:v1.1.36` (label `41972c6`): 32 of 32, twice from empty.
+
+The two green runs used ports 24100, 27420 and 28080 in a copy of this
+directory, because another run held the default ports on the same machine at
+the time; nothing else in the copy differed.
+
 ## Not proven
 
 - **A cluster.** This is Docker Compose on one Mac (arm64), not these
