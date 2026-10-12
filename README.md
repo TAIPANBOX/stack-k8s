@@ -693,9 +693,9 @@ sides use one secret, and it is off unless you turn it on:
 ./closure/down.sh --delete-secrets  # also removes the Secret
 ```
 
-A re-run of `up.sh` reuses the secret. It needs a tokenfuse gateway and a
-console image that include this feature; the images pinned here are older and
-ignore the setting.
+A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
+console v1.1.34 or later, which are the images pinned here; an older image
+ignores the setting.
 
 ## Status
 
