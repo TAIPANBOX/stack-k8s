@@ -96,6 +96,27 @@ services:
       init-volumes: { condition: service_completed_successfully }
       tokenfuse-gateway: { condition: service_started }
 
+  # The notifier, run once by run.sh after the closures, reading the same bus
+  # the gateway writes and writing the mail it WOULD send to ./mail instead of
+  # sending it. medium, so a call_retained is mailed rather than held for the
+  # daily summary (the launchers' floor is high).
+  heraldyx-once:
+    image: ${HERALDYX_IMAGE:-ghcr.io/taipanbox/heraldyx:v0.4.0}
+    profiles: ["mail"]
+    user: "0:0"
+    command: ["--once", "--from-now=false"]
+    environment:
+      HERALDYX_EVENTS: /var/lib/stack/events
+      HERALDYX_STATE: /out/state.json
+      HERALDYX_MIN_SEVERITY: medium
+      HERALDYX_TO: e2e@example.invalid
+      HERALDYX_MAIL_FILE: /out/mail.txt
+      HERALDYX_BOX: e2e
+      HERALDYX_CONSOLE_URL: http://localhost:17420
+    volumes:
+      - events:/var/lib/stack/events:ro
+      - ./mail:/out
+
 volumes:
   events: {}
   traces: {}
