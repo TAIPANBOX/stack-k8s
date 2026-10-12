@@ -1,0 +1,14 @@
+{
+  "name": "e2e",
+  "host": "localhost",
+  "services": {
+    "cloud":   { "url": "http://tokenfuse-cloud:8080" },
+    "gateway": { "url": "http://tokenfuse-gateway:4100", "mode": "enforce" }
+  },
+  "events": {
+    "dir": "/var/lib/stack/events",
+    "files": {
+      "tokenfuse": "/var/lib/stack/events/tokenfuse.ndjson"
+    }
+  }
+}

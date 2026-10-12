@@ -1063,16 +1063,20 @@ an absent invariant.
     `$patch: delete` counterparts, invariant 24's mechanism and for its reason,
     and keeps the Secret unless `--delete-secrets` is passed. It takes effect
     only with a tokenfuse image that serves `POST /v1/retained/close` and a
-    console image with the close command; the pins here predate both.
+    console image with the close command: tokenfuse v1.9.0 and console v1.1.34,
+    pinned here since 1.1.35, are the first that do.
     *(gate: `scripts/closure-off-by-default.sh`, in both callers, which refuses
     to report OK on a missing patch, unpatch or `up.sh`;
     `scripts/manifests-valid.sh` skips the four patch bodies by name, each with
     its own check; `scripts/mounted-keys-are-readable.sh` and
     `scripts/secret-keys-agree.sh` judge the patch and `up.sh` like any other;
     teeth in `scripts/gates-have-teeth.sh`; scenarios in
-    `features/closing-a-reservation-is-opt-in.feature`. Not covered: a cluster,
-    a token minted by a running console and verified by a running gateway, and
-    `closure/up.sh` or `down.sh` run against a real API server.)*
+    `features/closing-a-reservation-is-opt-in.feature`. A token minted by a
+    running console and verified by a running gateway: @measured
+    `evidence/closure-e2e/run.sh` on Docker Compose with tokenfuse v1.9.0 and
+    console v1.1.34, 2026-10-12, 29 of 29 twice (`evidence/closure-verified.md`).
+    Not covered: a cluster, and `closure/up.sh` or `down.sh` run against a real
+    API server.)*
 
 ## Decisions that have no gate yet
 

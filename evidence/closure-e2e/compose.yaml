@@ -1,0 +1,99 @@
+# Closure end-to-end (tokenfuse D8 + D8.1, genaryx money_close_retained), the
+# run recorded in evidence/closure-verified.md. Not a deployment: the real
+# images, wired the way stack-single wires them, minus the planes the closure
+# path does not touch, with a stub provider. Test values come from .env, which
+# run.sh mints on every run and never prints.
+name: closuree2e
+
+services:
+  init-volumes:
+    image: busybox:1.36
+    user: "0:0"
+    command:
+      - sh
+      - -euc
+      - |
+        mkdir -p /vol/events /vol/traces /vol/cloud
+        chown 0:10001 /vol/events && chmod 2775 /vol/events
+        chown 10001:10001 /vol/traces /vol/cloud && chmod 0775 /vol/traces /vol/cloud
+        for f in tokenfuse.ndjson tokenfuse-cloud.ndjson; do
+          touch /vol/events/$$f && chown 10001:10001 /vol/events/$$f && chmod 0664 /vol/events/$$f
+        done
+    volumes:
+      - events:/vol/events
+      - traces:/vol/traces
+      - cloudstate:/vol/cloud
+
+  # A provider that takes the whole POST and then closes without a status
+  # line: the gateway cannot know whether it billed, so the call is retained
+  # (tokenfuse invariant 50).
+  stub:
+    image: busybox:1.36
+    command: ["sh", "-c", "while true; do sleep 3 | nc -l -p 8080 >/dev/null 2>&1; done"]
+
+  tokenfuse-cloud:
+    image: ${TOKENFUSE_CLOUD_IMAGE}
+    command: ["/usr/local/bin/tokenfuse-cloud"]
+    environment:
+      PORT: "8080"
+      TOKENFUSE_CLOUD_HOST: 0.0.0.0
+      TOKENFUSE_CLOUD_KEYS: ${CLOUD_ADMIN}:e2e:admin
+      TOKENFUSE_CLOUD_DATA: /var/lib/stack/cloud/state.json
+      TOKENFUSE_EVENTS_PATH: /var/lib/stack/events/tokenfuse-cloud.ndjson
+    ports: ["127.0.0.1:18080:8080"]
+    volumes:
+      - events:/var/lib/stack/events
+      - cloudstate:/var/lib/stack/cloud
+    depends_on:
+      init-volumes: { condition: service_completed_successfully }
+
+  tokenfuse-gateway:
+    image: ${TOKENFUSE_IMAGE}
+    command: ["/usr/local/bin/tokenfuse"]
+    environment:
+      TOKENFUSE_ADDR: 0.0.0.0:4100
+      TOKENFUSE_ADMIN_KEYS: ${GATEWAY_ADMIN}
+      TOKENFUSE_CLOSURE_SECRET: ${CLOSURE_SECRET:-}
+      TOKENFUSE_MODE: enforce
+      TOKENFUSE_MAX_RUN_BUDGET_USD: "5.00"
+      TOKENFUSE_DATA_DIR: /var/lib/stack/traces/gateway
+      TOKENFUSE_CACHE: "off"
+      TOKENFUSE_EVENTS_PATH: /var/lib/stack/events/tokenfuse.ndjson
+      TOKENFUSE_UPSTREAM: http://stub:8080/v1/messages
+      TOKENFUSE_CLOUD_URL: http://tokenfuse-cloud:8080
+      TOKENFUSE_CLOUD_KEY: ${CLOUD_ADMIN}
+    ports: ["127.0.0.1:14100:4100"]
+    volumes:
+      - events:/var/lib/stack/events
+      - traces:/var/lib/stack/traces
+    depends_on:
+      init-volumes: { condition: service_completed_successfully }
+      tokenfuse-cloud: { condition: service_started }
+      stub: { condition: service_started }
+
+  console:
+    image: ${CONSOLE_IMAGE}
+    environment:
+      HOME: /var/lib/stack
+      TAIPAN_HOME: /etc/genaryx/taipan
+      GENARYX_STATE_DIR: /var/lib/stack/genaryx
+      TOKENFUSE_CLOUD_URL: http://tokenfuse-cloud:8080
+      TOKENFUSE_CLOUD_ADMIN_KEY: ${CLOUD_ADMIN}
+      TOKENFUSE_GATEWAY_ADMIN_KEY: ${GATEWAY_ADMIN}
+      GENARYX_WEB_REQUIRE_PASSKEY: ${REQUIRE_PASSKEY:-}
+      GENARYX_CLOSURE_SECRET_FILE: /run/closure/secret
+    ports: ["127.0.0.1:17420:7420"]
+    volumes:
+      - consolestate:/var/lib/stack
+      - events:/var/lib/stack/events
+      - ./environments:/etc/genaryx/taipan/environments:ro
+      - ./closure:/run/closure:ro
+    depends_on:
+      init-volumes: { condition: service_completed_successfully }
+      tokenfuse-gateway: { condition: service_started }
+
+volumes:
+  events: {}
+  traces: {}
+  cloudstate: {}
+  consolestate: {}
