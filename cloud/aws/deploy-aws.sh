@@ -399,7 +399,7 @@ fi
 # manifests started pulling them from ghcr.io by pinned tag. Cloning source
 # nothing builds is fetching something nothing reads.
 OPEN_REPOS="qryx mockryx verdryx engram"
-[ "$BUILD_FROM_SOURCE" = 1 ] && OPEN_REPOS="$OPEN_REPOS tokenfuse trailryx"
+[ "$BUILD_FROM_SOURCE" = 1 ] && OPEN_REPOS="$OPEN_REPOS tokenfuse"
 [ "$BUILD_FROM_SOURCE" = 1 ] && [ "$WITH_FINOPS" = 1 ] && OPEN_REPOS="$OPEN_REPOS costcrew"
 # Nothing is built here any more, and this whole step is the one that took the
 # time. Every image the manifests name is published and pinned, so the kubelet
@@ -507,8 +507,6 @@ else
     if [ '$BUILD_FROM_SOURCE' = '1' ]; then
       docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
       echo '   built stack/tokenfuse:dev'
-      docker build -q -f stack-k8s/images/trailryx.Dockerfile -t stack/trailryx:dev ./trailryx >/dev/null
-      echo '   built stack/trailryx:dev'
     fi
     if [ '$WITH_CONSOLE' = '1' ]; then
       docker build -q -f stack-k8s/images/console.Dockerfile -t stack/genaryx-console:dev . >/dev/null
@@ -549,7 +547,7 @@ else
   # is the whole saving: this used to distribute every image on every
   # install, and the console is now the only one left.
   IMAGES=""
-  [ "$BUILD_FROM_SOURCE" = 1 ] && IMAGES="stack/tokenfuse:dev stack/trailryx:dev"
+  [ "$BUILD_FROM_SOURCE" = 1 ] && IMAGES="stack/tokenfuse:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
   [ "$BUILD_FROM_SOURCE" = 1 ] && [ "$WITH_FINOPS" = 1 ] && IMAGES="$IMAGES stack/costcrew:dev"
   su_ "$BUILDER" "sh -c \"for img in $IMAGES; do
