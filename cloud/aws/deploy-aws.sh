@@ -380,9 +380,10 @@ fi
 # fetching something nothing reads. Their policy and config come from the
 # manifests, not from their repositories.
 # trailryx is on this list from 2026-09-01. 40-routines-and-secrets.yaml applies
-# the record-seal CronJob on every cloud and that CronJob runs
-# `stack/trailryx:dev`, which nothing here ever built, so the record plane could
-# never seal anything here. See the fuller account in ../gcp/deploy-gcp.sh, where
+# the record-seal CronJob on every cloud. Until the manifests pinned the published
+# trailryx-node image, that CronJob ran `stack/trailryx:dev`, which nothing here
+# ever built, so the record plane could never seal anything here. See the fuller
+# account in ../gcp/deploy-gcp.sh, where
 # it was measured on a live cluster.
 #
 # costcrew joins the list only with --with-finops, for the same reason its

@@ -4,19 +4,16 @@
 #
 #   docker build -f images/trailryx.Dockerfile -t stack/trailryx:dev ../trailryx
 #
-# WHY THIS IS BUILT HERE RATHER THAN PULLED
+# WHAT THIS BUILDS, AND WHO READS IT
 #
-# trailryx publishes a GHCR image and it carries `trailryx-ingest` only. The
-# release workflow builds `trailryx-verify` and `trailryx-ingest`, and every
-# sealing command lives in `trailryx-node`, which is published nowhere. So a
-# deployment that wants a sealed record has no pull-and-run path today.
+# The two sealing binaries, `trailryx-node` and `trailryx-verify`, built from a
+# trailryx checkout. The same binaries are published: ghcr.io/taipanbox/trailryx-node
+# carries both, and the manifests pull that image by tag (v1.2.0 today). So no
+# manifest names `stack/trailryx:dev`, and nothing that runs reads this build.
 #
-# Building it here is the established answer for exactly this case rather than
-# a workaround: `stack/tokenfuse:dev` comes out of an unpublished Rust
-# workspace the same way, and `pinned-images.sh` accepts a locally built
-# `stack/*:dev` tag on that basis. The day trailryx ships `trailryx-node` in
-# its image, this file goes away and the manifest names
-# `ghcr.io/taipanbox/trailryx:vX.Y.Z` instead, with nothing else moving.
+# It is here for a source build: a trailryx checkout that is not released yet,
+# or a cluster that cannot reach ghcr.io. Using it means editing the image line
+# in the manifest, the same as any other `stack/*:dev` tag (pinned-images.sh).
 ARG RUST_VERSION=1.85
 
 FROM rust:${RUST_VERSION}-slim AS build

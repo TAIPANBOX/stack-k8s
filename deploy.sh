@@ -472,9 +472,9 @@ fi
 # are pulled from ghcr.io now, so cloning their source on the node would be
 # fetching something nothing reads. Their policy and config come from the
 # manifests, not from their repositories.
-# trailryx joins the list because its image is BUILT here, not pulled: the
-# published one carries `trailryx-ingest` only and every sealing command is in
-# `trailryx-node`. Same reason tokenfuse is on this list and wardryx is not.
+# trailryx joins the list because it builds stack/trailryx:dev from the checkout.
+# The manifests pull the published trailryx-node image, which carries both
+# sealing binaries, so nothing that runs reads this build (images/trailryx.Dockerfile).
 OPEN_REPOS="qryx mockryx tokenfuse verdryx engram trailryx"
 if [ "$SKIP_IMAGES" = 1 ]; then
   say "skipping the image build (--skip-images)"
@@ -545,9 +545,9 @@ else
     cd /root/src
     docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
     echo '   built stack/tokenfuse:dev'
-    # The record plane's sealing tools. Built here for the same reason
-    # tokenfuse is: the published GHCR image carries `trailryx-ingest` only and
-    # every sealing command is in `trailryx-node`, which is published nowhere.
+    # The record plane's sealing tools, built from the trailryx checkout. The
+    # manifests pull the published trailryx-node image, so nothing that runs
+    # reads this build (see images/trailryx.Dockerfile).
     docker build -q -f stack-k8s/images/trailryx.Dockerfile -t stack/trailryx:dev ./trailryx >/dev/null
     echo '   built stack/trailryx:dev'
     # The operator tunnel needs these two, and nothing else builds them. Left
