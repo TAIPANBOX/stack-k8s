@@ -38,7 +38,8 @@
 # trust domain. The only difference is the verb: a ConfigMap key is patched, a
 # Deployment's environment is `set env`, which also rolls the gateway to the new
 # figure by itself. Same rule, one more row in the table below, so the two cannot
-# drift apart in this file the way the three deploy scripts did.
+# drift apart in this file the way the three deploy scripts did. `--firewall` (CLAUDE.md
+# invariant 37) is the third flag of the same shape, and is one more row for the same reason.
 #
 # The second is the whole reason the flag works. Patching before the
 # kustomization is indistinguishable from patching after it by reading the flag
@@ -95,6 +96,7 @@ checked=0
 FLAGS=$(cat <<'ROWS'
 --trust-domain|TRAILRYX_TRUST_DOMAIN|patch
 --run-budget-ceiling|TOKENFUSE_MAX_RUN_BUDGET_USD|set env
+--firewall|TOKENFUSE_FIREWALL|set env
 ROWS
 )
 
@@ -138,5 +140,5 @@ if [ "$problems" -gt 0 ]; then
 	exit 1
 fi
 
-printf 'OK: %d deploy script(s), each parsing --trust-domain and --run-budget-ceiling and\n' "$checked"
+printf 'OK: %d deploy script(s), each parsing --trust-domain, --run-budget-ceiling and --firewall and\n' "$checked"
 printf '    applying each after its own `apply -k`, which is the only position where it survives.\n'

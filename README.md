@@ -276,6 +276,34 @@ gateway has a ceiling the operator sets, and `10-planes.yaml` sets it:
   --run-budget-ceiling 2.50
 ```
 
+### The agent firewall
+
+TokenFuse's agent firewall refuses a run that read untrusted input and then asks for a
+capability it should not have, keeps the anti-exfiltration floor on, and labels a run whose
+declared tools carry an injection finding. Every gateway this launcher starts runs it in
+`enforce`, which is what `10-planes.yaml` sets. Without the variable TokenFuse falls back to
+`shadow`, which refuses nothing and only records what it would have refused.
+
+- **What enforce refuses.** A later exec, write or egress call by a run that read untrusted
+  input. The starter policy names web, email, file and secret sources. A request is never
+  refused for the text of a tool it declares: a declared tool with a high or critical finding
+  labels the run `suspected_injection`, and the starter rule then applies to that run's later
+  calls.
+- **Changing it.** `--firewall enforce|shadow|off` on `deploy.sh`, `deploy-gcp.sh` and
+  `deploy-aws.sh` (or `FIREWALL_MODE` in the environment). Any other word is refused before
+  anything is installed, because TokenFuse ignores a misspelt value without a word and would
+  run in shadow. The value is applied after the manifests, because `apply -k` puts the declared
+  `enforce` back over anything set before it or by hand, and the gateway rolls to the new mode
+  by itself. Give the flag on every run: a re-run without it returns the gateway to `enforce`.
+- **What it does not cover.** The MCP broker and the `focus-export` sidecar carry no switch.
+  The broker asks the gateway before it forwards a tool call, so the gateway's mode decides
+  for the broker too.
+
+```bash
+./deploy.sh --servers ... --hcloud-token ... --trust-domain acme.example \
+  --firewall shadow
+```
+
 ### Being told, rather than watching
 
 `deploy.sh` asks for an address for alerts alongside the tunnel and the console

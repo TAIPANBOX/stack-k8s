@@ -24,6 +24,11 @@
 # governed stack without the control room, which is a real deployment and not a
 # crippled one: the planes enforce with or without a UI in front of them.
 #
+# `--firewall <enforce|shadow|off>` sets the agent firewall's mode on the gateway (TokenFuse
+# invariants 25 to 27 and 93). Without it the manifest's enforce stands. Checked by
+# firewall/mode.sh before anything is installed, applied after the kustomization, and the
+# gateway rolls to it by itself. Give it on every run: a re-run without it returns the gateway
+# to enforce.
 # `--run-budget-ceiling <usd>` sets the most one run may be allowed to carry, as
 # TOKENFUSE_MAX_RUN_BUDGET_USD on the gateway (tokenfuse v1.5.0). Without it the manifest's
 # 5.00 stands, which is the gateway's own built-in run budget, so an ordinary run is
@@ -130,6 +135,11 @@ TRUST_DOMAIN="${TRUST_DOMAIN:-}"
 # Set, it is checked by budget/ceiling.sh before anything is installed and applied AFTER
 # the kustomization, the only position where it sticks (the same rule as the trust domain).
 RUN_BUDGET_CEILING="${RUN_BUDGET_CEILING:-}"
+# The agent firewall's mode on the gateway (TokenFuse invariants 25 to 27 and 93, CLAUDE.md
+# invariant 37). Empty leaves 10-planes.yaml's enforce. Set, it is checked by firewall/mode.sh
+# before anything is installed and applied AFTER the kustomization, the only position where it
+# sticks (the same rule as the run-budget ceiling).
+FIREWALL_MODE="${FIREWALL_MODE:-}"
 # Build tokenfuse, trailryx and costcrew on a node instead of pulling them.
 #
 # Off, since 2026-09-01, because all three are published and pinned in the
@@ -165,6 +175,7 @@ while [ $# -gt 0 ]; do
     --typed-risk-signal)    TYPED_RISK_SIGNAL=1; shift ;;
     --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --run-budget-ceiling) RUN_BUDGET_CEILING="$2"; shift 2 ;;
+    --firewall) FIREWALL_MODE="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     # The header block, found rather than counted.
@@ -344,6 +355,15 @@ TYPED_EFFECTIVE="$("$ROOT/typed/mode.sh" mode ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"
 if [ -n "$RUN_BUDGET_CEILING" ]; then
   "$ROOT/budget/ceiling.sh" check "$RUN_BUDGET_CEILING" \
     || die "the run-budget ceiling was refused, so nothing has been installed yet."
+fi
+
+# ---- the agent firewall's mode, refused BEFORE anything is installed -------------
+# firewall/mode.sh is the one copy of this check (CLAUDE.md invariant 37). TokenFuse reads
+# TOKENFUSE_FIREWALL with an exact match and ignores any other word, so a misspelt mode would
+# leave the gateway in shadow with no word about it. It is found here, before the install.
+if [ -n "$FIREWALL_MODE" ]; then
+  "$ROOT/firewall/mode.sh" check "$FIREWALL_MODE" \
+    || die "the agent firewall mode was refused, so nothing has been installed yet."
 fi
 say "using this checkout: $ROOT"
 
@@ -624,6 +644,16 @@ if [ -n "$RUN_BUDGET_CEILING" ]; then
   say "run-budget ceiling: $RUN_BUDGET_CEILING USD per run (set after apply, which is what makes it stick)"
   k_ "-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_MAX_RUN_BUDGET_USD=$RUN_BUDGET_CEILING" >/dev/null \
     || die "could not set the run-budget ceiling on the gateway"
+fi
+
+# The agent firewall's mode, set AFTER the kustomization for the reason the run-budget ceiling
+# is: 10-planes.yaml declares TOKENFUSE_FIREWALL=enforce, and `kubectl apply -k` puts the declared
+# value back over anything set before it or by hand. Without the flag nothing is set and the
+# manifest's enforce stands.
+if [ -n "$FIREWALL_MODE" ]; then
+  say "agent firewall: $FIREWALL_MODE on the gateway (set after apply, which is what makes it stick)"
+  k_ "-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_FIREWALL=$FIREWALL_MODE" >/dev/null \
+    || die "could not set the agent firewall mode on the gateway"
 fi
 
 # The finops plane, applied from its own file for the same reason heraldyx and

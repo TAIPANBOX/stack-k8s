@@ -4221,3 +4221,17 @@ The pin moved to trailryx-node v1.2.0 in the next releases (stack-single v1.1.27
 The gap was a producer pinned ahead of its consumer. A grep on 2026-10-12 found no script under `scripts/` that names both `trailryx` and `tokenfuse`, so nothing here compares the event types a pinned producer writes with the types a pinned consumer maps. The next event type a producer adds would pass every gate in this repository.
 
 *(not enforced: a check comparing the event types of each pinned producer with the event types of each pinned consumer would hold this. The two pins live in different files.)*
+
+## 123. A misspelt TokenFuse firewall mode starts the gateway in shadow without a word
+
+**Upstream.** TokenFuse reads `TOKENFUSE_FIREWALL` by exact match against `enforce`, `shadow`
+and `off` (`crates/gateway/src/firewall.rs`, `from_env`), and ignores any other value. The
+unset default is `shadow`. So a mode written as `enforce ` (a trailing space), `Enforce` or
+`enforced` starts the gateway in shadow, which refuses nothing and records what it would have
+refused, and nothing in the gateway's own output says the mode was not the one written.
+
+Found on 2026-10-13 while this launcher was made to run the firewall in enforce by default. It
+is not hit on a cluster. The answer here is `firewall/mode.sh`, which accepts exactly the three
+words before anything is installed, and `scripts/firewall-is-enforce-by-default.sh`, which
+requires the literal `enforce` on every gateway start. The trap stays live in any other
+deployment of the same image that passes the mode through without a check.

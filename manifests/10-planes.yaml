@@ -240,6 +240,18 @@ spec:
             # (the same ordering as TRAILRYX_TRUST_DOMAIN, invariant 14).
             # scripts/run-budget-ceiling-is-set.sh holds it (invariant 28).
             - { name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: "5.00" }
+            # The agent firewall runs in enforce by default (TokenFuse invariants 25
+            # to 27 and 93). In enforce, a run that read untrusted input and then asks
+            # for a capability it should not have is refused, the anti-exfiltration
+            # floor stays on, and a declared tool that carries an injection finding
+            # labels its run, so the starter rule applies to that run's later calls.
+            # Unset, the gateway falls back to shadow, which refuses nothing, and it
+            # ignores a misspelt value without a word, so this literal is checked.
+            # `--firewall enforce|shadow|off` on the three deploy scripts changes it,
+            # after the apply, because `kubectl apply -k` puts this literal back (the
+            # same ordering as TOKENFUSE_MAX_RUN_BUDGET_USD, invariant 28).
+            # scripts/firewall-is-enforce-by-default.sh holds it (CLAUDE.md invariant 37).
+            - { name: TOKENFUSE_FIREWALL, value: "enforce" }
             # Two settings the gateway leaves OFF by default, and this stack
             # must not, because they are the difference between a deployment
             # that is governed and one that only looks governed.

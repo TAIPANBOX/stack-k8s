@@ -1690,6 +1690,73 @@ run_case "temp: the temp size changes" pass \
 	'./scripts/read-only-root-has-a-temp.sh' \
 	"$(py 'edit("manifests/49-costcrew.yaml", "sizeLimit: 128Mi", "sizeLimit: 256Mi")')"
 
+# The agent firewall (CLAUDE.md invariant 37, TokenFuse invariants 25 to 27 and 93). A
+# gateway that starts in shadow protects nothing and says nothing about it, and TokenFuse
+# ignores a misspelt mode without a word. The faults: the switch gone from the gateway, the
+# gateway defaulting to shadow or to off, the switch set twice (the later entry wins without a
+# word), every gateway start taken away, the validator accepting a misspelt word or refusing a
+# real one, the validator taken away, a deploy path that checks the mode only after its
+# install, and a deploy path that takes --firewall and applies nothing. Then a comment (must
+# pass).
+run_case "firewall-is-enforce-by-default: the gateway container loses the switch" fail \
+	'./scripts/firewall-is-enforce-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n", "")')" \
+	"has no TOKENFUSE_FIREWALL env var"
+
+run_case "firewall-is-enforce-by-default: the gateway defaults to shadow" fail \
+	'./scripts/firewall-is-enforce-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d", "\x7b name: TOKENFUSE_FIREWALL, value: \"shadow\" \x7d")')" \
+	'not "enforce"'
+
+run_case "firewall-is-enforce-by-default: the gateway defaults to off" fail \
+	'./scripts/firewall-is-enforce-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d", "\x7b name: TOKENFUSE_FIREWALL, value: \"off\" \x7d")')" \
+	'not "enforce"'
+
+run_case "firewall-is-enforce-by-default: the switch is set twice, the second to shadow" fail \
+	'./scripts/firewall-is-enforce-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n", "            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n            - \x7b name: TOKENFUSE_FIREWALL, value: \"shadow\" \x7d\n")')" \
+	"set 2 times"
+
+run_case "firewall-is-enforce-by-default: a comment naming shadow beside the switch" pass \
+	'./scripts/firewall-is-enforce-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n", "            # shadow is the gateway default only when the variable is unset.\n            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n")')"
+
+run_case "firewall-is-enforce-by-default: every gateway start taken away" fail \
+	'./scripts/firewall-is-enforce-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "          command: [\"/usr/local/bin/tokenfuse\"]\n", "          command: [\"/bin/true\"]\n")')" \
+	"measured nothing"
+
+run_case "firewall/mode.sh: a misspelt mode is accepted" fail \
+	'./scripts/firewall-is-enforce-by-default.sh' \
+	"$(py 'edit("firewall/mode.sh", "  enforce)\n", "  enforce|enforced)\n")')" \
+	"accepts 'enforced'"
+
+run_case "firewall/mode.sh: the real word enforce is refused" fail \
+	'./scripts/firewall-is-enforce-by-default.sh' \
+	"$(py 'edit("firewall/mode.sh", "  enforce)\n", "  enforcex)\n")')" \
+	"refuses 'enforce'"
+
+run_case "firewall/mode.sh: taken away" fail \
+	'./scripts/firewall-is-enforce-by-default.sh' \
+	"$(py 'import os; os.remove("firewall/mode.sh")')" \
+	"firewall/mode.sh is missing"
+
+run_case "firewall-is-enforce-by-default: a deploy path checks the mode but does not stop on it" fail \
+	'./scripts/firewall-is-enforce-by-default.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/firewall/mode.sh\" check \"$FIREWALL_MODE\"", "\"$ROOT/firewall/mode.sh\" true \"$FIREWALL_MODE\"")')" \
+	"before its first apply"
+
+run_case "deploy-flags-agree: a deploy path stops taking --firewall" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "    --firewall) FIREWALL_MODE=\"$2\"; shift 2 ;;\n", "")')" \
+	"does not parse --firewall"
+
+run_case "deploy-flags-agree: the firewall flag is accepted and applies nothing" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'edit("deploy.sh", "set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_FIREWALL=$FIREWALL_MODE", "get deploy/tokenfuse-gateway -c gateway TOKENFUSE_FIREWALL=$FIREWALL_MODE")')" \
+	"never applies"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'
