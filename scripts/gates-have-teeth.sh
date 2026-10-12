@@ -582,7 +582,7 @@ run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
 run_case "secret-keys-agree: no installer left to judge" fail \
 	'./scripts/secret-keys-agree.sh' \
 	"$(py 'import os
-for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "delegation/up.sh"):
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "delegation/up.sh", "closure/up.sh"):
     os.remove(f)')" \
 	"measured NOTHING"
 
@@ -965,6 +965,67 @@ run_case "delegation-off-by-default: the subject taken away entirely" fail \
 	"$(py 'import os
 os.remove("manifests/54-delegation.yaml")')" \
 	"measured nothing"
+
+# invariant 36: closing a retained reservation is off by default, and on, the
+# gateway and the console read the same secret bytes, never printed.
+run_case "closure-off-by-default: a closure patch joins the default apply" fail \
+	'./scripts/closure-off-by-default.sh' \
+	"$(py 'edit("manifests/kustomization.yaml",
+    "  - 40-routines-and-secrets.yaml\n",
+    "  - 40-routines-and-secrets.yaml\n  - 57-closure-gateway-patch.yaml\n")')" \
+	"is listed in manifests/kustomization.yaml"
+
+run_case "closure-off-by-default: a closure setting leaks into the default gateway manifest" fail \
+	'./scripts/closure-off-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml",
+    "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n",
+    "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n            - { name: TOKENFUSE_CLOSURE_SECRET, value: \"x\" }\n")')" \
+	"a closure setting, in the manifest"
+
+run_case "closure-off-by-default: the console reads a file its volume does not mount" fail \
+	'./scripts/closure-off-by-default.sh' \
+	"$(py 'edit("manifests/57-closure-console-patch.yaml", "value: \"/run/closure/secret\"", "value: \"/run/closure/key\"")')" \
+	"does not name the file the patch mounts"
+
+run_case "closure-off-by-default: the console unpatch leaves the volume" fail \
+	'./scripts/closure-off-by-default.sh' \
+	"$(py 'edit("manifests/57-closure-console-unpatch.yaml", "        - { name: closure-secret, $patch: delete }\n", "")')" \
+	"does not delete"
+
+run_case "closure-off-by-default: up.sh creates the Secret from a file" fail \
+	'./scripts/closure-off-by-default.sh' \
+	"$(py 'edit("closure/up.sh", "--from-literal=\"secret=$CLOSURE_SECRET\"", "--from-file=\"secret=$CLOSURE_SECRET\"")')" \
+	"--from-file"
+
+run_case "closure-off-by-default: up.sh mints a new secret on every run" fail \
+	'./scripts/closure-off-by-default.sh' \
+	"$(py 'edit("closure/up.sh", "if k get secret closure-keys >/dev/null 2>&1; then", "if false; then")')" \
+	"without first checking it exists"
+
+run_case "closure-off-by-default: up.sh prints the secret" fail \
+	'./scripts/closure-off-by-default.sh' \
+	"$(py 'edit("closure/up.sh", "  unset CLOSURE_SECRET\n", "  echo \"$CLOSURE_SECRET\"\n  unset CLOSURE_SECRET\n")')" \
+	"expands the closure secret"
+
+run_case "closure-off-by-default: a comment in up.sh is reworded" pass \
+	'./scripts/closure-off-by-default.sh' \
+	"$(py 'edit("closure/up.sh", "# hex with no trailing newline,", "# hex without a trailing newline,")')"
+
+run_case "closure-off-by-default: the subject taken away entirely" fail \
+	'./scripts/closure-off-by-default.sh' \
+	"$(py 'import os
+os.remove("manifests/57-closure-console-patch.yaml")')" \
+	"measured nothing"
+
+run_case "manifests-valid: a closure patch body grows an apiVersion" fail \
+	'./scripts/manifests-valid.sh' \
+	"$(py 'edit("manifests/57-closure-console-patch.yaml", "spec:\n  template:\n", "apiVersion: apps/v1\nspec:\n  template:\n")')" \
+	"is skipped as a patch body"
+
+run_case "mounted-keys: the closure key mounted 0440 with no fsGroup in its patch" fail \
+	'./scripts/mounted-keys-are-readable.sh' \
+	"$(py 'edit("manifests/57-closure-console-patch.yaml", "            secretName: closure-keys\n", "            secretName: closure-keys\n            defaultMode: 0440\n")')" \
+	"patch/manifests/57-closure-console-patch.yaml mounts secret volume closure-secret"
 
 # Felyx through the gateway (invariant 25): the base URL moved off the gateway,
 # a remote opt-in reintroduced anywhere, a harmless comment, and the subject gone.

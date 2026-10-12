@@ -678,6 +678,25 @@ passkey-gated), wired to `GENARYX_VOUCHRYX_URL` and
 revocation is persisted on its own volume (`vouchryx-state`), so it survives a
 vouchryx pod restart.
 
+## Closing a retained reservation
+
+When a call reaches the model provider and the answer never comes back, the
+gateway cannot know whether the provider billed it. It keeps that money
+reserved, on purpose, until a person closes it with evidence: the usage the
+provider reported, or its confirmation that nothing was billed. The console
+asks for a passkey, then mints a short-lived token the gateway checks. Both
+sides use one secret, and it is off unless you turn it on:
+
+```sh
+./closure/up.sh                     # mints closure-keys once, patches the gateway and the console
+./closure/down.sh                   # reverses both patches, keeps the Secret
+./closure/down.sh --delete-secrets  # also removes the Secret
+```
+
+A re-run of `up.sh` reuses the secret. It needs a tokenfuse gateway and a
+console image that include this feature; the images pinned here are older and
+ignore the setting.
+
 ## Status
 
 **Proven on a live five-node cluster, 2026-07-25.** Five Hetzner CPX42 in

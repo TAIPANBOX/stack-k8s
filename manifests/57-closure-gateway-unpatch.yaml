@@ -1,0 +1,15 @@
+# Reverses manifests/57-closure-gateway-patch.yaml. Applied by closure/down.sh:
+#
+#   kubectl -n agent-stack patch deployment tokenfuse-gateway \
+#     --type strategic --patch-file manifests/57-closure-gateway-unpatch.yaml
+#
+# `$patch: delete` removes exactly the named element. `kubectl apply -k` would
+# leave it in place, for the reason manifests/54-delegation-gateway-unpatch.yaml
+# names in its header.
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          env:
+            - { name: TOKENFUSE_CLOSURE_SECRET, $patch: delete }

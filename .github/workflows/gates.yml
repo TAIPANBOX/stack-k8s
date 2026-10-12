@@ -111,6 +111,8 @@ jobs:
       # invariant 24 and GOTCHAS.md entry 105.
       - name: delegation is off by default (invariant 24)
         run: ./scripts/delegation-off-by-default.sh
+      - name: closing a retained reservation is off by default (invariant 36)
+        run: ./scripts/closure-off-by-default.sh
 
       # Added 2026-10-04 (estate audit, wave 1), tokenfuse v1.5.0 invariant 73.
       # A run's budget came from the header the agent sends and the next call

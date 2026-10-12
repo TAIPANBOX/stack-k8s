@@ -110,6 +110,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/longhorn-releases-a-dead-node.sh # invariant 22; GOTCHAS 109
 ./scripts/hub-entry-is-narrow.sh  # invariant 23
 ./scripts/delegation-off-by-default.sh # invariant 24; GOTCHAS 105
+./scripts/closure-off-by-default.sh # invariant 36
 ./scripts/felyx-through-the-gateway.sh # invariant 25
 ./scripts/typed-mode-is-honest.sh # invariants 26 and 29; needs kubeconform on PATH
 ./scripts/run-budget-ceiling-is-set.sh # invariant 28 (its flag half is deploy-flags-agree.sh)
@@ -1040,6 +1041,38 @@ an absent invariant.
     `features/a-read-only-container-has-a-temp.feature`. Not covered: an image
     that needs a temp and is not in `NEEDS_TEMP`, whether 128Mi is enough for
     the store a real cluster grows, and a pod on a running cluster.)*
+
+36. **Closing a retained reservation is off by default, and when it is on the
+    gateway and the console read the same secret.** `@decided 2026-10-11`
+    (paraphrased, recorded in tokenfuse): a retained reservation is closed by a
+    person after a passkey assertion in the console, which mints a short-lived
+    token the gateway verifies; both are keyed by one shared secret.
+    `@claude 2026-10-12`: on a cluster that secret is the operator's choice.
+    Neither `10-planes.yaml` nor `20-console.yaml` names
+    `TOKENFUSE_CLOSURE_SECRET` or `GENARYX_CLOSURE_SECRET_FILE`, and no
+    `57-closure` file is in `kustomization.yaml`. `closure/up.sh` is the only
+    path that turns it on: it mints the secret once into the `closure-keys`
+    Secret (64 hex characters, `--from-literal`, no trailing newline) and
+    reuses it on every later run, then patches the gateway
+    (`manifests/57-closure-gateway-patch.yaml`, the variable from a
+    `secretKeyRef`) and the console (`manifests/57-closure-console-patch.yaml`,
+    the Secret mounted read only at `/run/closure` and
+    `GENARYX_CLOSURE_SECRET_FILE` naming that file). No newline matters
+    because the console trims whitespace from the file and the gateway reads
+    its variable as given. `closure/down.sh` reverses both with their
+    `$patch: delete` counterparts, invariant 24's mechanism and for its reason,
+    and keeps the Secret unless `--delete-secrets` is passed. It takes effect
+    only with a tokenfuse image that serves `POST /v1/retained/close` and a
+    console image with the close command; the pins here predate both.
+    *(gate: `scripts/closure-off-by-default.sh`, in both callers, which refuses
+    to report OK on a missing patch, unpatch or `up.sh`;
+    `scripts/manifests-valid.sh` skips the four patch bodies by name, each with
+    its own check; `scripts/mounted-keys-are-readable.sh` and
+    `scripts/secret-keys-agree.sh` judge the patch and `up.sh` like any other;
+    teeth in `scripts/gates-have-teeth.sh`; scenarios in
+    `features/closing-a-reservation-is-opt-in.feature`. Not covered: a cluster,
+    a token minted by a running console and verified by a running gateway, and
+    `closure/up.sh` or `down.sh` run against a real API server.)*
 
 ## Decisions that have no gate yet
 

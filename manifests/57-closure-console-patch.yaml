@@ -1,0 +1,26 @@
+# Gives the console the file holding the same secret, so its
+# `money_close_retained` command (admin-only, passkey-gated) can mint a closure
+# token. Applied by closure/up.sh, never by `kubectl apply -k`:
+#
+#   kubectl -n agent-stack patch deployment genaryx-console \
+#     --patch-file manifests/57-closure-console-patch.yaml
+#
+# GENARYX_CLOSURE_SECRET_FILE is a PATH, never the secret: the console reads
+# the file, the way manifests/54-delegation-console-patch.yaml hands it the
+# revoke key, and with the Secret volume's default mode, as that patch does.
+#
+# To go back, closure/down.sh applies manifests/57-closure-console-unpatch.yaml.
+spec:
+  template:
+    spec:
+      containers:
+        - name: console
+          env:
+            - { name: GENARYX_CLOSURE_SECRET_FILE, value: "/run/closure/secret" }
+          volumeMounts:
+            - { name: closure-secret, mountPath: /run/closure, readOnly: true }
+      volumes:
+        - name: closure-secret
+          secret:
+            secretName: closure-keys
+            items: [{ key: secret, path: secret }]
