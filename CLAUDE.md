@@ -114,6 +114,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/felyx-through-the-gateway.sh # invariant 25
 ./scripts/typed-mode-is-honest.sh # invariants 26 and 29; needs kubeconform on PATH
 ./scripts/run-budget-ceiling-is-set.sh # invariant 28 (its flag half is deploy-flags-agree.sh)
+./scripts/firewall-is-enforce-by-default.sh # invariant 37 (its flag half is deploy-flags-agree.sh)
 ./scripts/bus-names-match-the-source-rule.sh # invariant 30
 ./scripts/chain-verifier-watches-the-bus.sh # invariant 31
 ./scripts/mounted-keys-are-readable.sh # invariant 32; GOTCHAS 117
@@ -1077,6 +1078,39 @@ an absent invariant.
     console v1.1.34, 2026-10-12, 29 of 29 twice (`evidence/closure-verified.md`).
     Not covered: a cluster, and `closure/up.sh` or `down.sh` run against a real
     API server.)*
+
+37. **The agent firewall runs in enforce on every gateway this launcher starts, and one
+    switch changes it.** `@decided 2026-10-13`: the launcher runs TokenFuse's agent firewall
+    in `enforce` by default, shipped as its own change after a test stack, and an operator
+    keeps one switch to run it in `shadow` or `off`. `@claude 2026-10-13`: an unset
+    `TOKENFUSE_FIREWALL` reads as `shadow` in TokenFuse (`crates/gateway/src/firewall.rs`,
+    `from_env`), which refuses nothing, so a launcher that forgets the variable ships a
+    gateway that protects nothing and says nothing about it. TokenFuse also ignores a
+    misspelt value without a word, so the switch is validated here and not there.
+
+    The literal `{ name: TOKENFUSE_FIREWALL, value: "enforce" }` is on the gateway container
+    in `manifests/10-planes.yaml`. `--firewall enforce|shadow|off` on `deploy.sh`,
+    `cloud/gcp/deploy-gcp.sh` and `cloud/aws/deploy-aws.sh` changes it: `firewall/mode.sh`
+    refuses any other word before anything is installed, and the value is set with
+    `kubectl set env` AFTER the kustomization, the only position where it sticks (invariant
+    14's trap, the rule of invariant 28). A re-run without the flag returns the gateway to
+    enforce. The MCP broker and the `focus-export` sidecar are not gateway starts and carry no
+    switch: the broker asks the gateway before it forwards a call, and the serve path is the
+    only one that reads the firewall.
+
+    What enforce changes: a request is never refused for the text of a tool it declares
+    (invariant 93 of TokenFuse: a finding labels the run, it does not decide). The starter
+    rule then refuses a later exec, write or egress call by a run that read untrusted input,
+    or that a declared tool has labelled. Shadow records the same decisions and lets them
+    through.
+    *(gate: `scripts/firewall-is-enforce-by-default.sh`, which finds every gateway start under
+    `manifests/` by the definition invariant 20 uses and fails on a missing, duplicated,
+    non-literal or non-enforce value, on a validator that accepts or refuses the wrong word,
+    and on a deploy path that checks the mode after its first apply; `deploy-flags-agree.sh`
+    holds the flag's ordering; twelve teeth cases in `scripts/gates-have-teeth.sh`; scenarios
+    in `features/the-agent-firewall-is-enforce-by-default.feature`. Not covered: that a running
+    gateway refuses a call, which needs a cluster; how a rolling update behaves when the mode
+    changes; and the TokenFuse side of the rule, which is that repository's own test suite.)*
 
 ## Decisions that have no gate yet
 

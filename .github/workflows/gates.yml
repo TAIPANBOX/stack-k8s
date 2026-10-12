@@ -123,6 +123,14 @@ jobs:
       - name: the gateway caps what a run may declare (invariant 28)
         run: ./scripts/run-budget-ceiling-is-set.sh
 
+      # Added 2026-10-13. The agent firewall refuses a run that read untrusted input and
+      # then asks for a dangerous capability only in enforce, and the gateway's own default
+      # is shadow. Every gateway start sets enforce, and one switch (--firewall on the deploy
+      # scripts) changes it. The deploy-path half is in the deploy-flags-agree step above.
+      # See CLAUDE.md invariant 37.
+      - name: the agent firewall runs in enforce by default (invariant 37)
+        run: ./scripts/firewall-is-enforce-by-default.sh
+
       # Added 2026-10-04. heraldyx v0.3.0 and idryx v1.1.0 refuse an event whose
       # source is not allowed for the file it was read from, so a stream this
       # launcher names differently, or a --load pair naming the wrong source,
