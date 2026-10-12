@@ -82,6 +82,10 @@ services:
       TOKENFUSE_GATEWAY_ADMIN_KEY: ${GATEWAY_ADMIN}
       GENARYX_WEB_REQUIRE_PASSKEY: ${REQUIRE_PASSKEY:-}
       GENARYX_CLOSURE_SECRET_FILE: /run/closure/secret
+      # The pair a passkey is bound to. localhost is a secure context, so a
+      # browser on this machine can enrol and use a passkey over plain http.
+      GENARYX_WEB_RP_ID: localhost
+      GENARYX_WEB_ORIGIN: http://localhost:17420
     ports: ["127.0.0.1:17420:7420"]
     volumes:
       - consolestate:/var/lib/stack
