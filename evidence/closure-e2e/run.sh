@@ -51,10 +51,12 @@ cmd() { # name, json body -> prints "STATUS BODY"
 retain() { # run id -> makes one call the stub abandons
   curl -sS -m30 -o /dev/null -w '%{http_code}' "$GW/v1/messages" \
     -H 'content-type: application/json' -H 'x-api-key: e2e-not-a-key' \
-    -H 'anthropic-version: 2023-06-01' -H "x-fuse-run-id: $1" -H 'x-fuse-budget-usd: 1' \
+    -H 'anthropic-version: 2023-06-01' -H "x-fuse-run-id: $1" -H 'x-fuse-budget-usd: 1' -H 'x-fuse-agent-id: agent://e2e.example/caller' \
     -d '{"model":"claude-haiku-4-5","max_tokens":64,"messages":[{"role":"user","content":"hi"}]}'
 }
 
+bus_types() { docker run --rm -v closuree2e_events:/e:ro busybox:1.36 cat /e/tokenfuse.ndjson 2>/dev/null | jq -r --arg t "$1" 'select(.type == $t) | "\(.run_id) \(.agent_id) \(.severity)"'; }
+bus_count() { bus_types "$1" | grep -c . || true; }
 gw_retained() { curl -fsS -m10 -H "authorization: Bearer $GATEWAY_ADMIN" "$GW/v1/retained"; }
 gw_runs() { curl -fsS -m10 -H "authorization: Bearer $GATEWAY_ADMIN" "$GW/v1/runs"; }
 absent() { gw_retained | jq -e --arg r "$1" 'type == "array" and all(.[]; .run_id != $r)' >/dev/null; }
@@ -143,6 +145,13 @@ check "C: the gateway no longer lists it" absent e2e-nc
 check "C: run spent = 0 (got $(spent_of e2e-nc))" sh -c "[ \"\$(printf '%s' \"\$1\")\" = 0 ] || [ \"\$1\" = 0.0 ]" _ "$(spent_of e2e-nc)"
 check "C: run reserved = 0" sh -c "[ \"\$1\" = 0 ] || [ \"\$1\" = 0.0 ]" _ "$(reserved_of e2e-nc)"
 
+# ---- the bus: what the gateway wrote so far (tokenfuse 1.10.0, D10) ------------
+check "bus: one call_retained per retained call so far (2)" test "$(bus_count call_retained)" = 2
+check "bus: one retained_closed per applied closure (2)" test "$(bus_count retained_closed)" = 2
+check "bus: call_retained is medium and names the calling agent" test "$(bus_types call_retained | grep -v -c ' agent://e2e.example/caller medium$')" = 0
+check "bus: retained_closed is high and names the calling agent" test "$(bus_types retained_closed | grep -v -c ' agent://e2e.example/caller high$')" = 0
+check "bus: the second, refused close of e2e-obs wrote no retained_closed" test "$(bus_types retained_closed | grep -c '^e2e-obs ')" = 1
+
 # ---- D: a console holding another secret is refused by the gateway ------------
 retain e2e-keep >/dev/null
 E=$(entry_for e2e-keep)
@@ -164,6 +173,8 @@ check "E: after restart e2e-obs is not retained" absent e2e-obs
 check "E: after restart e2e-nc is not retained" absent e2e-nc
 J=$(dc exec -T tokenfuse-gateway cat /var/lib/stack/traces/gateway/retained-reservations.ndjson 2>/dev/null)
 check "E: the journal was rewritten to the one open record" test "$(printf '%s\n' "$J" | grep -c .)" = 1
+check "bus: the restart's replay wrote no second call_retained (still 3)" test "$(bus_count call_retained)" = 3
+check "bus: the refused closures (wrong secret) wrote no retained_closed (still 2)" test "$(bus_count retained_closed)" = 2
 
 # ---- B: the launcher posture, passkey required --------------------------------
 REQUIRE_PASSKEY=1
@@ -183,6 +194,16 @@ echo "      console journal lines mentioning close_retained: $N"
 check "record: every close attempt is journaled by the console (>= 4)" test "$N" -ge 4
 LEAK=$(dc exec -T console sh -c "grep -rl '$CLOSURE_SECRET' /var/lib/stack 2>/dev/null | head -3")
 check "record: the secret appears in no console file" test -z "$LEAK"
+
+# ---- the mail: heraldyx reads the same bus once ------------------------------
+rm -rf mail && mkdir -p mail
+dc --profile mail run --rm heraldyx-once >/dev/null 2>&1
+MAIL=$(cat mail/mail.txt 2>/dev/null)
+check "mail: heraldyx wrote mail from this bus" test -n "$MAIL"
+check "mail: a retained call is described, not the fallback" sh -c "printf '%s' \"\$1\" | grep -q 'sent and never answered'" _ "$MAIL"
+check "mail: a closure is described" sh -c "printf '%s' \"\$1\" | grep -q 'closed by a person'" _ "$MAIL"
+check "mail: no evidence reference reaches the mail" sh -c "! printf '%s' \"\$1\" | grep -q -e 'e2e invoice line' -e 'provider confirms no charge'" _ "$MAIL"
+check "mail: no event is mailed with the fallback wording" sh -c "! printf '%s' \"\$1\" | grep -q 'does not have a description'" _ "$MAIL"
 
 rm -f "$JAR"
 echo "---"

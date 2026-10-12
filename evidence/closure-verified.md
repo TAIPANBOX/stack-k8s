@@ -7,14 +7,20 @@ the other (genaryx invariant 22, tokenfuse invariant 89).
 
 `evidence/closure-e2e/run.sh` re-runs the whole set from empty (`down -v`
 first) on Docker, with the three published images and a stub provider:
-**29 passed, 0 failed, twice.**
+**29 passed, 0 failed, twice** on that first set; with the checks added since
+(the operator without a restart, then the bus and the mail), **44 of 44,
+twice**, on the set below. The run that each section reports used the images
+that section names.
 
 ```sh
 cd evidence/closure-e2e
-TOKENFUSE_IMAGE=ghcr.io/taipanbox/tokenfuse:v1.9.0 \
-TOKENFUSE_CLOUD_IMAGE=ghcr.io/taipanbox/tokenfuse-control-plane:v1.9.0 \
-CONSOLE_IMAGE=ghcr.io/taipanbox/genaryx-console:v1.1.34 ./run.sh
+TOKENFUSE_IMAGE=ghcr.io/taipanbox/tokenfuse:v1.10.0 \
+TOKENFUSE_CLOUD_IMAGE=ghcr.io/taipanbox/tokenfuse-control-plane:v1.10.0 \
+CONSOLE_IMAGE=ghcr.io/taipanbox/genaryx-console:v1.1.36 ./run.sh
 ```
+
+heraldyx runs once at the end from the compose file's `heraldyx-once`
+service (`ghcr.io/taipanbox/heraldyx:v0.4.0`, `HERALDYX_IMAGE` overrides it).
 
 Images, read with `docker buildx imagetools inspect` the same day:
 
@@ -160,6 +166,48 @@ old restart back for an older image. On Docker Compose on the same Mac, with
 The two green runs used ports 24100, 27420 and 28080 in a copy of this
 directory, because another run held the default ports on the same machine at
 the time; nothing else in the copy differed.
+
+## The bus and the mail: TokenFuse 1.10.0 and heraldyx 0.4.0, 2026-10-12
+
+TokenFuse 1.10.0 writes `call_retained` (medium) when it retains a call and
+`retained_closed` (high) when a closure is applied (tokenfuse invariant 90,
+agent-passport SPEC 6.2, D10); heraldyx 0.4.0 describes both and never mails
+the evidence reference. The harness now sends `x-fuse-agent-id` with each call
+(an event with no subject is skipped, SPEC 6.1), counts both types on the bus
+after the closures and again after the gateway's restart, and runs heraldyx
+once over the same bus with file delivery and a `medium` floor. Images:
+`tokenfuse:v1.10.0` (`sha256:638f8c0ad7c010e51f0529a4c504af0fd4e695a1c8eb887e6c23694991d0868b`,
+prints `tokenfuse v1.10.0 (a0de01b)`), `tokenfuse-control-plane:v1.10.0`
+(`sha256:179664d37655dcbaa2af98670d203c6a05bf3aaa3c860c35a0f77eae950dbd9b`),
+`genaryx-console:v1.1.36`, `heraldyx:v0.4.0`
+(`sha256:f1f9058c533fad3239e4a9d1549d44d45d1522b6b645dc83989b245aa84ab84f`).
+
+- **The bus:** three `call_retained`, one per retained call, at `medium`,
+  each naming `agent://e2e.example/caller`, with `journaled` and `listed`
+  true; two `retained_closed`, one per applied closure (observed and no
+  charge), at `high`. The refused second close, the wrong-secret attempt and
+  the passkey-required refusal wrote none, and the restart's replay wrote no
+  second `call_retained`.
+- **The mail:** one message per retained call ("made a call that was sent and
+  never answered, and $0.000394 stays reserved until a person closes it") and
+  one per closure ("had retained reservation 1 closed by a person as
+  observed, settling $0.004321"; "as no charge, settling $0.00"), each closure
+  saying the evidence reference is in the console rather than printing it.
+  Neither reference appears anywhere in the mail, and no event fell back to
+  the generic wording.
+- **44 of 44, twice from empty.** Against `tokenfuse:v1.9.0`, which writes
+  neither type, the same harness gave 37 passed and 7 failed: every count on
+  the bus and both descriptions in the mail.
+
+Each retained call in this run also mailed a `dependency_failed` ("could not
+be served, because a dependency of this box failed"), because the stub
+provider breaks the connection, which the gateway reports as its provider
+failing. That one is `high`, so it reaches a launcher's default floor
+immediately; `call_retained` is `medium` and, at that floor, waits for the
+daily summary. A call retained because the CALLER left while the provider
+held it should raise no `dependency_failed` (the request is dropped before
+any error is seen), so at the default floor it would be mailed only in the
+summary; that case was not run here.
 
 ## Not proven
 

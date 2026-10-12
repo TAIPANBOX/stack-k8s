@@ -1,3 +1,4 @@
 .env
 closure/
 *.txt
+mail/
