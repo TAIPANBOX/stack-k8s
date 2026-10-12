@@ -1433,6 +1433,17 @@ you just ran.
 after setting the password and wait for the rollout. One line each, and without
 it every fresh cluster hands its operator a login they cannot use.
 
+**Fixed at the source too, from console v1.1.36** (genaryx#106, `41972c6`, the
+console's invariant 23): while the console holds no operator, a sign-in and
+`/api/auth/session` read `operator.json` again, so an account set after start
+works at the next sign-in. An operator the console already holds is still
+never read again, so a password changed on a running console still needs a
+restart. That is why the restart in the deploy scripts stays: they set the
+password again on a re-run when the operator types one, and only the restart
+makes that new password take effect. `evidence/closure-e2e/run.sh` no longer
+restarts and checks that the running console picks the account up
+(`RESTART_AFTER_SET_PASSWORD=1` restores the old step for an older image).
+
 ## 51. Dropping ALL drops CAP_CHOWN, and root does not get it back
 
 > **Platform.** Linux capability semantics: `drop: ["ALL"]` removes

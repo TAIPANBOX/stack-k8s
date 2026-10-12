@@ -90,16 +90,24 @@ check "control plane answers" wait_http "$CLOUD/healthz" 60
 set_pw() {
   wait_http "$CON/api/auth/session" 90 || return 1
   for _ in 1 2 3 4 5; do
-    # The console reads whether it has an operator once, at startup
-    # (stack-k8s GOTCHAS 50), so restart it after setting one, as the
-    # stack-k8s deploy scripts do.
     printf '%s\n' "$CONSOLE_PW" | dc exec -T console /usr/local/bin/genaryx-web set-password --username op >/dev/null 2>&1 \
-      && dc restart console >/dev/null 2>&1 && return 0
+      && return 0
     sleep 2
   done
   return 1
 }
+# A console from v1.1.36 picks an operator set while it runs up at the next
+# sign-in (genaryx#106, GOTCHAS 50), so nothing is restarted here. For an older
+# image set RESTART_AFTER_SET_PASSWORD=1, as the deploy scripts still do.
+configured_is() { curl -fsS -m10 "$CON/api/auth/session" | jq -e --argjson v "$1" '.configured == $v' >/dev/null; }
+check "console answers" wait_http "$CON/api/auth/session" 90
+check "console says it has no operator before set-password" configured_is false
 check "operator password is set in the console" set_pw
+if [ "${RESTART_AFTER_SET_PASSWORD:-}" = 1 ]; then
+  dc restart console >/dev/null 2>&1
+else
+  check "the running console says it has an operator, no restart" configured_is true
+fi
 check "operator signs in to the console" console_login
 check "gateway logged that closing is on" sh -c "docker compose --env-file .env logs tokenfuse-gateway 2>&1 | grep -qi 'closure'"
 
