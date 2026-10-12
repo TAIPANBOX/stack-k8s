@@ -97,6 +97,37 @@ PASS  record: the secret appears in no console file
 FAILS=0
 ```
 
+## A person closes it with a passkey
+
+The same compose file, the same three images, with
+`GENARYX_WEB_REQUIRE_PASSKEY=1` (what both launchers set), on 2026-10-12. The
+harness above shows only the refusal on that setting; this is the closure
+itself, done by a person in a browser.
+
+1. A call the stub provider abandoned left reservation 1 retained on run
+   `passkey-accept` (394 micro-USD).
+2. The operator signed in at `http://localhost:17420` with the password
+   `set-password` had written, enrolled a passkey with Touch ID (the first
+   passkey asks for the operator password as its factor), opened Money, and
+   closed the reservation from "Close a retained reservation": `observed`,
+   1000 micro-USD, reference `acceptance invoice line 1`, confirmed with
+   Touch ID.
+
+What each layer recorded:
+
+- **The console:** `webauthn passkey enrolled user=op ... user_verified=true`,
+  then `webauthn assertion verified user=op bound_to=money_close_retained`
+  with the same credential and `user_verified=true`. Its journal line is
+  `console.close_retained`, `decision: allow`, `http_status: 200`,
+  `verify_result: closed`, `target: reservation:1`, on behalf of
+  `user://local/op`, signed `sig_alg: webauthn-es256` with `sig_fpr` equal to
+  the enrolled credential id: a passkey signature, not the software-signed
+  fallback.
+- **The gateway:** `retained reservation closed with evidence (D8)` for
+  reservation 1 at revision `dc3de6cc44b62e0a`; `GET /v1/retained` empty; the
+  run at `spent_usd: 0.001`, `reserved_usd: 0`, `retained: 0`.
+- **The control plane:** `spent_microusd: 1000` for the run, one call.
+
 ## The checks can fail
 
 Run once against `tokenfuse:v1.7.0` and `tokenfuse-control-plane:v1.5.0`,
@@ -137,8 +168,8 @@ the time; nothing else in the copy differed.
   server.
 - **A live provider bill.** The provider is a stub, so the observed cost is a
   number the run chose, not one an invoice gave.
-- **The passkey ceremony.** The close ran on the console's no-passkey fallback;
-  the ceremony itself is held by genaryx's router tests, and only its refusal
-  was shown here.
+- **The passkey ceremony on a cluster.** It was done once by hand on Docker
+  Compose (the section above); `run.sh` itself uses the no-passkey fallback
+  and shows only the refusal, so a re-run does not repeat the ceremony.
 - **The unit half.** No identity map was configured, so no unit reservation
   was retained or closed.
