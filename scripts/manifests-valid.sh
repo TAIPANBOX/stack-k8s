@@ -114,6 +114,35 @@ if grep -qE '^apiVersion:' manifests/54-delegation-console-unpatch.yaml 2>/dev/n
 	exit 1
 fi
 
+# manifests/57-closure-{gateway,console}-{patch,unpatch}.yaml: the same
+# shape as the 54-delegation pair above, `kubectl patch --patch-file` bodies
+# applied by closure/up.sh and reversed by closure/down.sh, checked the same
+# way.
+if grep -qE '^apiVersion:' manifests/57-closure-gateway-patch.yaml 2>/dev/null; then
+	echo "FAIL: manifests/57-closure-gateway-patch.yaml is skipped as a patch body"
+	echo "      but now carries apiVersion, which makes it a manifest this gate must"
+	echo "      check. Take it off the FRAGMENTS list in this script."
+	exit 1
+fi
+if grep -qE '^apiVersion:' manifests/57-closure-console-patch.yaml 2>/dev/null; then
+	echo "FAIL: manifests/57-closure-console-patch.yaml is skipped as a patch body"
+	echo "      but now carries apiVersion, which makes it a manifest this gate must"
+	echo "      check. Take it off the FRAGMENTS list in this script."
+	exit 1
+fi
+if grep -qE '^apiVersion:' manifests/57-closure-gateway-unpatch.yaml 2>/dev/null; then
+	echo "FAIL: manifests/57-closure-gateway-unpatch.yaml is skipped as a patch body"
+	echo "      but now carries apiVersion, which makes it a manifest this gate must"
+	echo "      check. Take it off the FRAGMENTS list in this script."
+	exit 1
+fi
+if grep -qE '^apiVersion:' manifests/57-closure-console-unpatch.yaml 2>/dev/null; then
+	echo "FAIL: manifests/57-closure-console-unpatch.yaml is skipped as a patch body"
+	echo "      but now carries apiVersion, which makes it a manifest this gate must"
+	echo "      check. Take it off the FRAGMENTS list in this script."
+	exit 1
+fi
+
 FRAGMENTS=(
 	"tunnel/console-patch.yaml"
 	"manifests/55-copilot-cloud.yaml"
@@ -121,6 +150,10 @@ FRAGMENTS=(
 	"manifests/54-delegation-console-patch.yaml"
 	"manifests/54-delegation-gateway-unpatch.yaml"
 	"manifests/54-delegation-console-unpatch.yaml"
+	"manifests/57-closure-gateway-patch.yaml"
+	"manifests/57-closure-console-patch.yaml"
+	"manifests/57-closure-gateway-unpatch.yaml"
+	"manifests/57-closure-console-unpatch.yaml"
 )
 
 for f in "${FRAGMENTS[@]}"; do

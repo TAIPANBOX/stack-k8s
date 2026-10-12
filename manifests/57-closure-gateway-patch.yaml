@@ -1,0 +1,24 @@
+# Gives the gateway the secret it verifies closure tokens with (tokenfuse D8):
+# an admin closes a retained reservation with evidence, carrying a short-lived
+# token the console mints after a passkey assertion. Applied by
+# closure/up.sh, never by `kubectl apply -k`:
+#
+#   kubectl -n agent-stack patch deployment tokenfuse-gateway \
+#     --patch-file manifests/57-closure-gateway-patch.yaml
+#
+# The value comes from the `closure-keys` Secret, key `secret`, which
+# closure/up.sh mints once with no trailing newline: the console reads the
+# same bytes from a file and trims whitespace, the gateway reads this variable
+# as given, so a newline on one side would make every token fail.
+#
+# To go back, closure/down.sh applies manifests/57-closure-gateway-unpatch.yaml.
+# `kubectl apply -k manifests/` cannot undo a patch, for the reason
+# manifests/54-delegation-gateway-unpatch.yaml names in its header.
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          env:
+            - name: TOKENFUSE_CLOSURE_SECRET
+              valueFrom: { secretKeyRef: { name: closure-keys, key: secret } }

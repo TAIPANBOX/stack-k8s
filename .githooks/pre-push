@@ -56,6 +56,7 @@ step "Longhorn releases a dead node's volumes" "./scripts/longhorn-releases-a-de
 step "the hub entry routes exactly the eight allowed paths" "./scripts/hub-entry-is-narrow.sh"
 step "Felyx reaches its model through the gateway" "./scripts/felyx-through-the-gateway.sh"
 step "delegation is off by default" "./scripts/delegation-off-by-default.sh"
+step "closing a retained reservation is off by default" "./scripts/closure-off-by-default.sh"
 step "the typed data mode is honest" "./scripts/typed-mode-is-honest.sh"
 step "the gateway caps what a run may declare" "./scripts/run-budget-ceiling-is-set.sh"
 step "every bus file is a name the readers accept" "./scripts/bus-names-match-the-source-rule.sh"

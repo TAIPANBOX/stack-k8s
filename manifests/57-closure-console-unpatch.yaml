@@ -1,0 +1,18 @@
+# Reverses manifests/57-closure-console-patch.yaml. Applied by closure/down.sh:
+#
+#   kubectl -n agent-stack patch deployment genaryx-console \
+#     --type strategic --patch-file manifests/57-closure-console-unpatch.yaml
+#
+# `$patch: delete` with each list's own merge key: `name` for `env` and
+# `volumes`, `mountPath` for `volumeMounts`.
+spec:
+  template:
+    spec:
+      containers:
+        - name: console
+          env:
+            - { name: GENARYX_CLOSURE_SECRET_FILE, $patch: delete }
+          volumeMounts:
+            - { mountPath: /run/closure, $patch: delete }
+      volumes:
+        - { name: closure-secret, $patch: delete }
