@@ -1584,7 +1584,7 @@ edit("typed/mode.sh", "secret: \x7b secretName: typryx-model-key, defaultMode: 0
 run_case "client-key-ids: the README example goes back to an agent:// key id" fail \
 	'./scripts/client-key-ids-are-bare.sh' \
 	"$(py 'edit("README.md", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:agent://acme.example/broker-caller\x27")')" \
-	"README.md:324: TOKENFUSE_MCP_KEYS entry"
+	"README.md:352: TOKENFUSE_MCP_KEYS entry"
 
 run_case "client-key-ids: the manifest 52 example goes back to an agent:// key id" fail \
 	'./scripts/client-key-ids-are-bare.sh' \
