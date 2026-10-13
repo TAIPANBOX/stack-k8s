@@ -799,8 +799,10 @@ anything other than what the two objects hold. Neither object is in the
 manifests, so a later deploy keeps both.
 
 Once keys are on, every agent sends `x-fuse-key: <its secret>`, and an
-`x-fuse-agent-id` its key may speak as, on every call. Felyx and the drills send
-no key, so the gateway refuses them 401 while keys are on.
+`x-fuse-agent-id` its key may speak as, on every call. Two callers in this stack
+were not given a key here: the drills' manifest passes none, so a drill would be
+refused 401 while keys are on (not run); Felyx sends none, as stack-single measured
+on the same console version (not re-measured here).
 
 To turn either off, delete its object and run `up.sh` with no file. It rolls the
 gateway without it; the script itself deletes nothing:

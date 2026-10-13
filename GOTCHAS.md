@@ -4255,7 +4255,7 @@ sees the map they meant, and is wrong about what is in force.
 
 Measured on kind on 2026-10-13 (`evidence/identity-kind/run.sh`, step 8, three
 runs): the running pod's `/etc/tokenfuse/identity/identity.json` became the edited
-map after 29, 31 and 48 s, in the same pod, with no restart. A Secret behind an environment variable
+map after 29, 31, 46, 48 and 52 s across five runs, in the same pod, with no restart. A Secret behind an environment variable
 does not even do that much: the old value stays until the pod is replaced.
 
 The answer here (CLAUDE.md invariant 39): `identity/up.sh` writes the map's sha256

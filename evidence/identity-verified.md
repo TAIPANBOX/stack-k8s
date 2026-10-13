@@ -5,7 +5,7 @@
 namespace, `stack-wiring` and the `tokenfuse-gateway` Deployment and Service as
 `manifests/00-base.yaml` and `manifests/10-planes.yaml` declare them, runs nine
 steps and deletes the cluster. **46 passed, 0 failed, twice in a row from empty**
-(5 min 24 s and 5 min 40 s).
+(5 min 50 s and 5 min 53 s, on the final harness; two earlier sets of 46 ran before the harness created every key stack-k8s reads, and their numbers stand for the same checks).
 
 ```sh
 ./evidence/identity-kind/run.sh           # KEEP=1 leaves the cluster up
@@ -58,8 +58,8 @@ What differs from a real install, and why:
 7. **A refused keys file** (a key the map does not bind): refused by the gateway
    image's own warning, nothing written, nothing rolled, no key printed.
 8. **The map edited by another hand** (`kubectl patch` of the ConfigMap). The
-   running pod's file became the edited map after 29 s and 48 s (31 s on an
-   earlier run), in the same pod, with no restart: GOTCHAS 124. `verify.sh` then
+   running pod's file became the edited map after 29, 31, 46, 48 and 52 s across
+   five runs, in the same pod, with no restart: GOTCHAS 124. `verify.sh` then
    failed with "the gateway was started on another identity map than ConfigMap
    gateway-identity-map holds". A re-run of `up.sh` with no file let the image
    read the edited map and rolled the gateway onto it, and `verify.sh` agreed
