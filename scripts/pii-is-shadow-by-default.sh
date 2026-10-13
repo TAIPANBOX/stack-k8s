@@ -13,9 +13,10 @@
 # that forgets the variable ships gateways and brokers that look at nothing and say
 # nothing about it.
 #
-# TokenFuse also ignores a misspelt value without a word: any string outside the
-# four words falls back to off. So the switch that changes the mode is validated by
-# pii/mode.sh before anything is installed, and the literal is checked here.
+# TokenFuse also refuses a misspelt value: since v1.12.0 any string outside the four words
+# exits 2 at start (before that it fell back to off without a word). So the switch that
+# changes the mode is validated by pii/mode.sh before anything is installed, and the
+# literal is checked here.
 #
 # WHAT THIS CHECKS
 #

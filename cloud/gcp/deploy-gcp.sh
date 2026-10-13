@@ -377,16 +377,18 @@ fi
 
 # ---- the agent firewall's mode, refused BEFORE anything is installed -------------
 # firewall/mode.sh is the one copy of this check (CLAUDE.md invariant 37). TokenFuse reads
-# TOKENFUSE_FIREWALL with an exact match and ignores any other word, so a misspelt mode would
-# leave the gateway in shadow with no word about it. It is found here, before the install.
+# TOKENFUSE_FIREWALL with an exact match, and since TokenFuse v1.11.1 any other word exits 2 at
+# start, so a misspelt mode would stop the gateway rather than run it in shadow. It is found
+# here, before the install.
 if [ -n "$FIREWALL_MODE" ]; then
   "$ROOT/firewall/mode.sh" check "$FIREWALL_MODE" \
     || die "the agent firewall mode was refused, so nothing has been installed yet."
 fi
 
 # ---- the PII scanners' mode, refused BEFORE anything is installed ---------------
-# pii/mode.sh is the one copy of this check (CLAUDE.md invariant 38). TokenFuse falls back to off
-# on a word it does not read, without a word, so a misspelt mode would turn the scanners off silently.
+# pii/mode.sh is the one copy of this check (CLAUDE.md invariant 38). Since TokenFuse v1.12.0 a
+# word it does not read exits 2 at start, so a misspelt mode would stop the scanners at start
+# rather than turn them off silently.
 if [ -n "$PII_MODE" ]; then
   "$ROOT/pii/mode.sh" check "$PII_MODE" \
     || die "the PII scanners' mode was refused, so nothing has been installed yet."

@@ -1,8 +1,8 @@
 # @decided 2026-10-13: the launcher runs TokenFuse's agent firewall in enforce by default,
 # and an operator keeps one switch to run it in shadow or off. `@claude 2026-10-13`: an unset
-# TOKENFUSE_FIREWALL reads as shadow in TokenFuse, and TokenFuse ignores a misspelt value without
-# a word, so the literal is set on every gateway start and the switch is validated before the
-# install. Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this repository
+# TOKENFUSE_FIREWALL reads as shadow in TokenFuse, and since v1.11.1 TokenFuse refuses to start on
+# a misspelt value (exit 2), so the literal is set on every gateway start and the switch is
+# validated before the install. Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this repository
 # has no runner and no binding gate, so the binding is by eye.
 Feature: the launcher's gateway runs the agent firewall in enforce, and one switch changes it
 

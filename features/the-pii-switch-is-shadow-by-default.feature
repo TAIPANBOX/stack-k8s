@@ -1,9 +1,9 @@
 # @decided 2026-10-13: the launcher runs TokenFuse's personal-data scanners in shadow by default,
 # so personal data in prompts and tool arguments is reported and the call still goes through, and
 # an operator keeps one switch to run them in mask or block, or in off. `@claude 2026-10-13`: an
-# unset TOKENFUSE_DLP_PII reads as off in TokenFuse, and so does a misspelt value, without a word,
-# so the literal is set on every gateway and broker start and the switch is validated before the
-# install. Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this repository has
+# unset TOKENFUSE_DLP_PII reads as off in TokenFuse, and since v1.12.0 a misspelt value exits 2 at
+# start instead, so the literal is set on every gateway and broker start and the switch is
+# validated before the install. Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this repository has
 # no runner and no binding gate, so the binding is by eye.
 Feature: the launcher's gateway and MCP broker scan for personal data in shadow, and one switch changes it
 

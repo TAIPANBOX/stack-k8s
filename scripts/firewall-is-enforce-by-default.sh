@@ -12,9 +12,9 @@
 # firewall.rs), so a launcher that forgets the variable ships a gateway that
 # protects nothing and says nothing about it.
 #
-# TokenFuse also ignores a misspelt value without a word (firewall.rs, from_env:
-# any string other than the three words falls through). So the switch that
-# changes the mode is validated by firewall/mode.sh before anything is installed.
+# TokenFuse also refuses a misspelt value: since v1.11.1 any string other than the three
+# words exits 2 at start (firewall.rs, from_env). So the switch that changes the mode is
+# validated by firewall/mode.sh before anything is installed, and no pod is left to find it.
 #
 # WHAT THIS CHECKS
 #

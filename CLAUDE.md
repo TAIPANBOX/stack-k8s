@@ -1089,6 +1089,11 @@ an absent invariant.
     gateway that protects nothing and says nothing about it. TokenFuse also ignores a
     misspelt value without a word, so the switch is validated here and not there.
 
+    `@claude 2026-10-13`, correction, same day: the sentence above is stale. Since TokenFuse
+    v1.11.1 an unrecognised `TOKENFUSE_FIREWALL` exits 2 before the listener binds (invariant 94
+    of that repository), so TokenFuse no longer starts in shadow on a typo. The launcher still
+    validates the word first, so the mistake is found before the install and not at pod start.
+
     The literal `{ name: TOKENFUSE_FIREWALL, value: "enforce" }` is on the gateway container
     in `manifests/10-planes.yaml`. `--firewall enforce|shadow|off` on `deploy.sh`,
     `cloud/gcp/deploy-gcp.sh` and `cloud/aws/deploy-aws.sh` changes it: `firewall/mode.sh`
@@ -1113,7 +1118,7 @@ an absent invariant.
     gateway refuses a call, which needs a cluster; how a rolling update behaves when the mode
     changes; and the TokenFuse side of the rule, which is that repository's own test suite.)*
 
-38. **The PII scanners run in shadow on every gateway and every MCP broker this launcher starts, and one switch changes them.** `@decided 2026-10-13` (paraphrased): the launcher runs TokenFuse's personal-data scanners in shadow by default, so personal data in prompts and tool arguments is reported and the call still goes through, and an operator keeps one switch to run them in mask or block, or in off. `@claude 2026-10-13`: an unset `TOKENFUSE_DLP_PII` reads as off in TokenFuse, and so does any misspelt value, without a word. The MCP broker reads `TOKENFUSE_MCP_DLP_PII` the same way and does not trim a space around the word, so the switch is validated here and not there.
+38. **The PII scanners run in shadow on every gateway and every MCP broker this launcher starts, and one switch changes them.** `@decided 2026-10-13` (paraphrased): the launcher runs TokenFuse's personal-data scanners in shadow by default, so personal data in prompts and tool arguments is reported and the call still goes through, and an operator keeps one switch to run them in mask or block, or in off. `@claude 2026-10-13`: an unset `TOKENFUSE_DLP_PII` reads as off in TokenFuse, and so does any misspelt value, without a word. The MCP broker reads `TOKENFUSE_MCP_DLP_PII` the same way and does not trim a space around the word, so the switch is validated here and not there. `@claude 2026-10-13`, correction, same day: that is stale. Since TokenFuse v1.12.0 a misspelt value of either variable exits 2 at start (invariant 98 of that repository), and both accept their words in any case with surrounding spaces ignored. An unset variable still reads as off. The launcher's check also refuses a padded word, a stricter rule than TokenFuse's, so the manifest and the flag say the same thing.
 
     The literal `{ name: TOKENFUSE_DLP_PII, value: "shadow" }` is on the gateway container in `manifests/10-planes.yaml`, and `{ name: TOKENFUSE_MCP_DLP_PII, value: "shadow" }` on the broker container in `manifests/52-tokenfuse-mcp-broker.yaml`. `--pii-mode off|shadow|mask|block` on `deploy.sh`, `cloud/gcp/deploy-gcp.sh` and `cloud/aws/deploy-aws.sh` changes both. `pii/mode.sh` refuses any other word before anything is installed. The value is set with `kubectl set env` after the kustomization and after the typed render, the only position where it sticks, and the broker is set only when the typed plane applies its file. A re-run without the flag returns both to shadow.
 
