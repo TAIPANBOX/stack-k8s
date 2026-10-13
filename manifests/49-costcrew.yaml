@@ -111,7 +111,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: costcrew
-          image: ghcr.io/taipanbox/costcrew:v0.5.0
+          image: ghcr.io/taipanbox/costcrew:v0.6.0
           imagePullPolicy: IfNotPresent
           args:
             - "-addr"
@@ -246,7 +246,8 @@ spec:
 # anything (max-tokens at the output price, because how long an answer runs is
 # not known before it is asked for), and refuses any task whose worst case
 # would take it past what is left of its own guard. Raise COSTCREW_CEILING
-# deliberately; the default here is one dollar.
+# deliberately. No default ships: stack-wiring must carry the key, and the pod
+# does not start without it (the env block below).
 #
 # Every deliverable it writes is a DRAFT marked `live`, and only a person's
 # stamp publishes. That is the console's own invariant and this changes nothing
@@ -293,7 +294,7 @@ spec:
           securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
           containers:
             - name: crew
-              image: ghcr.io/taipanbox/costcrew:v0.5.0
+              image: ghcr.io/taipanbox/costcrew:v0.6.0
               imagePullPolicy: IfNotPresent
               # Overrides the image's ENTRYPOINT (the console server): this is
               # another binary in the same image (since v0.4.0 it carries five:

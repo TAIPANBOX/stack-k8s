@@ -11,13 +11,13 @@
 #     prints nothing on stdout, exits 0. Any other word exits 1 with the reason on
 #     stderr.
 #
-# TokenFuse compares these variables against the four words and IGNORES any other value
-# without a word: any string outside them falls back to off. The gateway trims surrounding
-# space before it compares and the MCP broker does not, so this check refuses a word with
-# a space in it too, since only the gateway would have read it. A misspelt `shadow`
-# therefore starts the scanners in off, which looks at nothing and says nothing about it.
-# The launcher refuses the word before anything is installed, so the mistake is found in a
-# second and not after the install.
+# TokenFuse compares these variables against the four words. Since TokenFuse v1.12.0 any
+# other value exits 2 before the listener binds, and both variables accept the words in any
+# case with surrounding spaces ignored. Before that, a value outside the words was read as
+# off without a word, so a misspelt `shadow` looked at nothing. This check still refuses a
+# word with a space in it, a stricter rule than TokenFuse's, so the manifest and the flag say
+# the same thing. The launcher refuses the word before anything is installed, so the mistake
+# is found in a second and not at pod start.
 set -euo pipefail
 
 refuse() { printf 'pii-scan: %s\n' "$*" >&2; exit 1; }

@@ -79,18 +79,29 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | StatefulSet + Service | the policy store: Postgres behind `wardryx`, holding its approvals and its runtime policy documents | 5432 |
 | PersistentVolumeClaim (RWX) | the shared event directory | |
 | PersistentVolumeClaim | `verdryx.db`, `engram.engram` stores | |
-| CronJob | three of `routines.sh`'s five governance routines: crypto trend, quality drift, identity sweep (`qryx-trend`, `verdryx-drift`, `idryx-detect`), plus the record seal (`trailryx-seal`, at 5:27, last because it seals what the others did). FinOps export (`focus-export`) cannot run as a CronJob here and does not: its data lives in a per-pod `emptyDir` (GOTCHAS 81), so since 2026-08-28 it runs as a SIDECAR in the `tokenfuse-gateway` pod, hourly, printing rather than storing. The alternative was a PersistentVolumeClaim for the trace directory, which is a billed disk and so a spending decision rather than a fix; `drills` (`mockryx-drill`) is separate: opt-in, suspended below | |
+| CronJob | four of the six governance routines that `stack-up`'s `routines.sh` installs by default, as CronJobs: crypto trend, quality drift, identity sweep (`qryx-trend`, `verdryx-drift`, `idryx-detect`), plus the record seal (`trailryx-seal`, at 5:27, last because it seals what the others did). The fifth, the chain verification, is the row below. FinOps export (`focus-export`) cannot run as a CronJob here and does not: its data lives in a per-pod `emptyDir` (GOTCHAS 81), so since 2026-08-28 it runs as a SIDECAR in the `tokenfuse-gateway` pod, hourly, printing rather than storing. The alternative was a PersistentVolumeClaim for the trace directory, which is a billed disk and so a spending decision rather than a fix; `drills` (`mockryx-drill`) is separate: opt-in, suspended below | |
 | CronJob | `agent-conform`, the on-box chain verifier, every 15 minutes: it verifies the `prev_hash` chain of every stream on the shared bus and writes a `chain_broken` event to `agent-conform.ndjson` on the bus when one is broken. In the default apply; keeps its memory beside its output on `stack-events`, so it adds no disk. See "The on-box chain verifier" below | |
 | NetworkPolicy | default-deny, then exactly the paths above | |
 | Deployment + PVC + NetworkPolicy | `heraldyx`, the notifier. **Not in the default apply**, see "Being told, rather than watching" below. No Service and no port: it reads the event log and sends mail, so nothing calls it | |
 | Deployment + PVC + Service + NetworkPolicy x4 | `47-scopyx.yaml`, the web-egress enforcement point. **Not in the default apply**: it opens 80 and 443 to the whole public internet on behalf of agents, which is the widest grant in the namespace and the one decision an operator most needs to have made themselves. Refuses to start without a credential, deliberately | |
 | Deployment | `48-scopyx-browser.yaml`, the same plane with a real browser, for pages that assemble themselves. **Replaces 47's Deployment rather than running beside it**, so a cluster cannot round-robin an agent's fetches between a browser and a fetcher that runs no JavaScript. Costs 267 MB of pull against 3.5 MB. Read its header: PodSecurity `restricted` decides the sandbox question for you | |
+| Deployment + PVC + Service + CronJob + NetworkPolicy | `49-costcrew.yaml`, CostCrew, the FinOps plane: the console and its crew CronJob `costcrew-crew`. **Not in the default apply**, and **metered once cadence is on**: see "CostCrew, the FinOps plane" below | 8321 |
 | Deployment + PVC + Service | `51-typryx.yaml`, the typed-answer plane: a typed question answered with a probability, scored later against what actually happened. **Not in the default apply**: a whole plane somebody may simply not want. Backend is `stub` (free, no outbound call) unless a launcher is given `--typed-mode` (see "Typed answers: choose where your data goes"). Refuses to start without a credential, the same as scopyx. Its journal is on the shared `stack-events` bus | |
 | Deployment + Service + NetworkPolicy x4 | `52-tokenfuse-mcp-broker.yaml`, tokenfuse's own MCP credential broker fronting typryx. **Not in the default apply, applied by the same `--with-typed` flag as 51-typryx.yaml, right after it**. Free, reaches nowhere but typryx itself. Refuses to start without its own credential | |
 | Deployment + Service + NetworkPolicy x4 | `56-typryx-wardryx-proxy.yaml`, typryx's `wardryx-proxy`: between the MCP broker and wardryx, it adds the risk class of a pending tool call to the decision request, so a `hold_if_signal` policy can hold the call for a person. **Not in the default apply, rendered only by `--typed-risk-signal`** (off by default, refused when the typed mode is off). No claim, no journal, no ledger: it keeps no state. See "A typed risk signal" below | 4330 |
 | Deployment + Service + PVC + NetworkPolicy x3 | `54-delegation.yaml`, vouchryx, the delegation-token service. **Not in the default apply, applied by `delegation/up.sh`**, which also refuses before applying anything unless a trusted upstream issuer, audience and JWKS file are given. Reachable only from the gateway and the console. See "The delegation plane" below | |
 | Patch (Deployment) | `55-copilot-cloud.yaml`: moves the console's copilot, Felyx, to a larger model. By default Felyx already reaches Anthropic through this stack's own gateway (by its Service name, under `agent://<trust domain>/genaryx/felyx`, metered and policy-checked like any agent) and needs only the `stack-copilot` Secret holding your key; without it Felyx says it is not configured. **Not in the default apply, opt-in, and METERED**: every conversation is billed by the model provider to the key's owner, on a bill separate from the cluster. See its own header before applying | |
 | Namespace labels + NetworkPolicy x2 | `60-harden-neighbours.yaml`: Pod Security `restricted` plus default-deny ingress and egress for the cluster's `default` namespace, i.e. hardening for a namespace this stack does not own (`security-tests.sh` check 12 reports on the gap this closes). **Not in the default apply**: it changes a namespace that belongs to whoever runs the cluster, and it WILL stop anything already running in `default`. Read its header before applying | |
+
+### CostCrew, the FinOps plane
+
+CostCrew reads the bills and works out what to do about them. It is off by default and is not in the default apply. `--with-finops` on `cloud/aws/deploy-aws.sh` and `cloud/gcp/deploy-gcp.sh` applies `49-costcrew.yaml`; on Hetzner (`deploy.sh`) it is applied by hand with `kubectl apply -f manifests/49-costcrew.yaml`.
+
+Once applied, the crew CronJob `costcrew-crew` runs every day at 05:57 and is **not suspended**. Firing is not spending: each run does only the work that the console's cadence has marked due (`-due`). With cadence off, which is the default, a run exits 2, creates nothing and spends nothing.
+
+When cadence is on and a run has work, the crew calls a model API (OpenRouter or Anthropic, with keys from the optional `costcrew-engine` Secret). That call is the metered part, and the provider bills the key's owner. Without a provider key the run refuses at the call and names the missing variable. Two caps bound each run, and the smaller one applies: `COSTCREW_CEILING`, which the operator sets in `stack-wiring` (no value ships, and the pod does not start until the key exists), and the console's own `cadence.ceiling_cents`, set at the console's `/cadence` page.
+
+To switch it on, create the `costcrew-engine` Secret, set `COSTCREW_CEILING` in `stack-wiring`, then turn cadence on and set its ceiling at `/cadence`. To switch it off, turn cadence off at `/cadence`. Every deliverable the crew writes is a draft marked live, which only a person's stamp publishes.
 
 ## Keys stay yours
 
@@ -154,11 +165,12 @@ delegation/     the delegation plane's opt-in: up.sh, down.sh for
                 manifests/54-delegation.yaml (vouchryx). See "The delegation
                 plane" below
 manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm).
-                Three files are opt-in and outside the default apply, each
-                applied by hand: 45-heraldyx.yaml (notifications), 55-copilot-
-                cloud.yaml (a metered cloud copilot) and 60-harden-
-                neighbours.yaml (hardening for the cluster's other
-                namespaces). See "What runs as what" above
+                Only the files listed in `kustomization.yaml` are in the default
+                apply. Every other manifest is opt-in, applied by a flag, a script
+                or by hand: among them 45-heraldyx.yaml (notifications),
+                49-costcrew.yaml (the FinOps plane), 55-copilot-cloud.yaml (a
+                metered cloud copilot) and 60-harden-neighbours.yaml (hardening for
+                the cluster's other namespaces). See "What runs as what" above
 images/         one Dockerfile per language family, plus the console's mixed build
 GOTCHAS.md      every trap this cost us, each with the fix that is already applied
 PORTABILITY.md  the measured Hetzner baseline, and what to compare AWS/GCP on
@@ -291,8 +303,8 @@ declared tools carry an injection finding. Every gateway this launcher starts ru
   calls.
 - **Changing it.** `--firewall enforce|shadow|off` on `deploy.sh`, `deploy-gcp.sh` and
   `deploy-aws.sh` (or `FIREWALL_MODE` in the environment). Any other word is refused before
-  anything is installed, because TokenFuse ignores a misspelt value without a word and would
-  run in shadow. The value is applied after the manifests, because `apply -k` puts the declared
+  anything is installed. TokenFuse also refuses to start on a misspelt value (since v1.11.1), so
+  the check here finds the mistake before the install rather than at pod start. The value is applied after the manifests, because `apply -k` puts the declared
   `enforce` back over anything set before it or by hand, and the gateway rolls to the new mode
   by itself. Give the flag on every run: a re-run without it returns the gateway to `enforce`.
 - **What it does not cover.** The MCP broker and the `focus-export` sidecar carry no switch.
@@ -313,7 +325,8 @@ unchanged. The gateway adds an `x-fuse-dlp` header to its answer with how many f
 - **Changing it.** `--pii-mode off|shadow|mask|block` on `deploy.sh`, `deploy-gcp.sh` and
   `deploy-aws.sh` (or `PII_MODE` in the environment). `mask` replaces each finding before the call
   is forwarded, and `block` refuses a call that carries one. Any other word is refused before
-  anything is installed, because TokenFuse reads an unknown word as `off` without a word. The value
+  anything is installed. TokenFuse also refuses to start on an unknown word (since v1.12.0), so
+  the check here finds the mistake before the install rather than at pod start. The value
   is applied after the manifests, and the broker takes it only when the typed-answer plane is
   applied. Give the flag on every run: a re-run without it returns both to `shadow`.
 
@@ -579,9 +592,9 @@ apply (`agent-conform`, in `40-routines-and-secrets.yaml`) runs it every 15
 minutes over the bus. A break becomes a `chain_broken` event (high) in
 `agent-conform.ndjson` on the bus, where heraldyx and the console already read; a
 chain with no `prev_hash` at all is reported once as `chain_unchained` (low),
-since the field is optional. heraldyx v0.3.0 has no sentence for `chain_broken`
-and renders it with its generic wording ("raised an event this build does not
-have a description for"), which is neutral and true.
+since the field is optional. heraldyx v0.4.0, the version pinned here, has its own
+sentence for `chain_broken`: it names the break and says that nothing was repaired,
+quarantined or stopped.
 
 - **A new break fails the Job**, once, on purpose: a second signal beside the
   event, and `verify.sh` counts the failed pod as not Running until it ages out
@@ -631,7 +644,7 @@ setting reaches it.
 
 **Metered.** The entry is a `type: LoadBalancer` Service, same shape as
 `50-loadbalancer.yaml`: a real forwarding rule billed hourly from the moment
-it exists (about USD 0.025/hour on GCP), created by Kubernetes rather than
+it exists, created by Kubernetes rather than
 Terraform, so `hub/down.sh` deletes it first, before anything else, the same
 order `cloud/gcp/teardown.sh` and `cloud/aws/teardown.sh` already use for the
 console's own balancer.
@@ -654,7 +667,8 @@ then called through the hub and appeared by name on `/v1/gateways`, a second
 here: a second real customer site (the lab's second site was a k3d cluster
 sharing a home network with the operator's own machine), a hub outage longer
 than a minute, and a stolen site key, which the edge does not itself bind to
-an address.
+an address. Both runs above were before `/v1/run-spend`, the eighth route, was added to the
+manifest, so neither measured it through the entry.
 
 ## The delegation plane
 
@@ -740,7 +754,8 @@ sides use one secret, and it is off unless you turn it on:
 ```
 
 A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
-console v1.1.34 or later, which are the images pinned here; an older image
+console v1.1.34 or later. The images pinned here are tokenfuse v1.13.0 and console v1.1.43,
+both later than those minimums; an older image
 ignores the setting.
 
 ## Status
@@ -808,8 +823,8 @@ down:
 
 The command output behind every sentence above is in `evidence/` and
 `cloud/*/evidence/`. Every trap the runs cost us is written up in
-`GOTCHAS.md`, now **81 items** (37 platform, 30 ours, 10 the stack's own
-contract, 4 upstream). Almost all are already fixed here, which is the whole
+`GOTCHAS.md`, now **123 items** (45 platform, 55 ours, 16 the stack's own
+contract, 7 upstream; `scripts/gotchas-classified.sh` prints the current split). Almost all are already fixed here, which is the whole
 point: the next person to run this should not meet any of them. A small
 number (69, 81) are recorded rather than solved, and say so plainly rather
 than letting the ledger look cleaner than the deployment is. The split matters

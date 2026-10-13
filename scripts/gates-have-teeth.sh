@@ -294,7 +294,7 @@ else:
 # with nothing noticing. Same fault, same gate, the other file it now reads.
 run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
 	'./scripts/pinned-images.sh' \
-	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.1.36", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.1.43", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
 	"moves: a pod can come back different"
 
 # The default apply set must not publish anything to the world, and must not
@@ -1677,8 +1677,8 @@ run_case "temp: the console's temp is mounted read-only" fail \
 
 run_case "temp: no container left that needs a temp" fail \
 	'./scripts/read-only-root-has-a-temp.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.5.0", "image: registry.invalid/costcrew:v0.5.0")
-edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.5.0", "image: registry.invalid/costcrew:v0.5.0")')" \
+	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.6.0", "image: registry.invalid/costcrew:v0.6.0")
+edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.6.0", "image: registry.invalid/costcrew:v0.6.0")')" \
 	"measured NOTHING"
 
 run_case "temp: TMPDIR inside the data volume instead of a /tmp mount" pass \

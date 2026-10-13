@@ -245,16 +245,16 @@ spec:
             # for a capability it should not have is refused, the anti-exfiltration
             # floor stays on, and a declared tool that carries an injection finding
             # labels its run, so the starter rule applies to that run's later calls.
-            # Unset, the gateway falls back to shadow, which refuses nothing, and it
-            # ignores a misspelt value without a word, so this literal is checked.
+            # Unset, the gateway falls back to shadow, which refuses nothing. It refuses to
+            # start on a misspelt value (TokenFuse v1.11.1 and later), so this literal is checked.
             # `--firewall enforce|shadow|off` on the three deploy scripts changes it,
             # after the apply, because `kubectl apply -k` puts this literal back (the
             # same ordering as TOKENFUSE_MAX_RUN_BUDGET_USD, invariant 28).
             # scripts/firewall-is-enforce-by-default.sh holds it (CLAUDE.md invariant 37).
             - { name: TOKENFUSE_FIREWALL, value: "enforce" }
             # Personal data in prompts and tool arguments: the PII extension of TokenFuse's
-            # scanner. TokenFuse leaves it off when unset, and it reads a misspelt value as off
-            # without a word, so this literal is checked. shadow lets every call through and
+            # scanner. TokenFuse leaves it off when unset, and it refuses to start on a misspelt
+            # value (TokenFuse v1.12.0 and later), so this literal is checked. shadow lets every call through and
             # reports how many findings and of which kinds in an x-fuse-dlp header, never the text. `--pii-mode
             # off|shadow|mask|block` on the three deploy scripts changes it, after the apply,
             # because `apply -k` puts this literal back. scripts/pii-is-shadow-by-default.sh
@@ -489,7 +489,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v1.3.0
+          image: ghcr.io/taipanbox/wardryx:v1.3.2
           imagePullPolicy: IfNotPresent
           # Single-dash flags, exactly as up.sh calls it.
           args:

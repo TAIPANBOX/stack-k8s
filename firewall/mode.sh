@@ -12,10 +12,10 @@
 #     stderr.
 #
 # TokenFuse compares TOKENFUSE_FIREWALL against those three words exactly
-# (crates/gateway/src/firewall.rs, from_env), and IGNORES any other value without
-# a word. A misspelt `enforce` therefore starts the gateway in shadow, which refuses
-# nothing and says nothing about it. The launcher refuses the word before anything
-# is installed, so the mistake is found in a second and not after the install.
+# (crates/gateway/src/firewall.rs, from_env). Since TokenFuse v1.11.1 any other value
+# exits 2 before the listener binds. Before that it was ignored without a word, and a
+# misspelt `enforce` started the gateway in shadow. The launcher refuses the word before
+# anything is installed, so the mistake is found in a second and not at pod start.
 set -euo pipefail
 
 refuse() { printf 'agent-firewall: %s\n' "$*" >&2; exit 1; }

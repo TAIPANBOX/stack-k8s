@@ -127,7 +127,8 @@
         },
         "agent_firewall_is_enforce_on_the_gateway": {
           "value": "TOKENFUSE_FIREWALL=enforce on the tokenfuse-gateway container (10-planes.yaml); --firewall enforce|shadow|off on deploy.sh, deploy-gcp.sh and deploy-aws.sh changes it after the apply, and firewall/mode.sh validates the word",
-          "why": "@decided 2026-10-13: the launcher runs TokenFuse's agent firewall in enforce by default and an operator keeps one switch to run it in shadow or off. An unset TOKENFUSE_FIREWALL reads as shadow in TokenFuse, and TokenFuse ignores a misspelt value without a word, so the switch is validated before the install. Held by scripts/firewall-is-enforce-by-default.sh and deploy-flags-agree.sh (CLAUDE.md invariant 37)."
+          "why": "@decided 2026-10-13: the launcher runs TokenFuse's agent firewall in enforce by default and an operator keeps one switch to run it in shadow or off. An unset TOKENFUSE_FIREWALL reads as shadow in TokenFuse, and TokenFuse ignores a misspelt value without a word, so the switch is validated before the install. Held by scripts/firewall-is-enforce-by-default.sh and deploy-flags-agree.sh (CLAUDE.md invariant 37).",
+          "note": "@claude 2026-10-13, correction: the sentence in the why above that says TokenFuse ignores a misspelt value without a word is stale. Since TokenFuse v1.11.1 an unrecognised TOKENFUSE_FIREWALL exits 2 before the listener binds, so the launcher's check is the earlier of two refusals, not the only one."
         },
         "typed_risk_signal_is_opt_in_and_stateless": {
           "value": "typryx-wardryx-proxy (manifests/56-typryx-wardryx-proxy.yaml), rendered only by typed/mode.sh --typed-risk-signal, off by default and refused when the typed mode is off",
