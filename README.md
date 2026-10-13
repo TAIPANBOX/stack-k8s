@@ -164,6 +164,9 @@ hub/            a second site's way IN: up.sh, add-site.sh, down.sh for
 delegation/     the delegation plane's opt-in: up.sh, down.sh for
                 manifests/54-delegation.yaml (vouchryx). See "The delegation
                 plane" below
+identity/       up.sh: the gateway's client keys and identity map, from files,
+                checked by the gateway image before the cluster is written.
+                See "Client keys and the identity map" below
 manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm).
                 Only the files listed in `kustomization.yaml` are in the default
                 apply. Every other manifest is opt-in, applied by a flag, a script
@@ -757,6 +760,56 @@ A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
 console v1.1.34 or later. The images pinned here are tokenfuse v1.13.0 and console v1.1.43,
 both later than those minimums; an older image
 ignores the setting.
+
+## Client keys and the identity map
+
+Off by default: the gateway answers any caller that reaches it. Two files decide
+who may call it and on whose budget, and you, or an onboarding agent, prepare
+them outside the cluster:
+
+- **a keys file**, one `secret:key_id` per line, the line the console's Onboard
+  tab prints. The key id is a bare name such as `treasury-bots`; the secret is 24
+  to 256 characters of `A-Z a-z 0-9 . _ ~ + / = @ : -`. Blank lines and `#`
+  comments are ignored.
+- **an identity map**, TokenFuse's JSON (`units[]`, `keys[]`, `prefixes[]`,
+  TokenFuse docs/20): which agent ids each key may speak as, and which unit pays.
+
+```bash
+./identity/up.sh --client-keys-file keys.txt --identity-map-file identity.json
+./identity/up.sh --identity-map-file identity.json   # a new map, the keys kept
+./identity/up.sh                                     # check what the cluster holds again
+./identity/up.sh --check-only --client-keys-file keys.txt --identity-map-file identity.json
+```
+
+Nothing in the cluster changes until the files pass two checks. First their
+grammar. Then the gateway image the cluster runs reads them in a throwaway
+container with no network, on the machine you run this from, so Docker is needed
+there. Anything the gateway would refuse to start on is refused, and so are three
+things it only warns about: a map that configures nothing, a map that binds a key
+id no secret carries, and a key the map does not bind (under the gateway's default
+strict mode every call with it is refused 403). A refusal never prints a secret.
+`--check-only` runs both checks and touches no cluster.
+
+Then the keys go into the Secret `gateway-client-keys` and the map into the
+ConfigMap `gateway-identity-map`, mounted read only into the gateway at
+`/etc/tokenfuse/identity`. The gateway reads both only at start, and a change to a
+Secret or a ConfigMap restarts nothing, so `up.sh` rolls the gateway when what it
+reads has changed, and only then. `verify.sh` reports a gateway running on
+anything other than what the two objects hold. Neither object is in the
+manifests, so a later deploy keeps both.
+
+Once keys are on, every agent sends `x-fuse-key: <its secret>`, and an
+`x-fuse-agent-id` its key may speak as, on every call. Felyx and the drills send
+no key, so the gateway refuses them 401 while keys are on.
+
+To turn either off, delete its object and run `up.sh` with no file. It rolls the
+gateway without it; the script itself deletes nothing:
+
+```bash
+kubectl -n agent-stack delete secret gateway-client-keys
+kubectl -n agent-stack delete configmap gateway-identity-map
+./identity/up.sh
+```
 
 ## Status
 

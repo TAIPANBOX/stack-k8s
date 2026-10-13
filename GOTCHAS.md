@@ -2315,6 +2315,13 @@ The construct is correct, the quoting is correct, and the next person writing a
 comment in a Python heredoc will do exactly the same thing. The two heredocs in
 `security-tests.sh` now carry a one-line note pointing here.
 
+Met again on 2026-10-13, by the next person writing a gate, exactly as
+predicted: `scripts/identity-files-are-checked.sh` fed a manifest reader to
+`python3 - <<'PY'` inside `"$(...)"`, its messages said "the map's own
+ConfigMap", and bash 3.2 answered `line 99: unexpected EOF while looking for
+matching ')'`. It never reached a commit. That gate now writes its reader to a
+file and runs it from there, which no apostrophe can break.
+
 ---
 
 ## 72. `kubectl get -o yaml` shows configuration that is no longer applied
@@ -4235,3 +4242,24 @@ is not hit on a cluster. The answer here is `firewall/mode.sh`, which accepts ex
 words before anything is installed, and `scripts/firewall-is-enforce-by-default.sh`, which
 requires the literal `enforce` on every gateway start. The trap stays live in any other
 deployment of the same image that passes the mode through without a check.
+
+## 124. A mounted ConfigMap changes under a running gateway that keeps the map it read at start
+
+**Platform.** Kubernetes rewrites a ConfigMap volume in place when the ConfigMap
+changes (any mount but a `subPath` one) and restarts nothing, while a variable taken
+from a ConfigMap or Secret key is fixed when the container starts. TokenFuse's
+gateway reads its identity map once, at start. So after an edit to
+`gateway-identity-map` the file inside the running pod is the new map and the
+gateway enforces the old one: an operator who checks with `kubectl exec ... cat`
+sees the map they meant, and is wrong about what is in force.
+
+Measured on kind on 2026-10-13 (`evidence/identity-kind/run.sh`, step 8, three
+runs): the running pod's `/etc/tokenfuse/identity/identity.json` became the edited
+map after 29, 31 and 48 s, in the same pod, with no restart. A Secret behind an environment variable
+does not even do that much: the old value stays until the pod is replaced.
+
+The answer here (CLAUDE.md invariant 39): `identity/up.sh` writes the map's sha256
+and the Secret's resourceVersion onto the gateway's pod template, so a change made
+through it rolls the gateway; `verify.sh` compares the template with both objects
+and fails when another hand changed one; and a re-run of `up.sh` with no file lets
+the gateway image read the edited map before rolling the gateway onto it.

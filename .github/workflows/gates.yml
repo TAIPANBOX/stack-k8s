@@ -138,6 +138,15 @@ jobs:
       - name: the PII scanners run in shadow by default (invariant 38)
         run: ./scripts/pii-is-shadow-by-default.sh
 
+      # Added 2026-10-13. The gateway's client keys and identity map come in as files through
+      # identity/up.sh: the keys as a Secret, the map as a ConfigMap mounted read only, both
+      # optional in the manifest, both checked by the pinned gateway image in a throwaway
+      # container with no network before anything is written, and the gateway rolled exactly
+      # when what it reads changed. Needs Docker, which the hosted runner has, and pulls the
+      # public gateway image the manifest pins. See CLAUDE.md invariant 39.
+      - name: client keys and the identity map are checked before they are applied (invariant 39)
+        run: ./scripts/identity-files-are-checked.sh
+
       # Added 2026-10-04. heraldyx v0.3.0 and idryx v1.1.0 refuse an event whose
       # source is not allowed for the file it was read from, so a stream this
       # launcher names differently, or a --load pair naming the wrong source,

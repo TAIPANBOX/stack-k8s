@@ -280,6 +280,73 @@ print('withkey', code(GATEWAY, os.environ.get('TOKENFUSE_GATEWAY_ADMIN_KEY', '')
     || bad "gateway did not serve /v1/runs with the admin key: got '$withkey_code', expected 200"
 fi
 
+head_ "client keys and the identity map"
+# identity/up.sh writes the gateway's client keys into the Secret
+# gateway-client-keys and its identity map into the ConfigMap
+# gateway-identity-map, then rolls the gateway by writing onto its pod template
+# what it now reads: the map's sha256 and the Secret's resourceVersion. A Secret
+# or ConfigMap changed by any other hand restarts nothing, and the gateway goes
+# on with what it read at start while every object looks right. So the objects
+# are compared with the template here, and while keys are on the running gateway
+# is asked to refuse a metered call that carries none. Its own refusal is told
+# from a provider's by the `x-fuse: unauthorized` header: a gateway that took no
+# keys would forward the call, and the provider's 401 would read as a pass.
+# CLAUDE.md invariant 39.
+sha256_() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
+id_ann_map="$(kc get deploy tokenfuse-gateway -o jsonpath='{.spec.template.metadata.annotations.taipanbox\.dev/identity-map-sha256}' 2>/dev/null)"
+id_ann_keys="$(kc get deploy tokenfuse-gateway -o jsonpath='{.spec.template.metadata.annotations.taipanbox\.dev/client-keys-version}' 2>/dev/null)"
+id_map_want=off
+if kc get configmap gateway-identity-map -o name >/dev/null 2>&1; then
+  id_map_want="$(kc get configmap gateway-identity-map -o jsonpath='{.data.identity\.json}' | sha256_)"
+fi
+id_keys_want=off
+id_keys_on=0
+if kc get secret gateway-client-keys -o name >/dev/null 2>&1; then
+  id_keys_on=1
+  id_keys_want="$(kc get secret gateway-client-keys -o jsonpath='{.metadata.resourceVersion}')"
+fi
+if [ "${id_ann_map:-off}" != "$id_map_want" ]; then
+  bad "the gateway was started on another identity map than ConfigMap gateway-identity-map holds (template ${id_ann_map:-off}, ConfigMap $id_map_want): run ./identity/up.sh"
+elif [ "$id_map_want" = off ]; then
+  note "identity map: off (./identity/up.sh --identity-map-file turns it on)"
+else
+  ok "the gateway runs the identity map ConfigMap gateway-identity-map holds"
+fi
+if [ "${id_ann_keys:-off}" != "$id_keys_want" ]; then
+  bad "the gateway was started on other client keys than Secret gateway-client-keys holds (template ${id_ann_keys:-off}, Secret $id_keys_want): run ./identity/up.sh"
+elif [ "$id_keys_on" = 0 ]; then
+  note "client keys: off, the gateway answers any caller that reaches it (./identity/up.sh --client-keys-file turns them on)"
+elif [ "$CONSOLE_READY" = 0 ]; then
+  ok "the gateway runs the client keys Secret gateway-client-keys holds"
+  note "no console pod: cannot ask the gateway to refuse a call with no client key"
+else
+  ok "the gateway runs the client keys Secret gateway-client-keys holds"
+  idk="$(inpod "
+import urllib.request, urllib.error
+def ask(key):
+    h = {'content-type': 'application/json', 'x-fuse-run-id': 'verify-client-keys'}
+    if key:
+        h['x-fuse-key'] = key
+    body = b'{\"model\":\"probe\",\"max_tokens\":1,\"messages\":[{\"role\":\"user\",\"content\":\"probe\"}]}'
+    try:
+        r = urllib.request.urlopen(urllib.request.Request('http://tokenfuse-gateway:4100/v1/messages', data=body, headers=h), timeout=10)
+        return r.status, r.headers.get('x-fuse', '')
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers.get('x-fuse', '')
+for name, key in (('nokey', ''), ('badkey', 'verify-not-a-client-key-0000000000')):
+    code, fuse = ask(key)
+    print(name, code, fuse or '-')
+")"
+  echo "$idk" | sed 's/^/  /'
+  for probe in nokey badkey; do
+    line="$(echo "$idk" | awk -v p="$probe" '$1 == p')"
+    case "$line" in
+      "$probe 401 unauthorized") ok "the gateway refuses a call with $( [ "$probe" = nokey ] && echo 'no client key' || echo 'an unknown client key') (401)" ;;
+      *) bad "the gateway did not refuse a call with $( [ "$probe" = nokey ] && echo 'no client key' || echo 'an unknown client key'): got '${line#"$probe" }', expected 401 unauthorized from the gateway itself" ;;
+    esac
+  done
+fi
+
 head_ "the console is reading a real environment, not fixtures"
 # GOTCHAS 16: with no descriptor the bus serves DEMO fixtures and the Graph
 # draws agents that do not exist. `kind` is the only thing that says so.

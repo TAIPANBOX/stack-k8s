@@ -1848,6 +1848,190 @@ run_case "deploy-flags-agree: the gateway PII switch is applied before the kusto
 	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "  k_ \"-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_DLP_PII=$PII_MODE\" >/dev/null \\\n", "  true \\\n"); edit("cloud/gcp/deploy-gcp.sh", "k_ \"apply -k /root/stack-k8s/manifests\"", "k_ \"-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_DLP_PII=$PII_MODE\" >/dev/null\nk_ \"apply -k /root/stack-k8s/manifests\"")')" \
 	"BEFORE its"
 
+# Client keys and the identity map (CLAUDE.md invariant 39). Each case runs the one section of
+# identity-files-are-checked.sh its fault is about (IDENTITY_SECTIONS), because sections C and D
+# start the gateway image and the whole gate is slow. A: the manifest; B: the grammar before any
+# tool runs; C: the gateway image's own reading; D: the cluster half against a stub kubectl; E:
+# verify.sh. Then the subject taken away twice, and a comment (must pass).
+run_case "identity-files: the gateway loses its client keys setting" fail \
+	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_CLIENT_KEYS\n              valueFrom: \x7b secretKeyRef: \x7b name: gateway-client-keys, key: client_keys, optional: true \x7d \x7d\n", "")')" \
+	"sets no TOKENFUSE_CLIENT_KEYS"
+
+run_case "identity-files: the gateway loses its identity map setting" fail \
+	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_IDENTITY_MAP\n              valueFrom: \x7b configMapKeyRef: \x7b name: gateway-identity-map, key: map_path, optional: true \x7d \x7d\n", "")')" \
+	"sets no TOKENFUSE_IDENTITY_MAP"
+
+run_case "identity-files: the client keys become required" fail \
+	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "name: gateway-client-keys, key: client_keys, optional: true", "name: gateway-client-keys, key: client_keys")')" \
+	"not optional, so a cluster"
+
+run_case "identity-files: the map volume becomes required" fail \
+	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "configMap: \x7b name: gateway-identity-map, optional: true, ", "configMap: \x7b name: gateway-identity-map, ")')" \
+	"ConfigMap not optional"
+
+run_case "identity-files: the map path becomes a literal" fail \
+	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "              valueFrom: \x7b configMapKeyRef: \x7b name: gateway-identity-map, key: map_path, optional: true \x7d \x7d\n", "              value: /etc/tokenfuse/identity/identity.json\n")')" \
+	"not read from the map's own ConfigMap"
+
+run_case "identity-files: the map is mounted writable" fail \
+	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "mountPath: /etc/tokenfuse/identity, readOnly: true", "mountPath: /etc/tokenfuse/identity, readOnly: false")')" \
+	"not read only"
+
+run_case "identity-files: another workload is handed the client keys" fail \
+	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "            - \x7b name: GENARYX_COPILOT_BASE_URL,", "            - name: GATE_PLANTED_KEYS\n              valueFrom: \x7b secretKeyRef: \x7b name: gateway-client-keys, key: client_keys, optional: true \x7d \x7d\n            - \x7b name: GENARYX_COPILOT_BASE_URL,")')" \
+	"names gateway-client-keys or gateway-identity-map"
+
+run_case "identity-files: a manifest declares the operator's ConfigMap" fail \
+	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
+	"$(py 'open("manifests/00-base.yaml", "a").write("---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: gateway-identity-map\n  namespace: agent-stack\ndata:\n  map_path: /etc/tokenfuse/identity/identity.json\n")')" \
+	"declares the ConfigMap the operator"
+
+run_case "identity-files: up.sh writes a path the gateway does not read" fail \
+	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "MAP_DIR=/etc/tokenfuse/identity\n", "MAP_DIR=/etc/tokenfuse/identities\n")')" \
+	"mounts nothing at /etc/tokenfuse/identities"
+
+run_case "identity-files: no gateway start left to judge" fail \
+	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "          command: [\"/usr/local/bin/tokenfuse\"]\n", "          command: [\"/bin/true\"]\n")')" \
+	"measured NOTHING"
+
+run_case "identity-files: identity/up.sh taken away" fail \
+	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
+	"$(py 'import os; os.remove("identity/up.sh")')" \
+	"identity/up.sh is missing"
+
+run_case "identity-files: a comment that names a required setting is not the setting" pass \
+	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_CLIENT_KEYS\n", "            # optional: false would stop a cluster that has no keys file; the reference below is optional.\n            - name: TOKENFUSE_CLIENT_KEYS\n")')"
+
+run_case "identity-files: a short secret is accepted" fail \
+	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "[ \"$\x7b#secret\x7d\" -lt 24 ]", "[ \"$\x7b#secret\x7d\" -lt 8 ]")')" \
+	"(a secret of 23 characters) reached docker"
+
+run_case "identity-files: a quote or a dollar reaches the Secret" fail \
+	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "re_chars=\x27^[A-Za-z0-9._~+/=@:-]+$\x27", "re_chars=\x27^.+$\x27")')" \
+	"(a secret with a dollar) reached docker"
+
+run_case "identity-files: a secret given twice is kept" fail \
+	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "die \"--client-keys-file: line $n gives a secret an earlier line already gave", ": \"--client-keys-file: line $n gives a secret an earlier line already gave")')" \
+	"(a secret given twice) reached docker"
+
+run_case "identity-files: a NUL byte is let through" fail \
+	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "printf \x27names a file holding a NUL byte\x27; return 0;", ":;")')" \
+	"(a NUL byte) reached docker"
+
+run_case "identity-files: a keys file of comments alone is accepted" fail \
+	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "[ \"$count\" -gt 0 ] || die", "[ \"$count\" -ge 0 ] || die")')" \
+	"(comments and blank lines only) was accepted"
+
+run_case "identity-files: a map that is not a JSON object passes the first half" fail \
+	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "[ \"$first\" = \"\x7b\" ] || die", "[ -n \"$first\" ] || die")')" \
+	"(a JSON array, not an object) reached docker"
+
+run_case "identity-files: a refusal repeats the secret" fail \
+	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "die \"--client-keys-file: line $n $why.", "die \"--client-keys-file: line $n ($line) $why.")')" \
+	"repeats the secret"
+
+run_case "identity-files: a map larger than a ConfigMap holds is accepted" fail \
+	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "MAP_MAX=1044480\n", "MAP_MAX=10485760\n")')" \
+	"(a map larger than a ConfigMap holds) reached docker"
+
+run_case "identity-files: the gateway's own refusal is not heard" fail \
+	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "    *\"tokenfuse gateway listening\"*) ;;\n", "    *) ;;\n")')" \
+	"refused, but not saying: not declared in units[]"
+
+run_case "identity-files: a map that configures nothing is accepted" fail \
+	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "grep -qF \x27identity map: ON (\x27 <<<\"$logs\" \\\n", "true \\\n")')" \
+	"configures nothing ({}) was accepted"
+
+run_case "identity-files: a map that binds a key with no secret is accepted" fail \
+	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "orphans=\"$(sed -n", "orphans=\"$(: sed -n")')" \
+	"binds a key id no client key carries was accepted"
+
+run_case "identity-files: a client key the map does not bind is accepted" fail \
+	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "unbound=\"$(sed -n", "unbound=\"$(: sed -n")')" \
+	"a client key the map does not bind was accepted"
+
+run_case "identity-files: the check container reaches the network" fail \
+	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "--name \"$CHECK_CONTAINER\" --network none \\\n", "--name \"$CHECK_CONTAINER\" \\\n")')" \
+	"with a network"
+
+run_case "identity-files: the keys ride the docker command line" fail \
+	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "      -e TOKENFUSE_CLIENT_KEYS \\\n", "      -e \"TOKENFUSE_CLIENT_KEYS=$spec\" \\\n")')" \
+	"put a secret on the docker command line"
+
+run_case "identity-files: the check gives the image no command" fail \
+	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "      --entrypoint \"$GATEWAY_CMD\" \\\n", "")')" \
+	"with no ENTRYPOINT, the shape BUILD_FROM_SOURCE builds was refused"
+
+run_case "identity-files: a refused file still writes to the cluster" fail \
+	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "identity_check \"$IMAGE\" \"$SPEC\" \"$MAPF\"\n", "true \"$IMAGE\" \"$SPEC\" \"$MAPF\"\n")')" \
+	"still wrote to the cluster"
+
+run_case "identity-files: a re-run that names no file drops the kept keys" fail \
+	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "SPEC=\"$KEPT_SPEC\"\n[ \"$KEYS_GIVEN\" = 0 ] || SPEC=\"$KEYS_NEW\"\n", "SPEC=\"$KEYS_NEW\"\n")')" \
+	"a re-run that names no file"
+
+run_case "identity-files: the same map again restarts the gateway" fail \
+	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "[ -z \"$MAP_SHA\" ] || ANN_MAP_WANT=\"$MAP_SHA\"\n", "[ -z \"$MAP_SHA\" ] || ANN_MAP_WANT=\"$MAP_SHA-$$\"\n")')" \
+	"the same map given again"
+
+run_case "identity-files: a new map does not restart the gateway" fail \
+	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "[ -z \"$MAP_SHA\" ] || ANN_MAP_WANT=\"$MAP_SHA\"\n", "[ -z \"$MAP_SHA\" ] || ANN_MAP_WANT=on\n")')" \
+	"a new map did not roll the gateway"
+
+run_case "identity-files: a new keys file does not restart the gateway" fail \
+	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "[ \"$SECRET_PRESENT\" = 0 ] || ANN_KEYS_WANT=\"$SECRET_RV\"\n", "[ \"$SECRET_PRESENT\" = 0 ] || ANN_KEYS_WANT=on\n")')" \
+	"a new keys file did not roll the gateway"
+
+run_case "identity-files: the keys ride the kubectl command line" fail \
+	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "      | k create -f - >/dev/null \\\n      || die \"could not create Secret $SECRET_NAME\"", "      >/dev/null; k create secret generic \"$SECRET_NAME\" --from-literal=\"$SECRET_KEY=$SPEC\" >/dev/null \\\n      || die \"could not create Secret $SECRET_NAME\"")')" \
+	"a secret appeared on a kubectl command line"
+
+run_case "identity-files: up.sh believes a gateway that reports other keys" fail \
+	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "if [ -n \"$seen_keys\" ] && [ \"$seen_keys\" != \"$CHECK_KEYS\" ]; then", "if false; then")')" \
+	"reported another number of keys than it was given was believed"
+
+run_case "identity-files: verify.sh stops asking for a call with no key" fail \
+	'IDENTITY_SECTIONS=E ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("verify.sh", "(\x27nokey\x27, \x27\x27), ", "")')" \
+	"refuse a call with no key"
+
+run_case "identity-files: verify.sh stops comparing the running map" fail \
+	'IDENTITY_SECTIONS=E ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("verify.sh", "annotations.taipanbox\\.dev/identity-map-sha256", "annotations.taipanbox\\.dev/identity-map")')" \
+	"compares what the gateway's pod template says"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'
