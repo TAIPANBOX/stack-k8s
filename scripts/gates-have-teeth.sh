@@ -1758,7 +1758,7 @@ run_case "deploy-flags-agree: the firewall flag is accepted and applies nothing"
 	"never applies"
 
 # The PII scanners (CLAUDE.md invariant 38). A gateway or broker that starts with its scanner off
-# records nothing about personal data and says nothing about it. The faults: the literal gone from
+# looks at nothing about personal data and says nothing about it. The faults: the literal gone from
 # the gateway, the gateway defaulting to off or to block, the switch set twice, every gateway start
 # taken away, the broker's literal gone, the broker defaulting to off, every broker start taken away,
 # the validator accepting a misspelt word or refusing the real one, the validator taken away, a deploy

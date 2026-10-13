@@ -15,7 +15,7 @@
 # without a word: any string outside them falls back to off. The gateway trims surrounding
 # space before it compares and the MCP broker does not, so this check refuses a word with
 # a space in it too, since only the gateway would have read it. A misspelt `shadow`
-# therefore starts the scanners in off, which records nothing and says nothing about it.
+# therefore starts the scanners in off, which looks at nothing and says nothing about it.
 # The launcher refuses the word before anything is installed, so the mistake is found in a
 # second and not after the install.
 set -euo pipefail
@@ -33,11 +33,11 @@ value="$1"
 
 case "$value" in
   off)
-    printf 'pii-scan: off. The personal-data scanners are not consulted and record nothing, which is TokenFuse before the extension existed.\n' >&2 ;;
+    printf 'pii-scan: off. The personal-data scanners are not consulted and look at nothing, which is TokenFuse before the extension existed.\n' >&2 ;;
   shadow)
-    printf 'pii-scan: shadow, the default. The scanners find email addresses, card numbers and international phone numbers in prompts and tool arguments, record how many and which kinds, and let the call through. Nothing is refused, and the matched text is not written. On a tool response the broker adds a note naming the count and kinds, which the agent then reads.\n' >&2 ;;
+    printf 'pii-scan: shadow, the default. The scanners find email addresses, card numbers and international phone numbers in prompts and tool arguments and report how many and which kinds. The gateway adds an x-fuse-dlp header to its answer and logs nothing. The broker logs a warning and marks _tokenfuse.dlp_pii on tool responses. Nothing is refused, no event or trace row is written, and the personal data still reaches the provider.\n' >&2 ;;
   mask)
-    printf 'pii-scan: mask. Each finding is replaced with [REDACTED:kind] before the call is forwarded, and the count and kinds are recorded.\n' >&2 ;;
+    printf 'pii-scan: mask. Each finding is replaced with [REDACTED:kind] before the call is forwarded.\n' >&2 ;;
   block)
     printf 'pii-scan: block. A call that carries a finding is refused. A false positive refuses the call, so block is a decision about a workload, not a default.\n' >&2 ;;
   *)

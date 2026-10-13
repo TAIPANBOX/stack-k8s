@@ -255,7 +255,7 @@ spec:
             # Personal data in prompts and tool arguments: the PII extension of TokenFuse's
             # scanner. TokenFuse leaves it off when unset, and it reads a misspelt value as off
             # without a word, so this literal is checked. shadow lets every call through and
-            # records how many findings and of which kinds, never the text. `--pii-mode
+            # reports how many findings and of which kinds in an x-fuse-dlp header, never the text. `--pii-mode
             # off|shadow|mask|block` on the three deploy scripts changes it, after the apply,
             # because `apply -k` puts this literal back. scripts/pii-is-shadow-by-default.sh
             # holds it (CLAUDE.md invariant 38).

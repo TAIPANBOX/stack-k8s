@@ -9,7 +9,7 @@
 # international phone numbers in prompts and tool arguments. Unset, they are off
 # (crates/gateway/src/defaults.rs, dlp_pii_mode_from; crates/gateway/src/main.rs,
 # the TOKENFUSE_MCP_DLP_PII match). In shadow they let the call through unchanged
-# and record the count and the kinds of what they found, never the text. A launcher
+# and report the count and the kinds of what they found, in an x-fuse-dlp header or a log line, never the text. A launcher
 # that forgets the variable ships gateways and brokers that look at nothing and say
 # nothing about it.
 #
@@ -40,7 +40,7 @@
 # A gate that finds no gateway start, or no broker start, says so and exits 1. No
 # subject is not a pass.
 #
-# It reads text. That a running gateway or broker records a finding needs a live
+# It reads text. That a running gateway or broker reports a finding needs a live
 # cluster, which CLAUDE.md invariants 4 and 5 already say this repository cannot hold
 # in a gate.
 set -uo pipefail
@@ -206,7 +206,7 @@ def judge(text, name):
     vals = literal_values(text, name)
     if not vals:
         return (f"has no {name} env var, so the scanner falls back to its own default, off, "
-                "which records nothing about personal data")
+                "which looks at nothing")
     if len(vals) > 1:
         return f"{name} is set {len(vals)} times, and the later entry wins without a word"
     v = vals[0]

@@ -308,8 +308,7 @@ declared tools carry an injection finding. Every gateway this launcher starts ru
 
 The gateway and the MCP broker look for email addresses, card numbers and international phone
 numbers in prompts and tool arguments. In `shadow`, which is the default, a call goes through
-unchanged and the record holds how many findings there were and of which kinds, never the text.
-On a tool response the broker adds a note with the same count.
+unchanged. The gateway adds an `x-fuse-dlp` header to its answer with how many findings there were and of which kinds, never the text, and logs nothing. The broker logs a warning with the same count and marks `_tokenfuse.dlp_pii` on tool responses. Neither writes an event or a trace row, and the personal data still reaches the provider.
 
 - **Changing it.** `--pii-mode off|shadow|mask|block` on `deploy.sh`, `deploy-gcp.sh` and
   `deploy-aws.sh` (or `PII_MODE` in the environment). `mask` replaces each finding before the call

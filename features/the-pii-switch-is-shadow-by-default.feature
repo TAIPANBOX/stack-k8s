@@ -1,5 +1,5 @@
 # @decided 2026-10-13: the launcher runs TokenFuse's personal-data scanners in shadow by default,
-# so personal data in prompts and tool arguments is recorded and the call still goes through, and
+# so personal data in prompts and tool arguments is reported and the call still goes through, and
 # an operator keeps one switch to run them in mask or block, or in off. `@claude 2026-10-13`: an
 # unset TOKENFUSE_DLP_PII reads as off in TokenFuse, and so does a misspelt value, without a word,
 # so the literal is set on every gateway and broker start and the switch is validated before the
@@ -9,7 +9,7 @@ Feature: the launcher's gateway and MCP broker scan for personal data in shadow,
 
   A scanner that starts off looks at nothing and says nothing. The gateway and the broker run
   their personal-data scanner in shadow by default: a call goes through, and the count and kinds
-  of what was found are recorded, never the matched text. An operator who wants masking or
+  of what was found are reported, never the matched text. An operator who wants masking or
   refusal changes one switch, and a mode the scanner does not read is refused before anything
   is installed.
 

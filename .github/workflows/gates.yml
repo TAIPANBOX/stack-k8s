@@ -132,7 +132,7 @@ jobs:
         run: ./scripts/firewall-is-enforce-by-default.sh
 
       # Added 2026-10-13. The PII scanners run in shadow on every gateway and every MCP broker
-      # this launcher starts, so personal data in prompts and tool arguments is recorded and the
+      # this launcher starts, so personal data in prompts and tool arguments is reported and the
       # call still goes through. One switch (--pii-mode on the deploy scripts) changes it. The
       # deploy-path half is in the deploy-flags-agree step above. See CLAUDE.md invariant 38.
       - name: the PII scanners run in shadow by default (invariant 38)

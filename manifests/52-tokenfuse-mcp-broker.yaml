@@ -160,7 +160,7 @@ spec:
             - { name: TOKENFUSE_MCP_SECRET_SCOPES, value: "typryx_key=tools:ask|ask_freeform|list_questions" }
             # The broker's own personal-data scanner, over tool arguments and tool responses.
             # shadow for the same reason as the gateway's: the call goes through, the count and
-            # kinds are logged, never the text. On a tool response the broker adds a note with
+            # kinds are logged, never the text. On a tool response the broker marks _tokenfuse.dlp_pii with
             # the count and kinds, which the agent reads. The same `--pii-mode` switch changes it,
             # applied after the typed render that applies this file. scripts/pii-is-shadow-by-default.sh
             # holds it (CLAUDE.md invariant 38).
