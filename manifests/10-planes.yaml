@@ -218,6 +218,23 @@ spec:
             # scripts/declassify-is-keyed.sh holds it (CLAUDE.md invariant 27).
             - name: TOKENFUSE_DECLASSIFY_KEY
               valueFrom: { secretKeyRef: { name: stack-keys, key: declassify_key } }
+            # Who may call this gateway, which agent ids each caller may speak as,
+            # and which unit pays (tokenfuse docs/20). Off until identity/up.sh has
+            # run: it writes the keys into the Secret gateway-client-keys and the
+            # map into the ConfigMap gateway-identity-map, after the gateway image
+            # has read both. Both references are optional, so a cluster that named
+            # no file starts exactly as before, and neither object is in any
+            # manifest, so `kubectl apply -k` never puts a copy back over the
+            # operator's. The map's PATH comes from the map's own ConfigMap, never
+            # a literal: the gateway refuses to start on a path that names no file,
+            # so the path exists exactly when the map does. A change to either
+            # object restarts nothing by itself; identity/up.sh rolls this pod by
+            # annotating its template with what it reads.
+            # scripts/identity-files-are-checked.sh holds it (CLAUDE.md invariant 39).
+            - name: TOKENFUSE_CLIENT_KEYS
+              valueFrom: { secretKeyRef: { name: gateway-client-keys, key: client_keys, optional: true } }
+            - name: TOKENFUSE_IDENTITY_MAP
+              valueFrom: { configMapKeyRef: { name: gateway-identity-map, key: map_path, optional: true } }
             # enforce, not observe: an over-budget call gets a hard 402 rather
             # than a log line. This is the whole point of the gateway.
             - { name: TOKENFUSE_MODE, value: "enforce" }
@@ -352,6 +369,9 @@ spec:
           volumeMounts:
             - { name: events, mountPath: /var/lib/stack/events }
             - { name: traces, mountPath: /var/lib/stack/traces }
+            # The identity map, read only. An empty directory until identity/up.sh
+            # has written one; TOKENFUSE_IDENTITY_MAP above is unset until then.
+            - { name: identity, mountPath: /etc/tokenfuse/identity, readOnly: true }
           readinessProbe:
             httpGet: { path: /healthz, port: http }
             initialDelaySeconds: 2
@@ -441,6 +461,12 @@ spec:
         # and a CSV that outlives the pod would need a disk somebody pays for.
         - name: focus
           emptyDir: {}
+        # The map identity/up.sh writes, and only its map key: the path key stays
+        # out of the directory. Optional, so a cluster that named no map starts.
+        # 0444: the map names units, owners, key ids and agent patterns and holds
+        # no secret, and the gateway's uid reads it without an fsGroup.
+        - name: identity
+          configMap: { name: gateway-identity-map, optional: true, defaultMode: 0444, items: [{ key: identity.json, path: identity.json }] }
 ---
 apiVersion: v1
 kind: Service
