@@ -252,6 +252,14 @@ spec:
             # same ordering as TOKENFUSE_MAX_RUN_BUDGET_USD, invariant 28).
             # scripts/firewall-is-enforce-by-default.sh holds it (CLAUDE.md invariant 37).
             - { name: TOKENFUSE_FIREWALL, value: "enforce" }
+            # Personal data in prompts and tool arguments: the PII extension of TokenFuse's
+            # scanner. TokenFuse leaves it off when unset, and it reads a misspelt value as off
+            # without a word, so this literal is checked. shadow lets every call through and
+            # records how many findings and of which kinds, never the text. `--pii-mode
+            # off|shadow|mask|block` on the three deploy scripts changes it, after the apply,
+            # because `apply -k` puts this literal back. scripts/pii-is-shadow-by-default.sh
+            # holds it (CLAUDE.md invariant 38).
+            - { name: TOKENFUSE_DLP_PII, value: "shadow" }
             # Two settings the gateway leaves OFF by default, and this stack
             # must not, because they are the difference between a deployment
             # that is governed and one that only looks governed.

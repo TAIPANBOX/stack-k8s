@@ -232,3 +232,11 @@ data:
       target: agent://mockryx.local/*
       deny_tool:
         - shell_exec
+    # The allow-list rehearsal: the one identity this policy matches may call only the listed
+    # tool. The drill tries a renamed copy of that tool, which the list does not name, so it is
+    # refused. Wardryx v1.3.0 reads allow_tool; a build older than v1.3.0 refuses this file at
+    # start with "field allow_tool not found".
+    - name: mockryx-allow-list
+      target: "agent://mockryx.local/allow-list-rehearsal"
+      allow_tool:
+        - lookup_order_status

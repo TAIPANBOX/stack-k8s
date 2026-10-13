@@ -40,6 +40,8 @@
 # figure by itself. Same rule, one more row in the table below, so the two cannot
 # drift apart in this file the way the three deploy scripts did. `--firewall` (CLAUDE.md
 # invariant 37) is the third flag of the same shape, and is one more row for the same reason.
+# `--pii-mode` (CLAUDE.md invariant 38) is the fourth, with one row for the gateway and one for
+# the MCP broker, which carries its own variable.
 #
 # The second is the whole reason the flag works. Patching before the
 # kustomization is indistinguishable from patching after it by reading the flag
@@ -97,6 +99,8 @@ FLAGS=$(cat <<'ROWS'
 --trust-domain|TRAILRYX_TRUST_DOMAIN|patch
 --run-budget-ceiling|TOKENFUSE_MAX_RUN_BUDGET_USD|set env
 --firewall|TOKENFUSE_FIREWALL|set env
+--pii-mode|TOKENFUSE_DLP_PII|set env
+--pii-mode|TOKENFUSE_MCP_DLP_PII|set env
 ROWS
 )
 
@@ -140,5 +144,5 @@ if [ "$problems" -gt 0 ]; then
 	exit 1
 fi
 
-printf 'OK: %d deploy script(s), each parsing --trust-domain, --run-budget-ceiling and --firewall and\n' "$checked"
+printf 'OK: %d deploy script(s), each parsing --trust-domain, --run-budget-ceiling, --firewall and --pii-mode and\n' "$checked"
 printf '    applying each after its own `apply -k`, which is the only position where it survives.\n'

@@ -1757,6 +1757,97 @@ run_case "deploy-flags-agree: the firewall flag is accepted and applies nothing"
 	"$(py 'edit("deploy.sh", "set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_FIREWALL=$FIREWALL_MODE", "get deploy/tokenfuse-gateway -c gateway TOKENFUSE_FIREWALL=$FIREWALL_MODE")')" \
 	"never applies"
 
+# The PII scanners (CLAUDE.md invariant 38). A gateway or broker that starts with its scanner off
+# records nothing about personal data and says nothing about it. The faults: the literal gone from
+# the gateway, the gateway defaulting to off or to block, the switch set twice, every gateway start
+# taken away, the broker's literal gone, the broker defaulting to off, every broker start taken away,
+# the validator accepting a misspelt word or refusing the real one, the validator taken away, a deploy
+# path that checks the mode only after its install, a deploy path that stops taking --pii-mode, and a
+# deploy path that applies the switch before its kustomization. Then a comment (must pass).
+run_case "pii-is-shadow-by-default: the gateway container loses the switch" fail \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n", "")')" \
+	"has no TOKENFUSE_DLP_PII env var"
+
+run_case "pii-is-shadow-by-default: the gateway defaults to off" fail \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d", "\x7b name: TOKENFUSE_DLP_PII, value: \"off\" \x7d")')" \
+	'not "shadow"'
+
+run_case "pii-is-shadow-by-default: the gateway defaults to block" fail \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d", "\x7b name: TOKENFUSE_DLP_PII, value: \"block\" \x7d")')" \
+	'not "shadow"'
+
+run_case "pii-is-shadow-by-default: the switch is set twice, the second to off" fail \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n", "            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n            - \x7b name: TOKENFUSE_DLP_PII, value: \"off\" \x7d\n")')" \
+	"set 2 times"
+
+run_case "pii-is-shadow-by-default: a comment naming block beside the switch" pass \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n", "            # block refuses a call that carries a finding; the literal below is shadow.\n            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n")')"
+
+run_case "pii-is-shadow-by-default: every gateway start taken away" fail \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "          command: [\"/usr/local/bin/tokenfuse\"]\n", "          command: [\"/bin/true\"]\n")')" \
+	"no gateway start was found"
+
+run_case "pii-is-shadow-by-default: the broker container loses the switch" fail \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - \x7b name: TOKENFUSE_MCP_DLP_PII, value: \"shadow\" \x7d\n", "")')" \
+	"has no TOKENFUSE_MCP_DLP_PII env var"
+
+run_case "pii-is-shadow-by-default: the MCP broker defaults to off" fail \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_MCP_DLP_PII, value: \"shadow\" \x7d", "\x7b name: TOKENFUSE_MCP_DLP_PII, value: \"off\" \x7d")')" \
+	'TOKENFUSE_MCP_DLP_PII is "off"'
+
+run_case "pii-is-shadow-by-default: every MCP broker start taken away" fail \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          args: [\"mcp-broker\"]\n", "          args: [\"mcp-brokr\"]\n")')" \
+	"no MCP broker start was found"
+
+run_case "pii/mode.sh: a misspelt mode is accepted" fail \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'edit("pii/mode.sh", "  shadow)\n", "  shadow|shadows)\n")')" \
+	"accepts 'shadows'"
+
+run_case "pii/mode.sh: the real word shadow is refused" fail \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'edit("pii/mode.sh", "  shadow)\n", "  shadowx)\n")')" \
+	"refuses 'shadow'"
+
+run_case "pii/mode.sh: taken away" fail \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'import os; os.remove("pii/mode.sh")')" \
+	"pii/mode.sh is missing"
+
+run_case "pii-is-shadow-by-default: a deploy path checks the mode but does not stop on it" fail \
+	'./scripts/pii-is-shadow-by-default.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/pii/mode.sh\" check \"$PII_MODE\"", "\"$ROOT/pii/mode.sh\" true \"$PII_MODE\"")')" \
+	"before its first apply"
+
+run_case "deploy-flags-agree: a deploy path stops taking --pii-mode" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "    --pii-mode) PII_MODE=\"$2\"; shift 2 ;;\n", "")')" \
+	"does not parse --pii-mode"
+
+run_case "deploy-flags-agree: the gateway PII switch is accepted and applies nothing" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'edit("deploy.sh", "set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_DLP_PII=$PII_MODE", "get deploy/tokenfuse-gateway -c gateway TOKENFUSE_DLP_PII=$PII_MODE")')" \
+	"never applies"
+
+run_case "deploy-flags-agree: the broker PII switch is accepted and applies nothing" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "set env deploy/tokenfuse-mcp-broker -c broker TOKENFUSE_MCP_DLP_PII=$PII_MODE", "get deploy/tokenfuse-mcp-broker -c broker TOKENFUSE_MCP_DLP_PII=$PII_MODE")')" \
+	"never applies"
+
+run_case "deploy-flags-agree: the gateway PII switch is applied before the kustomization" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "  k_ \"-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_DLP_PII=$PII_MODE\" >/dev/null \\\n", "  true \\\n"); edit("cloud/gcp/deploy-gcp.sh", "k_ \"apply -k /root/stack-k8s/manifests\"", "k_ \"-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_DLP_PII=$PII_MODE\" >/dev/null\nk_ \"apply -k /root/stack-k8s/manifests\"")')" \
+	"BEFORE its"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'

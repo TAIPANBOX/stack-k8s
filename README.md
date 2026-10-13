@@ -304,6 +304,25 @@ declared tools carry an injection finding. Every gateway this launcher starts ru
   --firewall shadow
 ```
 
+### Personal data in prompts
+
+The gateway and the MCP broker look for email addresses, card numbers and international phone
+numbers in prompts and tool arguments. In `shadow`, which is the default, a call goes through
+unchanged and the record holds how many findings there were and of which kinds, never the text.
+On a tool response the broker adds a note with the same count.
+
+- **Changing it.** `--pii-mode off|shadow|mask|block` on `deploy.sh`, `deploy-gcp.sh` and
+  `deploy-aws.sh` (or `PII_MODE` in the environment). `mask` replaces each finding before the call
+  is forwarded, and `block` refuses a call that carries one. Any other word is refused before
+  anything is installed, because TokenFuse reads an unknown word as `off` without a word. The value
+  is applied after the manifests, and the broker takes it only when the typed-answer plane is
+  applied. Give the flag on every run: a re-run without it returns both to `shadow`.
+
+```bash
+./deploy.sh --servers ... --hcloud-token ... --trust-domain acme.example \
+  --pii-mode mask
+```
+
 ### Being told, rather than watching
 
 `deploy.sh` asks for an address for alerts alongside the tunnel and the console
