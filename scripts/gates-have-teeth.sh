@@ -579,10 +579,14 @@ run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
 	'./scripts/secret-keys-agree.sh' \
 	"$(py 'edit("install.sh", "      --from-literal=cloud_admin=\x27$CLOUD_SECRET\x27 \\\n", "      --from-literal=cloud_admin=\x27$CLOUD_SECRET\x27 \\\n      --from-literal=spare=\x27$CLOUD_SECRET\x27 \\\n")')"
 
+# evidence/identity-kind/run.sh creates stack-keys with every key the manifests read, so
+# it is an (installer, Secret) subject too: the gate judges it and passes it, which is
+# correct. Taking the installers away therefore takes it away too, or the case would
+# measure a Secret creator instead of none.
 run_case "secret-keys-agree: no installer left to judge" fail \
 	'./scripts/secret-keys-agree.sh' \
 	"$(py 'import os
-for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "delegation/up.sh", "closure/up.sh"):
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "delegation/up.sh", "closure/up.sh", "evidence/identity-kind/run.sh"):
     os.remove(f)')" \
 	"measured NOTHING"
 
