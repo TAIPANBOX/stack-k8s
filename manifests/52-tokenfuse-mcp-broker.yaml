@@ -158,6 +158,13 @@ spec:
             # header. Configuration, not a credential, so it sits here rather
             # than in the Secret.
             - { name: TOKENFUSE_MCP_SECRET_SCOPES, value: "typryx_key=tools:ask|ask_freeform|list_questions" }
+            # The broker's own personal-data scanner, over tool arguments and tool responses.
+            # shadow for the same reason as the gateway's: the call goes through, the count and
+            # kinds are logged, never the text. On a tool response the broker marks _tokenfuse.dlp_pii with
+            # the count and kinds, which the agent reads. The same `--pii-mode` switch changes it,
+            # applied after the typed render that applies this file. scripts/pii-is-shadow-by-default.sh
+            # holds it (CLAUDE.md invariant 38).
+            - { name: TOKENFUSE_MCP_DLP_PII, value: "shadow" }
             # This broker's own line on the shared bus, beside
             # tokenfuse.ndjson and tokenfuse-cloud.ndjson: a tool call through
             # it is a metered, recorded act, same reason those two get their

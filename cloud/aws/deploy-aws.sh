@@ -29,6 +29,10 @@
 # firewall/mode.sh before anything is installed, applied after the kustomization, and the
 # gateway rolls to it by itself. Give it on every run: a re-run without it returns the gateway
 # to enforce.
+# `--pii-mode <off|shadow|mask|block>` sets the personal-data scanners' mode on the gateway and
+# on the MCP broker (TokenFuse's PII extension, CLAUDE.md invariant 38). Without it the manifests'
+# shadow stands. Checked by pii/mode.sh before anything is installed, applied after the
+# kustomization and after the typed render, and the gateway rolls to it by itself.
 # `--run-budget-ceiling <usd>` sets the most one run may be allowed to carry, as
 # TOKENFUSE_MAX_RUN_BUDGET_USD on the gateway (tokenfuse v1.5.0). Without it the manifest's
 # 5.00 stands, which is the gateway's own built-in run budget, so an ordinary run is
@@ -140,6 +144,11 @@ RUN_BUDGET_CEILING="${RUN_BUDGET_CEILING:-}"
 # before anything is installed and applied AFTER the kustomization, the only position where it
 # sticks (the same rule as the run-budget ceiling).
 FIREWALL_MODE="${FIREWALL_MODE:-}"
+# The PII scanners' mode on the gateway (TOKENFUSE_DLP_PII) and the MCP broker
+# (TOKENFUSE_MCP_DLP_PII), CLAUDE.md invariant 38. Empty leaves each manifest's shadow. Set, it is
+# checked by pii/mode.sh before anything is installed and applied AFTER the kustomization and the
+# typed render, the only position where it sticks (the same rule as the firewall).
+PII_MODE="${PII_MODE:-}"
 # Build tokenfuse, trailryx and costcrew on a node instead of pulling them.
 #
 # Off, since 2026-09-01, because all three are published and pinned in the
@@ -176,6 +185,7 @@ while [ $# -gt 0 ]; do
     --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --run-budget-ceiling) RUN_BUDGET_CEILING="$2"; shift 2 ;;
     --firewall) FIREWALL_MODE="$2"; shift 2 ;;
+    --pii-mode) PII_MODE="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
     # The header block, found rather than counted.
@@ -364,6 +374,14 @@ fi
 if [ -n "$FIREWALL_MODE" ]; then
   "$ROOT/firewall/mode.sh" check "$FIREWALL_MODE" \
     || die "the agent firewall mode was refused, so nothing has been installed yet."
+fi
+
+# ---- the PII scanners' mode, refused BEFORE anything is installed ---------------
+# pii/mode.sh is the one copy of this check (CLAUDE.md invariant 38). TokenFuse falls back to off
+# on a word it does not read, without a word, so a misspelt mode would turn the scanners off silently.
+if [ -n "$PII_MODE" ]; then
+  "$ROOT/pii/mode.sh" check "$PII_MODE" \
+    || die "the PII scanners' mode was refused, so nothing has been installed yet."
 fi
 say "using this checkout: $ROOT"
 
@@ -681,6 +699,20 @@ if [ "$TYPED_EFFECTIVE" != off ]; then
       || die "could not apply the typed-answer key Secret"
   fi
   "$ROOT/typed/mode.sh" render ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} | k_ "apply -f -"
+fi
+
+# The PII scanners' mode, set AFTER the kustomization and after the typed render, for the same
+# reason as the firewall: the manifests declare shadow, and `apply` puts the declared value back over
+# anything set before it. The broker is set only when the typed plane was applied, because its
+# Deployment exists only then.
+if [ -n "$PII_MODE" ]; then
+  say "PII scanners: $PII_MODE (set after apply, which is what makes it stick)"
+  k_ "-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_DLP_PII=$PII_MODE" >/dev/null \
+    || die "could not set the PII scanners' mode on the gateway"
+  if [ "$TYPED_EFFECTIVE" != off ]; then
+    k_ "-n agent-stack set env deploy/tokenfuse-mcp-broker -c broker TOKENFUSE_MCP_DLP_PII=$PII_MODE" >/dev/null \
+      || die "could not set the PII scanners' mode on the MCP broker"
+  fi
 fi
 
 say "waiting for rollouts"
