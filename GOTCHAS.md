@@ -654,6 +654,9 @@ v="$( set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "$n" 
 [ "${#v}" = "$n" ] || die "could not generate a $n-character secret"
 ```
 
+That fix holds only while SIGPIPE is at its default. Where it is ignored the same
+pipeline never ends on a Mac; see 125, which replaced it with a bounded read.
+
 ## 26. A `set -e` script that dies mid-run looks like one that finished
 
 > **Ours, and fixed.** We wrote this wrong in this repository.
@@ -4263,3 +4266,35 @@ and the Secret's resourceVersion onto the gateway's pod template, so a change ma
 through it rolls the gateway; `verify.sh` compares the template with both objects
 and fails when another hand changed one; and a re-run of `up.sh` with no file lets
 the gateway image read the edited map before rolling the gateway onto it.
+
+## 125. The fix for 25 never ends where SIGPIPE is ignored
+
+> **Ours, and fixed.** Entry 25's fix, carried by all three deploy scripts, was half a fix.
+
+**Symptom:** none here yet. In stack-single the same idiom made a pre-push hook
+hang on a Mac with no output, and the three deploy scripts in this repository
+generated the operator password with that line (`deploy.sh`,
+`cloud/gcp/deploy-gcp.sh`, `cloud/aws/deploy-aws.sh`). Nothing here runs a deploy
+under a hook, so nothing hung; the line was one hook away from it.
+
+**Why:** `tr </dev/urandom | head -c N` reads a stream that never ends, and the
+only thing that stops `tr` is the pipe `head` closes. Entry 25 turned `pipefail`
+off for that pipeline, which deals with `tr` dying of SIGPIPE. With SIGPIPE
+IGNORED, which is how git runs a hook and how some supervisors start a child,
+`tr` does not die: its next write fails, macOS's `tr` keeps reading forever, and
+GNU `tr` exits and prints `write error: Broken pipe`. Measured on macOS 27.0.1
+with bash 3.2.57, 2026-10-14:
+
+```
+perl -e '$SIG{PIPE}="IGNORE"; alarm 5; exec @ARGV' bash -c \
+  'set -euo pipefail; v="$( set +o pipefail; LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 28 )"; echo "len ${#v}"'
+# killed by the alarm after 5 s, exit 142
+```
+
+**Fixed here:** `lib/gen.sh`, the one generator, sourced by the three deploy
+scripts. It reads `head -c 4096 /dev/urandom`, keeps the 62 characters with `tr`,
+which reads to the end of a finite input, and cuts to N in bash, so nothing
+closes a pipe early and SIGPIPE does not matter. The same command with `gen 28`
+printed 28 characters at once. `scripts/gen-is-bounded.sh` (CLAUDE.md invariant
+41) runs every generator with SIGPIPE ignored and refuses an unbounded read of
+`/dev/urandom` anywhere in the tracked shell.

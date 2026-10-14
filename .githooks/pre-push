@@ -69,6 +69,7 @@ step "every mounted key is readable by its pod" "./scripts/mounted-keys-are-read
 step "every client key example has a bare key id" "./scripts/client-key-ids-are-bare.sh"
 step "no quote of the owner in a public file" "./scripts/no-owner-quotes.sh"
 step "a read-only container that needs a temp has one" "./scripts/read-only-root-has-a-temp.sh"
+step "a secret is minted from a bounded read" "./scripts/gen-is-bounded.sh"
 
 echo
 if [ "$fail" -ne 0 ]; then

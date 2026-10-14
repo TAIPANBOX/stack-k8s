@@ -2073,6 +2073,69 @@ run_case "aws-takes-every-gcp-flag: an allow-list entry names a flag GCP does no
 	"$(py 'edit("scripts/aws-takes-every-gcp-flag.sh", "ALLOW=\"\"", "ALLOW=\"--no-such-flag|a flag nobody takes\"")')" \
 	"the allow-list names --no-such-flag"
 
+# Invariant 41: a secret is minted from a bounded read, by one generator, sourced. The
+# unbounded line comes back, inside a caller and inside the generator; the generator
+# returns short, repeats, or is copied; a caller forgets the source or sources it too
+# late; a message that only names the device must pass; and the subject taken away.
+run_case "gen-is-bounded: a deploy script reads urandom with no bound" fail \
+	'./scripts/gen-is-bounded.sh' \
+	"$(py 'edit("deploy.sh", "CONSOLE_PASSWORD=\"$(gen 28)\"", "CONSOLE_PASSWORD=\"$( set +o pipefail; LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 28 )\"")')" \
+	"deploy.sh:"
+
+run_case "gen-is-bounded: the generator itself reads with no bound" fail \
+	'./scripts/gen-is-bounded.sh' \
+	"$(py 'edit("lib/gen.sh", "v=\"$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc \x27A-Za-z0-9\x27)\"", "v=\"$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 64)\"")')" \
+	"lib/gen.sh:"
+
+run_case "gen-is-bounded: the generator returns short without saying so" fail \
+	'./scripts/gen-is-bounded.sh' \
+	"$(py 'edit("lib/gen.sh", "v=\"$\x7bv:0:$n\x7d\"", "v=\"$\x7bv:0:$((n - 1))\x7d\"")
+edit("lib/gen.sh", "if [ \"$\x7b#v\x7d\" != \"$n\" ]; then", "if false; then")')" \
+	"that are not exactly 28 of A-Za-z0-9"
+
+run_case "gen-is-bounded: the generator says nothing and succeeds when it read nothing" fail \
+	'./scripts/gen-is-bounded.sh' \
+	"$(py 'edit("lib/gen.sh", "    return 1\n", "    return 0\n")')" \
+	"with nothing to read"
+
+run_case "gen-is-bounded: the generator prints the same value every time" fail \
+	'./scripts/gen-is-bounded.sh' \
+	"$(py 'edit("lib/gen.sh", "  printf \x27%s\x27 \"$v\"\n", "  printf \x27%s\x27 \"$(printf %0\"$n\"d 0)\"\n")')" \
+	"printed the same value twice"
+
+run_case "gen-is-bounded: a second copy of the generator in a deploy script" fail \
+	'./scripts/gen-is-bounded.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", ". \"$ROOT/lib/gen.sh\" || die", "gen() \x7b local v; v=\"$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc A-Za-z0-9)\"; printf %s \"$\x7bv:0:$1\x7d\"; \x7d\n. \"$ROOT/lib/gen.sh\" || die")')" \
+	"a second gen() outside lib/gen.sh"
+
+run_case "gen-is-bounded: a caller that never sources the generator" fail \
+	'./scripts/gen-is-bounded.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", ". \"$ROOT/lib/gen.sh\" || die \"no lib/gen.sh in $ROOT\"\n", "")')" \
+	"asks gen for a value and never sources lib/gen.sh"
+
+run_case "gen-is-bounded: a caller that sources the generator below its first ask" fail \
+	'./scripts/gen-is-bounded.sh' \
+	"$(py 'edit("deploy.sh", ". \"$ROOT/lib/gen.sh\" || die \"no lib/gen.sh in $ROOT\"\n", "")
+s = open("deploy.sh").read()
+open("deploy.sh", "w").write(s + ". \"$ROOT/lib/gen.sh\"\n")')" \
+	"above the line that sources lib/gen.sh"
+
+run_case "gen-is-bounded: a message that names the device reads nothing" pass \
+	'./scripts/gen-is-bounded.sh' \
+	"$(py 'edit("deploy.sh", "CONSOLE_PASSWORD=\"$(gen 28)\" || die", "say \"nothing here reads /dev/urandom, this only names it\"\n      CONSOLE_PASSWORD=\"$(gen 28)\" || die")')"
+
+run_case "gen-is-bounded: the generator is taken away" fail \
+	'./scripts/gen-is-bounded.sh' \
+	"$(py 'import os
+os.remove("lib/gen.sh")')" \
+	"measured NOTHING"
+
+run_case "gen-is-bounded: nothing asks the generator for a length" fail \
+	'./scripts/gen-is-bounded.sh' \
+	"$(py 'for p in ("deploy.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh"):
+    edit(p, "\"$(gen 28)\"", "\"$(gen)\"")')" \
+	"there is no length to run the generator for"
+
 echo
 if [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'

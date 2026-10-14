@@ -186,6 +186,12 @@ jobs:
       - name: a read-only container that needs a temp has one (invariant 35)
         run: ./scripts/read-only-root-has-a-temp.sh
 
+      # Added 2026-10-14, in BOTH callers on the same commit. A secret is minted from a bounded
+      # read by one generator, lib/gen.sh, because `tr </dev/urandom | head -c N` never ends where
+      # SIGPIPE is ignored, as it is under a git hook. See CLAUDE.md invariant 41 and GOTCHAS 125.
+      - name: a secret is minted from a bounded read (invariant 41)
+        run: ./scripts/gen-is-bounded.sh
+
       # Added 2026-10-04. The on-box chain verifier (agent-stack-go v1.1.0):
       # in the default install, every 15 minutes, on the bus, its memory on a
       # claim that already exists, a new break kept visible. See CLAUDE.md
