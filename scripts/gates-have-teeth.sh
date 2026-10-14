@@ -704,7 +704,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.13.1\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.13.2\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 # The gateway's declassify key (invariant 27). POST /v1/fuse/declassify lifts a
@@ -759,7 +759,7 @@ run_case "declassify-is-keyed: an installer never gives an existing Secret the k
 # Each must say it measured nothing, never OK.
 run_case "declassify-is-keyed: no gateway container left to judge" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.13.1\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.13.2\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the declassify key"
 
 run_case "declassify-is-keyed: no installer left to read" fail \
@@ -877,7 +877,7 @@ for f in ["install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"]:
     os.remove(f)')" \
 	"This measured nothing"
 
-# Invariant 43 (GOTCHAS 127): the policy store's volume is on stack-policy, and
+# Invariant 43 (GOTCHAS 129): the policy store's volume is on stack-policy, and
 # every Longhorn installer creates that class with the settings the store needs.
 run_case "policy-store-survives-a-partition: the policy-db claim names no class" fail \
 	'./scripts/policy-store-survives-a-partition.sh' \
@@ -940,17 +940,17 @@ run_case "policy-store-survives-a-partition: the class reworded in spacing is no
 	'./scripts/policy-store-survives-a-partition.sh' \
 	"$(py 'edit("install.sh", "  dataLocality: \"best-effort\"", "  dataLocality:   \"best-effort\"")')"
 
-# Invariant 43, the refusal half (GOTCHAS 127): a deploy stops, with one sentence
+# Invariant 43, the refusal half (GOTCHAS 129): a deploy stops, with one sentence
 # that names the migration, BEFORE its first apply, when policy-db is on another class.
 run_case "policy-store-refuses-an-old-claim: the guard lets an old claim through" fail \
 	'./scripts/policy-store-refuses-an-old-claim.sh' \
 	"$(py 'edit("lib/policy-store.sh", "  [ \"$cls\" = \"stack-policy\" ] && return 0", "  return 0")')" \
 	"scenario old: expected a refusal"
 
-run_case "policy-store-refuses-an-old-claim: the refusal loses its pointer to GOTCHAS 127" fail \
+run_case "policy-store-refuses-an-old-claim: the refusal loses its pointer to GOTCHAS 129" fail \
 	'./scripts/policy-store-refuses-an-old-claim.sh' \
-	"$(py 'edit("lib/policy-store.sh", "migrate the policy store first as GOTCHAS 127 describes", "migrate the policy store first as the notes describe")')" \
-	"lacks 'GOTCHAS 127'"
+	"$(py 'edit("lib/policy-store.sh", "migrate the policy store first as GOTCHAS 129 describes", "migrate the policy store first as the notes describe")')" \
+	"lacks 'GOTCHAS 129'"
 
 run_case "policy-store-refuses-an-old-claim: an unreachable cluster lets the apply through" fail \
 	'./scripts/policy-store-refuses-an-old-claim.sh' \
@@ -964,14 +964,14 @@ run_case "policy-store-refuses-an-old-claim: a fresh cluster is refused" fail \
 
 run_case "policy-store-refuses-an-old-claim: the AWS deploy drops its guard call" fail \
 	'./scripts/policy-store-refuses-an-old-claim.sh' \
-	"$(py 'edit("cloud/aws/deploy-aws.sh", "policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 127: refuse before anything is applied\n", "")')" \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 129: refuse before anything is applied\n", "")')" \
 	"does not call policy_store_guard before it"
 
 run_case "policy-store-refuses-an-old-claim: the GCP deploy calls the guard after its apply" fail \
 	'./scripts/policy-store-refuses-an-old-claim.sh' \
 	"$(py 'p = "cloud/gcp/deploy-gcp.sh"
 s = open(p).read()
-g = "policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 127: refuse before anything is applied\n"
+g = "policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 129: refuse before anything is applied\n"
 a = "k_ \"apply -k /root/stack-k8s/manifests\"\n"
 assert g in s and a in s, "the guard or the apply line was not found"
 s = s.replace(g, "", 1).replace(a, a + "policy_store_guard\n", 1)
@@ -1280,7 +1280,7 @@ run_case "typed-mode-is-honest: a launcher stops forwarding --typed-training" fa
 
 run_case "typed-mode-is-honest: the typryx pin goes back before the wardryx-proxy" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.0", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
+	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.1", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
 	"older than v0.4.0"
 
 run_case "typed-mode-is-honest: a document names a second typryx tag" fail \
@@ -1290,8 +1290,8 @@ run_case "typed-mode-is-honest: a document names a second typryx tag" fail \
 
 run_case "typed-mode-is-honest: the typryx image is no longer named" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.0", "image: example.invalid/typ:v0.4.0")
-edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.0", "image: example.invalid/typ:v0.4.0")')" \
+	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.1", "image: example.invalid/typ:v0.4.0")
+edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.1", "image: example.invalid/typ:v0.4.0")')" \
 	"measured nothing about the typryx pin"
 
 run_case "typed-mode-is-honest: a comment in the training section changes" pass \
@@ -1364,7 +1364,7 @@ run_case "run-budget-ceiling-is-set: a comment next to the ceiling changes" pass
 
 run_case "run-budget-ceiling-is-set: no gateway container left to judge" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.13.1\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.13.2\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')" \
 	"measured nothing about the run-budget ceiling"
 
 run_case "run-budget-ceiling-is-set: budget/ceiling.sh taken away" fail \
@@ -1490,7 +1490,7 @@ run_case "typed-mode-is-honest: a launcher stops forwarding --typed-risk-signal"
 
 run_case "typed-mode-is-honest: the proxy runs another typryx tag than typryx" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.0", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.1", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
 	"different tags"
 
 run_case "typed-mode-is-honest: the proxy runs the service, not the proxy" fail \
@@ -2190,6 +2190,66 @@ run_case "aws-takes-every-gcp-flag: an allow-list entry names a flag GCP does no
 	"$(py 'edit("scripts/aws-takes-every-gcp-flag.sh", "ALLOW=\"\"", "ALLOW=\"--no-such-flag|a flag nobody takes\"")')" \
 	"the allow-list names --no-such-flag"
 
+# Invariant 45: cluster DNS keeps a replica through a drain, and k3s's coredns is left to k3s.
+run_case "cluster-dns-has-a-budget: an installer applies no budget" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "\x27kind: PodDisruptionBudget\x27", "\x27kind: PodDisruptionBudgetX\x27")')" \
+	"never applies a PodDisruptionBudget"
+
+run_case "cluster-dns-has-a-budget: the budget keeps nothing up" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("install.sh", "\x27  minAvailable: 1\x27", "\x27  minAvailable: 0\x27")')" \
+	"not the document this gate holds"
+
+run_case "cluster-dns-has-a-budget: the budget selects other pods" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "matchLabels: \x7b k8s-app: kube-dns \x7d", "matchLabels: \x7b k8s-app: coredns \x7d")')" \
+	"not the document this gate holds"
+
+run_case "cluster-dns-has-a-budget: the budget is applied with one replica too" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("install.sh", "if [ \"$DNS_WANT\" -ge 2 ]; then", "if true; then")')" \
+	"outside"
+
+run_case "cluster-dns-has-a-budget: an installer patches k3s's coredns Deployment" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "echo \"   coredns replicas=$DNS_WANT\"\n", "echo \"   coredns replicas=$DNS_WANT\"\nk_ \"-n kube-system patch deployment coredns --type merge -p x\" >/dev/null || true\n")')" \
+	"changes k3s's coredns Deployment"
+
+run_case "cluster-dns-has-a-budget: a comment about patching coredns is not a fault" pass \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "echo \"   coredns replicas=$DNS_WANT\"\n", "echo \"   coredns replicas=$DNS_WANT\"\n# never patch deployment coredns here: k3s re-applies its manifest\n")')"
+
+run_case "cluster-dns-has-a-budget: verify.sh stops checking the budget" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("verify.sh", "get pdb coredns -o jsonpath=", "get pdb dns -o jsonpath=")')" \
+	"verify.sh does not check"
+
+run_case "cluster-dns-has-a-budget: no installer is left to judge" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'for p in ("install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"):
+    s = open(p).read()
+    k = "sh -s - " + "serv" + "er"
+    assert k in s
+    open(p, "w").write(s.replace(k, "sh -s - serve"))')" \
+	"measured NOTHING"
+
+# Invariant 45, the replica policy: three replicas from five nodes, two from two, one alone.
+run_case "cluster-dns-has-a-budget: five nodes get two replicas" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("install.sh", "[ \"${#ALL_NODES[@]}\" -ge 5 ] && DNS_WANT=3", "[ \"${#ALL_NODES[@]}\" -ge 5 ] && DNS_WANT=2")')" \
+	"the replica policy"
+
+run_case "cluster-dns-has-a-budget: the three-replica line is dropped from one installer" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "[ \"${#ALL_NODES[@]}\" -ge 5 ] && DNS_WANT=3\n", "")')" \
+	"the replica policy"
+
+run_case "cluster-dns-has-a-budget: the installers disagree on the threshold" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "-ge 5 ] && DNS_WANT=3", "-ge 4 ] && DNS_WANT=3")')" \
+	"the replica policy"
+
 # Invariant 41: a secret is minted from a bounded read, by one generator, sourced. The
 # unbounded line comes back, inside a caller and inside the generator; the generator
 # returns short, repeats, or is copied; a caller forgets the source or sources it too
@@ -2370,6 +2430,27 @@ if [ -n "$(git status --porcelain)" ]; then
 	git status --porcelain | head -5
 	exit 1
 fi
+
+# Invariant 44. A cost report refuses a machine type it has no rate for; the three
+# faults are the two ways to count it as zero and the loss of a known rate.
+run_case "cost-live-refuses-unknown-rates: the AWS script counts an unknown type as zero" fail \
+	'./scripts/cost-live-refuses-unknown-rates.sh' \
+	"$(py 'edit("cloud/aws/cost-live.sh", "*)           return 1 ;;", "*)           echo 0 ;;")')" \
+	"counts it as zero"
+
+run_case "cost-live-refuses-unknown-rates: the GCP script counts an unknown type as zero" fail \
+	'./scripts/cost-live-refuses-unknown-rates.sh' \
+	"$(py 'edit("cloud/gcp/cost-live.sh", "*)              return 1 ;;", "*)              echo 0 ;;")')" \
+	"counts it as zero"
+
+run_case "cost-live-refuses-unknown-rates: the m7i.xlarge row is removed" fail \
+	'./scripts/cost-live-refuses-unknown-rates.sh' \
+	"$(py 'edit("cloud/aws/cost-live.sh", "    m7i.xlarge)  echo 0.2415 ;;\n", "")')" \
+	"a known type must price and exit 0"
+
+run_case "cost-live-refuses-unknown-rates: a reworded comment is not a fault" pass \
+	'./scripts/cost-live-refuses-unknown-rates.sh' \
+	"$(py 'edit("cloud/aws/cost-live.sh", "# eu-central-1, on demand, Linux, shared tenancy.", "# eu-central-1, on demand, Linux, shared tenancy (reworded).")')"
 
 if [ "$failures" -gt 0 ]; then
 	printf '%d of %d cases failed.\n' "$failures" "$cases"

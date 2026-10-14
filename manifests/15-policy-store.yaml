@@ -119,7 +119,7 @@ spec:
         # invariant 43 names. Changing this on an EXISTING StatefulSet is
         # refused by the API server (`spec.volumeClaimTemplates` is immutable):
         # an existing cluster keeps its volume until a planned migration, see
-        # GOTCHAS 127.
+        # GOTCHAS 129.
         storageClassName: stack-policy
         resources:
           requests:

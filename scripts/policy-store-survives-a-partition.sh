@@ -10,7 +10,7 @@
 # (GOTCHAS 14). On 2026-10-14 (GCP, stack-k8s v1.1.44) a two-minute network cut
 # of the node that held its engine left every replica of its volume in error:
 # the volume had no backend, the kubelet's format step then ran against a device
-# it could not read, and Postgres refused to start afterwards (GOTCHAS 127).
+# it could not read, and Postgres refused to start afterwards (GOTCHAS 129).
 # The class below is the part of the fix that Longhorn's default class does not
 # give: a replica on the workload's node (dataLocality best-effort) so the
 # engine keeps one healthy replica when the other nodes are unreachable, the
@@ -41,7 +41,7 @@
 #
 # It reads text. It does not show that Longhorn schedules a replica on the
 # workload's node, or that a partitioned engine keeps serving. That is the live
-# partition run, which is not a gate. See GOTCHAS 127.
+# partition run, which is not a gate. See GOTCHAS 129.
 set -uo pipefail
 
 cd "$(dirname "$0")/.."

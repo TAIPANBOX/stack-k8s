@@ -62,7 +62,7 @@
 # the same credential either way.
 #
 # Needs typryx v0.2.0 or later: v0.1.0 predates typryx#6 and ignores this
-# variable (GOTCHAS 106). This file pins v0.4.0, the first release with the
+# variable (GOTCHAS 106). This file pins v0.4.1; v0.4.0 is the first release with the
 # `wardryx-proxy` subcommand that manifests/56 runs from this same image (v0.3.0
 # was the first to read TYPRYX_TRAINING_DIR, below, and to accept a distribution
 # rounded to four decimals). @measured on kind v0.33, 2026-09-26,
@@ -225,7 +225,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: typryx
-          image: ghcr.io/taipanbox/typryx:v0.4.0
+          image: ghcr.io/taipanbox/typryx:v0.4.1
           imagePullPolicy: IfNotPresent
           # ENTRYPOINT defaults to `serve`; TYPRYX_ADDR and TYPRYX_TEMPLATES
           # are baked into the image (0.0.0.0:4320, the three example

@@ -1,6 +1,6 @@
 # Evidence: go-to-market-2026-09/evidence/gcp-2026-10-14b/logs/D/d7-* (GCP, stack-k8s v1.1.44, 2026-10-14):
 # a two-minute cut of the node under the policy store's engine left every replica in error, and the store
-# refused to start on the volume afterwards (GOTCHAS 127). Which replica sat on which node is not in that
+# refused to start on the volume afterwards (GOTCHAS 129). Which replica sat on which node is not in that
 # evidence; the live partition rerun decides it.
 # Scenarios are bound to cases in scripts/gates-have-teeth.sh by name.
 # They check the text that configures the volume, not a running partition.
@@ -83,14 +83,14 @@ Feature: the policy store keeps a readable copy of its data when the node under 
   Scenario: a deploy stops before it applies onto a store on the old class
     Given the policy-db StatefulSet already exists with its claim on the default class
     When the deploy reaches the step that applies the manifests
-    Then it stops before the apply, with one sentence that names the migration in GOTCHAS 127
+    Then it stops before the apply, with one sentence that names the migration in GOTCHAS 129
     # -> gates-have-teeth.sh "policy-store-refuses-an-old-claim: the guard lets an old claim through"
 
   Scenario: the refusal still names the migration
     Given the policy-db StatefulSet already exists on the old class
     When the refusal is printed
-    Then it names GOTCHAS 127, so the reader knows where the steps are
-    # -> gates-have-teeth.sh "policy-store-refuses-an-old-claim: the refusal loses its pointer to GOTCHAS 127"
+    Then it names GOTCHAS 129, so the reader knows where the steps are
+    # -> gates-have-teeth.sh "policy-store-refuses-an-old-claim: the refusal loses its pointer to GOTCHAS 129"
 
   Scenario: a cluster that cannot be asked is not applied onto
     Given the cluster cannot say whether policy-db exists

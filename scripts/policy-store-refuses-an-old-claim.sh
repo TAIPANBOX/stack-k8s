@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Enforces the refusal half of invariant 43 in CLAUDE.md: a deploy that would apply
 # the manifests onto a cluster whose policy-db claim is on another class stops,
-# with one sentence naming GOTCHAS 127, BEFORE the first `apply -k`.
+# with one sentence naming GOTCHAS 129, BEFORE the first `apply -k`.
 #
 # WHY
 #
@@ -18,7 +18,7 @@
 #    six scenarios, and each run must end as stated:
 #      fresh              no policy-db: returns, and the apply runs
 #      stack              policy-db on stack-policy: returns, and the apply runs
-#      old                policy-db on longhorn: refuses, names GOTCHAS 127, no apply
+#      old                policy-db on longhorn: refuses, names GOTCHAS 129, no apply
 #      default            policy-db with no class: refuses, names the default class, no apply
 #      unreachable-name   the cluster cannot be asked: refuses, no apply
 #      unreachable-class  the claim cannot be read: refuses, no apply
@@ -103,7 +103,7 @@ SCENARIOS = {
     "unreachable-name": ("refuse", "could not ask the cluster"),
     "unreachable-class": ("refuse", "could not read policy-db's claim class"),
 }
-REFUSAL_MUST_NAME = "GOTCHAS 127"
+REFUSAL_MUST_NAME = "GOTCHAS 129"
 
 tmp = tempfile.mkdtemp(prefix="policy-guard-")
 try:

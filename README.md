@@ -319,6 +319,34 @@ declared tools carry an injection finding. Every gateway this launcher starts ru
   --firewall shadow
 ```
 
+### Which models an agent may use
+
+wardryx v1.5.0 can name the models a policy's agents may use. A policy that sets
+`allow_models` denies a model call whose `model` matches none of its entries, so an agent
+that switches to a model its policy does not name is refused on that call. Entries are
+model ids or globs (`*` any run of characters, `?` exactly one), matched exactly. This
+launcher writes no such policy, so nothing is restricted until you write one, through the
+same policy API as the typed risk rule above:
+
+```bash
+ADMIN_KEY="$(kubectl -n agent-stack get secret stack-keys -o jsonpath='{.data.wardryx_admin}' | base64 -d)"
+kubectl -n agent-stack port-forward svc/wardryx 8090:8090 &
+curl -X PUT localhost:8090/v1/policies/support-models \
+  -H "Authorization: Bearer $ADMIN_KEY" -H "Content-Type: application/json" \
+  -d '{"target": "agent://acme.example/support/*",
+       "allow_models": ["claude-sonnet-*", "claude-haiku-5"]}'
+```
+
+- An empty or absent list restricts nothing. Tool calls are not judged by this rule. TokenFuse
+  sends `unknown` when a model call names no model, and a list refuses that unless it names
+  `unknown`.
+- The rule runs before the cost gate, so no approval token lifts it, and a decision under a
+  policy that sets it is never cacheable.
+- Rollback: a wardryx older than v1.5.0 refuses a policy file that uses `allow_models` at
+  start, which is loud. A policy stored through the API is read without that check, so an
+  older build would drop the list without a word. Remove `allow_models` from stored policies
+  before rolling back.
+
 ### Personal data in prompts
 
 The gateway and the MCP broker look for email addresses, card numbers and international phone
@@ -413,7 +441,7 @@ splits each `secret:key_id` entry on its LAST colon, so a URI there turns
 `manifests/52-tokenfuse-mcp-broker.yaml` has the full story: why two Secrets
 rather than one, what its NetworkPolicies admit, and what was measured
 through it on kind (it needs typryx v0.2.0 or later; `51-typryx.yaml` pins
-v0.4.0; GOTCHAS 106). Reaching typryx directly,
+v0.4.1; GOTCHAS 106). Reaching typryx directly,
 without the broker, is unchanged, over your own tunnel or
 
 ```bash
@@ -488,7 +516,7 @@ How each mode behaves, because the defaults are deliberate:
 ship models for customers. A customer can fine-tune and calibrate their own model
 on their own data, and typryx gives them what they need to do it. Add
 `--typed-training` to any launcher, next to `--with-typed` or a `--typed-mode`,
-and typryx (v0.3.0 or later; `51-typryx.yaml` pins v0.4.0) keeps a local training
+and typryx (v0.3.0 or later; `51-typryx.yaml` pins v0.4.1) keeps a local training
 log: one line per answered question holding the state the template let through
 and the identity of the answer, never the backend's answer or its probabilities.
 You post what actually happened to `/v1/outcome`, and `typryx export --training`
@@ -544,8 +572,9 @@ launchers.
 
 Use this when you want a person to approve a tool call because a classifier says
 it is probably destructive, an external send, or a money movement. It needs
-typryx deployed (`--with-typed`, or a `--typed-mode`), a wardryx of v1.2.0 or
-later, and a policy rule you write. All of it is off by default.
+typryx deployed (`--with-typed`, or a `--typed-mode`), a wardryx of v1.4.0 or
+later (v1.2.0 for the rule alone; `when_absent` needs v1.4.0), and a policy rule you
+write. All of it is off by default.
 
 ```bash
 ./deploy.sh ... --with-typed --typed-risk-signal           # the free stub backend
@@ -586,12 +615,25 @@ curl -X PUT localhost:8090/v1/policies/support-risk \
   -d '{"target": "agent://acme.example/support/*",
        "hold_if_signal": {"name": "action.risk_class",
                           "values": ["destructive", "external_send", "financial"],
-                          "min_probability": 0.8}}'
+                          "min_probability": 0.8,
+                          "when_absent": "hold"}}'
 ```
 
 A call the rule holds waits for a person to approve it in the console; the
 approval is bound to the exact call they read (wardryx v1.2.0), so the same
 arguments re-spaced are another call.
+
+**A missing signal.** Without `when_absent`, a tool call that reaches wardryx with no
+`action.risk_class` signal is allowed as if it were harmless. That is what a call padded
+past the 12 KiB argument cap gets (sent with `arguments_truncated` and no arguments), and
+what a typryx that is out of budget, timed out or down leaves behind. With
+`"when_absent": "hold"` such a call waits for a person instead. A model call, which has
+no tool call yet, is never held for a missing signal. The cost is that every tool call
+typryx does not answer waits for a person, a typryx outage included. wardryx v1.4.0 measured
+13,312 and 65,536 byte calls with no signal allowed before this option existed. Keep
+single-use on, which is the default: leave `WARDRYX_APPROVAL_SINGLE_USE` unset. A padded
+call carries no arguments, so one approval fits every padded call to the same tool and
+target, and single-use lets exactly one of them through.
 
 **Not proven.** Checked without a cluster: every mode renders with the flag to
 schema-valid manifests (`kubeconform --strict`), the gate in
@@ -614,7 +656,7 @@ apply (`agent-conform`, in `40-routines-and-secrets.yaml`) runs it every 15
 minutes over the bus. A break becomes a `chain_broken` event (high) in
 `agent-conform.ndjson` on the bus, where heraldyx and the console already read; a
 chain with no `prev_hash` at all is reported once as `chain_unchained` (low),
-since the field is optional. heraldyx v0.5.0, the version pinned here, has its own
+since the field is optional. heraldyx v0.6.0, the version pinned here, has its own
 sentence for `chain_broken`: it names the break and says that nothing was repaired,
 quarantined or stopped.
 
@@ -631,7 +673,7 @@ quarantined or stopped.
 - **What it cannot see.** `prev_hash` is unkeyed: a writer compromised in its own
   uid can forge its own stream with a valid chain, and truncation from the end is
   invisible. Only signing closes those.
-- **File names.** heraldyx v0.5.0 and idryx v1.2.0 refuse an event whose `source`
+- **File names.** heraldyx v0.6.0 and idryx v1.2.1 refuse an event whose `source`
   is not allowed for the file it was read from (`<source>.ndjson` carries
   `<source>`; `tokenfuse-cloud.ndjson` and `tokenfuse-mcp.ndjson` carry
   `tokenfuse`). Every stream this launcher names already matches, and
@@ -776,7 +818,7 @@ sides use one secret, and it is off unless you turn it on:
 ```
 
 A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
-console v1.1.34 or later. The images pinned here are tokenfuse v1.13.1 and console v1.1.44,
+console v1.1.34 or later. The images pinned here are tokenfuse v1.13.2 and console v1.1.44,
 both later than those minimums; an older image
 ignores the setting.
 
@@ -897,7 +939,7 @@ down:
 
 The command output behind every sentence above is in `evidence/` and
 `cloud/*/evidence/`. Every trap the runs cost us is written up in
-`GOTCHAS.md`, now **126 items** (46 platform, 57 ours, 16 the stack's own
+`GOTCHAS.md`, now **128 items** (47 platform, 58 ours, 16 the stack's own
 contract, 7 upstream; `scripts/gotchas-classified.sh` prints the current split). Almost all are already fixed here, which is the whole
 point: the next person to run this should not meet any of them. A small
 number (69, 81) are recorded rather than solved, and say so plainly rather

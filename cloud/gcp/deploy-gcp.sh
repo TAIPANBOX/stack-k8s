@@ -656,7 +656,7 @@ TUNNEL_PORT="${TUNNEL_PORT:-17420}"
 
 # ---- 3. the workload --------------------------------------------------------
 say "step 3/5: the workload"
-policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 127: refuse before anything is applied
+policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 129: refuse before anything is applied
 tar -cz -C "$ROOT" manifests | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
 k_ "apply -k /root/stack-k8s/manifests"
 

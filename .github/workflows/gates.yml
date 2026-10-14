@@ -198,6 +198,12 @@ jobs:
       - name: a secret is minted from a bounded read (invariant 41)
         run: ./scripts/gen-is-bounded.sh
 
+      # Added 2026-10-14, in BOTH callers on the same commit. k3s ships coredns with no
+      # disruption budget; the installers add one of their own and never patch k3s's
+      # Deployment. See CLAUDE.md invariant 45 and GOTCHAS 128.
+      - name: cluster DNS keeps a replica through a drain (invariant 45)
+        run: ./scripts/cluster-dns-has-a-budget.sh
+
       # Added 2026-10-04. The on-box chain verifier (agent-stack-go v1.1.0):
       # in the default install, every 15 minutes, on the bus, its memory on a
       # claim that already exists, a new break kept visible. See CLAUDE.md
@@ -275,6 +281,11 @@ jobs:
       # See CLAUDE.md invariant 42 and GOTCHAS 126.
       - name: the typed-answer door is minted by the deploy (invariant 42)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/typed-door-is-minted.sh
+
+      # Added 2026-10-14 with invariant 44. A cost report that meets a machine type with no
+      # rate exits non-zero and names it, instead of counting it as zero. See GOTCHAS 127.
+      - name: a cost report refuses an unknown machine rate (invariant 44)
+        run: ./scripts/cost-live-refuses-unknown-rates.sh
 
       # Last, because it mutates tracked files and restores them. It needs a
       # clean tree and says so plainly, so it also reports any earlier step
