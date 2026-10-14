@@ -704,7 +704,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.13.1\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.13.2\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 # The gateway's declassify key (invariant 27). POST /v1/fuse/declassify lifts a
@@ -759,7 +759,7 @@ run_case "declassify-is-keyed: an installer never gives an existing Secret the k
 # Each must say it measured nothing, never OK.
 run_case "declassify-is-keyed: no gateway container left to judge" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.13.1\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.13.2\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the declassify key"
 
 run_case "declassify-is-keyed: no installer left to read" fail \
@@ -1163,7 +1163,7 @@ run_case "typed-mode-is-honest: a launcher stops forwarding --typed-training" fa
 
 run_case "typed-mode-is-honest: the typryx pin goes back before the wardryx-proxy" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.0", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
+	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.1", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
 	"older than v0.4.0"
 
 run_case "typed-mode-is-honest: a document names a second typryx tag" fail \
@@ -1173,8 +1173,8 @@ run_case "typed-mode-is-honest: a document names a second typryx tag" fail \
 
 run_case "typed-mode-is-honest: the typryx image is no longer named" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.0", "image: example.invalid/typ:v0.4.0")
-edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.0", "image: example.invalid/typ:v0.4.0")')" \
+	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.1", "image: example.invalid/typ:v0.4.0")
+edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.1", "image: example.invalid/typ:v0.4.0")')" \
 	"measured nothing about the typryx pin"
 
 run_case "typed-mode-is-honest: a comment in the training section changes" pass \
@@ -1247,7 +1247,7 @@ run_case "run-budget-ceiling-is-set: a comment next to the ceiling changes" pass
 
 run_case "run-budget-ceiling-is-set: no gateway container left to judge" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.13.1\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.13.2\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')" \
 	"measured nothing about the run-budget ceiling"
 
 run_case "run-budget-ceiling-is-set: budget/ceiling.sh taken away" fail \
@@ -1373,7 +1373,7 @@ run_case "typed-mode-is-honest: a launcher stops forwarding --typed-risk-signal"
 
 run_case "typed-mode-is-honest: the proxy runs another typryx tag than typryx" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.0", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.1", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
 	"different tags"
 
 run_case "typed-mode-is-honest: the proxy runs the service, not the proxy" fail \

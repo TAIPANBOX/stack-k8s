@@ -137,7 +137,7 @@ spec:
         - name: proxy
           # The typryx image, as pinned for typryx itself (51-typryx.yaml): the
           # `wardryx-proxy` subcommand ships in v0.4.0 and later.
-          image: ghcr.io/taipanbox/typryx:v0.4.0
+          image: ghcr.io/taipanbox/typryx:v0.4.1
           imagePullPolicy: IfNotPresent
           args: ["wardryx-proxy"]
           env:
