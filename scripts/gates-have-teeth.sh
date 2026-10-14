@@ -2523,7 +2523,7 @@ run_case "shell-scripts-parse: a script uses a bash-4-only construct" fail \
 	"$(py 'p = "verify.sh"
 s = open(p).read()
 open(p, "w").write(s + "\ndeclare -A seen\n")')" \
-	"bash-4-only construct"
+	"(bash 4 only)"
 
 # Invariant 47: node checks read only the lines their probe printed.
 run_case "node-checks-read-their-own-answer: an ssh call outside the helper" fail \
