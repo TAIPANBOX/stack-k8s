@@ -8,7 +8,7 @@
 #
 # The two sealing binaries, `trailryx-node` and `trailryx-verify`, built from a
 # trailryx checkout. The same binaries are published: ghcr.io/taipanbox/trailryx-node
-# carries both, and the manifests pull that image by tag (v1.2.0 today). So no
+# carries both, and the manifests pull that image by tag (v1.2.1 today). So no
 # manifest names `stack/trailryx:dev`, and nothing that runs reads this build.
 #
 # It is here for a source build: a trailryx checkout that is not released yet,
