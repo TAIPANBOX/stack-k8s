@@ -18,11 +18,15 @@
 # source tree here, no large checkout. It needs ssh, curl and the terraform and
 # aws CLIs, which is what preflight.sh checks.
 #
-# The open stack needs NO credentials: wardryx, idryx, qryx, mockryx, tokenfuse,
-# verdryx and engram are public. The Genaryx console is the one closed piece, so
-# `--console-token <github-token>` is what adds it. Leave it out and you get the
-# governed stack without the control room, which is a real deployment and not a
-# crippled one: the planes enforce with or without a UI in front of them.
+# The stack needs NO credentials: wardryx, idryx, qryx, mockryx, tokenfuse,
+# verdryx, engram and the Genaryx console are all public. The console is cloned
+# from TAIPANBOX/genaryx without a token; `--console-token <github-token>` is only
+# for building it from a private fork of your own.
+#
+# `--copilot-key-file <path>` additionally points the console's copilot at a
+# cloud model, reading the key from that file. It is METERED on that key's
+# account rather than on the cluster, which is why it is a flag and not a
+# default, and why the key is a file rather than an argument.
 #
 # `--firewall <enforce|shadow|off>` sets the agent firewall's mode on the gateway (TokenFuse
 # invariants 25 to 27 and 93). Without it the manifest's enforce stands. Checked by
@@ -93,6 +97,7 @@ SERVERS=""; AGENTS=""
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/stack-k8s-aws}"
 SSH_USER="${SSH_USER:-ubuntu}"
 CONSOLE_TOKEN="${CONSOLE_TOKEN:-}"
+COPILOT_KEY_FILE="${COPILOT_KEY_FILE:-}"
 # Notifications, exactly as ../../deploy.sh asks for them. There is deliberately
 # no --smtp-password: a secret on a command line is in `ps` for every user on
 # the machine for as long as this runs, and in the shell history afterwards.
@@ -166,6 +171,7 @@ while [ $# -gt 0 ]; do
     --agents)        AGENTS="$2"; shift 2 ;;
     --ssh-key)       SSH_KEY="$2"; shift 2 ;;
     --console-token) CONSOLE_TOKEN="$2"; shift 2 ;;
+    --copilot-key-file) COPILOT_KEY_FILE="$2"; shift 2 ;;
     --alert-to)      ALERT_TO="$2"; ALERT_ASKED=1; shift 2 ;;
     --no-alerts)     ALERT_TO=""; ALERT_ASKED=1; shift ;;
     --smtp-host)     SMTP_HOST="$2"; shift 2 ;;
@@ -724,6 +730,37 @@ done
 k_ "-n agent-stack rollout status statefulset/policy-db --timeout=300s" || true
 
 install_alerts
+
+# ---- Felyx on a cloud model, if a key was handed over ----------------------
+# Opt-in, one flag, and part of the SCRIPT rather than a command someone runs
+# afterwards: a step that only the author knows about is a step the next
+# operator does not get. Without the flag the console keeps the local-first
+# provider from 20-console.yaml and nothing bills a model account.
+#
+# The key travels on STDIN, never as an argument: an argument is visible in the
+# node's process list to anyone with a shell on it, and lands in history on the
+# way there. It is written with umask 077, read once by kubectl, and shredded.
+if [ -n "$COPILOT_KEY_FILE" ]; then
+  if [ ! -s "$COPILOT_KEY_FILE" ]; then
+    die "--copilot-key-file $COPILOT_KEY_FILE is missing or empty"
+  fi
+  say "Felyx: pointing the console's copilot at a cloud model (METERED, on that key's account)"
+  # `sudo umask 077; cat > file` does NOT do what it reads like, and it took a
+  # live run to notice: umask is a shell builtin, so sudo answers
+  # `sudo: 'umask': command not found`, the semicolon ends that command, and the
+  # redirect then runs UNPRIVILEGED and with the default mask, writing the key
+  # 0644. The error is printed, the script continues, and everything downstream
+  # succeeds, so nothing looks wrong. Measured 2026-07-26.
+  tr -d '\r\n' < "$COPILOT_KEY_FILE" | su_ "$FIRST" "sh -c 'umask 077; cat > /tmp/.ck'"
+  k_ "-n agent-stack delete secret stack-copilot --ignore-not-found" >/dev/null 2>&1 || true
+  k_ "-n agent-stack create secret generic stack-copilot --from-file=api_key=/tmp/.ck" >/dev/null \
+    || die "could not create the stack-copilot secret"
+  su_ "$FIRST" "shred -u /tmp/.ck 2>/dev/null || rm -f /tmp/.ck"
+  k_ "-n agent-stack patch deployment genaryx-console --patch-file /root/stack-k8s/manifests/55-copilot-cloud.yaml" >/dev/null \
+    || die "could not apply the copilot patch"
+  k_ "-n agent-stack rollout status deploy/genaryx-console --timeout=240s" >/dev/null 2>&1 || true
+  echo "   Felyx is on claude-sonnet-5, key held in the stack-copilot Secret only"
+fi
 
 # ---- 4 and 5. proof, not vibes ---------------------------------------------
 tar -cz -C "$ROOT" verify.sh security-tests.sh | su_ "$FIRST" 'tar -xz -C /root/stack-k8s'

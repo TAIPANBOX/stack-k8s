@@ -18,11 +18,10 @@
 # Step 2 is why the machine running this script stays light: no Docker here, no
 # source tree here, no large checkout.
 #
-# The open stack needs NO credentials: wardryx, idryx, qryx, mockryx, tokenfuse,
-# verdryx and engram are public. The Genaryx console is the one closed piece, so
-# `--console-token <github-token>` is what adds it. Leave it out and you get the
-# governed stack without the control room, which is a real deployment and not a
-# crippled one: the planes enforce with or without a UI in front of them.
+# The stack needs NO credentials: wardryx, idryx, qryx, mockryx, tokenfuse,
+# verdryx, engram and the Genaryx console are all public. The console is cloned
+# from TAIPANBOX/genaryx without a token; `--console-token <github-token>` is only
+# for building it from a private fork of your own.
 #
 # `--copilot-key-file <path>` additionally points the console's copilot at a
 # cloud model, reading the key from that file. It is METERED on that key's

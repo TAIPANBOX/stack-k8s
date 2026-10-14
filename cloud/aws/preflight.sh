@@ -105,10 +105,9 @@ else
   bad "could not determine your public address"
 fi
 
-# ---- 5. access to the closed piece ----------------------------------------
-# The open stack needs no credentials at all. The Genaryx console is the one
-# closed component, and without it the cluster is a real deployment with no
-# control room, which also means no browser freeze test.
+# ---- 5. access to the Genaryx console -------------------------------------
+# The open stack needs no credentials at all. The Genaryx console is public too,
+# and the cluster gets it without a token. A token is for a private fork only.
 say "github access for the Genaryx console (optional)"
 if [ -n "${CONSOLE_TOKEN:-}" ]; then
   if curl -sf -o /dev/null -H "Authorization: Bearer $CONSOLE_TOKEN" \
@@ -120,9 +119,8 @@ if [ -n "${CONSOLE_TOKEN:-}" ]; then
   fi
 else
   printf '   \033[33mopt\033[0m   %s\n' "CONSOLE_TOKEN not set"
-  note "without it: wardryx, idryx, qryx, mockryx, tokenfuse deploy and enforce,"
-  note "but there is no console, so the browser freeze proof cannot be reproduced."
-  note "with it:    export CONSOLE_TOKEN=<a github token that can read TAIPANBOX/genaryx>"
+  note "not needed: deploy-aws.sh clones the console from the public TAIPANBOX/genaryx"
+  note "without one. Set it only to build from a private fork of your own."
 fi
 
 # ---- 6. write terraform.tfvars --------------------------------------------

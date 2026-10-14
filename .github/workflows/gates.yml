@@ -46,6 +46,12 @@ jobs:
       - name: every deploy path can set the trust domain, after the apply
         run: ./scripts/deploy-flags-agree.sh
 
+      # Added 2026-10-14, in BOTH callers on the same commit. The GCP and AWS launchers are one
+      # launcher for two clouds, so every flag the GCP one takes, the AWS one takes too, or is
+      # allow-listed by name in the gate with its reason (CLAUDE.md invariant 40).
+      - name: the AWS launcher takes every flag the GCP one takes (invariant 40)
+        run: ./scripts/aws-takes-every-gcp-flag.sh
+
       # Added 2026-09-13, in both callers on the same commit. Three installers
       # each carry a copy of the block that generates stack-keys; two of them
       # shipped without the key the manifests had read since 2026-09-07, and

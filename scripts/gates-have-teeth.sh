@@ -586,7 +586,7 @@ run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
 run_case "secret-keys-agree: no installer left to judge" fail \
 	'./scripts/secret-keys-agree.sh' \
 	"$(py 'import os
-for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "delegation/up.sh", "closure/up.sh", "evidence/identity-kind/run.sh"):
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh", "delegation/up.sh", "closure/up.sh", "evidence/identity-kind/run.sh"):
     os.remove(f)')" \
 	"measured NOTHING"
 
@@ -2035,6 +2035,43 @@ run_case "identity-files: verify.sh stops comparing the running map" fail \
 	'IDENTITY_SECTIONS=E ./scripts/identity-files-are-checked.sh' \
 	"$(py 'edit("verify.sh", "annotations.taipanbox\\.dev/identity-map-sha256", "annotations.taipanbox\\.dev/identity-map")')" \
 	"compares what the gateway's pod template says"
+
+# Invariant 40: every flag the GCP launcher takes, the AWS launcher takes too, or
+# allow-lists by name with its reason. The stale-entry case keeps the list honest.
+run_case "aws-takes-every-gcp-flag: the AWS launcher drops --copilot-key-file" fail \
+	'./scripts/aws-takes-every-gcp-flag.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "--copilot-key-file)", "--copilot-key-fil)")')" \
+	"does not take --copilot-key-file"
+
+run_case "aws-takes-every-gcp-flag: a flag only the GCP launcher takes" fail \
+	'./scripts/aws-takes-every-gcp-flag.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "    --skip-images)", "    --probe-gcp-only) PROBE=1; shift ;;\n    --skip-images)")')" \
+	"does not take --probe-gcp-only"
+
+run_case "aws-takes-every-gcp-flag: the GCP option parser is taken away" fail \
+	'./scripts/aws-takes-every-gcp-flag.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "while [ $# -gt 0 ]; do", "while [ $# -gt 0 ] ; do")')" \
+	"measured NOTHING"
+
+run_case "aws-takes-every-gcp-flag: the AWS launcher is taken away" fail \
+	'./scripts/aws-takes-every-gcp-flag.sh' \
+	"$(py 'import os
+os.remove("cloud/aws/deploy-aws.sh")')" \
+	"measured NOTHING"
+
+run_case "aws-takes-every-gcp-flag: a flag only the AWS launcher takes is not a fault" pass \
+	'./scripts/aws-takes-every-gcp-flag.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "    --skip-images)", "    --probe-aws-only) PROBE=1; shift ;;\n    --skip-images)")')"
+
+run_case "aws-takes-every-gcp-flag: a GCP-only flag with an allow-list entry passes" pass \
+	'./scripts/aws-takes-every-gcp-flag.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "    --skip-images)", "    --probe-gcp-only) PROBE=1; shift ;;\n    --skip-images)")
+edit("scripts/aws-takes-every-gcp-flag.sh", "ALLOW=\"\"", "ALLOW=\"--probe-gcp-only|a probe flag for this case\"")')"
+
+run_case "aws-takes-every-gcp-flag: an allow-list entry names a flag GCP does not take" fail \
+	'./scripts/aws-takes-every-gcp-flag.sh' \
+	"$(py 'edit("scripts/aws-takes-every-gcp-flag.sh", "ALLOW=\"\"", "ALLOW=\"--no-such-flag|a flag nobody takes\"")')" \
+	"the allow-list names --no-such-flag"
 
 echo
 if [ -n "$(git status --porcelain)" ]; then

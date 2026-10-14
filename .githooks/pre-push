@@ -44,6 +44,7 @@ step "every manifest validates against the schema" "./scripts/manifests-valid.sh
 step "components.json says what is installed" "./scripts/manifest-is-true.sh"
 step "node names are pinned by the install" "./scripts/node-name-is-pinned.sh"
 step "every deploy path can set the trust domain" "./scripts/deploy-flags-agree.sh"
+step "the AWS launcher takes every flag the GCP one takes" "./scripts/aws-takes-every-gcp-flag.sh"
 step "no pod automounts the default SA token" "./scripts/no-sa-token-by-default.sh"
 step "nothing operator-shaped is tracked" "./scripts/no-operator-files-tracked.sh"
 step "every installer creates every Secret key the manifests read" "./scripts/secret-keys-agree.sh"
