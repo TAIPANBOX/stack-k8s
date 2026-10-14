@@ -153,8 +153,10 @@ terraform init
 terraform plan
 ```
 
-Creates nothing. It should show **14 resources** to add, and no load balancer
-and no Filestore, because neither is on by default.
+Creates nothing. At the defaults (three servers, two agents) it should show
+**15 resources** to add: ten that do not depend on the node count, and one
+instance per node. No load balancer and no Filestore, because neither is on by
+default.
 
 ### 3. Apply (the meter starts here)
 

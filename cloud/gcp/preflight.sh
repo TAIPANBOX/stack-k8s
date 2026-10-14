@@ -351,8 +351,8 @@ if [ -n "${CONSOLE_TOKEN:-}" ]; then
   fi
 else
   printf '   \033[33mopt\033[0m   %s\n' "CONSOLE_TOKEN not set"
-  note "without it: wardryx, idryx, qryx, mockryx, tokenfuse deploy and enforce,"
-  note "but there is no console, so the browser freeze proof cannot be reproduced."
+  note "not needed: deploy-gcp.sh clones the console from the public TAIPANBOX/genaryx"
+  note "without one. Set it only to build from a private fork of your own."
 fi
 
 # ---- 10. write terraform.tfvars -------------------------------------------
