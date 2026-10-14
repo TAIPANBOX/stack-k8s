@@ -111,6 +111,16 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
+        # Named, not left to the default class. The default is Longhorn's
+        # `longhorn`, which runs with dataLocality disabled and the revision
+        # counter off: when every replica is faulted, the volume can then have
+        # no readable copy on the node the store runs on. `stack-policy` is
+        # created by each Longhorn installer with the settings CLAUDE.md
+        # invariant 43 names. Changing this on an EXISTING StatefulSet is
+        # refused by the API server (`spec.volumeClaimTemplates` is immutable):
+        # an existing cluster keeps its volume until a planned migration, see
+        # GOTCHAS 129.
+        storageClassName: stack-policy
         resources:
           requests:
             storage: 5Gi

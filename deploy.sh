@@ -257,6 +257,7 @@ fi
 # The one secret generator (CLAUDE.md invariant 41): a bounded read, so it ends whatever
 # SIGPIPE is set to. Sourced here, once the checkout is known, for the operator password.
 . "$ROOT/lib/gen.sh" || die "no lib/gen.sh in $ROOT"
+. "$ROOT/lib/policy-store.sh" || die "no lib/policy-store.sh in $ROOT"
 
 # ---- the typed data mode, refused BEFORE anything is installed ---------------
 # typed/mode.sh is the one copy of this check (CLAUDE.md invariant 26). Run here
@@ -619,6 +620,7 @@ fi
 
 # ---- 3. the workload --------------------------------------------------------
 say "step 3/5: the workload"
+policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 129: refuse before anything is applied
 tar -cz -C "$ROOT" manifests | sh_ "$FIRST" 'mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s'
 k_ "apply -k /root/stack-k8s/manifests"
 

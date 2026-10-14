@@ -99,6 +99,12 @@ jobs:
       - name: Longhorn releases a dead node's volumes (invariant 22)
         run: ./scripts/longhorn-releases-a-dead-node.sh
 
+      - name: the policy store keeps a readable replica (invariant 43)
+        run: ./scripts/policy-store-survives-a-partition.sh
+
+      - name: a deploy refuses an old policy-db claim before apply (invariant 43)
+        run: ./scripts/policy-store-refuses-an-old-claim.sh
+
       # manifests/53-hub-entry.yaml is opt-in and, unlike every other gate
       # here, publishes something on purpose: a second site's one way in.
       # Nothing above catches a route that widens, a missing catch-all, or a
