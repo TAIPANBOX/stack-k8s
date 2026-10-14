@@ -140,6 +140,14 @@ for p in installers:
                 problems.append(f"{p}: put_graceful_shutdown does not {need_s!r}, so the node is not given the shutdown setting")
 
     lines = dict(code_lines(p))
+    # An installer that has lost its server invocation still has agent ones, so it is
+    # found above and the per-invocation checks pass. The first node's file is then
+    # never checked: the gap a renamed server invocation opened. The pattern is joined
+    # from pieces so that this file is not itself read as an installer by the other
+    # install gates, which scan every tracked script.
+    server_call = re.compile(r"sh -s - " + "serv" + r"er\b")
+    if not [n for n, l in lines.items() if server_call.search(l)]:
+        problems.append(f"{p}: no k3s server install invocation, so the first node's shutdown file cannot be checked")
     installs = [(n, l) for n, l in lines.items() if re.search(r'(?:sh_|su_) ("\$FIRST"|"\$n") "INSTALL_K3S_VERSION=', l)]
     if not installs:
         problems.append(f"{p}: no k3s install invocation found, so this cannot tell where the file has to be written")

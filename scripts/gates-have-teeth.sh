@@ -2493,13 +2493,22 @@ run_case "nodes-stop-their-pods-first: verify.sh stops counting a crash loop" fa
 	"$(py 'edit("verify.sh", "!($1 in gone) && $3 != \"Running\" && $3 != \"Completed\" { c++ }", "!($1 in gone) && $3 != \"Running\" && $3 != \"Completed\" && $3 != \"CrashLoopBackOff\" { c++ }")')" \
 	"did not report exactly one bad pod"
 
-run_case "nodes-stop-their-pods-first: no installer is left to judge" fail \
+run_case "nodes-stop-their-pods-first: every installer loses its server install" fail \
 	'./scripts/nodes-stop-their-pods-first.sh' \
 	"$(py 'for p in ("install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"):
     s = open(p).read()
     k = "sh -s - " + "serv" + "er"
     assert k in s
     open(p, "w").write(s.replace(k, "sh -s - serve"))')" \
+	"no k3s server install invocation"
+
+run_case "nodes-stop-their-pods-first: no installer is left to judge" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'for p in ("install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"):
+    s = open(p).read()
+    k = "INSTALL_K3S_" + "VERSION="
+    assert k in s
+    open(p, "w").write(s.replace(k, "INSTALL_K3S_" + "VERSIONX="))')" \
 	"measured NOTHING"
 
 if [ "$failures" -gt 0 ]; then
