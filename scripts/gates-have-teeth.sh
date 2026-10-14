@@ -76,10 +76,54 @@
 # green in CI while reporting WRONG REASON here, so a case that only ever
 # runs in CI is not proven at all.
 
+# A running bash reads its script file as it goes. The cases below edit this file
+# and then `git reset` it, which replaces the file under the shell; a shell still
+# reading the old inode would parse the edited bytes (found on 2026-10-14, when a
+# planted filter made shard 1 stop with a syntax error). So the run continues
+# from a copy of itself that no case touches. The copy is removed on exit.
+if [ "${TEETH_RUN_COPY:-}" != "$0" ]; then
+	run_copy="$(mktemp)" || exit 1
+	cp "$0" "$run_copy" || exit 1
+	TEETH_RUN_COPY="$run_copy" exec "$BASH" "$run_copy" "$@"
+fi
+discard_copy() {
+	if [ "${TEETH_RUN_COPY:-}" = "$0" ]; then
+		rm -f "$0"
+	fi
+}
+trap discard_copy EXIT
+
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
-if [ -n "$(git status --porcelain)" ]; then
+# Two switches, read before anything else. Unset, a run is exactly what it was.
+#
+# TEETH_SHARD=i/N runs only the cases whose position k (1-based, in the order
+# they are written) has (k - 1) % N == i - 1. CI runs the four shards in four
+# jobs; scripts/teeth-shards-cover-every-case.sh proves that together they run
+# every case once.
+#
+# TEETH_LIST=1 prints each case name, one per line, and runs none of them. It
+# mutates nothing, so it must not reset a tree that holds someone's work: the
+# listing writes to fd 3, everything else goes to /dev/null, and restore() is a
+# no-op while listing.
+shard_i=""
+shard_n=""
+ran=0
+if [ -n "${TEETH_SHARD:-}" ]; then
+	shard_i="${TEETH_SHARD%/*}"
+	shard_n="${TEETH_SHARD#*/}"
+	if ! printf '%s' "$TEETH_SHARD" | grep -Eq '^[0-9]+/[0-9]+$' ||
+		[ "$shard_i" -lt 1 ] || [ "$shard_i" -gt "$shard_n" ]; then
+		printf 'TEETH_SHARD must be i/N with 1 <= i <= N, not "%s"\n' "$TEETH_SHARD"
+		exit 1
+	fi
+fi
+if [ "${TEETH_LIST:-}" = 1 ]; then
+	exec 3>&1 1>/dev/null
+fi
+
+if [ "${TEETH_LIST:-}" != 1 ] && [ -n "$(git status --porcelain)" ]; then
 	printf 'this script mutates tracked files, so it needs a clean tree.\n'
 	printf 'commit or stash first; it restores with `git checkout` and cannot\n'
 	printf 'tell your edits from its own.\n'
@@ -94,6 +138,9 @@ fi
 # during a run was created by the run. `-x` is deliberately absent: ignored
 # build output is not ours to delete.
 restore() {
+	if [ "${TEETH_LIST:-}" = 1 ]; then
+		return 0
+	fi
 	git reset -q --hard HEAD 2>/dev/null
 	git clean -fdq 2>/dev/null
 }
@@ -105,6 +152,7 @@ baseline_dir="$(mktemp -d)"
 cleanup() {
 	restore
 	rm -rf "$baseline_dir"
+	discard_copy
 }
 trap cleanup EXIT INT TERM
 
@@ -120,6 +168,17 @@ cases=0
 run_case() {
 	local name="$1" expect="$2" gate="$3" edit="$4" needle="${5:-}"
 	cases=$((cases + 1))
+
+	# Position k of this case decides its shard (see the head). A case outside
+	# this shard is neither run nor judged here; the shard that owns it runs it.
+	if [ -n "$shard_i" ] && [ $(( (cases - 1) % shard_n )) -ne $((shard_i - 1)) ]; then
+		return
+	fi
+	if [ "${TEETH_LIST:-}" = 1 ]; then
+		printf '%s\n' "$name" >&3
+		return
+	fi
+	ran=$((ran + 1))
 
 	# The baseline applies to EVERY case, not only the ones expecting a failure.
 	# It was `fail`-only until 2026-08-09, which left the mirror of the bug it was
@@ -2425,7 +2484,7 @@ run_case "typed-door-is-minted: no launcher is left to judge" fail \
 	"measured NOTHING about the launchers"
 
 echo
-if [ -n "$(git status --porcelain)" ]; then
+if [ "${TEETH_LIST:-}" != 1 ] && [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'
 	git status --porcelain | head -5
 	exit 1
@@ -2578,12 +2637,54 @@ run_case "servers-encrypt-secrets: section 7 stops expecting encryption" fail \
 	"$(py 'edit("security-tests.sh", "bad \"the Secret is plaintext in etcd, so", "bad \"the Secret is in etcd, so")')" \
 	"section 7 no longer reports"
 
+# Invariant 49. The teeth run is split into CI shards, and a case that falls in no
+# shard, or in two, changes no exit code, so nothing else would notice. These cases
+# plant the split's own faults: the shard filter, the listing and the CI matrix.
+# The planted faults are in the runner and the workflow, never in a gate. The
+# cover gate is judged by what it lists, and its listing runs no case.
+
+run_case "teeth-shards-cover-every-case: the shard filter uses one shard too many" fail \
+	'./scripts/teeth-shards-cover-every-case.sh' \
+	"$(py 'edit("scripts/gates-have-teeth.sh", "% shard_n )) -ne", "% (shard_n + 1) )) -ne")')" \
+	"do not cover the whole list"
+
+run_case "teeth-shards-cover-every-case: the listing prints nothing" fail \
+	'./scripts/teeth-shards-cover-every-case.sh' \
+	"$(py 'edit("scripts/gates-have-teeth.sh", "printf \x27%s\\n\x27 \"$name\" >&3", ":")')" \
+	"measured nothing"
+
+run_case "teeth-shards-cover-every-case: the CI matrix runs three shards" fail \
+	'./scripts/teeth-shards-cover-every-case.sh' \
+	"$(py 'edit(".github/workflows/gates.yml", "shard: [1, 2, 3, 4]", "shard: [1, 2, 3]")')" \
+	"does not run every shard"
+
+run_case "teeth-shards-cover-every-case: a reworded comment is not a fault" pass \
+	'./scripts/teeth-shards-cover-every-case.sh' \
+	"$(py 'edit("scripts/gates-have-teeth.sh", "# Position k of this case decides its shard (see the head). A case outside", "# Position k of this case decides its shard (see the head, reworded). A case outside")')"
+
+# A listing is not a run. Stop before the verdict, which would count cases this
+# listing did not take.
+if [ "${TEETH_LIST:-}" = 1 ]; then
+	exit 0
+fi
+
+# A shard that owns no case has measured nothing, and CI must not show it green.
+if [ -n "$shard_i" ] && [ "$ran" -eq 0 ]; then
+	printf 'shard %s/%s owns no case, so it measured NOTHING\n' "$shard_i" "$shard_n"
+	failures=$((failures + 1))
+fi
+
+scope=""
+if [ -n "$shard_i" ]; then
+	scope=" (shard $shard_i/$shard_n of $cases)"
+fi
+
 if [ "$failures" -gt 0 ]; then
-	printf '%d of %d cases failed.\n' "$failures" "$cases"
+	printf '%d of %d cases failed%s.\n' "$failures" "$ran" "$scope"
 	printf 'A gate that has quietly stopped catching anything looks exactly like a gate\n'
 	printf 'with nothing to catch, and stays that way until the fault it guards ships.\n'
 	exit 1
 fi
 
-printf 'OK: %d cases. Every gate fails on its own fault, passes on a non-fault,\n' "$cases"
+printf 'OK: %d cases%s. Every gate fails on its own fault, passes on a non-fault,\n' "$ran" "$scope"
 printf '    and refuses to report success when it measured nothing.\n'

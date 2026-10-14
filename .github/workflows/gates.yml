@@ -13,8 +13,11 @@ on:
 permissions:
   contents: read
 
+# The gates run in two jobs. `fast-gates` holds every check below except the
+# teeth run; `teeth` runs that run in four shards at once; `gates` is the one
+# required check, and it passes only when both succeeded.
 jobs:
-  gates:
+  fast-gates:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -296,8 +299,52 @@ jobs:
       - name: a cost report refuses an unknown machine rate (invariant 44)
         run: ./scripts/cost-live-refuses-unknown-rates.sh
 
-      # Last, because it mutates tracked files and restores them. It needs a
-      # clean tree and says so plainly, so it also reports any earlier step
-      # that starts writing into the checkout.
-      - name: the gates above can still fail
+      # Invariant 49. The teeth run below is split into four shards, and a case
+      # that falls in no shard, or in two, changes no exit code. This lists the
+      # whole run and each shard without running any case, and compares them.
+      - name: the teeth shards cover every case once (invariant 49)
+        run: ./scripts/teeth-shards-cover-every-case.sh
+
+  # The teeth run (invariant 9), split into four shards that run in parallel.
+  # Each shard runs the cases whose position is its own number mod 4; the cover
+  # step above proves that together they run every case once. The setup is the
+  # fast job's, because the cases run the gates above. Standard runners: the
+  # repository is public.
+  teeth:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.2"
+
+      - name: install kubeconform
+        run: go install github.com/yannh/kubeconform/cmd/kubeconform@v0.8.0
+
+      # Last inside each shard, because it mutates tracked files and restores
+      # them. It needs a clean tree and says so plainly, so it also reports any
+      # earlier step that starts writing into the checkout.
+      - name: the gates above can still fail (shard ${{ matrix.shard }} of 4)
+        env:
+          TEETH_SHARD: ${{ matrix.shard }}/4
         run: ./scripts/gates-have-teeth.sh
+
+  # The one required check, named `gates`. `if: always()` makes a needed job
+  # that failed or was cancelled read as a red result here, not as a skip.
+  gates:
+    needs: [fast-gates, teeth]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: every fast gate and every teeth shard passed
+        env:
+          FAST: ${{ needs.fast-gates.result }}
+          TEETH: ${{ needs.teeth.result }}
+        run: |
+          echo "fast-gates: $FAST, teeth (all four shards): $TEETH"
+          test "$FAST" = success && test "$TEETH" = success
