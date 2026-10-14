@@ -263,6 +263,13 @@ jobs:
       - name: the typed-answer data mode is honest (invariant 26)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/typed-mode-is-honest.sh
 
+      # Added 2026-10-14, in BOTH callers on the same commit, after kubeconform is installed
+      # because it validates the Secrets it mints. A typed deploy comes up green on its own: the
+      # two Secrets the typed planes' doors read are minted when absent and never overwritten.
+      # See CLAUDE.md invariant 42 and GOTCHAS 126.
+      - name: the typed-answer door is minted by the deploy (invariant 42)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/typed-door-is-minted.sh
+
       # Last, because it mutates tracked files and restores them. It needs a
       # clean tree and says so plainly, so it also reports any earlier step
       # that starts writing into the checkout.

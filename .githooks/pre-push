@@ -59,6 +59,7 @@ step "Felyx reaches its model through the gateway" "./scripts/felyx-through-the-
 step "delegation is off by default" "./scripts/delegation-off-by-default.sh"
 step "closing a retained reservation is off by default" "./scripts/closure-off-by-default.sh"
 step "the typed data mode is honest" "./scripts/typed-mode-is-honest.sh"
+step "the typed-answer door is minted by the deploy" "./scripts/typed-door-is-minted.sh"
 step "the gateway caps what a run may declare" "./scripts/run-budget-ceiling-is-set.sh"
 step "the agent firewall runs in enforce by default" "./scripts/firewall-is-enforce-by-default.sh"
 step "the PII scanners run in shadow by default" "./scripts/pii-is-shadow-by-default.sh"

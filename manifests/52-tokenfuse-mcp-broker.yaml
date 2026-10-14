@@ -40,17 +40,25 @@
 # timed out reaching this broker and typryx.
 #
 #
-# ## Two Secrets, one value shared between them by hand
+# ## Two Secrets, one value shared between them, minted by the deploy
 #
 # `TOKENFUSE_MCP_SECRETS` needs the SAME bearer value that appears in
 # `typryx-keys`' own `TYPRYX_KEYS` (51-typryx.yaml), because that is the
-# credential typryx's door actually checks. Nothing here generates either
-# Secret: both are operator-created, the same stance 51-typryx.yaml and
-# 47-scopyx.yaml already take on their own doors, so CLAUDE.md invariant 17
-# (every installer that creates a Secret creates every key the manifests
-# read) does not apply to either: no tracked script runs `create secret
-# generic typryx-keys` or `create secret generic tokenfuse-mcp-broker-keys`,
-# so there is nothing for that gate to compare.
+# credential typryx's door actually checks. `@decided 2026-10-14`: the deploy
+# scripts mint both Secrets when absent and never overwrite one, as
+# stack-single's installer already does. Until then both were made by hand, and
+# measured on GCP 2026-10-14 a typed deploy without them left this pod and
+# typryx Pending, the rollout waiting 300 s for each and verify red. `typed/mode.sh door-secrets`, the one copy for the three deploy
+# scripts, decides in their typed branch before the render (CLAUDE.md invariant
+# 42, `scripts/typed-door-is-minted.sh`): both there, both kept; neither, both
+# minted with fresh 40-character values, this vault carrying typryx's bearer;
+# only `typryx-keys`, this one minted from its bearer; only this one, the deploy
+# stops, because a new typryx key would not be the one this vault holds. The
+# documents go to `kubectl create -f -` on stdin, which never replaces a Secret
+# (`apply` would, and would keep every value again in its last-applied
+# annotation), and no value is printed. Both are read whole through `envFrom`,
+# so CLAUDE.md invariant 17, which reads `secretKeyRef`s against `create secret
+# generic` blocks, has nothing to compare here; invariant 42 holds them.
 #
 # `TOKENFUSE_MCP_KEYS` is a SEPARATE credential from the typryx one: it is
 # the door on the BROKER itself (`secret:key_id`, tokenfuse's own
@@ -58,7 +66,10 @@
 # whatever calls the broker. Reusing the typryx key here would mean anything
 # that can reach typryx directly can also reach the broker, and the reverse,
 # which collapses two doors into one; a caller of the broker never needs to
-# know typryx's own key at all, which is the point of fronting it.
+# know typryx's own key at all, which is the point of fronting it. The deploy
+# mints the two from separate reads, and its gate refuses them equal.
+#
+# Made by hand before a deploy, which still wins over minting:
 #
 #   TYPRYX_KEY="$(kubectl -n agent-stack get secret typryx-keys \
 #     -o jsonpath='{.data.TYPRYX_KEYS}' | base64 -d | cut -d, -f1 | cut -d= -f1)"
@@ -78,10 +89,12 @@
 # already uses on `stack-keys`' `wardryx_keys` for the same reason: the
 # secret is the FIRST field before either separator, not the whole pair.
 #
-# Without this Secret the pod refuses to start (`TOKENFUSE_MCP_KEYS` set but
-# unusable, or the broker's vault empty and every `{{secret:typryx_key}}`
-# handle unresolved), the same stance every opt-in plane's own door takes
-# here.
+# Without this Secret the pod does not start at all: the `envFrom` below is not
+# optional, so its container waits in CreateContainerConfigError and the pod
+# stays Pending (measured on GCP 2026-10-14), the same stance every opt-in
+# plane's own door takes here. With a
+# `TOKENFUSE_MCP_KEYS` that parses to no key, or a vault with no `typryx_key`,
+# it starts and refuses every caller or every `{{secret:typryx_key}}` handle.
 #
 #
 # ## What TOKENFUSE_MCP_SECRET_SCOPES buys
@@ -173,7 +186,8 @@ spec:
           envFrom:
             # NOT optional. Missing here is not an unconfigured feature, it
             # is a door with nothing on it or a vault with nothing in it; see
-            # the header for what each half does.
+            # the header for what each half does, and for how the deploy
+            # scripts mint it when absent (CLAUDE.md invariant 42).
             - secretRef: { name: tokenfuse-mcp-broker-keys }
           ports: [{ name: mcp, containerPort: 4200 }]
           lifecycle: { preStop: { sleep: { seconds: 5 } } }
