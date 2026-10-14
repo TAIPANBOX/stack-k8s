@@ -4346,3 +4346,46 @@ caller stops with `unknown rate for <type>` before any total prints. The AWS tab
 API as read on 2026-10-14 by the person who reported the run; this change did not re-read it.
 `scripts/cost-live-refuses-unknown-rates.sh` (CLAUDE.md invariant 44) runs both scripts with a
 stub cloud CLI on PATH, so it needs no account, and it fails on the two fault shapes above.
+## 128. A dead node's coredns replica keeps answering for the Service until the node is NotReady
+
+**Platform.** Two replicas spread over two nodes (invariant 12) do not keep cluster DNS whole
+when one of those nodes goes away. The replica's address stays in the kube-dns Service, and
+kube-proxy goes on sending a share of the lookups to it, until the control plane marks the node
+NotReady and the pod not ready: `node-monitor-grace-period`, 50 s by Kubernetes' default (read
+in `pkg/controller/nodelifecycle/config/v1alpha1/defaults.go` at v1.36.0). Measured on GCP on 2026-10-14: an agent stopped with one of the two replicas on it, and
+lookups failed now and then for about 90 s.
+
+Measured on a local kind cluster (v0.33.0, three workers, one replica per worker, a probe on the
+control plane resolving the API server's name every 0.25 s), the worker holding one replica
+killed, one run each:
+
+| Variant | failed or slower than 1 s | last bad lookup after the kill |
+|---|---|---|
+| two replicas, as k3s and the installers ship them | 5 of 393 | 53 s |
+| `node-monitor-grace-period` 20 s | 2 of 525 | 16 s |
+| two replicas, resolver `timeout:1 attempts:3` in the client | 10 of 384 | 51 s |
+| three replicas | 5 of 426 | 43 s |
+| `docker stop` (systemd halt) instead of a kill | 5 of 405 | 51 s |
+
+Only the grace period moves the window, and it is not taken here: Kubernetes' own default
+carries the reason it is 50 s, which is to stay above the 45 s an HTTP/2 health check takes to
+notice a dead connection, so a shorter grace marks LIVE nodes NotReady when an API server goes
+away (a k3s server reboot is exactly that) and invariant 21's 30 s then evicts their pods. A
+third replica moved the last bad lookup from 53 s to 43 s in that one run, which is not a closed
+window. Client retries did not help: glibc resolves a retry over the same socket, so the retry goes
+to the same dead backend. What the installers do instead (invariant 45): three replicas from five
+nodes, so one dead replica is a third of the answers and not a half, and a PodDisruptionBudget of
+one for coredns, so a drain, the planned way a node goes away, never takes every replica; k3s ships
+none. A crashed node still costs the detection window. A node stopped
+cleanly is a different matter: its kubelet can stop its pods first, if graceful node shutdown is
+on, and that is its own change.
+
+How the replica count is set, and why k3s does not undo it. k3s's packaged components page says
+that packaged manifests are managed by K3s, should not be altered, and are re-written to disk on
+every start (docs.k3s.io/installation/packaged-components). HelmChartConfig reaches HelmChart-based
+components only; CoreDNS is an AddOn from the manifests directory, so no HelmChartConfig applies.
+The k3s v1.36.2 manifest for CoreDNS (`manifests/coredns.yaml` in the k3s source) sets no replica
+count and spreads its pods over host names with `DoNotSchedule`, so `kubectl scale` is the one
+change, and the scale is not in the file k3s re-writes. `@claude` 2026-10-14: read from the k3s
+docs and source, not seen on a running cluster; a restart of k3s on a live cluster is what would
+prove the count survives it.

@@ -2073,6 +2073,66 @@ run_case "aws-takes-every-gcp-flag: an allow-list entry names a flag GCP does no
 	"$(py 'edit("scripts/aws-takes-every-gcp-flag.sh", "ALLOW=\"\"", "ALLOW=\"--no-such-flag|a flag nobody takes\"")')" \
 	"the allow-list names --no-such-flag"
 
+# Invariant 45: cluster DNS keeps a replica through a drain, and k3s's coredns is left to k3s.
+run_case "cluster-dns-has-a-budget: an installer applies no budget" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "\x27kind: PodDisruptionBudget\x27", "\x27kind: PodDisruptionBudgetX\x27")')" \
+	"never applies a PodDisruptionBudget"
+
+run_case "cluster-dns-has-a-budget: the budget keeps nothing up" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("install.sh", "\x27  minAvailable: 1\x27", "\x27  minAvailable: 0\x27")')" \
+	"not the document this gate holds"
+
+run_case "cluster-dns-has-a-budget: the budget selects other pods" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "matchLabels: \x7b k8s-app: kube-dns \x7d", "matchLabels: \x7b k8s-app: coredns \x7d")')" \
+	"not the document this gate holds"
+
+run_case "cluster-dns-has-a-budget: the budget is applied with one replica too" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("install.sh", "if [ \"$DNS_WANT\" -ge 2 ]; then", "if true; then")')" \
+	"outside"
+
+run_case "cluster-dns-has-a-budget: an installer patches k3s's coredns Deployment" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "echo \"   coredns replicas=$DNS_WANT\"\n", "echo \"   coredns replicas=$DNS_WANT\"\nk_ \"-n kube-system patch deployment coredns --type merge -p x\" >/dev/null || true\n")')" \
+	"changes k3s's coredns Deployment"
+
+run_case "cluster-dns-has-a-budget: a comment about patching coredns is not a fault" pass \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "echo \"   coredns replicas=$DNS_WANT\"\n", "echo \"   coredns replicas=$DNS_WANT\"\n# never patch deployment coredns here: k3s re-applies its manifest\n")')"
+
+run_case "cluster-dns-has-a-budget: verify.sh stops checking the budget" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("verify.sh", "get pdb coredns -o jsonpath=", "get pdb dns -o jsonpath=")')" \
+	"verify.sh does not check"
+
+run_case "cluster-dns-has-a-budget: no installer is left to judge" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'for p in ("install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"):
+    s = open(p).read()
+    k = "sh -s - " + "serv" + "er"
+    assert k in s
+    open(p, "w").write(s.replace(k, "sh -s - serve"))')" \
+	"measured NOTHING"
+
+# Invariant 45, the replica policy: three replicas from five nodes, two from two, one alone.
+run_case "cluster-dns-has-a-budget: five nodes get two replicas" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("install.sh", "[ \"${#ALL_NODES[@]}\" -ge 5 ] && DNS_WANT=3", "[ \"${#ALL_NODES[@]}\" -ge 5 ] && DNS_WANT=2")')" \
+	"the replica policy"
+
+run_case "cluster-dns-has-a-budget: the three-replica line is dropped from one installer" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "[ \"${#ALL_NODES[@]}\" -ge 5 ] && DNS_WANT=3\n", "")')" \
+	"the replica policy"
+
+run_case "cluster-dns-has-a-budget: the installers disagree on the threshold" fail \
+	'./scripts/cluster-dns-has-a-budget.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "-ge 5 ] && DNS_WANT=3", "-ge 4 ] && DNS_WANT=3")')" \
+	"the replica policy"
+
 # Invariant 41: a secret is minted from a bounded read, by one generator, sourced. The
 # unbounded line comes back, inside a caller and inside the generator; the generator
 # returns short, repeats, or is copied; a caller forgets the source or sources it too
