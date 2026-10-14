@@ -110,9 +110,24 @@ kc get pods -o custom-columns=POD:.metadata.name,NODE:.spec.nodeName,READY:.stat
 # `Completed` is not a failure: the CronJobs leave finished pods behind, and so
 # does any probe pod a test left. Only count pods that are neither Running nor
 # Succeeded.
-notrunning="$(kc get pods --no-headers 2>/dev/null | awk '$3 != "Running" && $3 != "Completed" { n++ } END { print n+0 }')"
+# Nor is a pod the kubelet stopped for a node shutdown (CLAUDE.md invariant 46): it
+# stays behind as a Failed object with the reason Terminated (NodeShutdown in older
+# kubelets), and its controller has already started the replacement, which this
+# count does judge. Found by its phase and reason, not by the STATUS column, which
+# shows its container's exit reason instead. Noted, with the command that clears it.
+# pods: begin
+shutdown_pods="$(kc get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.phase}{" "}{.status.reason}{"\n"}{end}' 2>/dev/null \
+  | awk '$2 == "Failed" && ($3 == "Terminated" || $3 == "NodeShutdown") { printf "%s ", $1 }')"
+notrunning="$(kc get pods --no-headers 2>/dev/null | awk -v skip="$shutdown_pods" '
+  BEGIN { n = split(skip, s, " "); for (i = 1; i <= n; i++) gone[s[i]] = 1 }
+  !($1 in gone) && $3 != "Running" && $3 != "Completed" { c++ }
+  END { print c+0 }')"
 [ "${notrunning:-1}" = 0 ] && ok "every pod Running (finished Job pods ignored)" \
   || bad "$notrunning pod(s) neither Running nor Completed"
+if [ -n "$shutdown_pods" ]; then
+  note "$(printf '%s' "$shutdown_pods" | wc -w | tr -d ' ') pod(s) stopped by a node shutdown and already replaced; clear them: kubectl -n $NS delete pod $shutdown_pods"
+fi
+# pods: end
 
 # One node holding every pod is a five-node cluster with one node's worth of
 # resilience (GOTCHAS 17), so this is a check, not a cosmetic note.

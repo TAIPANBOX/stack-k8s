@@ -203,6 +203,15 @@ jobs:
       # Deployment. See CLAUDE.md invariant 45 and GOTCHAS 128.
       - name: cluster DNS keeps a replica through a drain (invariant 45)
         run: ./scripts/cluster-dns-has-a-budget.sh
+      - name: every node stops its pods before its network goes
+        run: ./scripts/nodes-stop-their-pods-first.sh
+      - name: every shell script parses under the bash a Mac ships
+        run: ./scripts/shell-scripts-parse.sh
+
+      - name: node checks read only their own answer
+        run: ./scripts/node-checks-read-their-own-answer.sh
+      - name: every k3s server starts with --secrets-encryption
+        run: ./scripts/servers-encrypt-secrets.sh
 
       # Added 2026-10-04. The on-box chain verifier (agent-stack-go v1.1.0):
       # in the default install, every 15 minutes, on the bus, its memory on a

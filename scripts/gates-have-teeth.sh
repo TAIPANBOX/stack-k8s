@@ -2451,6 +2451,132 @@ run_case "cost-live-refuses-unknown-rates: the m7i.xlarge row is removed" fail \
 run_case "cost-live-refuses-unknown-rates: a reworded comment is not a fault" pass \
 	'./scripts/cost-live-refuses-unknown-rates.sh' \
 	"$(py 'edit("cloud/aws/cost-live.sh", "# eu-central-1, on demand, Linux, shared tenancy.", "# eu-central-1, on demand, Linux, shared tenancy (reworded).")')"
+# Invariant 46: a node that is shut down stops its pods before its network goes.
+run_case "nodes-stop-their-pods-first: an installer writes no shutdown config" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "graceful_shutdown_conf() {", "graceful_shutdown_cfg() {")')" \
+	"defines no graceful_shutdown_conf"
+
+run_case "nodes-stop-their-pods-first: the logind delay is shorter than the period" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("install.sh", "InhibitDelayMaxSec=180", "InhibitDelayMaxSec=30")')" \
+	"is not the drop-in this gate holds"
+
+run_case "nodes-stop-their-pods-first: the first server gets no file" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("install.sh", "put_graceful_shutdown \"$FIRST\"\n", "")')" \
+	"without writing the graceful-shutdown files"
+
+run_case "nodes-stop-their-pods-first: an install passes its own config-dir" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("install.sh", "--secrets-encryption \\\n", "--secrets-encryption \\\n    --kubelet-arg=config-dir=/etc/elsewhere \\\n")')" \
+	"passes --kubelet-arg=config-dir"
+
+run_case "nodes-stop-their-pods-first: workloads get less time than a pod may take" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'for p in ("install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"):
+    edit(p, "shutdownGracePeriod: 60s", "shutdownGracePeriod: 40s")')" \
+	"our workloads get"
+
+run_case "nodes-stop-their-pods-first: the installers disagree on the shutdown period" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "shutdownGracePeriod: 60s", "shutdownGracePeriod: 61s")')" \
+	"is not the KubeletConfiguration this gate holds"
+
+run_case "nodes-stop-their-pods-first: verify.sh counts a pod a shutdown stopped" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("verify.sh", "$2 == \"Failed\" && ($3 == \"Terminated\" || $3 == \"NodeShutdown\")", "$2 == \"Failed\" && $3 == \"NoSuchReason\"")')" \
+	"did not report exactly one bad pod"
+
+run_case "nodes-stop-their-pods-first: verify.sh stops counting a crash loop" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("verify.sh", "!($1 in gone) && $3 != \"Running\" && $3 != \"Completed\" { c++ }", "!($1 in gone) && $3 != \"Running\" && $3 != \"Completed\" && $3 != \"CrashLoopBackOff\" { c++ }")')" \
+	"did not report exactly one bad pod"
+
+run_case "nodes-stop-their-pods-first: every installer loses its server install" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'for p in ("install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"):
+    s = open(p).read()
+    k = "sh -s - " + "serv" + "er"
+    assert k in s
+    open(p, "w").write(s.replace(k, "sh -s - serve"))')" \
+	"no k3s server install invocation"
+
+run_case "nodes-stop-their-pods-first: no installer is left to judge" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'for p in ("install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"):
+    s = open(p).read()
+    k = "INSTALL_K3S_" + "VERSION="
+    assert k in s
+    open(p, "w").write(s.replace(k, "INSTALL_K3S_" + "VERSIONX="))')" \
+	"measured NOTHING"
+# Invariant 47: every shell script parses under /bin/bash (3.2 on a Mac) and uses no bash-4-only construct.
+run_case "shell-scripts-parse: a script does not parse" fail \
+	'./scripts/shell-scripts-parse.sh' \
+	"$(py 'p = "verify.sh"
+s = open(p).read()
+open(p, "w").write(s + "\nif [ ; then\n")')" \
+	"does not parse under"
+
+run_case "shell-scripts-parse: a script uses a bash-4-only construct" fail \
+	'./scripts/shell-scripts-parse.sh' \
+	"$(py 'p = "verify.sh"
+s = open(p).read()
+open(p, "w").write(s + "\ndeclare -A seen\n")')" \
+	"(bash 4 only)"
+
+# Invariant 47: node checks read only the lines their probe printed.
+run_case "node-checks-read-their-own-answer: an ssh call outside the helper" fail \
+	'./scripts/node-checks-read-their-own-answer.sh' \
+	"$(py 'p = "security-tests.sh"
+s = open(p).read()
+open(p, "w").write(s + "\nssh root@10.0.0.9 true\n")')" \
+	"runs ssh outside node_probe"
+
+run_case "node-checks-read-their-own-answer: the helper keeps the banner" fail \
+	'./scripts/node-checks-read-their-own-answer.sh' \
+	"$(py 'edit("security-tests.sh", "| sed -n \x27s/^SECCHK: //p\x27", "| cat")')" \
+	"printed more than the command"
+
+run_case "node-checks-read-their-own-answer: the quiet ssh setting is gone" fail \
+	'./scripts/node-checks-read-their-own-answer.sh' \
+	"$(py 'edit("security-tests.sh", "SECCHK_SSH=\"-q -o LogLevel=ERROR", "SECCHK_OFF=\"-q -o LogLevel=ERROR")')" \
+	"defines no SECCHK_SSH"
+# Invariant 48: every k3s server an installer starts is started with --secrets-encryption.
+run_case "servers-encrypt-secrets: the GCP joining server starts without the flag" fail \
+	'./scripts/servers-encrypt-secrets.sh' \
+	"$(py 'p = "cloud/gcp/install-gcp.sh"
+s = open(p).read()
+a = "--secrets-encryption \\\n"
+i = s.rindex(a)
+open(p, "w").write(s[:i] + s[i + len(a):])')" \
+	"starts a k3s server without --secrets-encryption"
+
+run_case "servers-encrypt-secrets: the first server starts without the flag" fail \
+	'./scripts/servers-encrypt-secrets.sh' \
+	"$(py 'p = "install.sh"
+s = open(p).read()
+a = "--secrets-encryption \\\n"
+i = s.index(a)
+open(p, "w").write(s[:i] + s[i + len(a):])')" \
+	"starts a k3s server without --secrets-encryption"
+
+run_case "servers-encrypt-secrets: the flag is commented out" fail \
+	'./scripts/servers-encrypt-secrets.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "    --secrets-encryption \\\n", "    # --secrets-encryption \\\n")')" \
+	"starts a k3s server without --secrets-encryption"
+
+run_case "servers-encrypt-secrets: a new server invocation has no flag" fail \
+	'./scripts/servers-encrypt-secrets.sh' \
+	"$(py 'p = "install.sh"
+s = open(p).read()
+open(p, "w").write(s + "\nsh_ \"$FIRST\" \"INSTALL_K3S_VERSION=1 sh -s - " + "serv" + "er --cluster-init\" < <(curl -sfL https://get.k3s.io)\n")')" \
+	"starts a k3s server without --secrets-encryption"
+
+run_case "servers-encrypt-secrets: section 7 stops expecting encryption" fail \
+	'./scripts/servers-encrypt-secrets.sh' \
+	"$(py 'edit("security-tests.sh", "bad \"the Secret is plaintext in etcd, so", "bad \"the Secret is in etcd, so")')" \
+	"section 7 no longer reports"
 
 if [ "$failures" -gt 0 ]; then
 	printf '%d of %d cases failed.\n' "$failures" "$cases"
