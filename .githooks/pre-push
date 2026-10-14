@@ -72,6 +72,8 @@ step "no quote of the owner in a public file" "./scripts/no-owner-quotes.sh"
 step "a read-only container that needs a temp has one" "./scripts/read-only-root-has-a-temp.sh"
 step "a secret is minted from a bounded read" "./scripts/gen-is-bounded.sh"
 step "a cost report refuses an unknown machine rate" "./scripts/cost-live-refuses-unknown-rates.sh"
+step "every shell script parses under the bash a Mac ships" "./scripts/shell-scripts-parse.sh"
+step "node checks read only their own answer" "./scripts/node-checks-read-their-own-answer.sh"
 
 echo
 if [ "$fail" -ne 0 ]; then

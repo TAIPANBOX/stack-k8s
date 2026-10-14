@@ -2274,6 +2274,38 @@ run_case "cost-live-refuses-unknown-rates: the m7i.xlarge row is removed" fail \
 run_case "cost-live-refuses-unknown-rates: a reworded comment is not a fault" pass \
 	'./scripts/cost-live-refuses-unknown-rates.sh' \
 	"$(py 'edit("cloud/aws/cost-live.sh", "# eu-central-1, on demand, Linux, shared tenancy.", "# eu-central-1, on demand, Linux, shared tenancy (reworded).")')"
+# Invariant 47: every shell script parses under /bin/bash (3.2 on a Mac) and uses no bash-4-only construct.
+run_case "shell-scripts-parse: a script does not parse" fail \
+	'./scripts/shell-scripts-parse.sh' \
+	"$(py 'p = "verify.sh"
+s = open(p).read()
+open(p, "w").write(s + "\nif [ ; then\n")')" \
+	"does not parse under"
+
+run_case "shell-scripts-parse: a script uses a bash-4-only construct" fail \
+	'./scripts/shell-scripts-parse.sh' \
+	"$(py 'p = "verify.sh"
+s = open(p).read()
+open(p, "w").write(s + "\ndeclare -A seen\n")')" \
+	"bash-4-only construct"
+
+# Invariant 47: node checks read only the lines their probe printed.
+run_case "node-checks-read-their-own-answer: an ssh call outside the helper" fail \
+	'./scripts/node-checks-read-their-own-answer.sh' \
+	"$(py 'p = "security-tests.sh"
+s = open(p).read()
+open(p, "w").write(s + "\nssh root@10.0.0.9 true\n")')" \
+	"runs ssh outside node_probe"
+
+run_case "node-checks-read-their-own-answer: the helper keeps the banner" fail \
+	'./scripts/node-checks-read-their-own-answer.sh' \
+	"$(py 'edit("security-tests.sh", "| sed -n \x27s/^SECCHK: //p\x27", "| cat")')" \
+	"printed more than the command"
+
+run_case "node-checks-read-their-own-answer: the quiet ssh setting is gone" fail \
+	'./scripts/node-checks-read-their-own-answer.sh' \
+	"$(py 'edit("security-tests.sh", "SECCHK_SSH=\"-q -o LogLevel=ERROR", "SECCHK_OFF=\"-q -o LogLevel=ERROR")')" \
+	"defines no SECCHK_SSH"
 
 if [ "$failures" -gt 0 ]; then
 	printf '%d of %d cases failed.\n' "$failures" "$cases"

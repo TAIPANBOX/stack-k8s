@@ -4346,3 +4346,30 @@ caller stops with `unknown rate for <type>` before any total prints. The AWS tab
 API as read on 2026-10-14 by the person who reported the run; this change did not re-read it.
 `scripts/cost-live-refuses-unknown-rates.sh` (CLAUDE.md invariant 44) runs both scripts with a
 stub cloud CLI on PATH, so it needs no account, and it fails on the two fault shapes above.
+
+## 130. security-tests.sh did not parse on a Mac, so its later sections never ran, and its node checks read ssh banners
+
+**Ours.** `security-tests.sh` had a syntax error at line 650 that `bash -n` reports under the bash a Mac ships
+(`/bin/bash`, 3.2.57). It was not in CI: no gate parsed the script under bash 3.2, and CI's bash 5 reads the same
+text without complaint. The cause was a heredoc inside a command substitution (`x="$(kc exec ... <<'PY' ... PY
+)"`). bash 3.2 does not parse those, and it reported the failure several lines after the block that caused it, at
+the first line of the next section, which is why the first reading pointed at the wrong place. Five such heredocs
+were in the file; each now writes to a temporary file that `kc exec` reads. The GCP run of 2026-10-14 saw the
+effect: sections 10 and later never ran.
+
+The node checks had a second fault, found on an operator's Mac against an Ubuntu node. `ssh` writes a login
+banner to the same stdout as the probe's answer, and the etcd check read the banner as the count of plaintext
+Secrets and failed a healthy cluster. A probe that finds nothing also printed a `0`, because `grep -c` of nothing
+is zero, so a failed `etcdctl` read as "not plaintext". Now every node probe runs through `node_probe`: `ssh -q -o
+LogLevel=ERROR`, the probe's lines prefixed `SECCHK:` on the node, and only those lines read here. The etcd count
+is taken only when `etcdctl` returned the Secret's key itself (the control), so a failed read is "could not look",
+not a pass.
+
+Invariant 47 holds both: `scripts/shell-scripts-parse.sh` parses every tracked shell script under `/bin/bash` and
+under the `bash` on PATH when they differ, and refuses bash-4-only constructs in code; and
+`scripts/node-checks-read-their-own-answer.sh` checks that `ssh` appears only inside `node_probe`, and that a
+stand-in `ssh` printing a banner gives the command's answer alone.
+
+`@claude` 2026-10-14: the bash 3.2 parse was reproduced on this Mac with `/bin/bash -n`, before and after; the
+node probe was checked with a stand-in `ssh`, not against a real node. Not proven: a `security-tests.sh --nodes`
+run from a Mac against a live cluster; sections 10 and later have run only where bash parses them.

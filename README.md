@@ -939,7 +939,7 @@ down:
 
 The command output behind every sentence above is in `evidence/` and
 `cloud/*/evidence/`. Every trap the runs cost us is written up in
-`GOTCHAS.md`, now **126 items** (46 platform, 57 ours, 16 the stack's own
+`GOTCHAS.md`, now **128 items** (46 platform, 59 ours, 16 the stack's own
 contract, 7 upstream; `scripts/gotchas-classified.sh` prints the current split). Almost all are already fixed here, which is the whole
 point: the next person to run this should not meet any of them. A small
 number (69, 81) are recorded rather than solved, and say so plainly rather
