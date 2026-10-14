@@ -877,6 +877,69 @@ for f in ["install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"]:
     os.remove(f)')" \
 	"This measured nothing"
 
+# Invariant 43 (GOTCHAS 127): the policy store's volume is on stack-policy, and
+# every Longhorn installer creates that class with the settings the store needs.
+run_case "policy-store-survives-a-partition: the policy-db claim names no class" fail \
+	'./scripts/policy-store-survives-a-partition.sh' \
+	"$(py 'edit("manifests/15-policy-store.yaml", "        storageClassName: stack-policy\n", "")')" \
+	"names no storageClassName"
+
+run_case "policy-store-survives-a-partition: the policy-db claim names the RWX class" fail \
+	'./scripts/policy-store-survives-a-partition.sh' \
+	"$(py 'edit("manifests/15-policy-store.yaml", "storageClassName: stack-policy", "storageClassName: stack-rwx")')" \
+	"not \`stack-policy\`"
+
+run_case "policy-store-survives-a-partition: an installer leaves data locality disabled" fail \
+	'./scripts/policy-store-survives-a-partition.sh' \
+	"$(py 'edit("install.sh", "  dataLocality: \"best-effort\"", "  dataLocality: \"disabled\"")')" \
+	"parameter dataLocality"
+
+run_case "policy-store-survives-a-partition: an installer turns the revision counter off" fail \
+	'./scripts/policy-store-survives-a-partition.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "  disableRevisionCounter: \"false\"", "  disableRevisionCounter: \"true\"")')" \
+	"parameter disableRevisionCounter"
+
+run_case "policy-store-survives-a-partition: an installer keeps a failed replica 30 minutes" fail \
+	'./scripts/policy-store-survives-a-partition.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "  staleReplicaTimeout: \"2880\"", "  staleReplicaTimeout: \"30\"")')" \
+	"parameter staleReplicaTimeout"
+
+run_case "policy-store-survives-a-partition: an installer lets the class delete its data" fail \
+	'./scripts/policy-store-survives-a-partition.sh' \
+	"$(py 'edit("install.sh", "  name: stack-policy\nprovisioner: driver.longhorn.io\nallowVolumeExpansion: true\nreclaimPolicy: Retain", "  name: stack-policy\nprovisioner: driver.longhorn.io\nallowVolumeExpansion: true\nreclaimPolicy: Delete")')" \
+	"reclaimPolicy"
+
+run_case "policy-store-survives-a-partition: an installer marks the class as the default" fail \
+	'./scripts/policy-store-survives-a-partition.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "  name: stack-policy\n", "  name: stack-policy\n  annotations: { storageclass.kubernetes.io/is-default-class: \"true\" }\n")')" \
+	"marked as the default class"
+
+run_case "policy-store-survives-a-partition: an installer turns auto-salvage off" fail \
+	'./scripts/policy-store-survives-a-partition.sh' \
+	"$(py 'edit("install.sh", "k_ \"apply -f /tmp/stack-policy.yaml\"", "k_ \"apply -f /tmp/stack-policy.yaml\"\nk_ \"-n longhorn-system patch settings.longhorn.io auto-salvage --type merge -p {value:false}\"")')" \
+	"auto-salvage off"
+
+run_case "policy-store-survives-a-partition: an installer never writes the class" fail \
+	'./scripts/policy-store-survives-a-partition.sh' \
+	"$(py 'import re
+p = "cloud/aws/install-aws.sh"
+s = open(p).read()
+t = re.sub(r"say .stack-policy StorageClass.*?apply -f /tmp/stack-policy.yaml.\n", "", s, count=1, flags=re.S)
+assert t != s, "the stack-policy block was not found"
+open(p, "w").write(t)')" \
+	"never creates the stack-policy StorageClass"
+
+run_case "policy-store-survives-a-partition: no Longhorn installer left" fail \
+	'./scripts/policy-store-survives-a-partition.sh' \
+	"$(py 'import os
+for f in ["install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"]:
+    os.remove(f)')" \
+	"This measured nothing"
+
+run_case "policy-store-survives-a-partition: the class reworded in spacing is not a fault" pass \
+	'./scripts/policy-store-survives-a-partition.sh' \
+	"$(py 'edit("install.sh", "  dataLocality: \"best-effort\"", "  dataLocality:   \"best-effort\"")')"
+
 # The hub entry's whole job is to publish something on purpose, so nothing
 # above stops a route from widening: it would still be valid YAML, still pass
 # kubeconform, still keep automountServiceAccountToken false. Only reading the

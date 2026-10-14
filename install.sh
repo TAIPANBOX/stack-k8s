@@ -552,6 +552,28 @@ parameters:
 YAML
 k_ "apply -f /tmp/stack-rwx.yaml"
 
+# The policy store's class (CLAUDE.md invariant 43, GOTCHAS 127): one readable
+# replica on the store's own node, revision counter on, a failed replica kept
+# 48 h for salvage, Retain. Not the default class, which stays Longhorn's.
+say "stack-policy StorageClass"
+sh_ "$FIRST" "cat > /tmp/stack-policy.yaml" <<'YAML'
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: stack-policy
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: "3"
+  dataLocality: "best-effort"
+  disableRevisionCounter: "false"
+  staleReplicaTimeout: "2880"
+  fsType: "ext4"
+YAML
+k_ "apply -f /tmp/stack-policy.yaml"
+
 # ---- 6. the cloud controller, narrowed ------------------------------------
 # Only if a token was given. The CCM here does ONE job: turn a
 # type=LoadBalancer Service into a Hetzner load balancer. Node lifecycle stays
