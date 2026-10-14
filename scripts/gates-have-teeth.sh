@@ -940,6 +940,60 @@ run_case "policy-store-survives-a-partition: the class reworded in spacing is no
 	'./scripts/policy-store-survives-a-partition.sh' \
 	"$(py 'edit("install.sh", "  dataLocality: \"best-effort\"", "  dataLocality:   \"best-effort\"")')"
 
+# Invariant 43, the refusal half (GOTCHAS 127): a deploy stops, with one sentence
+# that names the migration, BEFORE its first apply, when policy-db is on another class.
+run_case "policy-store-refuses-an-old-claim: the guard lets an old claim through" fail \
+	'./scripts/policy-store-refuses-an-old-claim.sh' \
+	"$(py 'edit("lib/policy-store.sh", "  [ \"$cls\" = \"stack-policy\" ] && return 0", "  return 0")')" \
+	"scenario old: expected a refusal"
+
+run_case "policy-store-refuses-an-old-claim: the refusal loses its pointer to GOTCHAS 127" fail \
+	'./scripts/policy-store-refuses-an-old-claim.sh' \
+	"$(py 'edit("lib/policy-store.sh", "migrate the policy store first as GOTCHAS 127 describes", "migrate the policy store first as the notes describe")')" \
+	"lacks 'GOTCHAS 127'"
+
+run_case "policy-store-refuses-an-old-claim: an unreachable cluster lets the apply through" fail \
+	'./scripts/policy-store-refuses-an-old-claim.sh' \
+	"$(py 'edit("lib/policy-store.sh", "|| die \"could not ask the cluster whether policy-db exists, so the manifests were not applied\"", "|| return 0")')" \
+	"scenario unreachable-name: expected a refusal"
+
+run_case "policy-store-refuses-an-old-claim: a fresh cluster is refused" fail \
+	'./scripts/policy-store-refuses-an-old-claim.sh' \
+	"$(py 'edit("lib/policy-store.sh", "  [ -n \"$existing\" ] || return 0", "  [ -n \"$existing\" ] || die \"fresh cluster refused\"")')" \
+	"scenario fresh"
+
+run_case "policy-store-refuses-an-old-claim: the AWS deploy drops its guard call" fail \
+	'./scripts/policy-store-refuses-an-old-claim.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 127: refuse before anything is applied\n", "")')" \
+	"does not call policy_store_guard before it"
+
+run_case "policy-store-refuses-an-old-claim: the GCP deploy calls the guard after its apply" fail \
+	'./scripts/policy-store-refuses-an-old-claim.sh' \
+	"$(py 'p = "cloud/gcp/deploy-gcp.sh"
+s = open(p).read()
+g = "policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 127: refuse before anything is applied\n"
+a = "k_ \"apply -k /root/stack-k8s/manifests\"\n"
+assert g in s and a in s, "the guard or the apply line was not found"
+s = s.replace(g, "", 1).replace(a, a + "policy_store_guard\n", 1)
+open(p, "w").write(s)')" \
+	"after its first apply"
+
+run_case "policy-store-refuses-an-old-claim: the top-level deploy does not source the helper" fail \
+	'./scripts/policy-store-refuses-an-old-claim.sh' \
+	"$(py 'edit("deploy.sh", ". \"$ROOT/lib/policy-store.sh\" || die \"no lib/policy-store.sh in $ROOT\"\n", "")')" \
+	"does not source lib/policy-store.sh"
+
+run_case "policy-store-refuses-an-old-claim: no deploy script left to judge" fail \
+	'./scripts/policy-store-refuses-an-old-claim.sh' \
+	"$(py 'import os
+for f in ["deploy.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh"]:
+    os.remove(f)')" \
+	"This measured nothing"
+
+run_case "policy-store-refuses-an-old-claim: the helper's comment reworded is not a fault" pass \
+	'./scripts/policy-store-refuses-an-old-claim.sh' \
+	"$(py 'edit("lib/policy-store.sh", "There is no opt-out flag on purpose.", "There is no opt-out flag, on purpose.")')"
+
 # The hub entry's whole job is to publish something on purpose, so nothing
 # above stops a route from widening: it would still be valid YAML, still pass
 # kubeconform, still keep automountServiceAccountToken false. Only reading the

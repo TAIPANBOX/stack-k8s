@@ -79,3 +79,27 @@ Feature: the policy store keeps a readable copy of its data when the node under 
     When an installer writes the same value with extra spaces
     Then policy-store-survives-a-partition.sh still passes
     # -> gates-have-teeth.sh "policy-store-survives-a-partition: the class reworded in spacing is not a fault"
+
+  Scenario: a deploy stops before it applies onto a store on the old class
+    Given the policy-db StatefulSet already exists with its claim on the default class
+    When the deploy reaches the step that applies the manifests
+    Then it stops before the apply, with one sentence that names the migration in GOTCHAS 127
+    # -> gates-have-teeth.sh "policy-store-refuses-an-old-claim: the guard lets an old claim through"
+
+  Scenario: the refusal still names the migration
+    Given the policy-db StatefulSet already exists on the old class
+    When the refusal is printed
+    Then it names GOTCHAS 127, so the reader knows where the steps are
+    # -> gates-have-teeth.sh "policy-store-refuses-an-old-claim: the refusal loses its pointer to GOTCHAS 127"
+
+  Scenario: a cluster that cannot be asked is not applied onto
+    Given the cluster cannot say whether policy-db exists
+    When the deploy reaches the step that applies the manifests
+    Then it stops before the apply rather than guessing
+    # -> gates-have-teeth.sh "policy-store-refuses-an-old-claim: an unreachable cluster lets the apply through"
+
+  Scenario: a fresh cluster is applied onto without a refusal
+    Given no policy-db StatefulSet exists yet
+    When the deploy reaches the step that applies the manifests
+    Then the check returns and the apply runs
+    # -> gates-have-teeth.sh "policy-store-refuses-an-old-claim: a fresh cluster is refused"
