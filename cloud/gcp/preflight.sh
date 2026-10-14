@@ -339,7 +339,7 @@ else
   bad "could not determine your public address"
 fi
 
-# ---- 9. access to the closed piece ----------------------------------------
+# ---- 9. access to the Genaryx console -------------------------------------
 say "github access for the Genaryx console (optional)"
 if [ -n "${CONSOLE_TOKEN:-}" ]; then
   if curl -sf -o /dev/null -H "Authorization: Bearer $CONSOLE_TOKEN" \
