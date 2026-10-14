@@ -4346,3 +4346,57 @@ caller stops with `unknown rate for <type>` before any total prints. The AWS tab
 API as read on 2026-10-14 by the person who reported the run; this change did not re-read it.
 `scripts/cost-live-refuses-unknown-rates.sh` (CLAUDE.md invariant 44) runs both scripts with a
 stub cloud CLI on PATH, so it needs no account, and it fails on the two fault shapes above.
+
+## 129. A node stopped with its pods running takes its network down under a volume writer, and the reboot hangs
+
+**Platform.** k3s's unit stops with `KillMode=process`, so on a reboot or a stop the containers
+outlive the kubelet, and systemd brings the network down while a pod may still be writing to the
+RWX (NFS) volume. Measured on GCP on 2026-10-14, 16:08 to 16:16: a reboot of a server with a
+tokenfuse process writing to that volume hung for 7 minutes in systemd-shutdown, "Waiting for
+process (tokenfuse)", and took 8m19s instead of about one.
+
+The kubelet's graceful node shutdown is the fix, and it is off unless configured: Kubernetes'
+node-shutdown page says that by default `shutdownGracePeriod` and `shutdownGracePeriodCriticalPods`
+are zero, "thus not activating the graceful node shutdown functionality". k3s v1.36.2 sets neither.
+
+Two more settings are needed, and the second is the one that is easy to miss. systemd-logind
+holds the kubelet's delay inhibitor, and systemd waits for it only `InhibitDelayMaxSec`, which is
+5 s by default (logind.conf, `#InhibitDelayMaxSec=5`, systemd source). A kubelet period above 5 s
+is cut short without a drop-in in `/etc/systemd/logind.conf.d/`.
+
+What the installers write, on every node before its k3s starts (CLAUDE.md invariant 46):
+
+- A KubeletConfiguration drop-in, `99-stack-graceful-shutdown.conf`, in the directory k3s passes to
+  the kubelet as `--config-dir`. k3s's source sets that argument unconditionally:
+  `"config-dir": cfg.KubeletConfigDir` in `kubeletArgsAndConfig` (`pkg/daemons/agent`, k3s
+  v1.36.2), and the directory is `<DataDir>/agent/etc/kubelet.conf.d`, that is
+  `/var/lib/rancher/k3s/agent/etc/kubelet.conf.d`. The drop-in sets `shutdownGracePeriod: 60s` and
+  `shutdownGracePeriodCriticalPods: 15s`: our pods get 45 s, the critical pods (Calico, coredns)
+  the last 15 s.
+- A systemd-logind drop-in, `99-stack-graceful-shutdown.conf`, with `InhibitDelayMaxSec=180`, and
+  logind restarted so it reads it now. The `99-` prefix sorts it after any other drop-in in the
+  directory, so it wins over a shorter value set there.
+
+Two things the sources do not settle, and what was done instead. The shutdown period as a kubelet
+command-line flag (`--shutdown-grace-period`) is not in the part of the v1.36 kubelet reference that
+was read (the entries between `--serialize-image-pulls` and `--streaming-connection-idle-timeout`),
+so the drop-in is the way; the earlier part of the reference was not read.
+Priority bands (`shutdownGracePeriodByPodPriority`), which would stop Longhorn's volume managers
+after the workloads that write through them, need the GracefulNodeShutdownBasedOnPodPriority
+feature gate and a band table; not done here, so the Longhorn managers stop in the same window as
+the workloads. That is the named limitation.
+
+The cost: a node that is shut down waits up to 60 s longer, when its pods do not stop sooner. A
+pod that ignores SIGTERM takes the whole 45 s. A rack of nodes shut down at once waits in parallel,
+not one after another.
+
+What a shutdown does to `verify.sh`: a pod the kubelet stopped for a node shutdown stays behind as
+a Failed object with reason `Terminated` (Kubernetes' node-shutdown page: "Terminated"), and its
+replacement is already running. `verify.sh` now notes such pods by name and does not count them,
+and still counts a crash loop.
+
+`@claude` 2026-10-14: read from the k3s source, the k3s and Kubernetes docs and the systemd source
+template; not run on a cluster. The live check, a reboot of a node with the files in place and the
+time it takes, is scheduled by the supervisor and is what proves the change. Not proven: that the
+logind restart during bring-up leaves the installer's own ssh session alone on every distribution
+the installers meet.
