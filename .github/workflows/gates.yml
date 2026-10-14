@@ -270,6 +270,11 @@ jobs:
       - name: the typed-answer door is minted by the deploy (invariant 42)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/typed-door-is-minted.sh
 
+      # Added 2026-10-14 with invariant 44. A cost report that meets a machine type with no
+      # rate exits non-zero and names it, instead of counting it as zero. See GOTCHAS 127.
+      - name: a cost report refuses an unknown machine rate (invariant 44)
+        run: ./scripts/cost-live-refuses-unknown-rates.sh
+
       # Last, because it mutates tracked files and restores them. It needs a
       # clean tree and says so plainly, so it also reports any earlier step
       # that starts writing into the checkout.

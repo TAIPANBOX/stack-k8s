@@ -23,12 +23,16 @@ say()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
 # eu-central-1, on demand, Linux, shared tenancy.
 # Source: pricing.us-east-1.amazonaws.com price list published 2026-07-20.
+# m7i.xlarge is the AWS Pricing API's eu-central-1 figure for 2026-10-14, supplied
+# by the supervisor for the change that added it; it was not re-read there.
+# A type with no row returns non-zero, and the caller refuses the report.
 rate_instance() {
   case "$1" in
     c7i.2xlarge) echo 0.4074 ;;
     c7a.2xlarge) echo 0.46852 ;;
+    m7i.xlarge)  echo 0.2415 ;;
     m7i.2xlarge) echo 0.4830 ;;
-    *)           echo 0 ;;
+    *)           return 1 ;;
   esac
 }
 RATE_GP3_GB_MONTH=0.0952
@@ -47,14 +51,16 @@ INST="$(aws_ ec2 describe-instances \
   --filters "Name=tag:Cluster,Values=$CLUSTER_NAME" "Name=instance-state-name,Values=running" \
   --query 'Reservations[].Instances[].InstanceType' --output text 2>/dev/null || true)"
 if [ -n "$INST" ]; then
+  # An unknown type stops the report. Counting it as 0 is the under-report that
+  # invariant 44 refuses (scripts/cost-live-refuses-unknown-rates.sh).
+  INST_USD=0
   for t in $INST; do
-    r="$(rate_instance "$t")"
-    [ "$r" = "0" ] && printf '   %-42s %10s (unknown type, add its rate above)\n' "$t" "?"
+    r="$(rate_instance "$t")" || { echo "unknown rate for $t: add it to rate_instance() in this script; no total is printed" >&2; exit 1; }
+    INST_USD="$(awk -v a="$INST_USD" -v b="$r" 'BEGIN{printf "%.6f", a+b}')"
     add "$r"
   done
   n="$(echo "$INST" | wc -w | tr -d ' ')"
-  first="$(echo "$INST" | awk '{print $1}')"
-  line "$n x $first" "$(awk -v n="$n" -v r="$(rate_instance "$first")" 'BEGIN{printf "%.6f", n*r}')"
+  line "$n running instance(s)" "$INST_USD"
 else
   echo "   no running instances tagged Cluster=$CLUSTER_NAME"
 fi

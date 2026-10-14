@@ -57,15 +57,13 @@ rate_machine() {
     c2d-standard-8) echo 0.46790400 ;;  # 8 x 0.038088   + 32 x 0.0051
     n4-highcpu-8)   echo 0.36126880 ;;  # 8 x 0.0368042  + 16 x 0.0041772
     c2d-highcpu-2)  echo 0.09657600 ;;  # 2 x 0.038088   + 4 x 0.0051
-    *)              echo 0 ;;
+    *)              return 1 ;;
   esac
 }
-# Set when any running machine type is missing from that table. Without it the
-# total silently omits the largest line: measured on 2026-07-26, a five-node
-# c2d cluster burning USD 2.04/hour was reported as USD 0.1072 because only the
-# disks and addresses had known rates. The instance line said "unknown" on its
-# own row, which nobody reads when the bold number underneath looks calm.
-INCOMPLETE=0
+# A running machine type missing from that table stops the report: the caller
+# refuses it, and no total prints (invariant 44, scripts/cost-live-refuses-unknown-rates.sh).
+# Measured on 2026-07-26, a five-node c2d cluster burning USD 2.04/hour was
+# reported as USD 0.1072 when the instance line counted as zero.
 RATE_PD_BALANCED_GB_MONTH=0.12
 RATE_IPV4_HOUR=0.005          # External IP Charge on a Standard VM, in use
 RATE_ADDRESS_IDLE_HOUR=0.012  # Static Ip Charge in Frankfurt, reserved and unused
@@ -84,14 +82,9 @@ TYPES="$(g compute instances list --filter="labels.cluster=$CLUSTER_NAME AND sta
 if [ -n "$TYPES" ]; then
   for t in $(printf '%s\n' "$TYPES" | sort -u); do
     n="$(printf '%s\n' "$TYPES" | grep -c "^$t$" || true)"
-    r="$(rate_machine "$t")"
-    if [ "$r" = "0" ]; then
-      printf '   %-44s %10s (unknown type, add its rate above)\n' "$n x $t" "?"
-      INCOMPLETE=1
-    else
-      c="$(awk -v n="$n" -v r="$r" 'BEGIN{printf "%.6f", n*r}')"
-      line "$n x $t" "$c"; add "$c"
-    fi
+    r="$(rate_machine "$t")" || { echo "unknown rate for $t: add it to rate_machine() in this script; no total is printed" >&2; exit 1; }
+    c="$(awk -v n="$n" -v r="$r" 'BEGIN{printf "%.6f", n*r}')"
+    line "$n x $t" "$c"; add "$c"
   done
 else
   echo "   no running instances labelled cluster=$CLUSTER_NAME"
@@ -146,13 +139,7 @@ if [ "${FSGB:-0}" -gt 0 ]; then
 fi
 
 echo "   -----------------------------------------------------------------------"
-if [ "$INCOMPLETE" = 1 ]; then
-  printf '   %-44s %10s USD/hour  INCOMPLETE\n' "TOTAL (machines above are NOT counted)" "$(printf '%.4f' "$TOTAL")"
-  printf '   %s\n' "   ^ this is NOT what you are spending. Add the missing rate to"
-  printf '   %s\n' "     rate_machine() above, or run ./prices.sh to compute it."
-else
-  printf '   %-44s %10s USD/hour\n' "TOTAL" "$(printf '%.4f' "$TOTAL")"
-fi
+printf '   %-44s %10s USD/hour\n' "TOTAL" "$(printf '%.4f' "$TOTAL")"
 printf '   %-44s %10s USD\n' "an 8 hour session" "$(awk -v t="$TOTAL" 'BEGIN{printf "%.2f", t*8}')"
 printf '   %-44s %10s USD\n' "a 30 day month at this rate" "$(awk -v t="$TOTAL" 'BEGIN{printf "%.2f", t*730}')"
 printf '\n   Hetzner baseline, measured:   EUR 144.49/month for the same shape\n'
