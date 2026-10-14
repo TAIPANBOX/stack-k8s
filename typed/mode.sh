@@ -16,6 +16,11 @@
 #                         `kubectl apply -f -` ONLY. Refuses a terminal.
 #            has-secrets  yes or no
 #            mode         the effective mode: off, stub, jev or own-model
+#            door-secrets the door's two Secrets that do not exist yet, on stdout,
+#                         for piping into `kubectl create -f -` ONLY. Refuses a
+#                         terminal. Needs --have; reads typryx-keys' TYPRYX_KEYS,
+#                         base64 as `kubectl get -o jsonpath` prints it, on stdin
+#                         when --have names it. See THE DOOR below.
 #
 #   flags    --with-typed                 alone: the stub backend, exactly as
 #                                         before this file existed
@@ -34,6 +39,15 @@
 #                                         `wardryx-proxy` between the MCP broker and
 #                                         wardryx; off by default; needs typryx
 #                                         deployed (any mode but off)
+#            --have "NAMES"               door-secrets only: which of the two door
+#                                         Secrets exist, as `kubectl get secret
+#                                         typryx-keys tokenfuse-mcp-broker-keys
+#                                         --ignore-not-found -o name` prints them;
+#                                         empty when neither does
+#            --trust-domain DOMAIN        door-secrets only; the domain of the
+#                                         identity a minted typryx key carries
+#                                         (default set-me.invalid, the manifests'
+#                                         own placeholder)
 #
 # `@decided 2026-09-30`: a customer chooses where the data of a typed answer
 # goes, from three modes, and the launchers ask.
@@ -65,8 +79,30 @@
 # the stub makes no outbound call; delete it if you want the door shut again:
 #   kubectl -n agent-stack delete networkpolicy typryx-egress-model
 #
-# The door key (`typryx-keys`, TYPRYX_KEYS) is unchanged and still operator
-# made, in every mode; 51-typryx.yaml's header shows the command.
+# THE DOOR. Two Secrets, read in every mode and neither optional: `typryx-keys`
+# (TYPRYX_KEYS, `bearer=agent://identity`, manifests/51) and
+# `tokenfuse-mcp-broker-keys` (manifests/52): TOKENFUSE_MCP_KEYS, the broker's own
+# door (`secret:broker-caller`, the key id bare, invariant 33), and
+# TOKENFUSE_MCP_SECRETS, `typryx_key=<typryx's bearer>`, the vault the broker fills
+# a `{{secret:typryx_key}}` handle from. `@decided 2026-10-14`: the deploy scripts
+# mint both when absent and never overwrite one, as stack-single's installer
+# already does. `door-secrets` is the one copy of the decision, and the launchers
+# call it in their typed branch before the render (CLAUDE.md invariant 42,
+# scripts/typed-door-is-minted.sh):
+#
+#   both exist       both kept, nothing printed: a Secret made first, by hand or by
+#                    an earlier run, wins
+#   neither exists   both minted, two fresh 40-character bearers from lib/gen.sh,
+#                    the broker's vault carrying typryx's
+#   only typryx's    the broker's minted, its vault carrying the bearer read from
+#                    the existing typryx-keys (on stdin, never printed)
+#   only the broker's  a stop: a fresh typryx key would not be the one the broker's
+#                    vault already holds, and every call through it would be refused
+#
+# The documents go to `kubectl create -f -` on stdin: `create` refuses an existing
+# Secret where `apply` would replace it, and `apply` would also keep a second copy
+# of every value in its last-applied annotation. On stderr this says what it kept
+# and minted and how to read a value back, never a value.
 #
 # THE TRAINING LOG. `@decided 2026-09-30`: typryx keeps an opt-in local log of
 # the questions it answered, so a customer can fine-tune and calibrate a model of
@@ -112,6 +148,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
+# The one secret generator, a bounded read (CLAUDE.md invariant 41), for the door's bearers.
+. "$ROOT/lib/gen.sh"
 NS="agent-stack"
 M51="$ROOT/manifests/51-typryx.yaml"
 M52="$ROOT/manifests/52-tokenfuse-mcp-broker.yaml"
@@ -136,9 +174,19 @@ MODEL_CIDR=""
 TRAINING=0
 TRAINING_DIR="/var/lib/typryx/training"
 RISK=0
+HAVE=""
+HAVE_GIVEN=0
+DOOR_DOMAIN=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --with-typed) WITH_TYPED=1; shift ;;
+    # Empty is a real answer here (neither Secret exists), so it is not the value rule below.
+    --have)
+      [ $# -ge 2 ] || refuse "--have needs a value (empty when neither door Secret exists)"
+      HAVE="$2"; HAVE_GIVEN=1; shift 2 ;;
+    --trust-domain)
+      [ $# -ge 2 ] && [ -n "$2" ] || refuse "$1 needs a value"
+      DOOR_DOMAIN="$2"; shift 2 ;;
     --typed-training) TRAINING=1; shift ;;
     --typed-risk-signal) RISK=1; shift ;;
     --typed-mode|--typed-jev-key-file|--typed-model-url|--typed-model-name|--typed-model-key-file|--typed-model-cidr)
@@ -157,9 +205,12 @@ while [ $# -gt 0 ]; do
 done
 
 case "$verb" in
-  check|render|secrets|has-secrets|mode) ;;
-  *) refuse "usage: typed/mode.sh check|render|secrets|has-secrets|mode [flags]" ;;
+  check|render|secrets|has-secrets|mode|door-secrets) ;;
+  *) refuse "usage: typed/mode.sh check|render|secrets|has-secrets|mode|door-secrets [flags]" ;;
 esac
+if [ "$verb" != door-secrets ] && { [ "$HAVE_GIVEN" = 1 ] || [ -n "$DOOR_DOMAIN" ]; }; then
+  refuse "--have and --trust-domain only go with door-secrets"
+fi
 
 # ---- which mode, and which flags belong to it ------------------------------
 EFFECTIVE=""
@@ -455,6 +506,75 @@ has_secrets() {
   esac
 }
 
+# ---- the door: typryx-keys and tokenfuse-mcp-broker-keys (see THE DOOR above) ---------------
+DOOR_TYPRYX="typryx-keys"
+DOOR_BROKER="tokenfuse-mcp-broker-keys"
+DOOR_KEY_ID="broker-caller"
+DOOR_SUBJECT="typed-broker"
+
+b64_() { printf '%s' "$1" | base64 | tr -d '\n'; }
+
+door_secret() { # name app then key=value pairs, each value base64 in the document
+  local name="$1" app="$2" kv
+  shift 2
+  printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: %s\n  namespace: %s\n  labels: { app: %s, plane: typed }\ntype: Opaque\ndata:\n' \
+    "$name" "$NS" "$app"
+  for kv in "$@"; do
+    printf '  %s: %s\n' "${kv%%=*}" "$(b64_ "${kv#*=}")"
+  done
+}
+
+door_secrets() {
+  [ "$EFFECTIVE" != off ] || refuse "door-secrets is for a typryx that is deployed: add --with-typed, or choose --typed-mode jev or own-model"
+  [ "$HAVE_GIVEN" = 1 ] || refuse "door-secrets needs --have: which of $DOOR_TYPRYX and $DOOR_BROKER exist (empty for neither)"
+  local have_t=0 have_b=0 tok domain="${DOOR_DOMAIN:-set-me.invalid}" given="" spec bearer broker_key made=""
+  local domain_re bearer_re='^[^[:space:],]+$'
+  for tok in $HAVE; do
+    case "${tok#secret/}" in
+      "$DOOR_TYPRYX") have_t=1 ;;
+      "$DOOR_BROKER") have_b=1 ;;
+      *) refuse "--have names '$tok', which is not $DOOR_TYPRYX or $DOOR_BROKER" ;;
+    esac
+  done
+  domain_re='^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$'
+  [[ "$domain" =~ $domain_re ]] || refuse "--trust-domain '$domain' is not a domain name"
+  # Read stdin whole in every case, so the `kubectl get` feeding it never meets a closed pipe.
+  if [ ! -t 0 ]; then given="$(cat)"; fi
+
+  if [ "$have_t" = 1 ] && [ "$have_b" = 1 ]; then
+    printf 'typed: the door: %s and %s already exist and are kept as they are.\n' "$DOOR_TYPRYX" "$DOOR_BROKER" >&2
+  elif [ "$have_b" = 1 ]; then
+    refuse "$DOOR_BROKER exists and $DOOR_TYPRYX does not. A new typryx key would not be the typryx_key the broker's vault already holds, so every call through the broker would be refused, and the door never overwrites a Secret that exists. Create $DOOR_TYPRYX with the bearer that vault holds (manifests/51-typryx.yaml's header shows the command), or delete $DOOR_BROKER so both are minted, then run this again."
+  elif [ "$have_t" = 1 ]; then
+    spec="$(printf '%s' "$given" | tr -d ' \n\r\t' | base64 -d 2>/dev/null)" || spec=""
+    bearer="${spec%%,*}"
+    bearer="${bearer%%=*}"
+    if [ -z "$bearer" ] || [ "$bearer" = "$spec" ] || ! [[ "$bearer" =~ $bearer_re ]]; then
+      refuse "$DOOR_TYPRYX exists but no TYPRYX_KEYS bearer (\`bearer=agent://...\`) could be read from it, so the broker's vault cannot be given typryx's key. Create $DOOR_BROKER by hand (manifests/52-tokenfuse-mcp-broker.yaml's header shows the command), then run this again."
+    fi
+    broker_key="$(gen 40)" || refuse "could not mint the broker's key"
+    door_secret "$DOOR_BROKER" tokenfuse-mcp-broker \
+      "TOKENFUSE_MCP_KEYS=$broker_key:$DOOR_KEY_ID" "TOKENFUSE_MCP_SECRETS=typryx_key=$bearer"
+    made="$DOOR_BROKER, its vault carrying the bearer of the $DOOR_TYPRYX that was already there, which is kept"
+  else
+    bearer="$(gen 40)" || refuse "could not mint typryx's key"
+    broker_key="$(gen 40)" || refuse "could not mint the broker's key"
+    [ "$bearer" != "$broker_key" ] || refuse "the two door keys came out equal, which a random source does not do"
+    door_secret "$DOOR_TYPRYX" typryx "TYPRYX_KEYS=$bearer=agent://$domain/$DOOR_SUBJECT"
+    printf -- '---\n'
+    door_secret "$DOOR_BROKER" tokenfuse-mcp-broker \
+      "TOKENFUSE_MCP_KEYS=$broker_key:$DOOR_KEY_ID" "TOKENFUSE_MCP_SECRETS=typryx_key=$bearer"
+    made="$DOOR_TYPRYX (identity agent://$domain/$DOOR_SUBJECT) and $DOOR_BROKER, the broker's vault carrying typryx's bearer"
+  fi
+  bearer=""; broker_key=""; spec=""; given=""
+  if [ -n "$made" ]; then
+    printf 'typed: the door: creating %s. A Secret that already exists is never overwritten, so on every later run both are kept.\n' "$made" >&2
+  fi
+  printf '       Read a value back, never printed here: the broker'"'"'s caller key (`secret:%s`; an agent sends the secret as x-fuse-key), then typryx'"'"'s own (`bearer=agent://...`):\n' "$DOOR_KEY_ID" >&2
+  printf "         kubectl -n %s get secret %s -o jsonpath='{.data.TOKENFUSE_MCP_KEYS}' | base64 -d\n" "$NS" "$DOOR_BROKER" >&2
+  printf "         kubectl -n %s get secret %s -o jsonpath='{.data.TYPRYX_KEYS}' | base64 -d\n" "$NS" "$DOOR_TYPRYX" >&2
+}
+
 notice() {
   if [ "$TRAINING" = 1 ]; then
     printf 'typed: training log ON (--typed-training). typryx appends the egressed state of each answered question to training.ndjson in %s, on the typryx-state claim it already has: no new disk, and the log lives as long as that claim.\n       It never holds the backend'"'"'s answer. Read how to export it, and why it adds no disk, in README "Typed answers: choose where your data goes".\n' "$TRAINING_DIR" >&2
@@ -487,4 +607,7 @@ case "$verb" in
     secrets ;;
   has-secrets) has_secrets ;;
   mode)        echo "$EFFECTIVE" ;;
+  door-secrets)
+    [ ! -t 1 ] || refuse "refusing to print a Secret to a terminal: pipe it into 'kubectl create -f -' and nowhere else"
+    door_secrets ;;
 esac

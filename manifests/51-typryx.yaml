@@ -24,14 +24,28 @@
 # so the container still binds 0.0.0.0) with no `TYPRYX_KEYS` and no
 # `TYPRYX_ALLOW_OPEN_BIND=1` refuses to start, exit 1. A missing required
 # variable exits 2 naming it. The pod is set up so the only way it comes up
-# healthy is with a real key in place.
+# healthy is with a real key in place, and without the Secret at all it sits in
+# CreateContainerConfigError.
+#
+# `@decided 2026-10-14`: the deploy scripts mint this Secret when it is absent and
+# never overwrite it, as stack-single's installer already does. With
+# `--with-typed` (or a `--typed-mode`), `typed/mode.sh door-secrets` mints
+# `typryx-keys` with a fresh 40-character bearer and the identity
+# `agent://<--trust-domain>/typed-broker` (`set-me.invalid` without the flag),
+# together with 52's `tokenfuse-mcp-broker-keys`, whose vault carries the same
+# bearer, and creates them with `kubectl create -f -` on stdin; it prints how to
+# read the value back, never the value (CLAUDE.md invariant 42). One you made
+# first still wins, and is kept on every later run:
 #
 #   kubectl -n agent-stack create secret generic typryx-keys \
 #     --from-literal=TYPRYX_KEYS='pick-a-long-secret=agent://acme.example/support-bot'
 #
 # --from-literal here is what 47-scopyx.yaml's own header uses for the same
 # shape of value; swap in --from-file if the key should not sit in this
-# machine's shell history.
+# machine's shell history. Made by hand with no broker Secret yet, the deploy
+# mints the broker's from this bearer; a broker Secret with no typryx-keys
+# stops the deploy, because a new typryx key would not be the one the broker's
+# vault holds.
 #
 # The identity after `agent://` should carry THIS deployment's own
 # TRAILRYX_TRUST_DOMAIN (00-base.yaml's stack-wiring, invariant 14), not a
@@ -138,9 +152,9 @@
 # with an upstream and a secret it already knew how to handle. That broker,
 # its own Secret, and the NetworkPolicies admitting only it to port 4320 are
 # in `manifests/52-tokenfuse-mcp-broker.yaml`, applied by the same
-# `--with-typed` path as this file (see that file's header for the two
-# `kubectl create secret` commands an operator runs, and for what was
-# measured through it; GOTCHAS 106).
+# `--with-typed` path as this file (see that file's header for its Secret, which
+# the deploy scripts mint with this one, and for what was measured through it;
+# GOTCHAS 106).
 #
 # Reaching typryx directly, without the broker, is unchanged: the operator's
 # own tunnel or
@@ -232,8 +246,9 @@ spec:
           envFrom:
             # NOT optional, the same stance 47-scopyx.yaml takes on
             # scopyx-keys. Missing here is not an unconfigured feature, it is
-            # a plane with no door, and the pod exits rather than starting
-            # without one.
+            # a plane with no door, and the pod does not start without one.
+            # The deploy scripts mint it when absent (typed/mode.sh
+            # door-secrets, CLAUDE.md invariant 42).
             - secretRef: { name: typryx-keys }
           ports: [{ name: http, containerPort: 4320 }]
           volumeMounts:

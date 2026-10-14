@@ -4298,3 +4298,30 @@ closes a pipe early and SIGPIPE does not matter. The same command with `gen 28`
 printed 28 characters at once. `scripts/gen-is-bounded.sh` (CLAUDE.md invariant
 41) runs every generator with SIGPIPE ignored and refuses an unbounded read of
 `/dev/urandom` anywhere in the tracked shell.
+
+## 126. A typed deploy waited ten minutes on two Secrets nobody made, and ended red
+
+> **Ours, and fixed.** We wrote the step down for an operator and left it out of the deploy.
+
+**Symptom:** `deploy-gcp.sh --with-typed --typed-risk-signal`, measured on a GCP test cluster
+on 2026-10-14: every plane rolled out but two. `typryx` and `tokenfuse-mcp-broker` stayed
+Pending, each rollout timed out after its 300 s, and verify ended 15 passed, 1 failed, 3
+noted. With the two Secrets made by hand afterwards, 16, 0, 3.
+
+**Why:** typryx reads `typryx-keys` and the MCP broker reads `tokenfuse-mcp-broker-keys`,
+both through an `envFrom` that is not optional on purpose (a plane with no door must not
+start), and a container whose `envFrom` names a missing Secret waits in
+CreateContainerConfigError. Both Secrets were documented as made by hand, in the two
+manifests' headers, the README and `typed/mode.sh`; the deploy scripts said in a comment
+that the pod would crash-loop, which it does not, and named only one of the two. Invariant
+17 did not see it, because it reads `secretKeyRef`s against `create secret generic`
+blocks, and nothing created these at all. stack-single's installer mints the same pair.
+
+**Fixed here:** `typed/mode.sh door-secrets`, called by the three deploy scripts in their
+typed branch before the render, mints both when neither exists, mints the broker's from
+the existing bearer when only `typryx-keys` exists, keeps both when both exist, and stops
+with the reason when only the broker's exists. It creates them with `kubectl create -f -`
+on stdin, so a Secret that exists is never replaced, and prints how to read a value back,
+never a value. `scripts/typed-door-is-minted.sh` (CLAUDE.md invariant 42) requires every
+non-optional Secret a typed manifest reads to be made by something here.
+

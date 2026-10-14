@@ -62,9 +62,10 @@
 # default for the same reason `--with-finops` is: a whole plane somebody may
 # simply not want. Nothing it does spends money by default (its backend is `stub`,
 # free and making no outbound call, unless `--typed-mode` below chooses another);
-# see manifests/51-typryx.yaml for how its door key is generated. The
-# same flag also applies tokenfuse's MCP broker in front of it
-# (manifests/52-tokenfuse-mcp-broker.yaml).
+# see manifests/51-typryx.yaml for its door key. The same flag also applies
+# tokenfuse's MCP broker in front of it (manifests/52-tokenfuse-mcp-broker.yaml).
+# The two Secrets their doors read are minted when absent and kept when present
+# (typed/mode.sh door-secrets); how to read them is printed, never the values.
 #
 # `--typed-mode jev|own-model|off` chooses where the data of a typed answer goes
 # (`@decided 2026-09-30`), default off. `--with-typed` alone keeps the stub
@@ -723,11 +724,27 @@ fi
 # mode chosen (the stub for --with-typed alone, byte for byte manifests/51 and
 # 52) and, for jev or an own model with a key, the Secret the Deployment mounts,
 # which is piped over stdin and never passed as an argument or written down.
-# It still needs a typryx-keys Secret the operator creates by hand
-# (manifests/51-typryx.yaml's own header shows the command); without one the pod
-# stays in CrashLoopBackOff, which is the intended signal, the same as scopyx.
+#
+# Its door first: typryx reads typryx-keys and the MCP broker reads
+# tokenfuse-mcp-broker-keys, neither optional, so without them both pods stay
+# Pending (CreateContainerConfigError) and the rollout waits out its 300 s for
+# each (measured on GCP 2026-10-14). typed/mode.sh door-secrets decides, one copy for
+# the three launchers (CLAUDE.md invariant 42): both there, both kept; neither,
+# both minted; only typryx-keys, the broker's minted from its bearer; only the
+# broker's, a stop with the reason. What it prints goes to `create -f -` on
+# stdin, which never replaces a Secret that exists, and no value is printed.
 if [ "$TYPED_EFFECTIVE" != off ]; then
   say "typed: applying the typryx plane (mode $TYPED_EFFECTIVE) and tokenfuse's MCP broker in front of it"
+  DOOR_HAVE="$(k_ "-n agent-stack get secret typryx-keys tokenfuse-mcp-broker-keys --ignore-not-found -o name" | tr '\n' ' ')" \
+    || die "could not ask the cluster whether the typed-answer door's two Secrets exist"
+  DOOR_DOCS="$(k_ "-n agent-stack get secret typryx-keys --ignore-not-found -o jsonpath='{.data.TYPRYX_KEYS}'" \
+    | "$ROOT/typed/mode.sh" door-secrets ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} --have "$DOOR_HAVE" ${TRUST_DOMAIN:+--trust-domain "$TRUST_DOMAIN"})" \
+    || die "the typed-answer door's Secrets were not settled (the reason is above), so the typed plane has not been applied."
+  if [ -n "$DOOR_DOCS" ]; then
+    printf '%s\n' "$DOOR_DOCS" | k_ "-n agent-stack create -f -" >/dev/null \
+      || die "could not create the typed-answer door's Secrets"
+  fi
+  DOOR_DOCS=""
   if [ "$("$ROOT/typed/mode.sh" has-secrets ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"})" = yes ]; then
     "$ROOT/typed/mode.sh" secrets ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} | k_ "-n agent-stack apply -f -" >/dev/null \
       || die "could not apply the typed-answer key Secret"

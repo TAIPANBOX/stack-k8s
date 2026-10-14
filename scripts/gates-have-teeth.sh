@@ -2133,8 +2133,119 @@ os.remove("lib/gen.sh")')" \
 run_case "gen-is-bounded: nothing asks the generator for a length" fail \
 	'./scripts/gen-is-bounded.sh' \
 	"$(py 'for p in ("deploy.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh"):
-    edit(p, "\"$(gen 28)\"", "\"$(gen)\"")')" \
+    edit(p, "\"$(gen 28)\"", "\"$(gen)\"")
+s = open("typed/mode.sh").read()
+assert "$(gen 40)" in s
+open("typed/mode.sh", "w").write(s.replace("$(gen 40)", "$(gen)"))')" \
 	"there is no length to run the generator for"
+
+# Invariant 42: a typed deploy comes up green on its own. A typed manifest reads a
+# Secret nothing makes; a launcher loses the door, mints it after the render, applies
+# it, or hands create only part of it; door-secrets breaks the vault, the two keys,
+# their length, the key id, stderr, the broker-only stop or the schema; and the
+# subjects taken away. An optional reference and a comment must pass.
+run_case "typed-door-is-minted: a typed manifest reads a Secret nothing mints" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("manifests/51-typryx.yaml", "            - secretRef: \x7b name: typryx-keys \x7d\n", "            - secretRef: \x7b name: typryx-keys \x7d\n            - secretRef: \x7b name: typryx-extra \x7d\n")')" \
+	"reads Secret typryx-extra"
+
+run_case "typed-door-is-minted: an optional reference is not a fault" pass \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("manifests/51-typryx.yaml", "            - secretRef: \x7b name: typryx-keys \x7d\n", "            - secretRef: \x7b name: typryx-keys \x7d\n            - secretRef: \x7b name: typryx-extra, optional: true \x7d\n")')"
+
+run_case "typed-door-is-minted: a launcher loses its door" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 's = open("deploy.sh").read()
+i = s.index("  DOOR_HAVE=\"$(k_")
+j = s.index("  DOOR_DOCS=\"\"\n", i) + len("  DOOR_DOCS=\"\"\n")
+open("deploy.sh", "w").write(s[:i] + s[j:])')" \
+	"deploy.sh: its typed branch never calls typed/mode.sh door-secrets"
+
+run_case "typed-door-is-minted: a launcher mints the door after the render" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 's = open("cloud/gcp/deploy-gcp.sh").read()
+i = s.index("  DOOR_HAVE=\"$(k_")
+j = s.index("  DOOR_DOCS=\"\"\n", i) + len("  DOOR_DOCS=\"\"\n")
+block = s[i:j]
+s = s[:i] + s[j:]
+r = s.index("typed/mode.sh\" render")
+e = s.index("\n", r) + 1
+open("cloud/gcp/deploy-gcp.sh", "w").write(s[:e] + block + s[e:])')" \
+	"after the render"
+
+run_case "typed-door-is-minted: a launcher applies the door's Secrets" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "\"$DOOR_DOCS\" | k_ \"-n agent-stack create -f -\"", "\"$DOOR_DOCS\" | k_ \"-n agent-stack apply -f -\"")')" \
+	"hands the door's Secrets to apply"
+
+run_case "typed-door-is-minted: a launcher hands create only part of the door" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$DOOR_DOCS\" | k_ \"-n agent-stack create -f -\"", "\"$DOOR_DOCS\" | head -n 9 | k_ \"-n agent-stack create -f -\"")')" \
+	"not both door Secrets"
+
+run_case "typed-door-is-minted: a comment about apply beside the door is not a fault" pass \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("deploy.sh", "  DOOR_DOCS=\"\"\n", "  # DOOR_DOCS never goes to apply, which would overwrite a Secret\n  DOOR_DOCS=\"\"\n")')"
+
+run_case "typed-door-is-minted: the broker's vault does not carry typryx's bearer" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'p = "typed/mode.sh"
+s = open(p).read()
+a = "\"TOKENFUSE_MCP_SECRETS=typryx_key=$bearer\""
+i = s.rindex(a)
+open(p, "w").write(s[:i] + "\"TOKENFUSE_MCP_SECRETS=typryx_key=$broker_key\"" + s[i + len(a):])')" \
+	"does not carry typryx's own bearer"
+
+run_case "typed-door-is-minted: typryx and the broker get one key between them" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'p = "typed/mode.sh"
+s = open(p).read()
+a = "    broker_key=\"$(gen 40)\" || refuse \"could not mint the broker\x27s key\"\n    [ \"$bearer\" != \"$broker_key\" ]"
+assert a in s
+open(p, "w").write(s.replace(a, "    broker_key=\"$bearer\"\n    [ -n \"$broker_key\" ]"))')" \
+	"are the same"
+
+run_case "typed-door-is-minted: typryx's bearer is short" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("typed/mode.sh", "    bearer=\"$(gen 40)\" || refuse", "    bearer=\"$(gen 16)\" || refuse")')" \
+	"not at least 32"
+
+run_case "typed-door-is-minted: the broker's key id is an agent URI" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("typed/mode.sh", "DOOR_KEY_ID=\"broker-caller\"", "DOOR_KEY_ID=\"agent://acme.example/broker-caller\"")')" \
+	"not a bare name"
+
+run_case "typed-door-is-minted: a minted value reaches stderr" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("typed/mode.sh", "    made=\"$DOOR_TYPRYX (identity", "    printf \x27%s\\n\x27 \"$bearer\" >&2\n    made=\"$DOOR_TYPRYX (identity")')" \
+	"appears on stderr"
+
+run_case "typed-door-is-minted: the broker's Secret alone mints typryx's anyway" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("typed/mode.sh", "  elif [ \"$have_b\" = 1 ]; then\n", "  elif false; then\n")')" \
+	"only the broker"
+
+run_case "typed-door-is-minted: --have rides along with another verb unnoticed" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("typed/mode.sh", "  refuse \"--have and --trust-domain only go with door-secrets\"\n", "  true\n")')" \
+	"--have with another verb"
+
+run_case "typed-door-is-minted: the minted Secrets are not schema-valid" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("typed/mode.sh", "labels: \x7b app: %s, plane: typed \x7d\\ntype: Opaque", "labels: \x7b app: %s, plane: typed \x7d\\ntypo: Opaque")')" \
+	"do not validate"
+
+run_case "typed-door-is-minted: the typed manifests are taken away" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'import os
+os.remove("manifests/51-typryx.yaml")')" \
+	"measured NOTHING"
+
+run_case "typed-door-is-minted: no launcher is left to judge" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'for p in ("deploy.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh"):
+    edit(p, "    --with-typed)", "    --with-typd)")')" \
+	"measured NOTHING about the launchers"
 
 echo
 if [ -n "$(git status --porcelain)" ]; then

@@ -364,7 +364,24 @@ it says what it leaves open.
 `--with-typed` alone it reaches nowhere outbound (its backend is `stub`, free and
 deterministic) and enforces nothing, it is simply a whole plane somebody may not
 want. `./deploy.sh --with-typed` applies it after the kustomization on the stub;
-the next section is how to give it a real backend. By hand the stub is
+the next section is how to give it a real backend.
+
+Its door is a Secret, `typryx-keys`, and the broker's below is another,
+`tokenfuse-mcp-broker-keys`. `@decided 2026-10-14`: the deploy scripts mint both
+when they are absent and never overwrite one. With `--with-typed` or a
+`--typed-mode`, `typed/mode.sh door-secrets` mints two fresh 40-character
+values, the broker's vault carrying typryx's, the identity
+`agent://<--trust-domain>/typed-broker`, and prints how to read them back, never
+the values; a Secret you made first is kept, on that run and every later one. If
+only `typryx-keys` exists, the broker's is minted from its bearer; if only the
+broker's exists, the deploy stops and says why. Read them with
+
+```bash
+kubectl -n agent-stack get secret tokenfuse-mcp-broker-keys -o jsonpath='{.data.TOKENFUSE_MCP_KEYS}' | base64 -d
+kubectl -n agent-stack get secret typryx-keys -o jsonpath='{.data.TYPRYX_KEYS}' | base64 -d
+```
+
+By hand, without the launchers, the stub is
 
 ```bash
 kubectl apply -f manifests/51-typryx.yaml
@@ -372,13 +389,14 @@ kubectl -n agent-stack create secret generic typryx-keys \
   --from-literal=TYPRYX_KEYS='pick-a-long-secret=agent://acme.example/support-bot'
 ```
 
-Without that Secret the pod refuses to start, the same stance scopyx takes on
-its own key. Its journal is on the shared event bus (`stack-events`), the same
+Without that Secret the pod does not start (CreateContainerConfigError), the
+same stance scopyx takes on its own key. Its journal is on the shared event bus (`stack-events`), the same
 place every other plane's history lives; the record plane's own mapper does
 not seal typryx's event types today regardless (`manifests/51-typryx.yaml`
 says why), so that is a place to read them, not a claim that they are sealed.
 
-tokenfuse's MCP broker fronts typryx by configuration since 2026-09-26:
+tokenfuse's MCP broker fronts typryx by configuration since 2026-09-26. By
+hand, its Secret is
 
 ```bash
 kubectl apply -f manifests/52-tokenfuse-mcp-broker.yaml
@@ -462,8 +480,9 @@ How each mode behaves, because the defaults are deliberate:
   key Secrets behind (an `apply` does not prune; this repository does not delete
   keys on its own initiative). Remove them yourself if you want them gone:
   `kubectl -n agent-stack delete networkpolicy typryx-egress-model`.
-- **The door key is unchanged.** `typryx-keys` is still made by hand, in every
-  mode, as above.
+- **The door is the same in every mode.** `typryx-keys` and
+  `tokenfuse-mcp-broker-keys` are minted by the deploy when absent and kept when
+  present, whatever the mode, as above.
 
 **Training on your own data.** `@decided 2026-09-30`: we do not fine-tune or
 ship models for customers. A customer can fine-tune and calibrate their own model
@@ -878,7 +897,7 @@ down:
 
 The command output behind every sentence above is in `evidence/` and
 `cloud/*/evidence/`. Every trap the runs cost us is written up in
-`GOTCHAS.md`, now **125 items** (46 platform, 56 ours, 16 the stack's own
+`GOTCHAS.md`, now **126 items** (46 platform, 57 ours, 16 the stack's own
 contract, 7 upstream; `scripts/gotchas-classified.sh` prints the current split). Almost all are already fixed here, which is the whole
 point: the next person to run this should not meet any of them. A small
 number (69, 81) are recorded rather than solved, and say so plainly rather
