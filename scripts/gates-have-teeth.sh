@@ -2451,6 +2451,56 @@ run_case "cost-live-refuses-unknown-rates: the m7i.xlarge row is removed" fail \
 run_case "cost-live-refuses-unknown-rates: a reworded comment is not a fault" pass \
 	'./scripts/cost-live-refuses-unknown-rates.sh' \
 	"$(py 'edit("cloud/aws/cost-live.sh", "# eu-central-1, on demand, Linux, shared tenancy.", "# eu-central-1, on demand, Linux, shared tenancy (reworded).")')"
+# Invariant 46: a node that is shut down stops its pods before its network goes.
+run_case "nodes-stop-their-pods-first: an installer writes no shutdown config" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "graceful_shutdown_conf() {", "graceful_shutdown_cfg() {")')" \
+	"defines no graceful_shutdown_conf"
+
+run_case "nodes-stop-their-pods-first: the logind delay is shorter than the period" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("install.sh", "InhibitDelayMaxSec=180", "InhibitDelayMaxSec=30")')" \
+	"is not the drop-in this gate holds"
+
+run_case "nodes-stop-their-pods-first: the first server gets no file" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("install.sh", "put_graceful_shutdown \"$FIRST\"\n", "")')" \
+	"without writing the graceful-shutdown files"
+
+run_case "nodes-stop-their-pods-first: an install passes its own config-dir" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("install.sh", "--secrets-encryption \\\n", "--secrets-encryption \\\n    --kubelet-arg=config-dir=/etc/elsewhere \\\n")')" \
+	"passes --kubelet-arg=config-dir"
+
+run_case "nodes-stop-their-pods-first: workloads get less time than a pod may take" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'for p in ("install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"):
+    edit(p, "shutdownGracePeriod: 60s", "shutdownGracePeriod: 40s")')" \
+	"our workloads get"
+
+run_case "nodes-stop-their-pods-first: the installers disagree on the shutdown period" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "shutdownGracePeriod: 60s", "shutdownGracePeriod: 61s")')" \
+	"is not the KubeletConfiguration this gate holds"
+
+run_case "nodes-stop-their-pods-first: verify.sh counts a pod a shutdown stopped" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("verify.sh", "$2 == \"Failed\" && ($3 == \"Terminated\" || $3 == \"NodeShutdown\")", "$2 == \"Failed\" && $3 == \"NoSuchReason\"")')" \
+	"did not report exactly one bad pod"
+
+run_case "nodes-stop-their-pods-first: verify.sh stops counting a crash loop" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'edit("verify.sh", "!($1 in gone) && $3 != \"Running\" && $3 != \"Completed\" { c++ }", "!($1 in gone) && $3 != \"Running\" && $3 != \"Completed\" && $3 != \"CrashLoopBackOff\" { c++ }")')" \
+	"did not report exactly one bad pod"
+
+run_case "nodes-stop-their-pods-first: no installer is left to judge" fail \
+	'./scripts/nodes-stop-their-pods-first.sh' \
+	"$(py 'for p in ("install.sh", "cloud/gcp/install-gcp.sh", "cloud/aws/install-aws.sh"):
+    s = open(p).read()
+    k = "sh -s - " + "serv" + "er"
+    assert k in s
+    open(p, "w").write(s.replace(k, "sh -s - serve"))')" \
+	"measured NOTHING"
 
 if [ "$failures" -gt 0 ]; then
 	printf '%d of %d cases failed.\n' "$failures" "$cases"

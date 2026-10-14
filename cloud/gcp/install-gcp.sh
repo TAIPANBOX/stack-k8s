@@ -260,6 +260,43 @@ done
 wait
 echo "   done"
 
+# ---- graceful node shutdown ------------------------------------------------
+# A node that is rebooted or stopped (a VM stop, a maintenance reboot, a spot
+# reclaim) shuts down with its pods still running: k3s's unit stops with
+# KillMode=process, so the containers outlive the kubelet, and systemd brings the
+# network down while a pod is still writing to the shared RWX (NFS) volume. On GCP
+# on 2026-10-14 a reboot of server-3 hung for 7 minutes in systemd-shutdown,
+# "Waiting for process (tokenfuse)", and took 8m19s instead of about one (CLAUDE.md
+# invariant 46, GOTCHAS 130).
+#
+# Two settings make the kubelet stop the pods before the network goes. First the
+# kubelet's own period, in a KubeletConfiguration drop-in in the directory k3s always
+# passes to the kubelet as --config-dir (k3s source, pkg/daemons/agent,
+# kubeletArgsAndConfig): 60 s in all, 45 s for our pods and the last 15 s for the
+# critical pods (Calico, coredns). Second systemd-logind's InhibitDelayMaxSec, which
+# is 5 s by default and caps how long systemd waits for the kubelet's inhibitor lock:
+# raised to 180 s, and logind restarted so it reads the drop-in now. The cost: a node
+# that is shut down waits up to 60 s longer, when its pods do not stop sooner.
+GRACEFUL_DIR=/var/lib/rancher/k3s/agent/etc/kubelet.conf.d
+graceful_shutdown_conf() {
+  printf '%s\n' \
+    'apiVersion: kubelet.config.k8s.io/v1beta1' \
+    'kind: KubeletConfiguration' \
+    'shutdownGracePeriod: 60s' \
+    'shutdownGracePeriodCriticalPods: 15s'
+}
+logind_conf() {
+  printf '%s\n' \
+    '[Login]' \
+    'InhibitDelayMaxSec=180'
+}
+put_graceful_shutdown() { # node
+  graceful_shutdown_conf | su_ "$1" "sh -c 'mkdir -p $GRACEFUL_DIR && cat > $GRACEFUL_DIR/99-stack-graceful-shutdown.conf'" \
+    || die "could not write the kubelet's graceful-shutdown config on $1"
+  logind_conf | su_ "$1" "sh -c 'mkdir -p /etc/systemd/logind.conf.d && cat > /etc/systemd/logind.conf.d/99-stack-graceful-shutdown.conf && systemctl restart systemd-logind'" \
+    || die "could not write systemd-logind's inhibit delay on $1"
+}
+
 # ---- 2. the first server ---------------------------------------------------
 # The flag list is unchanged from the other two runs except provider-id. Every
 # flag is explained in ../../install.sh section 2; the reasons are not
@@ -302,6 +339,7 @@ if [ -z "$K3S_TOKEN_VALUE" ]; then
     K3S_TOKEN_VALUE="$(head -c 18 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   fi
 fi
+put_graceful_shutdown "$FIRST"
 su_ "$FIRST" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - server \
     --cluster-init \
     --node-name '$FIRST_NODE_NAME' \
@@ -328,6 +366,7 @@ for n in "${SERVER_LIST[@]:1}"; do
   # Read the name BEFORE installing, so the node registers under a name we chose.
   JOINED_NAME="$(node_name_of "$n")"
   [ -n "$JOINED_NAME" ] || die "could not read a host name from $n to pin --node-name to"
+  put_graceful_shutdown "$n"
   su_ "$n" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - server \
       --server 'https://$FIRST_PRIV:6443' \
       --node-name '$JOINED_NAME' \
@@ -355,6 +394,7 @@ done
 
 for n in ${AGENT_LIST[@]+"${AGENT_LIST[@]}"}; do
   say "k3s agent: $n ($(priv_of "$n"))"
+  put_graceful_shutdown "$n"
   su_ "$n" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_URL='https://$FIRST_PRIV:6443' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - agent \
       --node-name '$(node_name_of "$n")' \
       --node-ip '$(priv_of "$n")' \
@@ -364,6 +404,16 @@ done
 
 say "nodes"
 k_ "get nodes -o custom-columns=NAME:.metadata.name,STATUS:.status.conditions[-1].type,PROVIDER:.spec.providerID"
+
+say "graceful node shutdown: each kubelet holds its inhibitor"
+for n in "${ALL_NODES[@]}"; do
+  if su_ "$n" "systemd-inhibit --list --no-legend 2>/dev/null | grep -qi kubelet"; then
+    echo "   $n: the kubelet stops its pods before the network goes"
+  else
+    echo "   $n: NO kubelet shutdown inhibitor (is systemd-logind running, and D-Bus?):"
+    echo "   a reboot of this node can hang on a pod writing to the shared volume (GOTCHAS 130)"
+  fi
+done
 
 # ---- 4. Calico, and the one Kubernetes-level difference --------------------
 # [GCP] 5. The other two clouds run `encapsulation: VXLANCrossSubnet`, which
