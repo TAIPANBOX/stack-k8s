@@ -345,6 +345,9 @@ k_()  { su_ "$FIRST" "/usr/local/bin/k3s kubectl $*"; }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 [ -d "$ROOT/manifests" ] || die "no manifests/ above this script. Run it from a checkout of stack-k8s."
+# The one secret generator (CLAUDE.md invariant 41): a bounded read, so it ends whatever
+# SIGPIPE is set to. Sourced here, once the checkout is known, for the operator password.
+. "$ROOT/lib/gen.sh" || die "no lib/gen.sh in $ROOT"
 
 # ---- the typed data mode, refused BEFORE anything is installed ---------------
 # typed/mode.sh is the one copy of this check (CLAUDE.md invariant 26). Run here
@@ -779,11 +782,11 @@ if [ -n "$CONSOLE_NODE" ]; then
   if k_ "-n agent-stack exec -i deploy/genaryx-console -- test -s /var/lib/stack/.taipan/genaryx-web/operator.json" >/dev/null 2>&1; then
     say "operator account already exists, left as is"
   else
-    # GOTCHAS.md item 25: the subshell disables pipefail deliberately. `tr
-    # </dev/urandom | head -c N` under `set -o pipefail` kills the script here,
-    # silently, with the cluster up and no operator account.
-    CONSOLE_PASSWORD="$( set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 28 )"
-    [ "${#CONSOLE_PASSWORD}" = 28 ] || die "could not generate an operator password; /dev/urandom is not readable."
+    # lib/gen.sh reads a bounded 4096 bytes and cuts in bash, because `tr
+    # </dev/urandom | head -c N` is a trap twice: under pipefail it ends the
+    # script here with 141 (GOTCHAS 25), with the cluster up and no operator
+    # account, and with SIGPIPE ignored it never ends at all (GOTCHAS 125).
+    CONSOLE_PASSWORD="$(gen 28)" || die "could not generate an operator password; /dev/urandom is not readable."
     if printf '%s\n' "$CONSOLE_PASSWORD" | k_ "-n agent-stack exec -i deploy/genaryx-console -- /usr/local/bin/genaryx-web set-password --username $CONSOLE_USER" >/dev/null 2>&1; then
       say "operator '$CONSOLE_USER' created"
       # The console resolved "do I have an operator" at startup and does not

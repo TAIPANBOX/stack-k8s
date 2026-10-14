@@ -252,6 +252,9 @@ else
     || die "could not fetch the repo; check the network, or clone it and run ./deploy.sh"
 fi
 [ -d "$ROOT/manifests" ] || die "no manifests/ in $ROOT"
+# The one secret generator (CLAUDE.md invariant 41): a bounded read, so it ends whatever
+# SIGPIPE is set to. Sourced here, once the checkout is known, for the operator password.
+. "$ROOT/lib/gen.sh" || die "no lib/gen.sh in $ROOT"
 
 # ---- the typed data mode, refused BEFORE anything is installed ---------------
 # typed/mode.sh is the one copy of this check (CLAUDE.md invariant 26). Run here
@@ -803,13 +806,11 @@ if [ -n "$CONSOLE_NODE" ]; then
     say "operator account already exists, left as is${EXISTING_USER:+ (username: $EXISTING_USER)}"
     CONSOLE_USER="${EXISTING_USER:-$CONSOLE_USER}"
   else
-    # 24 bytes of urandom, base64, punctuation stripped: long enough that the
-    # Argon2id hash behind it is not the weak link, safe to paste anywhere.
-    # The subshell disables pipefail deliberately. `tr </dev/urandom | head -c N`
-    # is the idiom everyone writes, and under `set -o pipefail` it is a trap:
-    # head closes the pipe once it has its N bytes, tr dies of SIGPIPE, the
-    # pipeline reports 141 and `set -e` ends the deploy right here, silently,
-    # with the cluster up and no operator account.
+    # 28 characters of A-Za-z0-9 from lib/gen.sh: long enough that the Argon2id
+    # hash behind it is not the weak link, and safe to paste anywhere. gen reads
+    # a bounded 4096 bytes and cuts in bash, because `tr </dev/urandom | head -c N`
+    # is a trap twice: under pipefail it ends the deploy here with 141 (GOTCHAS
+    # 25), and with SIGPIPE ignored it never ends at all (GOTCHAS 125).
     if [ -n "$CONSOLE_PASSWORD" ]; then
       # Chosen at the top, before any of this ran. Never echoed back here: the
       # operator knows it, and printing it would put it in the scrollback and in
@@ -822,8 +823,7 @@ if [ -n "$CONSOLE_NODE" ]; then
       # an instruction, and this run is when it was given.
       CONSOLE_PASSWORD_CHOSEN=1
     else
-      CONSOLE_PASSWORD="$( set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 28 )"
-      [ "${#CONSOLE_PASSWORD}" = 28 ] || die "could not generate an operator password; /dev/urandom is not readable."
+      CONSOLE_PASSWORD="$(gen 28)" || die "could not generate an operator password; /dev/urandom is not readable."
     fi
     if printf '%s\n' "$CONSOLE_PASSWORD" | k_ "-n agent-stack exec -i deploy/genaryx-console -- /usr/local/bin/genaryx-web set-password --username $CONSOLE_USER" >/dev/null 2>&1; then
       say "operator '$CONSOLE_USER' created"
