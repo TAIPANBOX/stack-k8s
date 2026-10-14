@@ -79,17 +79,30 @@ fi
 
 # Cluster DNS at one replica means one dead node costs the full not-ready
 # toleration in lost name resolution, measured at 298 s on 2026-08-27
-# (FINDINGS.md, F2). The installers scale this to two; k3s re-applies its own
-# manifest on a version change, so this is here to catch the revert.
+# (FINDINGS.md, F2). The installers scale this to two, or three from five nodes; k3s re-applies its
+# own manifest on a version change, so this is here to catch the revert.
 dns_replicas="$($KUBECTL -n kube-system get deployment coredns -o jsonpath='{.status.readyReplicas}' 2>/dev/null)"
 if [ "${nodes_total_early:-$($KUBECTL get nodes --no-headers 2>/dev/null | grep -c .)}" -le 1 ]; then
   note "single-node cluster: cluster DNS cannot be spread, and one replica is all there is to have"
 elif [ -z "$dns_replicas" ]; then
   bad "cannot read the coredns replica count: is cluster DNS deployed?"
+elif [ "$dns_replicas" -lt 3 ] && [ "$($KUBECTL get nodes --no-headers 2>/dev/null | grep -c .)" -ge 5 ]; then
+  bad "cluster DNS has $dns_replicas ready replicas on five or more nodes: the installers ask for three (CLAUDE.md invariant 45)"
 elif [ "$dns_replicas" -ge 2 ]; then
   ok "cluster DNS has $dns_replicas ready replicas"
 else
   bad "cluster DNS has $dns_replicas ready replica: one dead node costs the full 300 s toleration in lost resolution"
+fi
+# The installers give cluster DNS a disruption budget so a drain never takes every replica
+# (CLAUDE.md invariant 45). k3s ships none; a cluster installed before the budget, or one it
+# was deleted from, shows here rather than in the next drain.
+if [ "${nodes_total_early:-$($KUBECTL get nodes --no-headers 2>/dev/null | grep -c .)}" -gt 1 ]; then
+  dns_pdb="$($KUBECTL -n kube-system get pdb coredns -o jsonpath='{.spec.minAvailable}' 2>/dev/null)"
+  if [ "${dns_pdb:-0}" -ge 1 ] 2>/dev/null; then
+    ok "cluster DNS keeps $dns_pdb replica(s) up through a drain (PodDisruptionBudget coredns)"
+  else
+    bad "cluster DNS has no disruption budget: a drain of two nodes at once can take every replica (re-run the installer)"
+  fi
 fi
 
 head_ "pods"

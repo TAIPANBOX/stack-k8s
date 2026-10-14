@@ -378,16 +378,42 @@ done
 # so a second replica lands on a different node with no further configuration.
 # There was simply never a second replica for it to place.
 #
-# k3s owns this manifest and re-applies it when its own version changes, not on
-# every restart, so the scale survives reboots but not a k3s upgrade. verify.sh
-# checks the replica count for that reason: a revert should surface as a failed
+# k3s re-writes its packaged manifests on every start and says they should not be
+# altered (k3s docs, packaged components). The manifest sets no replica count, so
+# the scale is not overwritten by it. verify.sh checks the count: a revert should
+# surface as a failed
 # check rather than as the next outage.
-say "cluster DNS: more than one replica"
+#
+# And a disruption budget, so a drain never takes both replicas: k3s ships none,
+# and two nodes drained at once (an upgrade, a maintenance window) would
+# otherwise leave the cluster with no DNS at all. It is an object of our own,
+# which k3s's reconcile of its coredns manifest never touches; nothing here
+# changes k3s's Deployment beyond the replica count that manifest does not set.
+# What a budget does NOT do is keep DNS whole when a node dies: the dead
+# replica's address stays in the kube-dns Service until the node is marked
+# NotReady (the node-monitor grace), and a share of lookups fails or waits until
+# then. Three replicas shortened that window from 53 s to 43 s in one local run and
+# did not close it; a shorter grace is below
+# the 45 s Kubernetes itself asks for (CLAUDE.md invariant 45, GOTCHAS 128).
+say "cluster DNS: two replicas, three from five nodes, and a budget for drains"
 DNS_WANT=2
+[ "${#ALL_NODES[@]}" -ge 5 ] && DNS_WANT=3
 [ "${#ALL_NODES[@]}" -lt 2 ] && DNS_WANT=1
 k_ "-n kube-system scale deployment coredns --replicas=$DNS_WANT" >/dev/null \
   || echo "   could not scale coredns; verify.sh will report this"
 echo "   coredns replicas=$DNS_WANT"
+if [ "$DNS_WANT" -ge 2 ]; then
+  printf '%s\n' \
+    'apiVersion: policy/v1' \
+    'kind: PodDisruptionBudget' \
+    'metadata: { name: coredns, namespace: kube-system, labels: { app.kubernetes.io/managed-by: stack-k8s } }' \
+    'spec:' \
+    '  minAvailable: 1' \
+    '  selector: { matchLabels: { k8s-app: kube-dns } }' \
+    | k_ "apply -f -" >/dev/null \
+    || echo "   could not apply the coredns disruption budget; verify.sh will report this"
+  echo "   coredns disruption budget: one replica stays up through a drain"
+fi
 
 # ---- 5. Longhorn -----------------------------------------------------------
 say "Longhorn $LONGHORN_VERSION"
