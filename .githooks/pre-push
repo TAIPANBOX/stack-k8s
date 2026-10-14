@@ -76,6 +76,8 @@ step "a secret is minted from a bounded read" "./scripts/gen-is-bounded.sh"
 step "a cost report refuses an unknown machine rate" "./scripts/cost-live-refuses-unknown-rates.sh"
 step "cluster DNS keeps a replica through a drain" "./scripts/cluster-dns-has-a-budget.sh"
 step "every node stops its pods before its network goes" "./scripts/nodes-stop-their-pods-first.sh"
+step "every shell script parses under the bash a Mac ships" "./scripts/shell-scripts-parse.sh"
+step "node checks read only their own answer" "./scripts/node-checks-read-their-own-answer.sh"
 
 echo
 if [ "$fail" -ne 0 ]; then

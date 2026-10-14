@@ -43,6 +43,18 @@ note() { printf '  \033[33mnote\033[0m %s\n' "$*"; warn=$((warn+1)); }
 head_() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 kc()   { $KUBECTL -n "$NS" "$@"; }
 
+# Node checks run over ssh. A login banner, a motd or an ssh warning lands on the same
+# stdout as the answer, so the probe on the node prints its answer on lines that start
+# with SECCHK:, and only those lines are read here. A probe that prints nothing is
+# "could not look", the same as an unreachable node (GOTCHAS 131).
+SECCHK_SSH="-q -o LogLevel=ERROR -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10"
+node_probe() {  # host command -> the SECCHK: lines the command printed on that host
+  local host="$1" cmd="$2"
+  # shellcheck disable=SC2086
+  ssh $SECCHK_SSH ${SSH_KEY:+-i "$SSH_KEY"} "root@$host" "( $cmd ) 2>/dev/null | sed 's/^/SECCHK: /'" 2>/dev/null \
+    | sed -n 's/^SECCHK: //p'
+}
+
 # Where the console actually is. It lives in $NS on a plain install, and in its
 # own namespace once the operator tunnel is applied, because the tunnel needs
 # capabilities that $NS refuses on purpose (GOTCHAS 46). Every probe below runs
@@ -124,7 +136,8 @@ spec:
         capabilities: { drop: ["ALL"] }
 YAML
   if kc wait --for=condition=Ready pod/sec-probe-notify --timeout=90s >/dev/null 2>&1; then
-    notify_out="$(kc exec -i sec-probe-notify -- python3 - <<'PY' 2>/dev/null
+    notify_out_file="$(mktemp "${TMPDIR:-/tmp}/sec-probe.XXXXXX")"
+    cat > "${notify_out_file}" <<'PY'
 import socket
 # Inward, on the ports the planes serve and on a mail port: both must fail.
 # The second is the interesting one, since the policy allows 587 by PORT, and
@@ -139,7 +152,8 @@ for host, port in targets:
     except Exception:
         print(f"blocked {host}:{port}")
 PY
-)"
+    notify_out="$(kc exec -i sec-probe-notify -- python3 - < "${notify_out_file}" 2>/dev/null)"
+    rm -f "${notify_out_file}"
     echo "$notify_out" | sed 's/^/    /'
     if echo "$notify_out" | grep -q REACHED; then
       bad "a pod wearing the notifier's label reached inside the cluster: the egress rule points inward"
@@ -176,7 +190,8 @@ spec:
         capabilities: { drop: ["ALL"] }
 YAML
 if kc wait --for=condition=Ready pod/sec-probe --timeout=90s >/dev/null 2>&1; then
-  probe_out="$(kc exec -i sec-probe -- python3 - <<'PY' 2>/dev/null
+  probe_out_file="$(mktemp "${TMPDIR:-/tmp}/sec-probe.XXXXXX")"
+  cat > "${probe_out_file}" <<'PY'
 import socket
 # NOTE: no apostrophes in this heredoc, see GOTCHAS 71.
 targets = [("tokenfuse-cloud",8080),("tokenfuse-gateway",4100),("wardryx",8090),
@@ -188,7 +203,8 @@ for host, port in targets:
     except Exception:
         print(f"blocked {host}:{port}")
 PY
-)"
+  probe_out="$(kc exec -i sec-probe -- python3 - < "${probe_out_file}" 2>/dev/null)"
+  rm -f "${probe_out_file}"
   echo "$probe_out" | sed 's/^/    /'
   if echo "$probe_out" | grep -q REACHED; then
     bad "an unlabelled pod reached a plane: the namespace is acting as a trust boundary"
@@ -212,13 +228,15 @@ head_ "3. nothing leaves the cluster except the metered path"
 # of the deployment rather than a promise in a README.
 connect_test api.anthropic.com 443 blocked "console -> the model provider (must go through the gateway)"
 connect_test 1.1.1.1           443 blocked "console -> the open internet"
-gw="$(kc exec -i deploy/tokenfuse-gateway -- bash -s <<'SH' 2>/dev/null
+gw_file="$(mktemp "${TMPDIR:-/tmp}/sec-probe.XXXXXX")"
+cat > "${gw_file}" <<'SH'
 probe() { timeout 6 bash -c "echo > /dev/tcp/$1/$2" 2>/dev/null && echo "open $1:$2" || echo "blocked $1:$2"; }
 probe api.anthropic.com 443
 probe api.anthropic.com 80
 probe 10.10.0.2 6443
 SH
-)"
+gw="$(kc exec -i deploy/tokenfuse-gateway -- bash -s < "${gw_file}" 2>/dev/null)"
+rm -f "${gw_file}"
 echo "$gw" | sed 's/^/    /'
 echo "$gw" | grep -q "^open api.anthropic.com:443" \
   && ok "gateway -> provider on 443 (the metered path is open)" \
@@ -234,7 +252,8 @@ head_ "4. the namespace refuses a privileged pod"
 # The manifests promise `pod-security.kubernetes.io/enforce: restricted`. This
 # asks the API server to prove it, because a label that enforces nothing looks
 # identical to one that does until the day it matters.
-rejected="$(cat <<'YAML' | kc apply -f - 2>&1
+rejected_file="$(mktemp "${TMPDIR:-/tmp}/sec-probe.XXXXXX")"
+cat > "${rejected_file}" <<'YAML'
 apiVersion: v1
 kind: Pod
 metadata: { name: sec-privileged }
@@ -247,7 +266,8 @@ spec:
   hostPID: true
   volumes: [{ name: root, hostPath: { path: / } }]
 YAML
-)"
+rejected="$(cat < "${rejected_file}" | kc apply -f - 2>&1)"
+rm -f "${rejected_file}"
 if echo "$rejected" | grep -qi "forbidden\|violat\|denied"; then
   ok "a privileged, hostNetwork, hostPath pod was REJECTED by admission"
   echo "$rejected" | tr ',' '\n' | grep -oiE "(privileged|hostNetwork|hostPID|hostPath|allowPrivilegeEscalation|runAsNonRoot|seccompProfile)[^,]*" | head -4 | sed 's/^/    /'
@@ -402,12 +422,13 @@ sleep 2
 ETCD_CERTS=/var/lib/rancher/k3s/server/tls/etcd
 etcd_grep() {  # key pattern -> prints match count, or nothing if it could not look
   local key="$1" pat="$2"
-  local cmd="D=$ETCD_CERTS; ETCDCTL_API=3 etcdctl --cacert=\$D/server-ca.crt --cert=\$D/client.crt --key=\$D/client.key --endpoints=https://127.0.0.1:2379 get $key 2>/dev/null | grep -ac $pat"
+  # The count is taken only when etcdctl printed the key itself (the control): a failed
+  # etcdctl prints nothing, and a grep of nothing is a 0 that would read as "not plaintext".
+  local cmd="D=$ETCD_CERTS; out=\$(ETCDCTL_API=3 etcdctl --cacert=\$D/server-ca.crt --cert=\$D/client.crt --key=\$D/client.key --endpoints=https://127.0.0.1:2379 get '$key' 2>/dev/null); case \"\$out\" in *'$key'*) printf '%s\\n' \"\$out\" | grep -ac '$pat' ;; esac"
   if [ -d "$ETCD_CERTS" ] && command -v etcdctl >/dev/null 2>&1; then
     bash -c "$cmd" 2>/dev/null
   elif [ -n "$NODES" ]; then
-    ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 \
-      ${SSH_KEY:+-i "$SSH_KEY"} "root@${NODES%%,*}" "$cmd" 2>/dev/null
+    node_probe "${NODES%%,*}" "$cmd"
   fi
 }
 raw="$(etcd_grep "/registry/secrets/$NS/$canary" CANARY-VALUE-CHECK)"
@@ -427,9 +448,7 @@ if [ -z "$raw" ]; then
   db=/var/lib/rancher/k3s/server/db
   probe() {  # runs locally on a server, or over ssh to the first node
     if [ -d "$db" ]; then bash -c "$1" 2>/dev/null
-    elif [ -n "$NODES" ]; then
-      ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 \
-        ${SSH_KEY:+-i "$SSH_KEY"} "root@${NODES%%,*}" "$1" 2>/dev/null
+    elif [ -n "$NODES" ]; then node_probe "${NODES%%,*}" "$1"
     fi
   }
   hits="$(probe "sync; sleep 1; grep -rc CANARY-VALUE-CHECK $db 2>/dev/null | awk -F: '{s+=\$2} END{print s+0}'")"
@@ -464,9 +483,8 @@ print(' '.join(hits))
 head_ "9. the hosts themselves"
 # Local first, ssh second, and silence about what could not be checked. The
 # same reasoning as the etcd probe above.
-host_check() {  # label runner...
-  local label="$1"; shift
-  local out; out="$("$@" 2>/dev/null)"
+host_check() {  # label, the probe's answer
+  local label="$1" out="$2"
   case "$out" in
     *"passwordauthentication no"*)  ok "$label: sshd refuses passwords" ;;
     *"passwordauthentication yes"*) bad "$label: sshd accepts passwords (PasswordAuthentication no)" ;;
@@ -479,13 +497,12 @@ host_check() {  # label runner...
 }
 SSHD_PROBE='sshd -T 2>/dev/null | grep -E "^(permitrootlogin|passwordauthentication)" | tr "\n" " "; echo -n "etcd_public="; ss -ltn 2>/dev/null | grep ":2379" | grep -vcE "127\.0\.0\.1|10\.|\[::1\]" '
 if command -v sshd >/dev/null 2>&1; then
-  host_check "$(hostname) (local)" bash -c "$SSHD_PROBE"
+  host_check "$(hostname) (local)" "$(bash -c "$SSHD_PROBE" 2>/dev/null)"
 fi
 if [ -n "$NODES" ]; then
   IFS=',' read -r -a NODE_LIST <<< "$NODES"
   for n in "${NODE_LIST[@]}"; do
-    host_check "$n" ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 \
-      ${SSH_KEY:+-i "$SSH_KEY"} "root@$n" "$SSHD_PROBE"
+    host_check "$n" "$(node_probe "$n" "$SSHD_PROBE")"
   done
 fi
 
@@ -512,7 +529,8 @@ spec:
         capabilities: { drop: ["ALL"] }
 FORGEDYAML
 if kc wait --for=condition=Ready pod/sec-forged --timeout=90s >/dev/null 2>&1; then
-  forged="$(kc exec -i sec-forged -- python3 - <<'FORGEDPROBE' 2>/dev/null
+  forged_file="$(mktemp "${TMPDIR:-/tmp}/sec-probe.XXXXXX")"
+  cat > "${forged_file}" <<'FORGEDPROBE'
 import os, socket, urllib.request, urllib.error
 s = socket.socket(); s.settimeout(5)
 try:
@@ -543,7 +561,8 @@ for label, url, method, with_auth in [
     except Exception:
         print(f"{label}=error")
 FORGEDPROBE
-)"
+  forged="$(kc exec -i sec-forged -- python3 - < "${forged_file}" 2>/dev/null)"
+  rm -f "${forged_file}"
   echo "$forged" | sed 's/^/    /'
   echo "$forged" | grep -q "inherited_credential=no" \
     && ok "the forged pod inherits no credential from the cluster" \
@@ -598,7 +617,10 @@ head_ "11b. the policy plane has actually decided something"
 # Run from inside the gateway pod against its own port, because this is a
 # question about the gateway's decision path and not about who may reach it.
 # No curl in that image, so the request is spoken over bash's /dev/tcp.
-pdp_out="$(kc exec -i deploy/tokenfuse-gateway -- bash -s <<'PDPPROBE' 2>/dev/null
+# The probe goes through a file: a heredoc inside $( ) does not parse under bash 3.2,
+# which is /bin/bash on macOS, and it stopped this whole script at this block (GOTCHAS 131).
+pdp_file="$(mktemp "${TMPDIR:-/tmp}/sec-pdp.XXXXXX")"
+cat > "$pdp_file" <<'PDPPROBE'
 ask() {
   body="$1"; extra="$2"
   exec 3<>/dev/tcp/127.0.0.1/4100 || { echo "unreachable"; return; }
@@ -614,7 +636,8 @@ echo "ALLOWPROBE $(ask "$tiny" 'x-fuse-budget-usd: 0.0000001
 echo "DENYPROBE $(ask "$tooled" 'x-fuse-budget-usd: 5.0
 ' | grep -iE '^HTTP/|^x-fuse-wardryx' | tr '\n' ' ')"
 PDPPROBE
-)"
+pdp_out="$(kc exec -i deploy/tokenfuse-gateway -- bash -s < "$pdp_file" 2>/dev/null)"
+rm -f "$pdp_file"
 
 case "$pdp_out" in
   *"ALLOWPROBE HTTP/1.1 402"*)
