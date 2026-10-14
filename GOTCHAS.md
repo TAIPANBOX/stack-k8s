@@ -4325,3 +4325,24 @@ on stdin, so a Secret that exists is never replaced, and prints how to read a va
 never a value. `scripts/typed-door-is-minted.sh` (CLAUDE.md invariant 42) requires every
 non-optional Secret a typed manifest reads to be made by something here.
 
+## 127. The cost report priced a running machine it had no rate for at zero
+
+> **Ours, and fixed.** The table was short and the script counted the gap as nothing.
+
+**Symptom:** a run on AWS on 2026-10-14, reported to us, printed `TOTAL 0.0902 USD/hour` for a
+cluster that costs about 1.30 USD/hour. The instance line read `?` and "unknown type, add its
+rate above", and it still added zero to the total. The GCP script had the same table, and its
+unknown-type path printed a total marked INCOMPLETE and still exited 0.
+
+**Why:** `rate_instance` and `rate_machine` answered `0` for a type they did not know, and the
+caller treated `0` as a price. The table covered the types this stack was first measured on
+and nothing added after them, so the next type a cluster was resized to was silently free.
+The GCP report had already been caught once under-reporting a five-node cluster (its own header
+records it), and the fix there was a warning rather than a refusal.
+
+**Fixed here:** both scripts return non-zero from the rate lookup for an unknown type, and the
+caller stops with `unknown rate for <type>` before any total prints. The AWS table gains
+`m7i.xlarge` at 0.2415 USD/hour (eu-central-1, on demand, Linux, shared), from the AWS Pricing
+API as read on 2026-10-14 by the person who reported the run; this change did not re-read it.
+`scripts/cost-live-refuses-unknown-rates.sh` (CLAUDE.md invariant 44) runs both scripts with a
+stub cloud CLI on PATH, so it needs no account, and it fails on the two fault shapes above.

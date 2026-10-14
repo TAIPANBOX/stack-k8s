@@ -2254,6 +2254,27 @@ if [ -n "$(git status --porcelain)" ]; then
 	exit 1
 fi
 
+# Invariant 44. A cost report refuses a machine type it has no rate for; the three
+# faults are the two ways to count it as zero and the loss of a known rate.
+run_case "cost-live-refuses-unknown-rates: the AWS script counts an unknown type as zero" fail \
+	'./scripts/cost-live-refuses-unknown-rates.sh' \
+	"$(py 'edit("cloud/aws/cost-live.sh", "*)           return 1 ;;", "*)           echo 0 ;;")')" \
+	"counts it as zero"
+
+run_case "cost-live-refuses-unknown-rates: the GCP script counts an unknown type as zero" fail \
+	'./scripts/cost-live-refuses-unknown-rates.sh' \
+	"$(py 'edit("cloud/gcp/cost-live.sh", "*)              return 1 ;;", "*)              echo 0 ;;")')" \
+	"counts it as zero"
+
+run_case "cost-live-refuses-unknown-rates: the m7i.xlarge row is removed" fail \
+	'./scripts/cost-live-refuses-unknown-rates.sh' \
+	"$(py 'edit("cloud/aws/cost-live.sh", "    m7i.xlarge)  echo 0.2415 ;;\n", "")')" \
+	"a known type must price and exit 0"
+
+run_case "cost-live-refuses-unknown-rates: a reworded comment is not a fault" pass \
+	'./scripts/cost-live-refuses-unknown-rates.sh' \
+	"$(py 'edit("cloud/aws/cost-live.sh", "# eu-central-1, on demand, Linux, shared tenancy.", "# eu-central-1, on demand, Linux, shared tenancy (reworded).")')"
+
 if [ "$failures" -gt 0 ]; then
 	printf '%d of %d cases failed.\n' "$failures" "$cases"
 	printf 'A gate that has quietly stopped catching anything looks exactly like a gate\n'

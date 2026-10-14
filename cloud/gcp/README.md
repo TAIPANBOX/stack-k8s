@@ -118,7 +118,8 @@ difference from `../aws/README.md` steps 2 and 3.
 - **`teardown.sh`**: deletes the four objects the cloud controller made behind
   Terraform's back, then destroys, then re-checks that nothing is left billing.
 - **`cost-live.sh`**: what the cluster is costing right now, from Google's own
-  published rates. Free to run.
+  published rates. Free to run. A machine type with no rate in the script stops the
+  report with a non-zero exit that names it, and prints no total (invariant 44).
 - **`loadbalancer-gcp.yaml`**: the one manifest that is not portable, and the
   shortest of the three.
 
