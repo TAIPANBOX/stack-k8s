@@ -4507,3 +4507,31 @@ stand-in `ssh` printing a banner gives the command's answer alone.
 `@claude` 2026-10-14: the bash 3.2 parse was reproduced on this Mac with `/bin/bash -n`, before and after; the
 node probe was checked with a stand-in `ssh`, not against a real node. Not proven: a `security-tests.sh --nodes`
 run from a Mac against a live cluster; sections 10 and later have run only where bash parses them.
+
+## 132. Every server here starts with --secrets-encryption, and the flag in a script does not show that a running cluster encrypts
+
+**Ours.** Every installer passes `--secrets-encryption` on the first k3s server and on every joining server
+(`install.sh`, `cloud/gcp/install-gcp.sh`, `cloud/aws/install-aws.sh`). On 2026-10-14 a GCP cluster built
+from `395846e` (and `v1.1.44`, which carry the same flag in the same two places) failed `security-tests.sh`
+section 7: a freshly written canary Secret was readable in etcd. So the script text does not account for the
+result. It is not established here whether the first server ran with the flag, whether a join ran with it
+and not the first, or whether a process started without it. The read-only checks the supervisor's live run
+can make, none of them run here:
+
+- `sudo k3s secrets-encrypt status` on each server (read-only);
+- `sudo ls -l /var/lib/rancher/k3s/server/cred/encryption-config.json`, which exists only once encryption is on;
+- `ps -o args= -C k3s`, to see the flag on the running process;
+- `sudo journalctl -u k3s --no-pager | grep -i encrypt | tail`.
+
+What the k3s docs say for a cluster that already exists (docs.k3s.io, `secrets-encrypt`): a single server
+gets `--secrets-encryption` added to its arguments and is restarted; an HA cluster restarts all its servers
+with the flag. Key rotation runs `rotate-keys` on the first server, waits until `status` shows
+`reencrypt_finished`, restarts it, then restarts the others. The docs say a wrong order "can leave your
+cluster permanently corrupted". GOTCHAS 18 records the retrofit that went wrong on a live cluster, and that
+`k3s secrets-encrypt enable` returned an EOF with nothing in the server log on v1.36.2. So an existing
+cluster is not changed in place from this repository: the path is a rebuild, or a rotation proven first on a
+throwaway cluster.
+
+`@claude` 2026-10-14: the flag's presence is read from the installers at `395846e`, `v1.1.44` and `main`; the
+k3s steps are from the docs page as read on 2026-10-14. The cause of the plaintext result is not known. Not
+proven: that any running cluster encrypts; the gate reads the installers, not the clusters.

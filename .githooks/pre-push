@@ -78,6 +78,7 @@ step "cluster DNS keeps a replica through a drain" "./scripts/cluster-dns-has-a-
 step "every node stops its pods before its network goes" "./scripts/nodes-stop-their-pods-first.sh"
 step "every shell script parses under the bash a Mac ships" "./scripts/shell-scripts-parse.sh"
 step "node checks read only their own answer" "./scripts/node-checks-read-their-own-answer.sh"
+step "every k3s server starts with --secrets-encryption" "./scripts/servers-encrypt-secrets.sh"
 
 echo
 if [ "$fail" -ne 0 ]; then

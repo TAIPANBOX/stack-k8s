@@ -2542,6 +2542,41 @@ run_case "node-checks-read-their-own-answer: the quiet ssh setting is gone" fail
 	'./scripts/node-checks-read-their-own-answer.sh' \
 	"$(py 'edit("security-tests.sh", "SECCHK_SSH=\"-q -o LogLevel=ERROR", "SECCHK_OFF=\"-q -o LogLevel=ERROR")')" \
 	"defines no SECCHK_SSH"
+# Invariant 48: every k3s server an installer starts is started with --secrets-encryption.
+run_case "servers-encrypt-secrets: the GCP joining server starts without the flag" fail \
+	'./scripts/servers-encrypt-secrets.sh' \
+	"$(py 'p = "cloud/gcp/install-gcp.sh"
+s = open(p).read()
+a = "--secrets-encryption \\\n"
+i = s.rindex(a)
+open(p, "w").write(s[:i] + s[i + len(a):])')" \
+	"starts a k3s server without --secrets-encryption"
+
+run_case "servers-encrypt-secrets: the first server starts without the flag" fail \
+	'./scripts/servers-encrypt-secrets.sh' \
+	"$(py 'p = "install.sh"
+s = open(p).read()
+a = "--secrets-encryption \\\n"
+i = s.index(a)
+open(p, "w").write(s[:i] + s[i + len(a):])')" \
+	"starts a k3s server without --secrets-encryption"
+
+run_case "servers-encrypt-secrets: the flag is commented out" fail \
+	'./scripts/servers-encrypt-secrets.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "    --secrets-encryption \\\n", "    # --secrets-encryption \\\n")')" \
+	"starts a k3s server without --secrets-encryption"
+
+run_case "servers-encrypt-secrets: a new server invocation has no flag" fail \
+	'./scripts/servers-encrypt-secrets.sh' \
+	"$(py 'p = "install.sh"
+s = open(p).read()
+open(p, "w").write(s + "\nsh_ \"$FIRST\" \"INSTALL_K3S_VERSION=1 sh -s - " + "serv" + "er --cluster-init\" < <(curl -sfL https://get.k3s.io)\n")')" \
+	"starts a k3s server without --secrets-encryption"
+
+run_case "servers-encrypt-secrets: section 7 stops expecting encryption" fail \
+	'./scripts/servers-encrypt-secrets.sh' \
+	"$(py 'edit("security-tests.sh", "bad \"the Secret is plaintext in etcd, so", "bad \"the Secret is in etcd, so")')" \
+	"section 7 no longer reports"
 
 if [ "$failures" -gt 0 ]; then
 	printf '%d of %d cases failed.\n' "$failures" "$cases"

@@ -210,6 +210,8 @@ jobs:
 
       - name: node checks read only their own answer
         run: ./scripts/node-checks-read-their-own-answer.sh
+      - name: every k3s server starts with --secrets-encryption
+        run: ./scripts/servers-encrypt-secrets.sh
 
       # Added 2026-10-04. The on-box chain verifier (agent-stack-go v1.1.0):
       # in the default install, every 15 minutes, on the bus, its memory on a
