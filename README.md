@@ -656,7 +656,7 @@ apply (`agent-conform`, in `40-routines-and-secrets.yaml`) runs it every 15
 minutes over the bus. A break becomes a `chain_broken` event (high) in
 `agent-conform.ndjson` on the bus, where heraldyx and the console already read; a
 chain with no `prev_hash` at all is reported once as `chain_unchained` (low),
-since the field is optional. heraldyx v0.6.0, the version pinned here, has its own
+since the field is optional. heraldyx v0.7.0, the version pinned here, has its own
 sentence for `chain_broken`: it names the break and says that nothing was repaired,
 quarantined or stopped.
 
@@ -673,7 +673,7 @@ quarantined or stopped.
 - **What it cannot see.** `prev_hash` is unkeyed: a writer compromised in its own
   uid can forge its own stream with a valid chain, and truncation from the end is
   invisible. Only signing closes those.
-- **File names.** heraldyx v0.6.0 and idryx v1.2.1 refuse an event whose `source`
+- **File names.** heraldyx v0.7.0 and idryx v1.2.1 refuse an event whose `source`
   is not allowed for the file it was read from (`<source>.ndjson` carries
   `<source>`; `tokenfuse-cloud.ndjson` and `tokenfuse-mcp.ndjson` carry
   `tokenfuse`). Every stream this launcher names already matches, and
