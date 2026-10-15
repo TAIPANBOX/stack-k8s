@@ -116,6 +116,14 @@ spec:
             # if your fleet is small enough that medium-severity signal is
             # still worth reading.
             - { name: HERALDYX_MIN_SEVERITY, value: "high" }
+            # The daily pulse and quiet hours (heraldyx 0.7.0), set here like
+            # HERALDYX_MIN_SEVERITY. The pulse is one mail a day saying the
+            # notifier is alive, once a recipient is set; "0" turns it off.
+            # Quiet hours are HH:MM-HH:MM read in HERALDYX_TZ (an IANA zone,
+            # for example Europe/London); empty is off.
+            - { name: HERALDYX_PULSE_HOURS, value: "24" }
+            - { name: HERALDYX_QUIET, value: "" }
+            - { name: HERALDYX_TZ, value: "" }
             # Who is answerable for an agent. The event envelope cannot say:
             # `agent_id` is which agent acted and `on_behalf_of` is who it acted
             # for at that moment, while `owner` is a required field of the
