@@ -386,6 +386,13 @@ Read that file's header before you do. It carries the only egress rule in the
 namespace that reaches past DNS, it says exactly how narrow that rule is, and
 it says what it leaves open.
 
+The notifier's daily pulse and quiet hours are set in `manifests/45-heraldyx.yaml`, next to
+`HERALDYX_MIN_SEVERITY`:
+
+- `HERALDYX_PULSE_HOURS` (default `24`): one mail a day saying the notifier is alive, once a recipient is set; `0` turns it off.
+- `HERALDYX_QUIET` (default empty): quiet hours as `HH:MM-HH:MM`; alerts below critical are held and reported when they end, and a critical is always sent.
+- `HERALDYX_TZ` (default empty): the IANA zone the quiet hours are read in, for example `Europe/London`.
+
 ### The typed-answer plane
 
 `typryx` is off by default for a smaller reason than heraldyx or scopyx: with
@@ -656,7 +663,7 @@ apply (`agent-conform`, in `40-routines-and-secrets.yaml`) runs it every 15
 minutes over the bus. A break becomes a `chain_broken` event (high) in
 `agent-conform.ndjson` on the bus, where heraldyx and the console already read; a
 chain with no `prev_hash` at all is reported once as `chain_unchained` (low),
-since the field is optional. heraldyx v0.6.0, the version pinned here, has its own
+since the field is optional. heraldyx v0.7.0, the version pinned here, has its own
 sentence for `chain_broken`: it names the break and says that nothing was repaired,
 quarantined or stopped.
 
@@ -673,7 +680,7 @@ quarantined or stopped.
 - **What it cannot see.** `prev_hash` is unkeyed: a writer compromised in its own
   uid can forge its own stream with a valid chain, and truncation from the end is
   invisible. Only signing closes those.
-- **File names.** heraldyx v0.6.0 and idryx v1.2.1 refuse an event whose `source`
+- **File names.** heraldyx v0.7.0 and idryx v1.2.1 refuse an event whose `source`
   is not allowed for the file it was read from (`<source>.ndjson` carries
   `<source>`; `tokenfuse-cloud.ndjson` and `tokenfuse-mcp.ndjson` carry
   `tokenfuse`). Every stream this launcher names already matches, and
