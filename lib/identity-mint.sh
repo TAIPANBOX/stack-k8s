@@ -45,8 +45,11 @@
 #   . "$ROOT/lib/identity-mint.sh" || die "no lib/identity-mint.sh in $ROOT"
 #   identity_mint_settle "$ROOT/agent-key"   # after `apply -k` and the trust-domain patch
 #
-# Needs in scope, from the caller: die(), note(), gen (lib/gen.sh) and k_ (its
-# kubectl runner, given ONE string, as the deploy scripts' runner over ssh is).
+# Needs in scope, from the caller: die() and k_ (its kubectl runner, given ONE
+# string, as the deploy scripts' runner over ssh is). It sources the one generator
+# itself (CLAUDE.md invariant 41), so a caller cannot reach the mint without it.
+IDM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+. "$IDM_ROOT/lib/gen.sh" || return 1
 # identity-mint: begin
 # The deploy scripts print with say(); a note is one indented line, as identity/up.sh prints it.
 if ! declare -F note >/dev/null; then note() { printf '   %s\n' "$*"; }; fi
