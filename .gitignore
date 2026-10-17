@@ -15,6 +15,9 @@ cloud/**/tfplan
 # A saved plan (terraform plan -out) can carry account values; plans are made per run, never kept.
 cloud/**/*.plan
 kubeconfig-tunnel.yaml
+# The operator's agents' client key, written by a deploy that minted it (lib/identity-mint.sh, 0600).
+agent-key
+agent-key.tmp
 
 # The operator's own two names. site.example.yaml is the tracked template.
 tunnel/site.yaml

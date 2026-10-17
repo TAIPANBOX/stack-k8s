@@ -350,6 +350,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 # SIGPIPE is set to. Sourced here, once the checkout is known, for the operator password.
 . "$ROOT/lib/gen.sh" || die "no lib/gen.sh in $ROOT"
 . "$ROOT/lib/policy-store.sh" || die "no lib/policy-store.sh in $ROOT"
+. "$ROOT/lib/identity-mint.sh" || die "no lib/identity-mint.sh in $ROOT"
 
 # ---- the typed data mode, refused BEFORE anything is installed ---------------
 # typed/mode.sh is the one copy of this check (CLAUDE.md invariant 26). Run here
@@ -665,6 +666,16 @@ if [ -n "$TRUST_DOMAIN" ]; then
     || die "could not set the trust domain on stack-wiring"
 fi
 
+# The gateway's client keys (CLAUDE.md invariant 50), after the trust domain because the
+# minted keys are bound to agent ids in it. The gateway's reference to the Secret is not
+# optional, so on a fresh cluster its pod waits for this step. Given no files by
+# identity/up.sh, lib/identity-mint.sh mints a key for Felyx and one for the operator's
+# agents, binds each to its own ids, and writes the agents' key to a 0600 file here;
+# minted keys are never rewritten and the operator's own are left alone. Every document
+# goes to the cluster on stdin. Then the gateway and the console roll onto what they read.
+say "client keys: the gateway answers no caller without one"
+identity_mint_settle "$ROOT/agent-key"
+
 # The run-budget ceiling, set AFTER the kustomization for the reason the trust domain is:
 # 10-planes.yaml declares TOKENFUSE_MAX_RUN_BUDGET_USD (5.00), and `apply -k` puts the
 # declared value back, so a figure set before it, or by hand, is gone on the next run. `set
@@ -861,3 +872,5 @@ ${CONSOLE_PASSWORD:+  Your console sign-in, shown once and stored nowhere:
 
   $(printf '\033[1m')When finished: ./teardown.sh$(printf '\033[0m')
 EOF
+# Where the agents' key is and what an agent sends now; the key itself is not printed.
+identity_mint_note "$ROOT/agent-key"

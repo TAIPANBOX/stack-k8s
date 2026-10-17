@@ -66,6 +66,8 @@ step "the gateway caps what a run may declare" "./scripts/run-budget-ceiling-is-
 step "the agent firewall runs in enforce by default" "./scripts/firewall-is-enforce-by-default.sh"
 step "the PII scanners run in shadow by default" "./scripts/pii-is-shadow-by-default.sh"
 step "client keys and the identity map are checked first" "./scripts/identity-files-are-checked.sh"
+step "the gateway requires client keys, minted when none are given" "./scripts/metered-doors-require-keys.sh"
+step "the MCP broker blocks raw secrets and asks the policy plane" "./scripts/broker-blocks-raw-secrets.sh"
 step "every bus file is a name the readers accept" "./scripts/bus-names-match-the-source-rule.sh"
 step "the chain verifier watches the bus" "./scripts/chain-verifier-watches-the-bus.sh"
 step "every mounted key is readable by its pod" "./scripts/mounted-keys-are-readable.sh"

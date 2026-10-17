@@ -132,8 +132,9 @@
 #      v0.4.0) as its own Deployment, given the SAME backend the mode chose for
 #      typryx (the same three lines rewritten, the same key Secret mounted) and
 #      no state of its own, with the NetworkPolicy edges broker -> proxy -> wardryx;
-#   2. the broker (manifests/52) with the wardryx settings it does not have today,
-#      its `TOKENFUSE_WARDRYX_URL` pointing at the proxy. ONLY the broker: the
+#   2. the broker (manifests/52), which asks wardryx itself on every cluster since
+#      2026-10-17 (invariant 51), with its `TOKENFUSE_WARDRYX_URL` pointing at the
+#      proxy instead and a longer tool-call wait. ONLY the broker: the
 #      gateway keeps asking wardryx directly, so a slow typed answer never sits on
 #      the model path (J2-DESIGN: the model's median would miss the gateway's 250 ms
 #      and, fail-closed, refuse calls);
@@ -374,17 +375,15 @@ with_training() { # env-fragment
   printf '\n'
 }
 
-# The broker's wardryx settings, which only the risk signal adds. Without the flag the
-# broker is manifests/52 byte for byte and asks wardryx nothing (it has no wardryx
-# configuration at all). With it, ONLY the broker's wardryx URL moves to the proxy: the
-# LLM gateway in 10-planes.yaml keeps asking wardryx directly. Inserted after the
-# `TOKENFUSE_EVENTS_PATH` line, which must be there exactly once.
-#
-# fail closed, like the gateway: a plane whose job is to say no says no when it cannot ask.
-# The cost is that every tool call through the broker is refused while wardryx or the proxy
-# is down, which the notice says. The key is the VIEWER key the gateway uses (`wardryx_gateway`
-# in stack-keys, minted by every installer): /v1/decide needs any authenticated principal, and
-# an admin key here would let the enforcement point rewrite the policy it enforces.
+# The broker's wardryx settings. manifests/52 asks wardryx itself about every tool call
+# (CLAUDE.md invariant 51): mode enforce, fail closed, the gateway's VIEWER key (`wardryx_gateway`
+# in stack-keys, minted by every installer: /v1/decide needs any authenticated principal, and an
+# admin key here would let the enforcement point rewrite the policy it enforces). Without the risk
+# signal the broker is manifests/52 byte for byte. With it, ONLY two lines move: the URL, to
+# typryx's wardryx-proxy, and the tool path's wait, because the proxy's own ask may take up to
+# TYPRYX_PROXY_ASK_TIMEOUT_MS (3000, at most 5000) before it forwards without a signal. The LLM
+# gateway in 10-planes.yaml keeps asking wardryx directly. Each of the two lines must be there
+# exactly once.
 render_broker() {
   if [ "$RISK" = 0 ]; then
     cat "$M52"
@@ -392,28 +391,26 @@ render_broker() {
   fi
   local out
   out="$(awk '
-    BEGIN { a = "            - { name: TOKENFUSE_EVENTS_PATH, value: \"/var/lib/stack/events/tokenfuse-mcp.ndjson\" }" }
-    $0 == a {
-      print
+    BEGIN {
+      u = "            - { name: TOKENFUSE_WARDRYX_URL, value: \"http://wardryx:8090\" }"
+      t = "            - { name: TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \"1000\" }"
+    }
+    $0 == u {
       print "            # The typed risk signal (--typed-risk-signal, CLAUDE.md invariant 29): the broker asks"
-      print "            # wardryx about every tools/call, and asks THROUGH typryx'"'"'s wardryx-proxy, which adds the"
-      print "            # risk class of the pending call as a signal. Only this container: the LLM gateway keeps"
-      print "            # asking wardryx directly. Fail closed, as the gateway does; the viewer key, as the gateway does."
-      print "            - { name: TOKENFUSE_WARDRYX_MODE, value: \"enforce\" }"
+      print "            # wardryx THROUGH typryx'"'"'s wardryx-proxy, which adds the risk class of the pending call as"
+      print "            # a signal. Only this container: the LLM gateway keeps asking wardryx directly."
       print "            - { name: TOKENFUSE_WARDRYX_URL, value: \"http://typryx-wardryx-proxy:4330\" }"
-      print "            - name: TOKENFUSE_WARDRYX_KEY"
-      print "              valueFrom: { secretKeyRef: { name: stack-keys, key: wardryx_gateway } }"
-      print "            - { name: TOKENFUSE_WARDRYX_FAILMODE, value: \"closed\" }"
-      print "            - { name: TOKENFUSE_WARDRYX_TIMEOUT_MS, value: \"250\" }"
+      nu++; next
+    }
+    $0 == t {
       print "            # A tool call may wait longer than a model call: the proxy'"'"'s own ask may take up to"
       print "            # TYPRYX_PROXY_ASK_TIMEOUT_MS (3000, at most 5000) before it forwards without a signal."
       print "            - { name: TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \"7000\" }"
-      print "            - { name: TOKENFUSE_WARDRYX_CACHE_TTL_MS, value: \"3000\" }"
-      n++; next
+      nt++; next
     }
     { print }
-    END { if (n != 1) exit 3 }
-  ' "$M52")" || refuse "manifests/52-tokenfuse-mcp-broker.yaml no longer carries its TOKENFUSE_EVENTS_PATH line exactly once, which is where the risk signal's wardryx settings are inserted. Fix typed/mode.sh with it."
+    END { if (nu != 1 || nt != 1) exit 3 }
+  ' "$M52")" || refuse "manifests/52-tokenfuse-mcp-broker.yaml no longer carries its TOKENFUSE_WARDRYX_URL and TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS lines exactly once each, which the risk signal moves to the proxy. Fix typed/mode.sh with it."
   printf '%s\n' "$out"
 }
 
@@ -581,7 +578,7 @@ notice() {
   fi
   if [ "$RISK" = 1 ]; then
     printf 'typed: risk signal ON (--typed-risk-signal). typryx'"'"'s wardryx-proxy now sits between tokenfuse'"'"'s MCP broker and wardryx (manifests/56), answering from the same backend as typryx. The LLM gateway keeps asking wardryx directly.\n' >&2
-    printf '       The broker, which asked wardryx nothing before, now asks it about EVERY tool call, and fails closed: while wardryx or the proxy is down, tool calls through the broker are refused.\n' >&2
+    printf '       The broker asks wardryx about EVERY tool call on every cluster (invariant 51), now through the proxy, and fails closed: while wardryx or the proxy is down, tool calls through the broker are refused.\n' >&2
     printf '       No policy is seeded. Nothing is held until you write a hold_if_signal rule (README "A typed risk signal"); a rule that would deny on a signal is refused by wardryx.\n' >&2
     case "$EFFECTIVE" in
       stub) printf '       The stub backend answers every call the same way and its probabilities mean nothing: a hold_if_signal rule on them would hold on noise.\n' >&2 ;;

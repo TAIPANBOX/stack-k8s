@@ -109,6 +109,9 @@ SHAPES = [
     "kubeconfig.yaml", "kubeconfig-*.yaml", "kubeconfig", "kubeconfig.yml",
     "kubeconfig.json",
     "k3s.yaml",
+    # the gateway client key a deploy writes for the operator's agents
+    # (lib/identity-mint.sh, CLAUDE.md invariant 50)
+    "agent-key", "agent-key.tmp",
     # issued device configs (up.sh) and anything else ending .conf
     "*.conf",
     # credential stores: a generic name, a JSON name with "credentials" in

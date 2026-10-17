@@ -329,21 +329,25 @@ if kc get configmap gateway-identity-map -o name >/dev/null 2>&1; then
 fi
 id_keys_want=off
 id_keys_on=0
+id_minted=0
 if kc get secret gateway-client-keys -o name >/dev/null 2>&1; then
   id_keys_on=1
   id_keys_want="$(kc get secret gateway-client-keys -o jsonpath='{.metadata.resourceVersion}')"
+  [ "$(kc get secret gateway-client-keys -o jsonpath='{.metadata.labels.taipanbox\.dev/identity}')" = minted ] && id_minted=1
 fi
 if [ "${id_ann_map:-off}" != "$id_map_want" ]; then
   bad "the gateway was started on another identity map than ConfigMap gateway-identity-map holds (template ${id_ann_map:-off}, ConfigMap $id_map_want): run ./identity/up.sh"
+elif [ "$id_map_want" = off ] && [ "$id_minted" = 1 ]; then
+  bad "the client keys were minted by a deploy and their map is gone, so every key may speak as any agent: deploy again, or run ./identity/mint.sh, which puts it back (CLAUDE.md invariant 50)"
 elif [ "$id_map_want" = off ]; then
-  note "identity map: off (./identity/up.sh --identity-map-file turns it on)"
+  note "identity map: off, the operator's keys with no map (./identity/up.sh --identity-map-file turns it on)"
 else
   ok "the gateway runs the identity map ConfigMap gateway-identity-map holds"
 fi
 if [ "${id_ann_keys:-off}" != "$id_keys_want" ]; then
   bad "the gateway was started on other client keys than Secret gateway-client-keys holds (template ${id_ann_keys:-off}, Secret $id_keys_want): run ./identity/up.sh"
 elif [ "$id_keys_on" = 0 ]; then
-  note "client keys: off, the gateway answers any caller that reaches it (./identity/up.sh --client-keys-file turns them on)"
+  bad "the gateway has no client keys (Secret gateway-client-keys is missing), and it does not start without them: deploy again, or run ./identity/mint.sh or ./identity/up.sh (CLAUDE.md invariant 50)"
 elif [ "$CONSOLE_READY" = 0 ]; then
   ok "the gateway runs the client keys Secret gateway-client-keys holds"
   note "no console pod: cannot ask the gateway to refuse a call with no client key"

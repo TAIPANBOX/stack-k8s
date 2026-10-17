@@ -114,6 +114,19 @@ spec:
             - { name: GENARYX_COPILOT_API_KEY_REF, value: "env:GENARYX_COPILOT_KEY" }
             - name: GENARYX_COPILOT_KEY
               valueFrom: { secretKeyRef: { name: stack-copilot, key: api_key, optional: true } }
+            # Felyx's own gateway client key (genaryx invariant 24, console v1.1.45
+            # on): the gateway refuses every call without a key it holds (CLAUDE.md
+            # invariant 50), Felyx's included, so the console sends this one as
+            # x-fuse-key. The deploy mints it into the Secret felyx-client-key, the
+            # one object this pod reads it from (the gateway's own Secret holds every
+            # key and stays the gateway's), and binds it to Felyx's agent id alone.
+            # Optional: on a cluster whose keys the operator brought, Felyx needs a
+            # line in their keys file and this Secret made by hand, and until then
+            # it sends no key and is refused 401, which is the operator's to see.
+            # The deploy rolls this pod when the Secret changes, by an annotation.
+            - { name: GENARYX_COPILOT_FUSE_KEY_REF, value: "env:GENARYX_COPILOT_FUSE_KEY" }
+            - name: GENARYX_COPILOT_FUSE_KEY
+              valueFrom: { secretKeyRef: { name: felyx-client-key, key: client_key, optional: true } }
             # The five sensitive commands (kill a run, set a budget, decide an
             # approval, issue a device, revoke one) must not run on a session
             # cookie alone: a stolen session should not be able to pull the

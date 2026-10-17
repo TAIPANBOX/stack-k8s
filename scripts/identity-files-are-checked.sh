@@ -23,11 +23,13 @@
 # WHAT THIS CHECKS
 #
 #   A. THE MANIFESTS. Every gateway start (the definition invariant 20 uses)
-#      reads TOKENFUSE_CLIENT_KEYS from the Secret identity/up.sh writes, and
-#      TOKENFUSE_IDENTITY_MAP from a key of the ConfigMap that also carries the
-#      map, both `optional: true`, so a cluster that names no file starts as it
-#      always did and the path can never name a file that is not there. The map
-#      is mounted read only from that ConfigMap, at the directory up.sh names.
+#      reads TOKENFUSE_CLIENT_KEYS from the Secret identity/up.sh writes, NOT
+#      optional (invariant 50: the gateway requires keys, and a deploy given no
+#      files mints them), and TOKENFUSE_IDENTITY_MAP from a key of the ConfigMap
+#      that also carries the map, `optional: true`, so a cluster whose operator
+#      brought keys and no map starts, and the path can never name a file that is
+#      not there. The map is mounted read only from that ConfigMap, at the
+#      directory up.sh names.
 #      The command and the user are the ones up.sh gives its check container.
 #      No other container names either object, and no manifest declares them.
 #   B. THE FIRST HALF of identity/up.sh, `--check-only`, with a `docker` and a
@@ -45,7 +47,9 @@
 #      rolls nothing; the same map again rolls nothing; a new map and a new keys
 #      file each write and roll once; a refused file writes nothing; no secret
 #      is ever on a kubectl command line; a gateway that reports other keys than
-#      it was given fails the run.
+#      it was given fails the run; a run that would leave no keys is refused;
+#      on a cluster whose keys a deploy minted, one file alone is refused and
+#      both together take the minted label off.
 #   E. VERIFY. verify.sh asks the running gateway for a call with no key and
 #      compares what the pod template says the gateway read with the objects.
 #
@@ -291,7 +295,7 @@ for path in sorted(pathlib.Path("manifests").glob("*.yaml")):
             where = f"{path} {wname}/{cname}"
             im = IMAGE_RE.search(clive)
             image = image or (im.group(1) if im else None)
-            # the client keys, from the Secret, optional
+            # the client keys, from the Secret, required (invariant 50)
             ents = env_entries(lines, s, e, "TOKENFUSE_CLIENT_KEYS")
             if not ents:
                 problems.append(f"{where} sets no TOKENFUSE_CLIENT_KEYS, so the Secret identity/up.sh writes never reaches it.")
@@ -305,9 +309,9 @@ for path in sorted(pathlib.Path("manifests").glob("*.yaml")):
                 elif (f["name"], f["key"]) != (SECRET, SKEY):
                     problems.append(f"{where} reads TOKENFUSE_CLIENT_KEYS from {f['name']}/{f['key']}, not "
                                     f"{SECRET}/{SKEY}, which is what identity/up.sh writes.")
-                elif f["optional"] != "true":
-                    problems.append(f"{where} reads TOKENFUSE_CLIENT_KEYS from {SECRET} not optional, so a cluster "
-                                    "that names no keys file keeps its gateway in CreateContainerConfigError.")
+                elif f["optional"] == "true":
+                    problems.append(f"{where} reads TOKENFUSE_CLIENT_KEYS from {SECRET} optional, so a cluster "
+                                    "with no Secret starts a gateway that answers every caller (invariant 50).")
             # the map path, from the map's own ConfigMap, optional
             ents = env_entries(lines, s, e, "TOKENFUSE_IDENTITY_MAP")
             if not ents:
@@ -382,7 +386,7 @@ for p in problems:
 if problems:
     sys.exit(1)
 print(f"IMAGE={image}")
-print(f"manifest: {subjects} gateway start(s) read the client keys and the map from optional objects, map mounted read only")
+print(f"manifest: {subjects} gateway start(s) read the client keys (required) and the map (optional), map mounted read only")
 PY
   a_out="$(python3 "$scratch/a.py")"
   a_rc=$?
@@ -845,6 +849,26 @@ PY
   out="$(drun "$S2" --identity-map-file map.json)"
   [ "$(rc_of "$out")" != 0 ] || fail "a map with key bindings on a cluster with no client keys was accepted"
   [ "$(writes "$S2")" = 0 ] || fail "a refused map still wrote to the cluster"
+  grep -qF 'requires client keys' <<<"$out" || fail "a run that would leave the gateway no keys was not refused for that reason: $(grep -v '^rc=' <<<"$out" | tail -n 1)"
+
+  # A cluster whose keys a deploy minted (lib/identity-mint.sh, invariant 50): the
+  # minted map binds the minted key ids, so one file alone is refused, and both
+  # together make the keys the operator's, which a later deploy leaves alone.
+  S3="$scratch/d3.state"
+  new_state "$S3"
+  out="$(drun "$S3" --client-keys-file keys.txt --identity-map-file map.json)"
+  python3 -c 'import json,sys;s=json.load(open(sys.argv[1]));s["secret"]["metadata"]["labels"]={"taipanbox.dev/identity":"minted"};json.dump(s,open(sys.argv[1],"w"))' "$S3"
+  w="$(writes "$S3")"
+  out="$(drun "$S3" --client-keys-file keys3.txt)"
+  [ "$(rc_of "$out")" != 0 ] && grep -qF 'together' <<<"$out" || fail "a keys file alone on a cluster whose keys a deploy minted was accepted"
+  out="$(drun "$S3" --identity-map-file map2.json)"
+  [ "$(rc_of "$out")" != 0 ] || fail "a map alone on a cluster whose keys a deploy minted was accepted"
+  [ "$(writes "$S3")" = "$w" ] || fail "a refused file on a minted cluster still wrote to it"
+  out="$(drun "$S3" --client-keys-file keys3.txt --identity-map-file map.json)"
+  [ "$(rc_of "$out")" = 0 ] || fail "both files on a cluster whose keys a deploy minted were refused: $(grep -v '^rc=' <<<"$out" | tail -n 2 | tr '\n' ' ')"
+  [ -z "$(st_get "$S3" "(s['secret']['metadata'].get('labels') or {}).get('taipanbox.dev/identity', '')")" ] \
+    || fail "the operator's keys kept the minted label, so the next deploy would treat them as its own"
+  if has_secret "$(cat "$S3.calls")"; then fail "a secret appeared on a kubectl command line on the minted cluster"; fi
 fi
 
 # ---- E. verify.sh asks the running gateway -------------------------------------------------
@@ -868,7 +892,7 @@ if [ "$problems" -gt 0 ]; then
   echo "$problems problem(s). See CLAUDE.md invariant 39."
   exit 1
 fi
-echo "OK: every gateway start reads the client keys and the identity map from optional objects, the map"
+echo "OK: every gateway start reads the client keys from a required Secret and the identity map from an optional ConfigMap, the map"
 echo "    mounted read only; identity/up.sh refuses hostile files before any tool runs, lets the pinned"
 echo "    gateway image read the pair with no network before the cluster is written, keeps both on a"
 echo "    re-run, rolls the gateway exactly when what it reads changed, never puts a secret on a command"
