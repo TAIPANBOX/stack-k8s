@@ -165,7 +165,8 @@ delegation/     the delegation plane's opt-in: up.sh, down.sh for
                 manifests/54-delegation.yaml (vouchryx). See "The delegation
                 plane" below
 identity/       up.sh: the gateway's client keys and identity map, from files,
-                checked by the gateway image before the cluster is written.
+                checked by the gateway image before the cluster is written;
+                mint.sh: the keys a deploy mints, for a cluster applied by hand.
                 See "Client keys and the identity map" below
 manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm).
                 Only the files listed in `kustomization.yaml` are in the default
@@ -312,7 +313,8 @@ declared tools carry an injection finding. Every gateway this launcher starts ru
   by itself. Give the flag on every run: a re-run without it returns the gateway to `enforce`.
 - **What it does not cover.** The MCP broker and the `focus-export` sidecar carry no switch.
   The broker asks the gateway before it forwards a tool call, so the gateway's mode decides
-  for the broker too.
+  for the broker too. The broker also asks wardryx about every tool call (CLAUDE.md
+  invariant 51).
 
 ```bash
 ./deploy.sh --servers ... --hcloud-token ... --trust-domain acme.example \
@@ -444,6 +446,18 @@ The key id after the colon is a bare name, not an `agent://` id: tokenfuse
 splits each `secret:key_id` entry on its LAST colon, so a URI there turns
 `agent` into the end of the secret and the caller's real secret is refused
 401 (`scripts/client-key-ids-are-bare.sh`).
+
+The broker does not run tokenfuse's defaults here. A raw secret in tool
+arguments is refused (`-32002`) rather than forwarded, and a tool listing the
+broker's scanner flags is refused rather than passed with a log line. It asks
+wardryx about every `tools/call`, so the policy judges tool calls as it judges
+model calls: a call with no `x-fuse-agent-id` is refused (it cannot be judged), a
+tool the policy denies is refused (`-32004`), and with wardryx unreachable the
+call is refused (fail closed, like the gateway). A `{{secret:NAME}}` handle is not
+a raw secret and resolves as before. Pinning tool definitions
+(`TOKENFUSE_MCP_LOCK`) needs a lock file you approved and is not set. The same
+settings were measured on stack-single's compose environment on 2026-10-17, not
+on a cluster.
 
 `manifests/52-tokenfuse-mcp-broker.yaml` has the full story: why two Secrets
 rather than one, what its NetworkPolicies admit, and what was measured
@@ -831,9 +845,45 @@ ignores the setting.
 
 ## Client keys and the identity map
 
-Off by default: the gateway answers any caller that reaches it. Two files decide
-who may call it and on whose budget, and you, or an onboarding agent, prepare
-them outside the cluster:
+The gateway answers no caller without a client key, and a key may speak only as
+the agent ids the identity map binds it to. Without them it admitted anything
+the network let in and took the agent id a caller wrote, so one agent could
+speak as another and take its policy and its budget. Its reference to the keys'
+Secret is not optional, so a gateway with no keys waits rather than starting
+open, and the map runs strict (`TOKENFUSE_IDENTITY_STRICT: enforce`).
+
+**Given no files, every deploy mints two keys** after it applies the manifests
+(`lib/identity-mint.sh`), and binds each in a map:
+
+| Key id | Unit | May speak as | Its secret |
+|---|---|---|---|
+| `felyx` | `console` | `agent://<trust domain>/genaryx/felyx`, exactly | the Secret `felyx-client-key`, which the console sends for Felyx |
+| `agents` | `agents` | `agent://<trust domain>/agents/*` | `agent-key` beside the deploy script, 0600, on the machine you deployed from |
+
+The trust domain is the one `--trust-domain` sets. The deploy prints the key
+file's path and the ids, never the key. Your agents then send, on every call,
+`x-fuse-key: <the secret in agent-key>`, an `x-fuse-agent-id` under
+`agent://<trust domain>/agents/`, and `x-fuse-run-id`. No key, or one the gateway
+does not hold, is refused 401; the key speaking as an id outside `agents/`,
+Felyx's included, is refused 403 `identity_mismatch`. The units carry no budget:
+a monthly cap is yours to set in a map of your own. A re-run keeps every minted
+key and the file; a moved trust domain rebinds the map alone. On another machine,
+read the key back from the cluster:
+
+```bash
+kubectl -n agent-stack get secret gateway-client-keys -o jsonpath='{.data.client_keys}' | base64 --decode   # the entry ending :agents
+```
+
+A cluster applied by hand (`install.sh`, then `kubectl apply -k manifests/`) gets
+the same keys from `KUBECONFIG=./kubeconfig.yaml ./identity/mint.sh`; until then
+its gateway waits for them. A cluster deployed before this release gets them on
+its next deploy, and its agents are refused 401 until they send one.
+
+**One key for all your agents is the floor.** To give each agent its own key and
+unit, bring two files, which you, or an onboarding agent, prepare outside the
+cluster. On a cluster whose keys a deploy minted, give both together: the minted
+map binds the minted keys only, and once you have, the deploy leaves your keys
+alone:
 
 - **a keys file**, one `secret:key_id` per line, the line the console's Onboard
   tab prints. The key id is a bare name such as `treasury-bots`; the secret is 24
@@ -866,17 +916,17 @@ reads has changed, and only then. `verify.sh` reports a gateway running on
 anything other than what the two objects hold. Neither object is in the
 manifests, so a later deploy keeps both.
 
-Once keys are on, every agent sends `x-fuse-key: <its secret>`, and an
-`x-fuse-agent-id` its key may speak as, on every call. Two callers in this stack
-were not given a key here: the drills' manifest passes none, so a drill would be
-refused 401 while keys are on (not run); Felyx sends none, as stack-single measured
-on the same console version (not re-measured here).
+Every agent sends `x-fuse-key: <its secret>`, and an `x-fuse-agent-id` its key
+may speak as, on every call. Felyx sends the key in `felyx-client-key`; with your
+own files, give it a line in the keys file, a binding to its id, and the same
+secret in that Secret. The drills cannot send a key (mockryx has no setting for
+one yet), so a drill is refused 401 (not run).
 
-To turn either off, delete its object and run `up.sh` with no file. It rolls the
-gateway without it; the script itself deletes nothing:
+The map can be turned off: delete its ConfigMap and run `up.sh` with no file,
+which rolls the gateway without it. The keys cannot: the gateway requires them,
+and `up.sh` refuses a run that would leave none.
 
 ```bash
-kubectl -n agent-stack delete secret gateway-client-keys
 kubectl -n agent-stack delete configmap gateway-identity-map
 ./identity/up.sh
 ```

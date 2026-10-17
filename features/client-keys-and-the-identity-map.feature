@@ -14,6 +14,11 @@
 # resourceVersion, so it rolls exactly when what it reads changed. Scenarios are bound to cases in
 # scripts/gates-have-teeth.sh by name; this repository has no runner and no binding gate, so the
 # binding is by eye.
+#
+# @decided 2026-10-17 (paraphrased): close the agent-security findings of the 2026-10-17 review,
+# defaults first, so the gateway requires its client keys and a deploy given no files mints them
+# (features/the-metered-doors-need-a-key.feature). The scenario that said a cluster naming no file
+# runs keyless is replaced: the keys are required and the map stays optional.
 Feature: the cluster takes client keys and the identity map as files, checks them first, and keeps them
 
   A client key decides who may call the gateway. The identity map decides which agent ids each key
@@ -31,11 +36,11 @@ Feature: the cluster takes client keys and the identity map as files, checks the
     # -> gates-have-teeth.sh "identity-files: the gateway loses its identity map setting"
     # -> gates-have-teeth.sh "identity-files: another workload is handed the client keys"
 
-  Scenario: a cluster that names no file runs exactly as before
-    Given an operator who never runs identity/up.sh
-    When the manifest makes the Secret or the ConfigMap required instead of optional
-    Then identity-files-are-checked.sh fails, because every such gateway would stop starting
-    # -> gates-have-teeth.sh "identity-files: the client keys become required"
+  Scenario: the keys are required, the map stays optional
+    Given the gateway requires its keys and a deploy mints them when no file is given
+    When the manifest makes the keys optional, or the map's ConfigMap required
+    Then identity-files-are-checked.sh fails: a gateway with no keys answers anyone, and one whose operator brought keys and no map would stop starting
+    # -> gates-have-teeth.sh "identity-files: the client keys become optional"
     # -> gates-have-teeth.sh "identity-files: the map volume becomes required"
 
   Scenario: the map's path and the map itself cannot disagree
@@ -140,6 +145,6 @@ Feature: the cluster takes client keys and the identity map as files, checks the
 
   Scenario: a comment is not a fault
     Given reviewers write comments beside the settings
-    When a comment names a required form of the setting
+    When a comment names another form of the setting
     Then identity-files-are-checked.sh still passes
-    # -> gates-have-teeth.sh "identity-files: a comment that names a required setting is not the setting"
+    # -> gates-have-teeth.sh "identity-files: a comment that names another form of the setting is not the setting"

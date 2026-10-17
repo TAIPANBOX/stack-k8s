@@ -183,6 +183,32 @@ spec:
             # it is a metered, recorded act, same reason those two get their
             # own file rather than sharing one.
             - { name: TOKENFUSE_EVENTS_PATH, value: "/var/lib/stack/events/tokenfuse-mcp.ndjson" }
+            # A raw secret found in tool arguments is refused (-32002), not
+            # forwarded, and a tool listing the scanner flags is refused, not passed
+            # with a log line. tokenfuse's own defaults are shadow and warn, which
+            # forward both (finding F-009 of the 2026-10-17 review, measured on
+            # stack-single's environment). A {{secret:NAME}} handle is not a raw
+            # secret: the vault resolves it on the way out, as before.
+            # scripts/broker-blocks-raw-secrets.sh holds these and the hook below
+            # (CLAUDE.md invariant 51).
+            - { name: TOKENFUSE_MCP_DLP, value: "block" }
+            - { name: TOKENFUSE_MCP_SCAN, value: "block" }
+            # The broker's policy hook: it asks wardryx about every tools/call, so
+            # the policy judges tool calls as it judges model calls, and a call it
+            # cannot attribute (no x-fuse-agent-id) is refused. Until 2026-10-17 the
+            # broker had no hook unless the typed risk signal was on, so a tool the
+            # policy denied was called anyway. Fail closed, as the gateway does; the
+            # gateway's own VIEWER key, which may call /v1/decide and nothing else.
+            # With --typed-risk-signal, typed/mode.sh moves only the URL to typryx's
+            # wardryx-proxy and gives a tool call the longer wait the proxy needs.
+            - { name: TOKENFUSE_WARDRYX_MODE, value: "enforce" }
+            - { name: TOKENFUSE_WARDRYX_URL, value: "http://wardryx:8090" }
+            - name: TOKENFUSE_WARDRYX_KEY
+              valueFrom: { secretKeyRef: { name: stack-keys, key: wardryx_gateway } }
+            - { name: TOKENFUSE_WARDRYX_FAILMODE, value: "closed" }
+            - { name: TOKENFUSE_WARDRYX_TIMEOUT_MS, value: "250" }
+            - { name: TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: "1000" }
+            - { name: TOKENFUSE_WARDRYX_CACHE_TTL_MS, value: "3000" }
           envFrom:
             # NOT optional. Missing here is not an unconfigured feature, it
             # is a door with nothing on it or a vault with nothing in it; see
@@ -216,7 +242,7 @@ spec:
   selector: { app: tokenfuse-mcp-broker }
   ports: [{ name: mcp, port: 4200, targetPort: mcp }]
 ---
-# The broker's one outbound connection: typryx, and nothing else.
+# The broker's outbound connection to typryx; its only other one is wardryx, below.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -230,6 +256,25 @@ spec:
         - podSelector: { matchLabels: { app: typryx } }
       ports:
         - { protocol: TCP, port: 4320 }
+---
+# The broker's policy hook (CLAUDE.md invariant 51): it asks wardryx about every
+# tools/call. wardryx already admits this pod (`planes-ingress` in
+# 30-network-policy.yaml lets `plane: money` in on 8090); this is the egress half,
+# additive beside the file every install ships. With --typed-risk-signal the
+# broker asks typryx's wardryx-proxy instead (56-typryx-wardryx-proxy.yaml).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: broker-egress-wardryx
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: wardryx } }
+      ports:
+        - { protocol: TCP, port: 8090 }
 ---
 # typryx must accept the connection the rule above allows. This is the FIRST
 # NetworkPolicy naming typryx at all: 51-typryx.yaml shipped with none,

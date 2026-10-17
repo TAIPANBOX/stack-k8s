@@ -10,9 +10,9 @@
 # when the operator passes `--typed-risk-signal` (and typryx is deployed in some
 # mode but off). Off by default, for three reasons that are each a decision:
 #
-#   - it changes what the MCP broker does: with the flag the broker asks wardryx
-#     about every `tools/call` (it asked nothing before), so a deny_tool rule or a
-#     hold now reaches the MCP layer;
+#   - it changes where the MCP broker asks: the broker asks wardryx about every
+#     `tools/call` on every cluster since 2026-10-17 (CLAUDE.md invariant 51), and
+#     with the flag it asks through this proxy, so a hold can carry the signal;
 #   - in the jev and own-model modes each eligible tool call is one typryx ask,
 #     which is a bill (jev) or a load (own-model);
 #   - a signal is only as good as the backend behind it: the `stub` backend's

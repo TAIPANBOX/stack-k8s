@@ -4535,3 +4535,20 @@ throwaway cluster.
 `@claude` 2026-10-14: the flag's presence is read from the installers at `395846e`, `v1.1.44` and `main`; the
 k3s steps are from the docs page as read on 2026-10-14. The cause of the plaintext result is not known. Not
 proven: that any running cluster encrypts; the gate reads the installers, not the clusters.
+
+## 133. A keyed call to a gateway with no control plane to seed from is refused 503 before identity is judged
+
+**The stack's own contract.** tokenfuse v1.14.0 (its invariant 103) seeds each unit's month from the
+control plane at start when `TOKENFUSE_CLOUD_URL` is set, and until it has read the month it refuses a
+call a unit governs with `503 seed_pending`, in enforce. Measured 2026-10-17 on kind with the minted keys
+(`evidence/identity-kind/mint.sh`, CLAUDE.md invariant 50) and no control plane in the cluster: every call
+carrying a key, the agents' key speaking as Felyx included, came back `503 seed_pending`, so the identity
+check never got to say `403 identity_mismatch`; a call with no key was still `401`. With the URL blanked in
+the harness's copy of `stack-wiring`, the same calls read `403 identity_mismatch` for a key speaking as
+another agent and got past identity for a key speaking as its own. On a cluster the control plane runs, so a
+deploy is not affected; a test harness that leaves the control plane out is. `evidence/identity-kind/run.sh`
+(2026-10-13, tokenfuse v1.11.0, keys optional) predates both this and invariant 50 and is not re-run here.
+
+`@claude` 2026-10-17: the order (seed before identity) is read from the measurement, not from tokenfuse's
+code. Not proven: what a cluster whose control plane is down at the gateway's start does for longer than
+the gateway's background retry.

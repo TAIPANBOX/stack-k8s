@@ -162,6 +162,18 @@ jobs:
       - name: client keys and the identity map are checked before they are applied (invariant 39)
         run: ./scripts/identity-files-are-checked.sh
 
+      # Added 2026-10-17 (the agent-security review, wave 0). The gateway requires its client
+      # keys and runs strict, and a deploy given no files mints a key for Felyx and one for the
+      # operator's agents, each bound to its own ids; the mint runs against a stand-in cluster
+      # and the pinned gateway image reads what it made. See CLAUDE.md invariant 50.
+      - name: the gateway requires client keys, minted when none are given (invariant 50)
+        run: ./scripts/metered-doors-require-keys.sh
+      # The MCP broker blocks raw secrets and flagged tool listings and asks wardryx about every
+      # tool call, failing closed: in 52, in every typed render, and in the pinned image run with
+      # 52's switches and no network. See CLAUDE.md invariant 51.
+      - name: the MCP broker blocks raw secrets and asks the policy plane (invariant 51)
+        run: ./scripts/broker-blocks-raw-secrets.sh
+
       # Added 2026-10-04. heraldyx v0.3.0 and idryx v1.1.0 refuse an event whose
       # source is not allowed for the file it was read from, so a stream this
       # launcher names differently, or a --load pair naming the wrong source,

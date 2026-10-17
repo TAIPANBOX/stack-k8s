@@ -7,9 +7,13 @@
 #   ./identity/up.sh --check-only --client-keys-file keys.txt --identity-map-file identity.json
 #
 # Who may call the gateway, which agent ids each caller may speak as, and which
-# business unit its spend lands in (tokenfuse docs/20). Off by default: with no
-# client key and no map the gateway answers any caller that reaches it, exactly
-# as before. CLAUDE.md invariant 39.
+# business unit its spend lands in (tokenfuse docs/20). CLAUDE.md invariant 39.
+# The keys are required (invariant 50): the gateway does not start without the
+# Secret this writes, and a deploy given no files mints two keys of its own
+# (lib/identity-mint.sh). This script is how an operator brings their own. On a
+# cluster whose keys were minted, give both files together: the minted map binds
+# the minted key ids and nothing else. Writing them makes the keys the operator's,
+# and the deploy leaves them alone from then on.
 #
 #   --client-keys-file F   (or CLIENT_KEYS_FILE) one secret:key_id per line, the
 #                          line the console's Onboard tab prints; blank lines and
@@ -28,9 +32,9 @@
 # becomes the ConfigMap gateway-identity-map: the file under identity.json, and
 # under map_path the path the gateway reads it from, so the variable and the file
 # come from one object and cannot disagree (the gateway refuses to start on a path
-# that names no file). manifests/10-planes.yaml reads both as optional and mounts
-# the map read only at /etc/tokenfuse/identity. Neither object is in any manifest,
-# so `kubectl apply -k` and every deploy script leave them alone.
+# that names no file). manifests/10-planes.yaml reads the keys as required and the
+# map as optional, and mounts the map read only at /etc/tokenfuse/identity.
+# Neither object is in any manifest, so `kubectl apply -k` leaves them alone.
 #
 # CHECKED TWICE, AND NEITHER CHECK CHANGES THE CLUSTER.
 #   First, before any tool runs: each file is a readable regular file with
@@ -65,16 +69,16 @@
 # A RE-RUN that names no file keeps both and checks them again, with the image
 # the cluster runs now, so an upgrade that would refuse the map is found here.
 #
-# TO TURN EITHER OFF, delete its object, then run this script with no file, which
-# rolls the gateway without it. This script deletes nothing itself:
-#   kubectl -n agent-stack delete secret gateway-client-keys
+# TO TURN THE MAP OFF, delete its ConfigMap, then run this script with no file,
+# which rolls the gateway without it. The keys cannot be turned off: the gateway
+# requires them. This script deletes nothing itself:
 #   kubectl -n agent-stack delete configmap gateway-identity-map
 #   ./identity/up.sh
-# A map with key bindings and no keys left is refused, so delete both, or give a
-# map with no keys[] first.
 #
-# WHILE CLIENT KEYS ARE ON, every metered call must carry `x-fuse-key`. Felyx (the
-# console's copilot) and the drills send none and are refused 401.
+# Every metered call must carry `x-fuse-key`. Felyx (the console's copilot) sends
+# the key in the Secret felyx-client-key, which a deploy mints with its own keys;
+# with your files, give Felyx a line in the keys file and put the same secret in
+# that Secret. The drills (mockryx) send no key and are refused 401.
 #
 # Needs kubectl (KUBECONFIG from the environment), docker and python3 here. The
 # check bind-mounts a staging directory of this machine, so the Docker daemon has
@@ -115,6 +119,7 @@ MAP_CONFIGMAP=gateway-identity-map
 MAP_KEY=identity.json
 MAP_PATH_KEY=map_path
 MAP_DIR=/etc/tokenfuse/identity
+MINT_LABEL=taipanbox.dev/identity
 GATEWAY_CMD=/usr/local/bin/tokenfuse
 GATEWAY_USER=10001:10001
 ANN_MAP=taipanbox.dev/identity-map-sha256
@@ -363,6 +368,7 @@ LIVE_ANN_KEYS="$(sed -n 3p <<<"$live")"
 secret_read() {
   local o out
   SECRET_PRESENT=0
+  SECRET_MINTED=0
   SECRET_RV=""
   KEPT_SPEC=""
   o="$(k get secret "$SECRET_NAME" -o json --ignore-not-found)" || die "could not read Secret $SECRET_NAME. $NOTHING"
@@ -371,9 +377,12 @@ secret_read() {
 import base64, json, sys
 o = json.load(sys.stdin)
 v = (o.get("data") or {}).get(sys.argv[1], "")
-sys.stdout.write(o["metadata"].get("resourceVersion", "") + ":" + base64.b64decode(v).decode("utf-8"))' "$SECRET_KEY")" \
+m = "1" if (o["metadata"].get("labels") or {}).get(sys.argv[2]) == "minted" else "0"
+sys.stdout.write(m + o["metadata"].get("resourceVersion", "") + ":" + base64.b64decode(v).decode("utf-8"))' "$SECRET_KEY" "$MINT_LABEL")" \
     || die "could not read Secret $SECRET_NAME. $NOTHING"
   SECRET_PRESENT=1
+  SECRET_MINTED="${out:0:1}"
+  out="${out:1}"
   SECRET_RV="${out%%:*}"
   KEPT_SPEC="${out#*:}"
 }
@@ -419,6 +428,13 @@ SPEC="$KEPT_SPEC"
 [ "$KEYS_GIVEN" = 0 ] || SPEC="$KEYS_NEW"
 MAPF="$KEPT_MAP"
 [ "$MAP_GIVEN" = 0 ] || MAPF="$MAP_FILE"
+# The gateway requires keys (invariant 50): a run that would leave none is refused.
+[ -n "$SPEC" ] \
+  || die "the gateway requires client keys and this run would leave none. Give --client-keys-file, or deploy (or run identity/mint.sh) to mint them. $NOTHING"
+# Keys the deploy minted are bound by the map it minted, and by nothing else.
+if [ "$SECRET_MINTED" = 1 ] && [ "$KEYS_GIVEN$MAP_GIVEN" != 00 ] && [ "$KEYS_GIVEN$MAP_GIVEN" != 11 ]; then
+  die "the client keys on this cluster were minted by a deploy, and the map it wrote binds those keys only. Give --client-keys-file and --identity-map-file together. $NOTHING"
+fi
 
 say "the gateway image reads the files first"
 identity_check "$IMAGE" "$SPEC" "$MAPF"
@@ -445,6 +461,13 @@ print(json.dumps({"apiVersion": "v1", "kind": "Secret", "type": "Opaque",
       || die "could not create Secret $SECRET_NAME"
   fi
   note "client keys: $CHECK_KEYS key(s) in Secret $SECRET_NAME (never printed)"
+  # Yours now: a deploy leaves a Secret without the minted label alone.
+  if [ "$SECRET_MINTED" = 1 ]; then
+    printf '{"metadata":{"labels":{"%s":null}}}' "$MINT_LABEL" \
+      | k patch secret "$SECRET_NAME" --type merge --patch-file /dev/stdin >/dev/null \
+      || die "could not take the minted label off Secret $SECRET_NAME"
+    note "client keys: yours now; a deploy will not mint over them (felyx-client-key is left as it is)"
+  fi
   secret_read
 fi
 
@@ -530,9 +553,7 @@ if [ "$CHECK_KEYS" -gt 0 ]; then
   note "client keys: $CHECK_KEYS, from Secret $SECRET_NAME. Every metered call must send"
   note "  x-fuse-key: <its secret>     and, where the map binds its key, an agent id it may speak as:"
   note "  x-fuse-agent-id: agent://<domain>/<name>"
-  note "Felyx and the drills send no x-fuse-key, so the gateway refuses them 401 while keys are on."
-else
-  note "client keys: off, the gateway answers any caller that reaches it"
+  note "Felyx sends the key in Secret felyx-client-key; the drills send none and are refused 401."
 fi
 if [ "$CHECK_MAP" = 1 ]; then
   note "identity map: on, sha256 $MAP_SHA, from ConfigMap $MAP_CONFIGMAP"

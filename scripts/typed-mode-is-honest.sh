@@ -490,8 +490,13 @@ for label, args in variants.items():
     code = code_of(off)
     check("13 risk signal is off unless asked", "typryx-wardryx-proxy" not in code,
           f"{label}: the proxy appears in the render WITHOUT --typed-risk-signal")
-    check("13 risk signal is off unless asked", "TOKENFUSE_WARDRYX" not in code,
-          f"{label}: the broker carries a wardryx setting WITHOUT --typed-risk-signal")
+    # The broker asks wardryx itself on every box (invariant 51); without the flag it asks
+    # wardryx directly, never the proxy.
+    ob = doc_named(off, "Deployment", "tokenfuse-mcp-broker")
+    check("13 risk signal is off unless asked", ob is not None
+          and env_of(ob).get("TOKENFUSE_WARDRYX_URL") == "http://wardryx:8090",
+          f"{label}: WITHOUT --typed-risk-signal the broker asks "
+          f"{(env_of(ob).get('TOKENFUSE_WARDRYX_URL') if ob is not None else None)!r}, not wardryx directly")
     check("13 risk signal is off unless asked", "values: [typryx, typryx-wardryx-proxy]" not in code,
           f"{label}: the egress policy selects the proxy WITHOUT --typed-risk-signal")
 

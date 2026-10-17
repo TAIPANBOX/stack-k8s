@@ -645,7 +645,7 @@ run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
 run_case "secret-keys-agree: no installer left to judge" fail \
 	'./scripts/secret-keys-agree.sh' \
 	"$(py 'import os
-for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh", "delegation/up.sh", "closure/up.sh", "evidence/identity-kind/run.sh"):
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh", "delegation/up.sh", "closure/up.sh", "evidence/identity-kind/run.sh", "evidence/identity-kind/mint.sh"):
     os.remove(f)')" \
 	"measured NOTHING"
 
@@ -1479,12 +1479,12 @@ run_case "typed-mode-is-honest: the broker keeps asking wardryx directly" fail \
 
 run_case "typed-mode-is-honest: the broker fails open" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "TOKENFUSE_WARDRYX_FAILMODE, value: \\\"closed\\\"", "TOKENFUSE_WARDRYX_FAILMODE, value: \\\"open\\\"")')" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_WARDRYX_FAILMODE, value: \"closed\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_FAILMODE, value: \"open\" \x7d")')" \
 	"not enforce/closed"
 
 run_case "typed-mode-is-honest: the broker uses the admin key" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "key: wardryx_gateway \x7d \x7d", "key: wardryx_admin \x7d \x7d")')" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "key: wardryx_gateway \x7d \x7d", "key: wardryx_admin \x7d \x7d")')" \
 	"does not use the viewer key"
 
 run_case "typed-mode-is-honest: the broker waits less than the proxy may take" fail \
@@ -2035,7 +2035,7 @@ run_case "deploy-flags-agree: the gateway PII switch is applied before the kusto
 # verify.sh. Then the subject taken away twice, and a comment (must pass).
 run_case "identity-files: the gateway loses its client keys setting" fail \
 	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_CLIENT_KEYS\n              valueFrom: \x7b secretKeyRef: \x7b name: gateway-client-keys, key: client_keys, optional: true \x7d \x7d\n", "")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_CLIENT_KEYS\n              valueFrom: \x7b secretKeyRef: \x7b name: gateway-client-keys, key: client_keys \x7d \x7d\n", "")')" \
 	"sets no TOKENFUSE_CLIENT_KEYS"
 
 run_case "identity-files: the gateway loses its identity map setting" fail \
@@ -2043,10 +2043,11 @@ run_case "identity-files: the gateway loses its identity map setting" fail \
 	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_IDENTITY_MAP\n              valueFrom: \x7b configMapKeyRef: \x7b name: gateway-identity-map, key: map_path, optional: true \x7d \x7d\n", "")')" \
 	"sets no TOKENFUSE_IDENTITY_MAP"
 
-run_case "identity-files: the client keys become required" fail \
+# Invariant 50 turned this case around: the keys are required, so an optional reference is the fault.
+run_case "identity-files: the client keys become optional" fail \
 	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "name: gateway-client-keys, key: client_keys, optional: true", "name: gateway-client-keys, key: client_keys")')" \
-	"not optional, so a cluster"
+	"$(py 'edit("manifests/10-planes.yaml", "name: gateway-client-keys, key: client_keys \x7d", "name: gateway-client-keys, key: client_keys, optional: true \x7d")')" \
+	"optional, so a cluster with no Secret"
 
 run_case "identity-files: the map volume becomes required" fail \
 	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
@@ -2088,9 +2089,9 @@ run_case "identity-files: identity/up.sh taken away" fail \
 	"$(py 'import os; os.remove("identity/up.sh")')" \
 	"identity/up.sh is missing"
 
-run_case "identity-files: a comment that names a required setting is not the setting" pass \
+run_case "identity-files: a comment that names another form of the setting is not the setting" pass \
 	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_CLIENT_KEYS\n", "            # optional: false would stop a cluster that has no keys file; the reference below is optional.\n            - name: TOKENFUSE_CLIENT_KEYS\n")')"
+	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_CLIENT_KEYS\n", "            # optional: true would start a gateway that answers anyone; the reference below is required.\n            - name: TOKENFUSE_CLIENT_KEYS\n")')"
 
 run_case "identity-files: a short secret is accepted" fail \
 	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
@@ -2372,7 +2373,10 @@ run_case "gen-is-bounded: nothing asks the generator for a length" fail \
     edit(p, "\"$(gen 28)\"", "\"$(gen)\"")
 s = open("typed/mode.sh").read()
 assert "$(gen 40)" in s
-open("typed/mode.sh", "w").write(s.replace("$(gen 40)", "$(gen)"))')" \
+open("typed/mode.sh", "w").write(s.replace("$(gen 40)", "$(gen)"))
+s = open("lib/identity-mint.sh").read()
+assert "$(gen 40)" in s
+open("lib/identity-mint.sh", "w").write(s.replace("$(gen 40)", "$(gen)"))')" \
 	"there is no length to run the generator for"
 
 # Invariant 42: a typed deploy comes up green on its own. A typed manifest reads a
@@ -2657,6 +2661,167 @@ run_case "teeth-shards-cover-every-case: the CI matrix runs three shards" fail \
 	'./scripts/teeth-shards-cover-every-case.sh' \
 	"$(py 'edit(".github/workflows/gates.yml", "shard: [1, 2, 3, 4]", "shard: [1, 2, 3]")')" \
 	"does not run every shard"
+
+# ---- metered-doors-require-keys (CLAUDE.md invariant 50): the gateway requires its client keys,
+# runs strict, and a deploy given no files mints Felyx's key and the agents' key. The mint is run
+# against a stand-in cluster; one case reaches the pinned gateway image through identity/up.sh.
+run_case "metered-doors-require-keys: the gateway's client keys become optional" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "name: gateway-client-keys, key: client_keys \x7d", "name: gateway-client-keys, key: client_keys, optional: true \x7d")')" \
+	"optional: true, so a cluster with no Secret"
+
+run_case "metered-doors-require-keys: TOKENFUSE_CLIENT_KEYS goes missing" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_CLIENT_KEYS\n              valueFrom: \x7b secretKeyRef: \x7b name: gateway-client-keys, key: client_keys \x7d \x7d\n", "")')" \
+	"sets TOKENFUSE_CLIENT_KEYS 0 time(s)"
+
+run_case "metered-doors-require-keys: a gateway's identity map is only warned about" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_IDENTITY_STRICT, value: \"enforce\" \x7d", "\x7b name: TOKENFUSE_IDENTITY_STRICT, value: \"warn\" \x7d")')" \
+	"TOKENFUSE_IDENTITY_STRICT ['warn']"
+
+run_case "metered-doors-require-keys: the console loses Felyx's key" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "            - name: GENARYX_COPILOT_FUSE_KEY\n              valueFrom: \x7b secretKeyRef: \x7b name: felyx-client-key, key: client_key, optional: true \x7d \x7d\n", "")')" \
+	"does not read GENARYX_COPILOT_FUSE_KEY from felyx-client-key"
+
+run_case "metered-doors-require-keys: the deploy stops minting the agents' key" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "      agents=\"$(gen 40)\" || die \"could not mint the agents\x27 client key\"\n", "      agents=\"$felyx\"\n")')" \
+	"an empty cluster was refused by the mint"
+
+run_case "metered-doors-require-keys: a re-run writes a new agents' key" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "      fi\n      ;;\n    *)\n      case \"$have\" in\n", "      fi\n      agents=\"$(gen 40)\"\n      ;;\n    *)\n      case \"$have\" in\n")')" \
+	"a re-run changed the agents' key file"
+
+run_case "metered-doors-require-keys: the agents' key may speak as Felyx" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "\"agents\":[\"agent://%s/agents/*\"]", "\"agents\":[\"agent://%s/*\"]")')" \
+	"may speak as Felyx"
+
+run_case "metered-doors-require-keys: the agent key file is readable by others" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "  chmod 0600 \"$keyfile\" || die", "  chmod 0644 \"$keyfile\" || die")')" \
+	"not 600"
+
+run_case "metered-doors-require-keys: the operator's own keys are minted over" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "      if [ \"$label\" != minted ]; then\n", "      if [ \"$label\" = never ]; then\n")')" \
+	"holding the operator's own keys was refused or written"
+
+run_case "metered-doors-require-keys: a map with no keys is accepted" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "          die \"ConfigMap $IDM_CM holds an identity map", "          : \"ConfigMap $IDM_CM holds an identity map")')" \
+	"a map with no client keys was accepted"
+
+run_case "metered-doors-require-keys: a minted secret rides the kubectl command line" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "        | k_ \"-n $IDM_NS create -f -\" >/dev/null \\\n        || die \"could not create Secret $IDM_SECRET\"", "        >/dev/null; k_ \"-n $IDM_NS create secret generic $IDM_SECRET --from-literal=$IDM_SECRET_KEY=$felyx:felyx,$agents:agents\" >/dev/null \\\n        || die \"could not create Secret $IDM_SECRET\"")')" \
+	"on a kubectl command line"
+
+run_case "metered-doors-require-keys: the closing note prints the agents' key" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "the secret in %s (it is not printed here)\\n\x27 \"$1\"", "%s, the secret in %s\\n\x27 \"$(cat \"$1\")\" \"$1\"")')" \
+	"appears in what the mint printed"
+
+run_case "metered-doors-require-keys: the closing note stops naming the key file" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "the secret in %s (it is not printed here)\\n\x27 \"$1\"", "the secret in %s (it is not printed here)\\n\x27 \"the file\"")')" \
+	"does not name the agents' key file"
+
+run_case "metered-doors-require-keys: a deploy script stops minting" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "identity_mint_settle \"$ROOT/agent-key\"\n", "")')" \
+	"cloud/aws/deploy-aws.sh does not source lib/identity-mint.sh"
+
+run_case "metered-doors-require-keys: the minted map binds a key id nobody minted" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "\x7b\"key_id\":\"agents\",\"unit\":\"agents\"", "\x7b\"key_id\":\"agent\",\"unit\":\"agents\"")')" \
+	"the pinned gateway image refused the pair the mint made"
+
+run_case "metered-doors-require-keys: no gateway container left to judge" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "          command: [\"/usr/local/bin/tokenfuse\"]\n", "          command: [\"/bin/true\"]\n")')" \
+	"measured NOTHING"
+
+run_case "metered-doors-require-keys: the mint block is gone" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "# identity-mint: begin\n", "# identity-mint: start\n")')" \
+	"measured nothing about the keys"
+
+run_case "metered-doors-require-keys: a comment in the mint library is reworded" pass \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "# What the end of a deploy says about the minted keys", "# What the end of a deploy says of the minted keys")')"
+
+# identity/up.sh on a cluster whose keys a deploy minted, and a run that would leave none.
+run_case "identity-files: a keys file alone takes over minted keys" fail \
+	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "if [ \"$SECRET_MINTED\" = 1 ] && [ \"$KEYS_GIVEN$MAP_GIVEN\" != 00 ]", "if [ \"$SECRET_MINTED\" = 2 ] && [ \"$KEYS_GIVEN$MAP_GIVEN\" != 00 ]")')" \
+	"a keys file alone on a cluster whose keys a deploy minted was accepted"
+
+run_case "identity-files: up.sh leaves the gateway no keys" fail \
+	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
+	"$(py 'edit("identity/up.sh", "[ -n \"$SPEC\" ] \\\n  || die \"the gateway requires client keys", "[ -n \"$SPEC$MAPF\" ] \\\n  || die \"the gateway requires client keys")')" \
+	"was not refused for that reason"
+
+run_case "typed-mode-is-honest: the broker asks the proxy without the flag" fail \
+	'./scripts/typed-mode-is-honest.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_WARDRYX_URL, value: \"http://wardryx:8090\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_URL, value: \"http://typryx-wardryx-proxy:4330\" \x7d")')" \
+	"WITHOUT --typed-risk-signal the broker asks"
+
+# ---- broker-blocks-raw-secrets (CLAUDE.md invariant 51): the MCP broker blocks raw secrets and
+# flagged listings and asks wardryx about every tool call, failing closed, in 52, in every typed
+# render and in the image 52 pins.
+run_case "broker-blocks-raw-secrets: secrets in tool arguments go back to shadow" fail \
+	'./scripts/broker-blocks-raw-secrets.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_MCP_DLP, value: \"block\" \x7d", "\x7b name: TOKENFUSE_MCP_DLP, value: \"shadow\" \x7d")')" \
+	"TOKENFUSE_MCP_DLP 'shadow', not block"
+
+run_case "broker-blocks-raw-secrets: TOKENFUSE_MCP_DLP goes missing" fail \
+	'./scripts/broker-blocks-raw-secrets.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - \x7b name: TOKENFUSE_MCP_DLP, value: \"block\" \x7d\n", "")')" \
+	"TOKENFUSE_MCP_DLP None, not block"
+
+run_case "broker-blocks-raw-secrets: the tool scan only warns" fail \
+	'./scripts/broker-blocks-raw-secrets.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_MCP_SCAN, value: \"block\" \x7d", "\x7b name: TOKENFUSE_MCP_SCAN, value: \"warn\" \x7d")')" \
+	"TOKENFUSE_MCP_SCAN 'warn', not block"
+
+run_case "broker-blocks-raw-secrets: the broker's policy hook is off" fail \
+	'./scripts/broker-blocks-raw-secrets.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_WARDRYX_MODE, value: \"enforce\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_MODE, value: \"off\" \x7d")')" \
+	"TOKENFUSE_WARDRYX_MODE 'off', not enforce"
+
+run_case "broker-blocks-raw-secrets: the broker fails open" fail \
+	'./scripts/broker-blocks-raw-secrets.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_WARDRYX_FAILMODE, value: \"closed\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_FAILMODE, value: \"open\" \x7d")')" \
+	"TOKENFUSE_WARDRYX_FAILMODE 'open', not closed"
+
+run_case "broker-blocks-raw-secrets: the broker's policy key becomes optional" fail \
+	'./scripts/broker-blocks-raw-secrets.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "name: stack-keys, key: wardryx_gateway \x7d \x7d", "name: stack-keys, key: wardryx_gateway, optional: true \x7d \x7d")')" \
+	"does not read TOKENFUSE_WARDRYX_KEY from stack-keys/wardryx_gateway"
+
+run_case "broker-blocks-raw-secrets: the broker cannot reach wardryx" fail \
+	'./scripts/broker-blocks-raw-secrets.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "        - podSelector: \x7b matchLabels: \x7b app: wardryx \x7d \x7d\n      ports:\n        - \x7b protocol: TCP, port: 8090 \x7d", "        - podSelector: \x7b matchLabels: \x7b app: wardryx \x7d \x7d\n      ports:\n        - \x7b protocol: TCP, port: 8091 \x7d")')" \
+	"no NetworkPolicy lets the broker out to wardryx"
+
+run_case "broker-blocks-raw-secrets: the broker image cannot be pulled" fail \
+	'./scripts/broker-blocks-raw-secrets.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.14.0\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
+	"could not pull ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag"
+
+run_case "broker-blocks-raw-secrets: no broker left to judge" fail \
+	'./scripts/broker-blocks-raw-secrets.sh' \
+	"$(py 'import os; os.remove("manifests/52-tokenfuse-mcp-broker.yaml")')" \
+	"measured NOTHING"
+
+run_case "broker-blocks-raw-secrets: a comment in the broker's block is reworded" pass \
+	'./scripts/broker-blocks-raw-secrets.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "# with a log line. tokenfuse\x27s own defaults are shadow and warn", "# with a log line. tokenfuse\x27s defaults are shadow and warn")')"
+
 
 run_case "teeth-shards-cover-every-case: a reworded comment is not a fault" pass \
 	'./scripts/teeth-shards-cover-every-case.sh' \

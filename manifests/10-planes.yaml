@@ -219,22 +219,30 @@ spec:
             - name: TOKENFUSE_DECLASSIFY_KEY
               valueFrom: { secretKeyRef: { name: stack-keys, key: declassify_key } }
             # Who may call this gateway, which agent ids each caller may speak as,
-            # and which unit pays (tokenfuse docs/20). Off until identity/up.sh has
-            # run: it writes the keys into the Secret gateway-client-keys and the
-            # map into the ConfigMap gateway-identity-map, after the gateway image
-            # has read both. Both references are optional, so a cluster that named
-            # no file starts exactly as before, and neither object is in any
-            # manifest, so `kubectl apply -k` never puts a copy back over the
-            # operator's. The map's PATH comes from the map's own ConfigMap, never
-            # a literal: the gateway refuses to start on a path that names no file,
-            # so the path exists exactly when the map does. A change to either
-            # object restarts nothing by itself; identity/up.sh rolls this pod by
-            # annotating its template with what it reads.
-            # scripts/identity-files-are-checked.sh holds it (CLAUDE.md invariant 39).
+            # and which unit pays (tokenfuse docs/20). The KEYS ARE REQUIRED: with
+            # none, tokenfuse admits every caller and takes the agent id a caller
+            # writes, so one agent can speak as another (finding F-001 of the
+            # 2026-10-17 review). So this reference is not optional, and the gateway
+            # does not start until the Secret gateway-client-keys exists. The deploy
+            # scripts make it after their `apply -k` when the operator gave no files
+            # (lib/identity-mint.sh: a key for Felyx and one for the operator's
+            # agents, each bound in the map to its own ids, CLAUDE.md invariant 50),
+            # and identity/up.sh writes the operator's own (invariant 39). Neither
+            # object is in any manifest, so `kubectl apply -k` never puts a copy back.
+            # The map stays optional: an operator may bring keys with no map, as on
+            # stack-single. Its PATH comes from the map's own ConfigMap, never a
+            # literal: the gateway refuses to start on a path that names no file. A
+            # change to either object restarts nothing by itself; the deploy and
+            # identity/up.sh roll this pod by annotating its template with what it
+            # reads. Strict is written out rather than left to tokenfuse's default:
+            # a key speaking as an agent its binding does not name is refused 403.
+            # scripts/metered-doors-require-keys.sh and
+            # scripts/identity-files-are-checked.sh hold it.
             - name: TOKENFUSE_CLIENT_KEYS
-              valueFrom: { secretKeyRef: { name: gateway-client-keys, key: client_keys, optional: true } }
+              valueFrom: { secretKeyRef: { name: gateway-client-keys, key: client_keys } }
             - name: TOKENFUSE_IDENTITY_MAP
               valueFrom: { configMapKeyRef: { name: gateway-identity-map, key: map_path, optional: true } }
+            - { name: TOKENFUSE_IDENTITY_STRICT, value: "enforce" }
             # enforce, not observe: an over-budget call gets a hard 402 rather
             # than a log line. This is the whole point of the gateway.
             - { name: TOKENFUSE_MODE, value: "enforce" }
