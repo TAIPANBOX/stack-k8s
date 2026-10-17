@@ -850,6 +850,12 @@ PY
   [ "$(rc_of "$out")" != 0 ] || fail "a map with key bindings on a cluster with no client keys was accepted"
   [ "$(writes "$S2")" = 0 ] || fail "a refused map still wrote to the cluster"
   grep -qF 'requires client keys' <<<"$out" || fail "a run that would leave the gateway no keys was not refused for that reason: $(grep -v '^rc=' <<<"$out" | tail -n 1)"
+  # A pair only the gateway image refuses (a key the map does not bind): nothing written.
+  S4="$scratch/d4.state"
+  new_state "$S4"
+  out="$(drun "$S4" --client-keys-file keys-orphan.txt --identity-map-file map.json)"
+  [ "$(rc_of "$out")" != 0 ] || fail "a keys file with a key the map does not bind was accepted on an empty cluster"
+  [ "$(writes "$S4")" = 0 ] || fail "a pair the gateway image refused still wrote to the cluster"
 
   # A cluster whose keys a deploy minted (lib/identity-mint.sh, invariant 50): the
   # minted map binds the minted key ids, so one file alone is refused, and both

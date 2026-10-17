@@ -2373,7 +2373,10 @@ run_case "gen-is-bounded: nothing asks the generator for a length" fail \
     edit(p, "\"$(gen 28)\"", "\"$(gen)\"")
 s = open("typed/mode.sh").read()
 assert "$(gen 40)" in s
-open("typed/mode.sh", "w").write(s.replace("$(gen 40)", "$(gen)"))')" \
+open("typed/mode.sh", "w").write(s.replace("$(gen 40)", "$(gen)"))
+s = open("lib/identity-mint.sh").read()
+assert "$(gen 40)" in s
+open("lib/identity-mint.sh", "w").write(s.replace("$(gen 40)", "$(gen)"))')" \
 	"there is no length to run the generator for"
 
 # Invariant 42: a typed deploy comes up green on its own. A typed manifest reads a
