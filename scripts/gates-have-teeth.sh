@@ -2986,6 +2986,32 @@ run_case "agent-tokens: a comment naming the switch in the default gateway is no
 	"$AGT" \
 	"$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n", "            # TOKENFUSE_AGENT_TOKENS is set by 58-agent-tokens-gateway-patch.yaml, never here.\n            - { name: TOKENFUSE_CACHE, value: \"off\" }\n")')"
 
+# ---- the broker's relayed check has its key while the door is on (CLAUDE.md invariant 54) --
+run_case "agent-tokens: broker key missing while the door is on" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-broker-patch.yaml", "TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE, value: \"/run/taint/key\"", "TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE, value: \"\"")')" \
+	"broker key missing while the door is on"
+
+run_case "agent-tokens: the broker's taint check fails open" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-broker-patch.yaml", "TOKENFUSE_MCP_TAINT_FAILMODE, value: \"closed\"", "TOKENFUSE_MCP_TAINT_FAILMODE, value: \"open\"")')" \
+	"leaves the broker's taint check to fail open"
+
+run_case "agent-tokens: the mint does not give the broker its key" fail \
+	"$AGT" \
+	"$(py 'edit("lib/identity-mint.sh", "{\"key_id\":\"broker\",\"unit\":\"broker\",\"agents\":[\"agent://%s/*\"]}", "{\"key_id\":\"broker\",\"unit\":\"broker\",\"agents\":[\"agent://%s/x\"]}")')" \
+	"does not mint the broker's client key"
+
+run_case "agent-tokens: the broker's key Secret is projected under another name" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-broker-patch.yaml", "items: [{ key: client_key, path: key }]", "items: [{ key: client_key, path: other }]")')" \
+	"is not projected to the file"
+
+run_case "agent-tokens: the broker may reach the open internet" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-broker-network.yaml", "        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n      ports:\n        - { protocol: TCP, port: 4100 }\n    - to:\n        - podSelector: { matchLabels: { app: vouchryx } }", "        - ipBlock: { cidr: 0.0.0.0/0 }\n    - to:\n        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n      ports:\n        - { protocol: TCP, port: 4100 }\n    - to:\n        - podSelector: { matchLabels: { app: vouchryx } }")')" \
+	"opens the broker's egress to 0.0.0.0/0"
+
 # A listing is not a run. Stop before the verdict, which would count cases this
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then

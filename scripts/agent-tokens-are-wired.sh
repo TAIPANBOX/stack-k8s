@@ -70,6 +70,8 @@ NET = "manifests/58-agent-tokens-network.yaml"
 UP = "agent-tokens/up.sh"
 EX = "agent-tokens/example-agent.yaml"
 DELEG = "manifests/54-delegation.yaml"
+BRK = "manifests/58-agent-tokens-broker-patch.yaml"
+BRK_NET = "manifests/58-agent-tokens-broker-network.yaml"
 
 # ---- 1. the gateway patch that turns the door on ---------------------------------------
 gw = read(GW)
@@ -93,7 +95,7 @@ if delegation and ISSUER not in delegation:
     fail(f"{DELEG} no longer names vouchryx's issuer {ISSUER}: the audience this gate checks against has moved")
 
 # ---- 2. no default manifest names the door, its audience or the registry -----------------
-owned = {GW, VX, NET, "manifests/58-agent-tokens-gateway-unpatch.yaml", "manifests/58-agent-tokens-vouchryx-unpatch.yaml"}
+owned = {GW, VX, NET, BRK, BRK_NET, "manifests/58-agent-tokens-gateway-unpatch.yaml", "manifests/58-agent-tokens-vouchryx-unpatch.yaml", "manifests/58-agent-tokens-broker-unpatch.yaml"}
 for path in sorted(glob.glob("manifests/*.yaml")):
     if path in owned:
         continue
@@ -158,6 +160,47 @@ if net:
     ports = re.findall(r'port:\s*(\d+)', net)
     if not set(ports) <= {"4310", "4100"}:
         fail(f"{NET} opens ports {sorted(set(ports))}: only 4310 (vouchryx) and 4100 (the gateway)")
+
+# ---- 7. the broker: its door, its relayed check, and the key that answers it -------------
+MINT = "lib/identity-mint.sh"
+brk = read(BRK)
+if brk:
+    if not re.search(r'TOKENFUSE_AGENT_TOKENS, value: "accept"', brk):
+        fail(f"{BRK} does not turn the agent-token door on in the broker")
+    if env_value(brk, "TOKENFUSE_DELEGATION_AUDIENCE") != ISSUER:
+        fail(f"{BRK} does not set the broker's delegation audience to vouchryx's issuer {ISSUER}")
+    if env_value(brk, "TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE") != "closed":
+        fail(f"{BRK} does not fail the broker's revocation list closed")
+    if env_value(brk, "TOKENFUSE_MCP_TAINT_GATEWAY") != "http://tokenfuse-gateway:4100":
+        fail(f"{BRK} does not point the broker's tool-call check at the gateway")
+    keyfile = env_value(brk, "TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE")
+    if not keyfile:
+        fail(f"{BRK}: broker key missing while the door is on: TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE is not set, so a relayed agent token is checked without a key (401)")
+    else:
+        mount = re.search(r'\{\s*name:\s*taint-key,\s*mountPath:\s*(\S+?),', brk) or re.search(r'mountPath:\s*(\S+)\s*\n[^\n]*name: taint-key', brk)
+        if not mount or not keyfile.startswith(mount.group(1).rstrip("/") + "/"):
+            fail(f"{BRK} does not mount the broker's key where TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE ({keyfile}) reads it")
+        item = re.search(r'secretName:\s*broker-taint-key[^\n]*items:\s*\[\s*\{\s*key:\s*\S+,\s*path:\s*(\S+?)\s*\}', brk)
+        if not item or not keyfile.endswith("/" + item.group(1)):
+            fail(f"{BRK}: the Secret broker-taint-key is not projected to the file TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE names")
+    if env_value(brk, "TOKENFUSE_MCP_TAINT_FAILMODE") != "closed":
+        fail(f"{BRK} leaves the broker's taint check to fail open: a relayed call the gateway does not answer would pass")
+brk_net = read(BRK_NET)
+if brk_net:
+    if "0.0.0.0/0" in brk_net:
+        fail(f"{BRK_NET} opens the broker's egress to 0.0.0.0/0")
+    tg = set(re.findall(r'-\s*podSelector:\s*\{\s*matchLabels:\s*\{\s*app:\s*([\w-]+)', brk_net.split("policyTypes: [\"Ingress\"]")[0]))
+    if not tg <= {"tokenfuse-gateway", "vouchryx"}:
+        fail(f"{BRK_NET} lets the broker reach {sorted(tg)}: only the gateway and vouchryx")
+mint = read(MINT)
+if mint:
+    if '"key_id":"broker","unit":"broker","agents":["agent://%s/*"]' not in mint:
+        fail(f"{MINT} does not mint the broker's client key (id broker) bound to agent://<trust domain>/*: the broker's relayed checks would be refused")
+    if 'IDM_BROKER_SECRET=broker-taint-key' not in mint:
+        fail(f"{MINT} does not make the Secret broker-taint-key the broker reads its key from")
+up_s = read(UP)
+if up_s and "broker-taint-key" not in up_s:
+    fail(f"{UP} does not refuse a deployed broker whose key is missing")
 
 if fails:
     for f in fails:

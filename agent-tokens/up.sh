@@ -49,6 +49,16 @@ kubectl -n "$NS" get configmap vouchryx-trusted-issuers >/dev/null 2>&1 \
   || die "the delegation plane's ConfigMap vouchryx-trusted-issuers is missing: run delegation/up.sh first. Nothing was applied."
 kubectl -n "$NS" get deployment tokenfuse-gateway >/dev/null 2>&1 \
   || die "tokenfuse-gateway is not deployed in $NS. Nothing was applied."
+BROKER=0
+if kubectl -n "$NS" get deployment tokenfuse-mcp-broker >/dev/null 2>&1; then
+  # The broker relays an agent token to the gateway's tool-call check with its own key (id
+  # `broker`, invariant 54). Without that key the relayed check is refused 401, so refuse here.
+  kubectl -n "$NS" get secret broker-taint-key >/dev/null 2>&1 \
+    || die "the broker is deployed but Secret broker-taint-key is missing: deploy so it is minted with the gateway's keys (lib/identity-mint.sh), or give the broker's key by hand. Nothing was applied."
+  kubectl -n "$NS" get secret gateway-client-keys -o jsonpath='{.data.client_keys}' | base64 --decode | tr ',' '\n' | grep -q ':broker$' \
+    || die "the gateway's client keys have no entry for the broker (key id broker): add one, or deploy to mint them. Nothing was applied."
+  BROKER=1
+fi
 
 ISSUER="$(kubectl get --raw /.well-known/openid-configuration | python3 -c 'import sys,json; print(json.load(sys.stdin)["issuer"])')" \
   || die "could not read the cluster's service-account issuer. Nothing was applied."
@@ -85,5 +95,11 @@ kubectl -n "$NS" rollout status deployment/tokenfuse-gateway --timeout=180s >/de
 
 # ---- 4. the network agent pods need, and nothing else ------------------------------------
 kubectl -n "$NS" apply -f manifests/58-agent-tokens-network.yaml >/dev/null
+if [ "$BROKER" = 1 ]; then
+  echo "patching tokenfuse-mcp-broker (agent tokens, and its own key for the tool-call check)"
+  kubectl -n "$NS" patch deployment tokenfuse-mcp-broker --patch-file manifests/58-agent-tokens-broker-patch.yaml >/dev/null
+  kubectl -n "$NS" rollout status deployment/tokenfuse-mcp-broker --timeout=180s >/dev/null || die "tokenfuse-mcp-broker did not roll out with agent tokens on. kubectl -n $NS logs deploy/tokenfuse-mcp-broker"
+  kubectl -n "$NS" apply -f manifests/58-agent-tokens-broker-network.yaml >/dev/null
+fi
 echo "agent tokens are on: label an agent pod taipanbox.dev/agent-token=true (see agent-tokens/example-agent.yaml)."
 echo "A stop is one call to vouchryx: POST http://vouchryx:4310/v1/revoke with ban:true, bearer = the revoke_key in the vouchryx-keys Secret."

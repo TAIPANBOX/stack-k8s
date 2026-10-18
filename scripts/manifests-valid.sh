@@ -154,6 +154,8 @@ FRAGMENTS=(
 	"manifests/58-agent-tokens-gateway-unpatch.yaml"
 	"manifests/58-agent-tokens-vouchryx-patch.yaml"
 	"manifests/58-agent-tokens-vouchryx-unpatch.yaml"
+	"manifests/58-agent-tokens-broker-patch.yaml"
+	"manifests/58-agent-tokens-broker-unpatch.yaml"
 	"manifests/57-closure-gateway-patch.yaml"
 	"manifests/57-closure-console-patch.yaml"
 	"manifests/57-closure-gateway-unpatch.yaml"

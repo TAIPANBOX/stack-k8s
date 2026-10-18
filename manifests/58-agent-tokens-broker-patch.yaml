@@ -1,0 +1,42 @@
+# The agent-token door on the MCP broker (CLAUDE.md invariant 54; WAVE1-DESIGN 1.5; tokenfuse
+# T3's residual 1). Applied only by agent-tokens/up.sh, and only when the broker itself is
+# deployed (52-tokenfuse-mcp-broker.yaml, the typed-answer modes). Without this patch a broker
+# call that carries an agent token is refused by the door's own rules, and with the taint
+# check configured but no key it relays to the gateway, gets 401, and then follows the
+# taint fail mode; the patch sets that fail mode to closed so such a call is refused, not
+# passed.
+#
+#   TOKENFUSE_AGENT_TOKENS=accept                  the broker admits an agent's own token as a door credential
+#   TOKENFUSE_DELEGATION_*                         the same verifier the gateway uses: the issuer, the JWKS, the
+#                                                  audience (vouchryx's issuer), the broker's own address for the
+#                                                  DPoP htu, the revocation list (closed, at most 60 s old)
+#   TOKENFUSE_MCP_TAINT_GATEWAY                    the gateway's tool-call check, which the broker relays to
+#   TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE           the broker's own client key (id `broker`, minted with the
+#                                                  gateway's keys, the Secret broker-taint-key), read from a file
+#   TOKENFUSE_MCP_TAINT_FAILMODE=closed            a check the gateway does not answer refuses the call
+spec:
+  template:
+    spec:
+      containers:
+        - name: broker
+          env:
+            - { name: TOKENFUSE_AGENT_TOKENS, value: "accept" }
+            - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
+            - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "http://vouchryx:4310" }
+            - { name: TOKENFUSE_DELEGATION_URL, value: "http://tokenfuse-mcp-broker:4200" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS, value: "http://vouchryx:4310/v1/revocations" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: "closed" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: "60" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, value: "12000" }
+            - { name: TOKENFUSE_MCP_TAINT_GATEWAY, value: "http://tokenfuse-gateway:4100" }
+            - { name: TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE, value: "/run/taint/key" }
+            - { name: TOKENFUSE_MCP_TAINT_FAILMODE, value: "closed" }
+          volumeMounts:
+            - { name: vouchryx-jwks, mountPath: /etc/tokenfuse/delegation, readOnly: true }
+            - { name: taint-key, mountPath: /run/taint, readOnly: true }
+      volumes:
+        - name: vouchryx-jwks
+          configMap: { name: vouchryx-jwks }
+        - name: taint-key
+          secret: { secretName: broker-taint-key, defaultMode: 0440, items: [{ key: client_key, path: key }] }

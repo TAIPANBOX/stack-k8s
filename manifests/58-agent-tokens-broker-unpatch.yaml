@@ -1,0 +1,25 @@
+# Reverses 58-agent-tokens-broker-patch.yaml.
+spec:
+  template:
+    spec:
+      containers:
+        - name: broker
+          env:
+            - { name: TOKENFUSE_AGENT_TOKENS, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_ISSUER, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_JWKS, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_URL, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, $patch: delete }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, $patch: delete }
+            - { name: TOKENFUSE_MCP_TAINT_GATEWAY, $patch: delete }
+            - { name: TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE, $patch: delete }
+            - { name: TOKENFUSE_MCP_TAINT_FAILMODE, $patch: delete }
+          volumeMounts:
+            - { name: vouchryx-jwks, mountPath: /etc/tokenfuse/delegation, $patch: delete }
+            - { name: taint-key, mountPath: /run/taint, $patch: delete }
+      volumes:
+        - { name: vouchryx-jwks, $patch: delete }
+        - { name: taint-key, $patch: delete }
