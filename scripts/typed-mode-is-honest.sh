@@ -571,7 +571,7 @@ for label, args in risk_variants.items():
           and benv.get("TOKENFUSE_WARDRYX_FAILMODE") == "closed",
           f"{label}: the broker's wardryx mode or fail mode is not enforce/closed")
     check("14 broker asks through the proxy", "key: wardryx_gateway" in benv.get("TOKENFUSE_WARDRYX_KEY", ""),
-          f"{label}: the broker does not use the viewer key wardryx_gateway: {benv.get('TOKENFUSE_WARDRYX_KEY')!r}")
+          f"{label}: the broker does not use the pep key wardryx_gateway: {benv.get('TOKENFUSE_WARDRYX_KEY')!r}")
     try:
         mcp_ms, ask_ms = int(benv["TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS"]), int(penv["TYPRYX_PROXY_ASK_TIMEOUT_MS"])
         check("14 deadlines nest", mcp_ms > max(ask_ms, PROXY_MAX_ASK_MS),

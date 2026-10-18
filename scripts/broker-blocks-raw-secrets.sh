@@ -125,7 +125,7 @@ for f in files:
         bad.append(f"{label}: the broker asks {url!r}, not {want_url}" + (": with the risk signal it asks through the proxy." if risk else ": without the risk signal it asks wardryx itself, and tokenfuse turns the hook off with no URL."))
     key = e.get("TOKENFUSE_WARDRYX_KEY")
     if not key or key[0] != "from" or not re.search(r"name:\s*stack-keys\s*,\s*key:\s*wardryx_gateway", key[1]) or "optional: true" in key[1]:
-        bad.append(f"{label}: the broker does not read TOKENFUSE_WARDRYX_KEY from stack-keys/wardryx_gateway, required: the viewer key every installer mints.")
+        bad.append(f"{label}: the broker does not read TOKENFUSE_WARDRYX_KEY from stack-keys/wardryx_gateway, required: the pep key every installer mints.")
 
 text = open(os.path.join(scratch, "r-52.yaml")).read()
 ok_egress = False

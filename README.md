@@ -615,7 +615,7 @@ write. All of it is off by default.
 - **Where it sits.** Only tokenfuse's MCP broker asks wardryx through it. The LLM
   gateway keeps asking wardryx directly, so a slow typed answer never sits on the
   model path. The broker asked wardryx nothing before; with the flag it asks about
-  every tool call, fails closed, and uses the same viewer key as the gateway.
+  every tool call, fails closed, and uses the same pep key as the gateway.
 - **What it costs.** Each tool call that carries a name and whole arguments is one
   typryx ask. In the `jev` mode that is a paid call, and the tool name, arguments
   and target leave the cluster; the proxy has its own hourly cap
@@ -839,7 +839,7 @@ sides use one secret, and it is off unless you turn it on:
 ```
 
 A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
-console v1.1.34 or later. The images pinned here are tokenfuse v1.14.0 and console v1.1.46,
+console v1.1.34 or later. The images pinned here are tokenfuse v1.15.0 and console v1.1.46,
 both later than those minimums; an older image
 ignores the setting.
 
