@@ -2999,12 +2999,12 @@ run_case "agent-tokens: the broker's taint check fails open" fail \
 
 run_case "agent-tokens: the mint does not give the broker its key" fail \
 	"$AGT" \
-	"$(py 'edit("lib/identity-mint.sh", "{\"key_id\":\"broker\",\"unit\":\"broker\",\"agents\":[\"agent://%s/*\"]}", "{\"key_id\":\"broker\",\"unit\":\"broker\",\"agents\":[\"agent://%s/x\"]}")')" \
+	"$(py 'edit("lib/identity-mint.sh", "\"agents\":[\"agent://%s/*\"]", "\"agents\":[\"agent://%s/x\"]")')" \
 	"does not mint the broker's client key"
 
 run_case "agent-tokens: the broker's key Secret is projected under another name" fail \
 	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-broker-patch.yaml", "items: [{ key: client_key, path: key }]", "items: [{ key: client_key, path: other }]")')" \
+	"$(py 'edit("manifests/58-agent-tokens-broker-patch.yaml", "client_key, path: key", "client_key, path: other")')" \
 	"is not projected to the file"
 
 run_case "agent-tokens: the broker may reach the open internet" fail \
