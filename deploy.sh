@@ -29,6 +29,10 @@
 # governed stack and no control room, which is a real deployment and not a
 # crippled one: the planes enforce with or without a UI in front of them.
 #
+# `--anthropic-key-file <path>` gives the gateway its provider key: the one file the gateway
+# reads, made into the Secret gateway-upstream-key on the cluster, on stdin, once. A re-run
+# keeps it (CLAUDE.md invariant 53, lib/upstream-key.sh). Without it and without the Secret,
+# the deploy stops before the rollouts.
 # `--firewall <enforce|shadow|off>` sets the agent firewall's mode on the gateway (TokenFuse
 # invariants 25 to 27 and 93). Without it the manifest's enforce stands. Checked by
 # firewall/mode.sh before anything is installed, applied after the kustomization, and the
@@ -146,6 +150,10 @@ RUN_BUDGET_CEILING="${RUN_BUDGET_CEILING:-}"
 # before anything is installed and applied AFTER the kustomization, the only position where it
 # sticks (the same rule as the run-budget ceiling).
 FIREWALL_MODE="${FIREWALL_MODE:-}"
+# The provider key the gateway holds (CLAUDE.md invariant 53, lib/upstream-key.sh). A file,
+# never a value: it becomes the Secret gateway-upstream-key, read by the gateway alone. Made
+# once; a re-run keeps the Secret it finds. Empty on a cluster that already has the Secret.
+ANTHROPIC_KEY_FILE="${ANTHROPIC_KEY_FILE:-}"
 # The PII scanners' mode on the gateway (TOKENFUSE_DLP_PII) and the MCP broker
 # (TOKENFUSE_MCP_DLP_PII), CLAUDE.md invariant 38. Empty leaves each manifest's shadow. Set, it is
 # checked by pii/mode.sh before anything is installed and applied AFTER the kustomization and the
@@ -196,6 +204,7 @@ while [ $# -gt 0 ]; do
     --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --run-budget-ceiling) RUN_BUDGET_CEILING="$2"; shift 2 ;;
     --firewall) FIREWALL_MODE="$2"; shift 2 ;;
+    --anthropic-key-file) ANTHROPIC_KEY_FILE="$2"; shift 2 ;;
     --pii-mode) PII_MODE="$2"; shift 2 ;;
     --with-typed)    WITH_TYPED=1; shift ;;
     --typed-mode)    TYPED_MODE="$2"; shift 2 ;;
@@ -259,6 +268,7 @@ fi
 . "$ROOT/lib/gen.sh" || die "no lib/gen.sh in $ROOT"
 . "$ROOT/lib/policy-store.sh" || die "no lib/policy-store.sh in $ROOT"
 . "$ROOT/lib/identity-mint.sh" || die "no lib/identity-mint.sh in $ROOT"
+. "$ROOT/lib/upstream-key.sh" || die "no lib/upstream-key.sh in $ROOT"
 
 # ---- the typed data mode, refused BEFORE anything is installed ---------------
 # typed/mode.sh is the one copy of this check (CLAUDE.md invariant 26). Run here
@@ -624,6 +634,12 @@ say "step 3/5: the workload"
 policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 129: refuse before anything is applied
 tar -cz -C "$ROOT" manifests | sh_ "$FIRST" 'mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s'
 k_ "apply -k /root/stack-k8s/manifests"
+
+# The gateway's provider key (CLAUDE.md invariant 53). The gateway's pod waits for this
+# Secret, so it is made right after the apply, from the file, on stdin. Without a file
+# and without the Secret the step refuses: a gateway with no provider key cannot serve.
+say "provider key: the gateway holds it, no agent does"
+upstream_key_settle "$ANTHROPIC_KEY_FILE"
 
 # The trust domain, set AFTER the kustomization and not before, which is the
 # whole point of it being here. The two cloud wrappers have carried this since

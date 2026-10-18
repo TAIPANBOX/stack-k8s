@@ -623,8 +623,8 @@ run_case "secret-keys-agree: a manifest starts reading a key no installer writes
 
 run_case "secret-keys-agree: a manifest reads a key no installer writes, multi-line spelling" fail \
 	'./scripts/secret-keys-agree.sh' \
-	"$(py 'edit("manifests/55-copilot-cloud.yaml", "key: api_key\n", "key: api_key_v2\n")')" \
-	"does not create key api_key_v2"
+	"$(py 'edit("manifests/10-planes.yaml", "valueFrom: { secretKeyRef: { name: stack-keys, key: gateway_admin } }", "valueFrom:\n                secretKeyRef:\n                  name: stack-keys\n                  key: gateway_admin_v2")')" \
+	"does not create key gateway_admin_v2"
 
 run_case "secret-keys-agree: no manifest left that reads a Secret" fail \
 	'./scripts/secret-keys-agree.sh' \
@@ -763,7 +763,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.15.0\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.16.0\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 # The gateway's declassify key (invariant 27). POST /v1/fuse/declassify lifts a
@@ -818,7 +818,7 @@ run_case "declassify-is-keyed: an installer never gives an existing Secret the k
 # Each must say it measured nothing, never OK.
 run_case "declassify-is-keyed: no gateway container left to judge" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.15.0\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.16.0\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the declassify key"
 
 run_case "declassify-is-keyed: no installer left to read" fail \
@@ -1423,7 +1423,7 @@ run_case "run-budget-ceiling-is-set: a comment next to the ceiling changes" pass
 
 run_case "run-budget-ceiling-is-set: no gateway container left to judge" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.15.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.16.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')" \
 	"measured nothing about the run-budget ceiling"
 
 run_case "run-budget-ceiling-is-set: budget/ceiling.sh taken away" fail \
@@ -2525,8 +2525,8 @@ run_case "wardryx-key-is-pep: the migration writes the key on the command line" 
 
 run_case "wardryx-key-is-pep: a pin moves back to the old wardryx" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.0.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
-	"does not pin wardryx v2.0.0"
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.1.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
+	"does not pin wardryx v2.1.0"
 
 run_case "wardryx-key-is-pep: a reworded comment is not a fault" pass \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
@@ -2855,7 +2855,7 @@ run_case "broker-blocks-raw-secrets: the broker cannot reach wardryx" fail \
 
 run_case "broker-blocks-raw-secrets: the broker image cannot be pulled" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.15.0\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.16.0\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
 	"could not pull ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag"
 
 run_case "broker-blocks-raw-secrets: no broker left to judge" fail \
@@ -2871,6 +2871,53 @@ run_case "broker-blocks-raw-secrets: a comment in the broker's block is reworded
 run_case "teeth-shards-cover-every-case: a reworded comment is not a fault" pass \
 	'./scripts/teeth-shards-cover-every-case.sh' \
 	"$(py 'edit("scripts/gates-have-teeth.sh", "# Position k of this case decides its shard (see the head). A case outside", "# Position k of this case decides its shard (see the head, reworded). A case outside")')"
+
+# ---- the provider key is held by the gateway only (CLAUDE.md invariant 53) ---------
+# The gateway takes its provider key as a file it mounts; no other container holds one.
+GATE53=./scripts/no-provider-key-outside-the-gateway.sh
+
+run_case "no-provider-key: the gateway loses its key file variable" fail \
+	"$GATE53" \
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_UPSTREAM_KEY_FILE, value: \"/run/upstream/anthropic_key\" }\n", "")')" \
+	"no literal TOKENFUSE_UPSTREAM_KEY_FILE"
+
+run_case "no-provider-key: the gateway's key Secret becomes optional" fail \
+	"$GATE53" \
+	"$(py 'edit("manifests/10-planes.yaml", "secret: { secretName: gateway-upstream-key, defaultMode: 0440,", "secret: { secretName: gateway-upstream-key, optional: true, defaultMode: 0440,")')" \
+	"non-optional Secret gateway-upstream-key"
+
+run_case "no-provider-key: the gateway mounts its key where its variable does not point" fail \
+	"$GATE53" \
+	"$(py 'edit("manifests/10-planes.yaml", "- { name: upstream, mountPath: /run/upstream, readOnly: true }", "- { name: upstream, mountPath: /run/elsewhere, readOnly: true }")')" \
+	"non-optional Secret gateway-upstream-key"
+
+run_case "no-provider-key: the console reads the provider key from a Secret again" fail \
+	"$GATE53" \
+	"$(py 'edit("manifests/20-console.yaml", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n            - name: ANTHROPIC_API_KEY\n              valueFrom: { secretKeyRef: { name: gateway-upstream-key, key: anthropic_key } }\n")')" \
+	"reads the provider Secret gateway-upstream-key"
+
+run_case "no-provider-key: a provider-shaped variable reads a Secret that is not a client key" fail \
+	"$GATE53" \
+	"$(py 'edit("manifests/20-console.yaml", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n            - name: OPENAI_API_KEY\n              valueFrom: { secretKeyRef: { name: stack-keys, key: cloud_admin } }\n")')" \
+	"is provider-shaped and reads Secret stack-keys"
+
+run_case "no-provider-key: a second container takes costcrew-engine, the named exception does not cover it" fail \
+	"$GATE53" \
+	"$(py 'edit("manifests/49-costcrew.yaml", "            - name: crew\n", "            - name: crew-two\n")')" \
+	"container crew-two: env OPENROUTER_API_KEY reads the provider Secret costcrew-engine"
+
+run_case "no-provider-key: a client key under a provider-shaped name is the agent's own credential" pass \
+	"$GATE53" \
+	"$(py 'edit("manifests/20-console.yaml", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n            - name: ANTHROPIC_API_KEY\n              valueFrom: { secretKeyRef: { name: felyx-client-key, key: client_key, optional: true } }\n")')"
+
+run_case "no-provider-key: a comment naming the provider variable is not a fault" pass \
+	"$GATE53" \
+	"$(py 'edit("manifests/10-planes.yaml", "# The provider key is HELD by the gateway and read from a file it mounts", "# The ANTHROPIC_API_KEY of the old console is HELD by the gateway and read from a file it mounts")')"
+
+run_case "no-provider-key: no gateway left to judge" fail \
+	"$GATE53" \
+	"$(py 'import os; os.remove("manifests/10-planes.yaml")')" \
+	"measured nothing"
 
 # A listing is not a run. Stop before the verdict, which would count cases this
 # listing did not take.

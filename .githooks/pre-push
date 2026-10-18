@@ -69,6 +69,7 @@ step "client keys and the identity map are checked first" "./scripts/identity-fi
 step "the gateway requires client keys, minted when none are given" "./scripts/metered-doors-require-keys.sh"
 step "the MCP broker blocks raw secrets and asks the policy plane" "./scripts/broker-blocks-raw-secrets.sh"
 step "the gateway's policy-plane key is a pep, on a new cluster and on one installed again" "./scripts/wardryx-gateway-key-is-pep.sh"
+step "the provider key is held by the gateway from a file, and no other container holds one" "./scripts/no-provider-key-outside-the-gateway.sh"
 step "every bus file is a name the readers accept" "./scripts/bus-names-match-the-source-rule.sh"
 step "the chain verifier watches the bus" "./scripts/chain-verifier-watches-the-bus.sh"
 step "every mounted key is readable by its pod" "./scripts/mounted-keys-are-readable.sh"

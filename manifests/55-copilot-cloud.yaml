@@ -1,40 +1,24 @@
-# Felyx, the console's copilot, given a key and a larger model.
+# Felyx, the console's copilot, on a larger model. A model switch only.
 #
-# NOT in kustomization.yaml: applying it starts a meter, on somebody else's
-# account. Since 2026-09-27 the default (20-console.yaml) already points Felyx
-# at Anthropic THROUGH this stack's own gateway, by its Service name, with its
-# agent id in the trust domain, so every Felyx call is priced, budgeted and
-# policy-checked like any agent's; it only lacks a key. Creating the
-# `stack-copilot` Secret and restarting the console is enough to turn it on.
-# This patch adds one thing on top: a larger model than the default Haiku.
+# NOT in kustomization.yaml, and it grants nothing by itself: the copilot already
+# reaches Anthropic through this stack's gateway (20-console.yaml), and the
+# gateway holds the provider key (CLAUDE.md invariant 53). This patch adds one
+# thing on top: a larger model than the default Haiku, on the same gateway path,
+# so the console never holds a provider key and the meter sees every call.
 #
-# Apply it deliberately, and only after the Secret exists:
+# The deploy scripts apply it when they are given --anthropic-key-file, the one
+# provider key the gateway reads (lib/upstream-key.sh). Applying it by hand:
 #
-#   kubectl -n agent-stack create secret generic stack-copilot \
-#     --from-file=api_key=/path/to/a/file/holding/the/key
 #   kubectl -n agent-stack patch deployment genaryx-console \
 #     --patch-file manifests/55-copilot-cloud.yaml
 #
-# --from-file, not --from-literal: a literal puts the key in this machine's
-# shell history and in the argument list of a running process, where anyone with
-# a terminal on the box can read it out of `ps`. The file is deleted afterwards.
+# METERED, on the provider account of the key the gateway holds. Use a key with a
+# spend limit. To go back to the default model:
 #
-# METERED, and on a different bill from the cluster: every Felyx conversation is
-# billed by the model provider to the key's owner. A demo session is cents
-# rather than dollars, and it is still real money, so it is an explicit act by
-# the person whose key it is. Use a key with a spend limit, and revoke it when
-# the run ends.
+#   kubectl -n agent-stack set env deployment/genaryx-console GENARYX_COPILOT_MODEL=claude-haiku-4-5
 #
-# No GENARYX_COPILOT_ALLOW_REMOTE any more. It used to send Felyx straight to
-# api.anthropic.com, past the gateway, and on a cluster whose CNI enforces
-# NetworkPolicy the console has no egress to the internet at all
-# (30-network-policy.yaml: the gateway is the only pod allowed out), so that
-# path could not work here and would have bypassed the meter where it did.
-#
-# To go back to the default model, delete the Secret and re-apply the manifests:
-#
-#   kubectl -n agent-stack delete secret stack-copilot
-#   kubectl apply -k manifests/
+# (`kubectl patch --patch-file` is not in apply's last-applied annotation, so a
+# later `kubectl apply -k` does not revert it; CLAUDE.md invariant 24.)
 spec:
   template:
     spec:
@@ -43,12 +27,3 @@ spec:
           env:
             - { name: GENARYX_COPILOT_PROVIDER, value: "anthropic" }
             - { name: GENARYX_COPILOT_MODEL, value: "claude-sonnet-5" }
-            # A reference, not the key: the copilot resolves env:NAME itself, so
-            # the secret value reaches exactly one process and appears in no
-            # config file.
-            - { name: GENARYX_COPILOT_API_KEY_REF, value: "env:GENARYX_COPILOT_KEY" }
-            - name: GENARYX_COPILOT_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: stack-copilot
-                  key: api_key

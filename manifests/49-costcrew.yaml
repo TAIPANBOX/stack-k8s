@@ -359,6 +359,8 @@ spec:
                 # that has no key yet. The runner then refuses at the call and
                 # says which variable is missing, which is the right failure:
                 # loud, before anything is spent.
+                # NAMED EXCEPTION to CLAUDE.md invariant 53: this container reads its engine keys
+                # from costcrew-engine until costcrew's agent identity is decided (see that invariant).
                 - name: OPENROUTER_API_KEY
                   valueFrom:
                     secretKeyRef: { name: costcrew-engine, key: openrouter, optional: true }

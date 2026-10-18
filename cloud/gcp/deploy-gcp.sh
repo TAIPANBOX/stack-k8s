@@ -23,10 +23,12 @@
 # from TAIPANBOX/genaryx without a token; `--console-token <github-token>` is only
 # for building it from a private fork of your own.
 #
-# `--copilot-key-file <path>` additionally points the console's copilot at a
-# cloud model, reading the key from that file. It is METERED on that key's
-# account rather than on the cluster, which is why it is a flag and not a
-# default, and why the key is a file rather than an argument.
+# `--anthropic-key-file <path>` gives the gateway its provider key: the one file the
+# gateway reads, made into the Secret gateway-upstream-key on the node, on stdin, once. The
+# console and the agents never hold a provider key (CLAUDE.md invariant 53). Given with it,
+# the console moves to a larger model (claude-sonnet-5) through the same gateway. It is
+# METERED on that key's account, which is why it is a flag and not a default. `--copilot-key-file`
+# is the same flag under its older name.
 #
 # `--firewall <enforce|shadow|off>` sets the agent firewall's mode on the gateway (TokenFuse
 # invariants 25 to 27 and 93). Without it the manifest's enforce stands. Checked by
@@ -101,7 +103,8 @@ SERVERS=""; AGENTS=""
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/stack-k8s-gcp}"
 SSH_USER="${SSH_USER:-ubuntu}"
 CONSOLE_TOKEN="${CONSOLE_TOKEN:-}"
-COPILOT_KEY_FILE="${COPILOT_KEY_FILE:-}"
+# The provider key the gateway holds (CLAUDE.md invariant 53); a file, never a value.
+ANTHROPIC_KEY_FILE="${ANTHROPIC_KEY_FILE:-}"
 # Notifications, the same three questions the other two deploy scripts ask.
 ALERT_TO="${ALERT_TO:-}"
 ALERT_ASKED=0
@@ -173,7 +176,8 @@ while [ $# -gt 0 ]; do
     --agents)        AGENTS="$2"; shift 2 ;;
     --ssh-key)       SSH_KEY="$2"; shift 2 ;;
     --console-token) CONSOLE_TOKEN="$2"; shift 2 ;;
-    --copilot-key-file) COPILOT_KEY_FILE="$2"; shift 2 ;;
+    --anthropic-key-file) ANTHROPIC_KEY_FILE="$2"; shift 2 ;;
+    --copilot-key-file) ANTHROPIC_KEY_FILE="$2"; shift 2 ;;
     --alert-to)      ALERT_TO="$2"; ALERT_ASKED=1; shift 2 ;;
     --no-alerts)     ALERT_TO=""; ALERT_ASKED=1; shift ;;
     --smtp-host)     SMTP_HOST="$2"; shift 2 ;;
@@ -352,6 +356,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 . "$ROOT/lib/gen.sh" || die "no lib/gen.sh in $ROOT"
 . "$ROOT/lib/policy-store.sh" || die "no lib/policy-store.sh in $ROOT"
 . "$ROOT/lib/identity-mint.sh" || die "no lib/identity-mint.sh in $ROOT"
+. "$ROOT/lib/upstream-key.sh" || die "no lib/upstream-key.sh in $ROOT"
 
 # ---- the typed data mode, refused BEFORE anything is installed ---------------
 # typed/mode.sh is the one copy of this check (CLAUDE.md invariant 26). Run here
@@ -661,6 +666,11 @@ policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 129: refuse before anythi
 tar -cz -C "$ROOT" manifests | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
 k_ "apply -k /root/stack-k8s/manifests"
 
+# The gateway's provider key (CLAUDE.md invariant 53): the gateway's pod waits for this Secret,
+# so it is made here, right after the apply and before any rollout is waited on.
+say "provider key: the gateway holds it, no agent does"
+upstream_key_settle "$ANTHROPIC_KEY_FILE"
+
 # The trust domain, set AFTER the kustomization and not before, which is the
 # whole point of it being here.
 #
@@ -792,35 +802,17 @@ k_ "-n agent-stack rollout status statefulset/policy-db --timeout=300s" || true
 
 install_alerts
 
-# ---- Felyx on a cloud model, if a key was handed over ----------------------
-# Opt-in, one flag, and part of the SCRIPT rather than a command someone runs
-# afterwards: a step that only the author knows about is a step the next
-# operator does not get. Without the flag the console keeps the local-first
-# provider from 20-console.yaml and nothing bills a model account.
-#
-# The key travels on STDIN, never as an argument: an argument is visible in the
-# node's process list to anyone with a shell on it, and lands in history on the
-# way there. It is written with umask 077, read once by kubectl, and shredded.
-if [ -n "$COPILOT_KEY_FILE" ]; then
-  if [ ! -s "$COPILOT_KEY_FILE" ]; then
-    die "--copilot-key-file $COPILOT_KEY_FILE is missing or empty"
-  fi
-  say "Felyx: pointing the console's copilot at a cloud model (METERED, on that key's account)"
-  # `sudo umask 077; cat > file` does NOT do what it reads like, and it took a
-  # live run to notice: umask is a shell builtin, so sudo answers
-  # `sudo: 'umask': command not found`, the semicolon ends that command, and the
-  # redirect then runs UNPRIVILEGED and with the default mask, writing the key
-  # 0644. The error is printed, the script continues, and everything downstream
-  # succeeds, so nothing looks wrong. Measured 2026-07-26.
-  tr -d '\r\n' < "$COPILOT_KEY_FILE" | su_ "$FIRST" "sh -c 'umask 077; cat > /tmp/.ck'"
-  k_ "-n agent-stack delete secret stack-copilot --ignore-not-found" >/dev/null 2>&1 || true
-  k_ "-n agent-stack create secret generic stack-copilot --from-file=api_key=/tmp/.ck" >/dev/null \
-    || die "could not create the stack-copilot secret"
-  su_ "$FIRST" "shred -u /tmp/.ck 2>/dev/null || rm -f /tmp/.ck"
+# ---- Felyx on a larger model, if a provider key was handed over ------------
+# The provider key itself went to the gateway right after the apply (upstream_key_settle):
+# the gateway holds it, and this console never does. This step is the model switch only.
+# 55-copilot-cloud.yaml names claude-sonnet-5 and holds no key. Opt-in, one flag: without
+# it the console keeps the default model and nothing changes.
+if [ -n "$ANTHROPIC_KEY_FILE" ]; then
+  say "Felyx: a larger model, claude-sonnet-5, through the gateway (METERED on the key's account)"
   k_ "-n agent-stack patch deployment genaryx-console --patch-file /root/stack-k8s/manifests/55-copilot-cloud.yaml" >/dev/null \
-    || die "could not apply the copilot patch"
+    || die "could not apply the copilot model patch"
   k_ "-n agent-stack rollout status deploy/genaryx-console --timeout=240s" >/dev/null 2>&1 || true
-  echo "   Felyx is on claude-sonnet-5, key held in the stack-copilot Secret only"
+  echo "   Felyx is on claude-sonnet-5, through the gateway; the provider key is the gateway's"
 fi
 
 # ---- 4 and 5. proof, not vibes ---------------------------------------------
