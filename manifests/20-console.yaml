@@ -97,12 +97,14 @@ spec:
             # Its residency check refuses any endpoint it cannot prove local;
             # the gateway is reached by its Service name, allow-listed below
             # and resolved on every connection to cluster addresses only
-            # (genaryx invariant 14, console v1.1.17 on). No key ships: until
-            # the operator creates the `stack-copilot` Secret, Felyx says it is
-            # not configured and the rest of the console works as before.
-            #   kubectl -n agent-stack create secret generic stack-copilot \
-            #     --from-file=api_key=/path/to/a/file/holding/the/key
-            #   kubectl -n agent-stack rollout restart deployment/genaryx-console
+            # (genaryx invariant 14, console v1.1.17 on).
+            #
+            # This pod holds NO provider key (CLAUDE.md invariant 53). The
+            # provider key is the gateway's, read from its own file. Felyx
+            # sends its gateway client key, the same value in both headers, so
+            # the gateway reads it as Felyx's own credential. Until the deploy
+            # has minted felyx-client-key, Felyx says it is not configured and
+            # the rest of the console works as before.
             - { name: GENARYX_COPILOT_PROVIDER, value: "anthropic" }
             - { name: GENARYX_COPILOT_BASE_URL, value: "http://tokenfuse-gateway:4100" }
             - { name: GENARYX_COPILOT_LOCAL_HOSTNAMES, value: "tokenfuse-gateway" }
@@ -110,10 +112,10 @@ spec:
             # From stack-wiring (envFrom above), so the id follows the trust
             # domain the install set rather than a default.
             - { name: GENARYX_COPILOT_AGENT_ID, value: "agent://$(TRAILRYX_TRUST_DOMAIN)/genaryx/felyx" }
-            # A reference, not the key: the copilot resolves env:NAME itself.
-            - { name: GENARYX_COPILOT_API_KEY_REF, value: "env:GENARYX_COPILOT_KEY" }
-            - name: GENARYX_COPILOT_KEY
-              valueFrom: { secretKeyRef: { name: stack-copilot, key: api_key, optional: true } }
+            # A reference, not the key: the copilot resolves env:NAME itself. It is
+            # Felyx's gateway client key (below), so the copilot's x-api-key and
+            # x-fuse-key are the same credential, which the brokered gateway accepts.
+            - { name: GENARYX_COPILOT_API_KEY_REF, value: "env:GENARYX_COPILOT_FUSE_KEY" }
             # Felyx's own gateway client key (genaryx invariant 24, console v1.1.45
             # on): the gateway refuses every call without a key it holds (CLAUDE.md
             # invariant 50), Felyx's included, so the console sends this one as

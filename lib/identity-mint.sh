@@ -58,6 +58,8 @@ IDM_SECRET=gateway-client-keys
 IDM_SECRET_KEY=client_keys
 IDM_FELYX_SECRET=felyx-client-key
 IDM_FELYX_KEY=client_key
+IDM_DRILLS_SECRET=drills-client-key
+IDM_DRILLS_KEY=client_key
 IDM_CM=gateway-identity-map
 IDM_MAP_KEY=identity.json
 IDM_PATH_KEY=map_path
@@ -71,7 +73,7 @@ IDM_DOMAIN=""      # the trust domain the minted map names
 
 # DOMAIN: the map, one line, on stdout. No secret in it.
 identity_mint_map() {
-  printf '{"units":[{"id":"console","name":"Felyx, the console copilot"},{"id":"agents","name":"The operator agents"}],"keys":[{"key_id":"felyx","unit":"console","agents":["agent://%s/genaryx/felyx"]},{"key_id":"agents","unit":"agents","agents":["agent://%s/agents/*"]}]}' "$1" "$1"
+  printf '{"units":[{"id":"console","name":"Felyx, the console copilot"},{"id":"agents","name":"The operator agents"},{"id":"drills","name":"The scheduled drills"}],"keys":[{"key_id":"felyx","unit":"console","agents":["agent://%s/genaryx/felyx"]},{"key_id":"agents","unit":"agents","agents":["agent://%s/agents/*"]},{"key_id":"drills","unit":"drills","agents":["agent://mockryx.local/*"]}]}' "$1" "$1"
 }
 
 identity_mint_sha() { # the sha256 of stdin, hex
@@ -81,8 +83,8 @@ identity_mint_sha() { # the sha256 of stdin, hex
 # KEYFILE: settle the gateway's client keys, then roll what reads them. Prints notes
 # and never a secret.
 identity_mint_settle() {
-  local keyfile="$1" have domain label spec felyx="" agents="" entry id rest want cur esc rv sha t frv
-  have="$(k_ "-n $IDM_NS get secret/$IDM_SECRET configmap/$IDM_CM secret/$IDM_FELYX_SECRET --ignore-not-found -o name")" \
+  local keyfile="$1" have domain label spec felyx="" agents="" drills="" entry id rest want cur esc rv sha t frv
+  have="$(k_ "-n $IDM_NS get secret/$IDM_SECRET configmap/$IDM_CM secret/$IDM_FELYX_SECRET secret/$IDM_DRILLS_SECRET --ignore-not-found -o name")" \
     || die "could not ask the cluster whether the gateway's client keys exist, so the identity step did not run"
   domain="$(k_ "-n $IDM_NS get configmap stack-wiring -o jsonpath='{.data.TRAILRYX_TRUST_DOMAIN}'")" \
     || die "could not read TRAILRYX_TRUST_DOMAIN from stack-wiring, which the minted keys are bound to"
@@ -110,11 +112,26 @@ identity_mint_settle() {
         case "$id" in
           felyx) [ -z "$felyx" ] || felyx=bad; [ "$felyx" = bad ] || felyx="${entry%:*}" ;;
           agents) [ -z "$agents" ] || agents=bad; [ "$agents" = bad ] || agents="${entry%:*}" ;;
+          drills) [ -z "$drills" ] || drills=bad; [ "$drills" = bad ] || drills="${entry%:*}" ;;
           *) felyx=bad ;;
         esac
       done
-      if [ -z "$felyx" ] || [ -z "$agents" ] || [ "$felyx" = bad ] || [ "$agents" = bad ]; then
-        die "Secret $IDM_SECRET is labelled $IDM_LABEL=minted and does not hold exactly the two keys this deploy mints (felyx and agents), so it was edited by hand. Remove the label to make it yours, or delete it and deploy again to mint new keys. Nothing was changed."
+      if [ -z "$felyx" ] || [ -z "$agents" ] || [ "$felyx" = bad ] || [ "$agents" = bad ] || [ "$drills" = bad ]; then
+        die "Secret $IDM_SECRET is labelled $IDM_LABEL=minted and does not hold exactly the keys this deploy mints (felyx, agents and, since the drills key, drills), so it was edited by hand. Remove the label to make it yours, or delete it and deploy again to mint new keys. Nothing was changed."
+      fi
+      if [ -z "$drills" ]; then
+        # A cluster minted before the drills key: the drills get their own key, the two
+        # others are kept byte for byte, and the spec is patched on stdin.
+        case "$have" in
+          *"secret/$IDM_DRILLS_SECRET"*)
+            drills="$(k_ "-n $IDM_NS get secret $IDM_DRILLS_SECRET -o jsonpath='{.data.$IDM_DRILLS_KEY}'" | base64 --decode)" \
+              || die "could not read Secret $IDM_DRILLS_SECRET" ;;
+          *) drills="$(gen 40)" || die "could not mint the drills' client key" ;;
+        esac
+        printf '{"stringData":{"%s":"%s:felyx,%s:agents,%s:drills"}}\n' "$IDM_SECRET_KEY" "$felyx" "$agents" "$drills" \
+          | k_ "-n $IDM_NS patch secret $IDM_SECRET --type merge --patch-file /dev/stdin" >/dev/null \
+          || die "could not add the drills' key to Secret $IDM_SECRET"
+        note "client keys: a key for the scheduled drills added to Secret $IDM_SECRET (never printed)"
       fi
       ;;
     *)
@@ -129,9 +146,16 @@ identity_mint_settle() {
         *) felyx="$(gen 40)" || die "could not mint Felyx's client key" ;;
       esac
       agents="$(gen 40)" || die "could not mint the agents' client key"
-      [ "$felyx" != "$agents" ] || die "the two minted keys came out the same; deploy again"
-      printf '{"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"%s","namespace":"%s","labels":{"app.kubernetes.io/part-of":"agent-stack","%s":"minted"}},"stringData":{"%s":"%s:felyx,%s:agents"}}\n' \
-        "$IDM_SECRET" "$IDM_NS" "$IDM_LABEL" "$IDM_SECRET_KEY" "$felyx" "$agents" \
+      case "$have" in
+        *"secret/$IDM_DRILLS_SECRET"*)
+          drills="$(k_ "-n $IDM_NS get secret $IDM_DRILLS_SECRET -o jsonpath='{.data.$IDM_DRILLS_KEY}'" | base64 --decode)" \
+            || die "could not read Secret $IDM_DRILLS_SECRET" ;;
+        *) drills="$(gen 40)" || die "could not mint the drills' client key" ;;
+      esac
+      [ "$felyx" != "$agents" ] && [ "$felyx" != "$drills" ] && [ "$agents" != "$drills" ] \
+        || die "two of the minted keys came out the same; deploy again"
+      printf '{"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"%s","namespace":"%s","labels":{"app.kubernetes.io/part-of":"agent-stack","%s":"minted"}},"stringData":{"%s":"%s:felyx,%s:agents,%s:drills"}}\n' \
+        "$IDM_SECRET" "$IDM_NS" "$IDM_LABEL" "$IDM_SECRET_KEY" "$felyx" "$agents" "$drills" \
         | k_ "-n $IDM_NS create -f -" >/dev/null \
         || die "could not create Secret $IDM_SECRET"
       note "client keys: minted for Felyx and for your agents, in Secret $IDM_SECRET (never printed)"
@@ -150,6 +174,20 @@ identity_mint_settle() {
         | k_ "-n $IDM_NS create -f -" >/dev/null \
         || die "could not create Secret $IDM_FELYX_SECRET" ;;
   esac
+
+  # The drills' own Secret, the one object the scheduled drill reads its key from. It
+  # is made beside Felyx's, and a deleted one comes back with the same secret.
+  case "$have" in
+    *"secret/$IDM_DRILLS_SECRET"*)
+      [ "$(k_ "-n $IDM_NS get secret $IDM_DRILLS_SECRET -o jsonpath='{.data.$IDM_DRILLS_KEY}'" | base64 --decode)" = "$drills" ] \
+        || die "Secret $IDM_DRILLS_SECRET does not hold the key Secret $IDM_SECRET binds to the drills, so a drill would be refused 401. Delete $IDM_DRILLS_SECRET and deploy again. Nothing was changed." ;;
+    *)
+      printf '{"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"%s","namespace":"%s","labels":{"app.kubernetes.io/part-of":"agent-stack","%s":"minted"}},"stringData":{"%s":"%s"}}\n' \
+        "$IDM_DRILLS_SECRET" "$IDM_NS" "$IDM_LABEL" "$IDM_DRILLS_KEY" "$drills" \
+        | k_ "-n $IDM_NS create -f -" >/dev/null \
+        || die "could not create Secret $IDM_DRILLS_SECRET" ;;
+  esac
+  drills=""
 
   # The map, rebuilt from the trust domain on every run: the same bytes, unless the
   # domain moved. It holds no secret.

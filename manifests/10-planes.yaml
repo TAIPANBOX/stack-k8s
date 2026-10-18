@@ -55,7 +55,7 @@ spec:
           # 2026-09-02 on v0.4.3, the published
           # image carries /usr/local/bin/tokenfuse-cloud exactly as the local
           # build did.
-          image: ghcr.io/taipanbox/tokenfuse-control-plane:v1.15.0
+          image: ghcr.io/taipanbox/tokenfuse-control-plane:v1.16.0
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse-cloud"]
           env:
@@ -167,7 +167,7 @@ spec:
       # usable by a compromised container for discovery and SelfSubjectReview,
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
-      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
       # Leave a dead node in 30 s, not the default 300 s. One replica, no
       # ReadWriteOnce claim, so nothing ties this pod to the node it is on;
       # the default toleration alone kept the gateway refused for 360 s after
@@ -183,7 +183,7 @@ spec:
           # called `tokenfuse`. Measured 2026-09-01 on v0.4.1 and 2026-09-02 on
           # v0.4.3 by listing /usr/local/bin
           # in the published image, which is the only way to know.
-          image: ghcr.io/taipanbox/tokenfuse:v1.15.0
+          image: ghcr.io/taipanbox/tokenfuse:v1.16.0
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse"]
           env:
@@ -318,6 +318,15 @@ spec:
             # The FULL endpoint, not a base: the gateway POSTs to exactly this URL
             # (its own module doc says so, and a base alone answers 404).
             - { name: TOKENFUSE_UPSTREAM, value: "https://api.anthropic.com/v1/messages" }
+            # The provider key is HELD by the gateway and read from a file it mounts
+            # (CLAUDE.md invariant 53), never from an environment value. The file is
+            # the Secret gateway-upstream-key, made by the deploy from
+            # --anthropic-key-file (lib/upstream-key.sh) and mounted into this
+            # container alone. With this set, a caller's own provider key is refused
+            # 401 provider_credential_refused: the agents hold only their client key.
+            # Read once at start: a rotation is a new Secret and a restart.
+            # scripts/no-provider-key-outside-the-gateway.sh holds it.
+            - { name: TOKENFUSE_UPSTREAM_KEY_FILE, value: "/run/upstream/anthropic_key" }
             # The gateway's own org key for the control plane. Without it the
             # cloud sink never starts: the gateway meters locally, the console
             # shows nothing, and the deployment looks fine from both ends while
@@ -380,6 +389,7 @@ spec:
             # The identity map, read only. An empty directory until identity/up.sh
             # has written one; TOKENFUSE_IDENTITY_MAP above is unset until then.
             - { name: identity, mountPath: /etc/tokenfuse/identity, readOnly: true }
+            - { name: upstream, mountPath: /run/upstream, readOnly: true }
           readinessProbe:
             httpGet: { path: /healthz, port: http }
             initialDelaySeconds: 2
@@ -417,7 +427,7 @@ spec:
           # one thing worth checking before swapping a distroless-looking image
           # in underneath it: measured 2026-09-01 on v0.4.1 and 2026-09-02 on
           # v0.4.3, the published image has one (/usr/bin/dash).
-          image: ghcr.io/taipanbox/tokenfuse:v1.15.0
+          image: ghcr.io/taipanbox/tokenfuse:v1.16.0
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
@@ -475,6 +485,11 @@ spec:
         # no secret, and the gateway's uid reads it without an fsGroup.
         - name: identity
           configMap: { name: gateway-identity-map, optional: true, defaultMode: 0444, items: [{ key: identity.json, path: identity.json }] }
+        # The provider key. Not optional: a gateway without it does not start, so
+        # no caller can reach an upstream the gateway cannot authorise. 0440 with
+        # fsGroup 10001 above, so only this pod's user can read it.
+        - name: upstream
+          secret: { secretName: gateway-upstream-key, defaultMode: 0440, items: [{ key: anthropic_key, path: anthropic_key }] }
 ---
 apiVersion: v1
 kind: Service
@@ -523,7 +538,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v2.0.0
+          image: ghcr.io/taipanbox/wardryx:v2.1.0
           imagePullPolicy: IfNotPresent
           # Single-dash flags, exactly as up.sh calls it.
           args:

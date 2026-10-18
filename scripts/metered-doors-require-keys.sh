@@ -283,6 +283,10 @@ elif a[:1] == ["patch"] and opt("--type") == "merge":
     if r not in objs:
         die("NotFound", 1)
     body = json.load(sys.stdin) if opt("--patch-file") == "/dev/stdin" else json.loads(opt("-p"))
+    if "stringData" in body:
+        body.setdefault("data", {})
+        for k, v in body.pop("stringData").items():
+            body["data"][k] = base64.b64encode(v.encode()).decode()
     before = json.dumps(objs[r], sort_keys=True)
     merge(objs[r], body)
     if json.dumps(objs[r], sort_keys=True) != before:
@@ -361,8 +365,12 @@ if [ "$mint_ok" = 1 ]; then
   else
     spec="$(data_of "$S" secret/gateway-client-keys client_keys)"
     felyx="$(data_of "$S" secret/felyx-client-key client_key)"
-    fs="${spec%%,*}"; as="${spec#*,}"
-    [[ "$spec" =~ ^[A-Za-z0-9]{40}:felyx,[A-Za-z0-9]{40}:agents$ ]] || fail "the minted Secret does not hold <40>:felyx,<40>:agents"
+    fs="$(tr ',' '\n' <<<"$spec" | grep ':felyx$')"; as="$(tr ',' '\n' <<<"$spec" | grep ':agents$')"
+    [[ "$spec" =~ ^[A-Za-z0-9]{40}:felyx,[A-Za-z0-9]{40}:agents,[A-Za-z0-9]{40}:drills$ ]] || fail "the minted Secret does not hold <40>:felyx,<40>:agents,<40>:drills"
+    ds="$(tr ',' '\n' <<<"$spec" | grep ':drills$')"
+    [ "$ds" != "$fs" ] && [ "$ds" != "$as" ] || fail "the drills and another key came out the same secret"
+    [ "$(data_of "$S" secret/drills-client-key client_key)" = "${ds%:drills}" ] \
+      || fail "drills-client-key does not hold the key gateway-client-keys binds to the drills, so a drill would be refused 401"
     [ "${fs%:felyx}" = "$felyx" ] || fail "felyx-client-key does not hold the key gateway-client-keys binds to felyx, so the console's copilot would be refused"
     [ "${fs%:felyx}" != "${as%:agents}" ] || fail "Felyx and the agents were given the same secret"
     [ "$(q "$S" "o['secret/gateway-client-keys']['metadata'].get('labels',{}).get('taipanbox.dev/identity')")" = minted ] \
@@ -384,8 +392,10 @@ td = sys.argv[2]; felyx_id = "agent://%s/genaryx/felyx" % td
 units = {u.get("id") for u in m.get("units", [])}
 keys = {k.get("key_id"): k for k in m.get("keys", [])}
 bad = []
-if set(keys) != {"felyx", "agents"}:
-    bad.append("the minted map binds key ids %s, not felyx and agents" % sorted(keys))
+if set(keys) != {"felyx", "agents", "drills"}:
+    bad.append("the minted map binds key ids %s, not felyx, agents and drills" % sorted(keys))
+elif (keys["drills"].get("agents") or []) != ["agent://mockryx.local/*"] or keys["drills"].get("unit") != "drills":
+    bad.append("the minted map binds the drills' key to %s in unit %s, not agent://mockryx.local/* in unit drills" % (keys["drills"].get("agents"), keys["drills"].get("unit")))
 else:
     if keys["felyx"].get("agents") != [felyx_id]:
         bad.append("the minted map binds felyx to %s, not exactly [%s]" % (keys["felyx"].get("agents"), felyx_id))
@@ -428,11 +438,12 @@ PY
     [ "$(data_of "$S" secret/gateway-client-keys client_keys)" = "$spec" ] || fail "a re-run minted a new secret over the kept one"
 
     # A deleted key file and a deleted felyx-client-key come back with the same secret.
-    rm -f "$KF"; drop "$S" secret/felyx-client-key
+    rm -f "$KF"; drop "$S" secret/felyx-client-key; drop "$S" secret/drills-client-key
     out="$(settle "$S" "$KF")"
     [ "$(cat "$KF" 2>/dev/null)" = "${as%:agents}" ] || fail "a deleted agents' key file did not come back with the same key"
     [ "$(data_of "$S" secret/felyx-client-key client_key)" = "$felyx" ] || fail "a deleted felyx-client-key did not come back with the key the Secret binds to felyx"
     [ "$(rolls "$S" genaryx-console)" = 2 ] || fail "a new felyx-client-key did not roll the console"
+    [ "$(data_of "$S" secret/drills-client-key client_key)" = "${ds%:drills}" ] || fail "a deleted drills-client-key did not come back with the key the Secret binds to the drills"
 
     # A moved trust domain rewrites the map alone and rolls the gateway.
     setdomain "$S" other.example
@@ -471,6 +482,20 @@ PY
   refused "a minted Secret edited by hand" "edited by hand" "$S"
   S="$scratch/c5.json"; new_cluster "$S" 'a b'
   refused "a trust domain that is not a name" "not a name" "$S"
+
+  # A cluster minted before the drills key: the two keys it holds are kept byte for byte,
+  # the drills get their own, and the spec is patched on stdin, never rewritten.
+  S="$scratch/c6.json"; new_cluster "$S" acme.example
+  put_keys "$S" "gate-aaaaaaaaaaaaaaaaaaaaaaaa:felyx,gate-bbbbbbbbbbbbbbbbbbbbbbbb:agents" minted
+  out="$(settle "$S" "$scratch/agent-key-m")"
+  if [ "$(rc_of "$out")" != 0 ]; then
+    fail "a minted cluster from before the drills key was refused by the mint: $(grep '^die' <<<"$out")"
+  else
+    m="$(data_of "$S" secret/gateway-client-keys client_keys)"
+    [[ "$m" == gate-aaaaaaaaaaaaaaaaaaaaaaaa:felyx,gate-bbbbbbbbbbbbbbbbbbbbbbbb:agents,*:drills ]] \
+      || fail "the migration changed the Felyx or the agents key, so both would be refused 401: $m"
+    [[ "$m" =~ ,[A-Za-z0-9]{40}:drills$ ]] || fail "the migration did not add a 40-character drills key"
+  fi
 fi
 
 # ---- C. the gateway image reads the minted pair ---------------------------------------
@@ -485,8 +510,8 @@ if [ "$mint_ok" = 1 ] && [ -s "$scratch/c1.json" ] && [ -s "$scratch/map.json" ]
     if [ "$rc" != 0 ]; then
       fail "the pinned gateway image refused the pair the mint made: $(grep -v '^$' <<<"$out" | tail -n 2 | tr '\n' ' ')"
     else
-      grep -qF 'read 2 client key(s) and an identity map, and refused nothing' <<<"$out" \
-        || fail "the pinned gateway image did not read two keys and the map from the minted pair: $(tail -n 2 <<<"$out" | tr '\n' ' ')"
+      grep -qF 'read 3 client key(s) and an identity map, and refused nothing' <<<"$out" \
+        || fail "the pinned gateway image did not read three keys and the map from the minted pair: $(tail -n 2 <<<"$out" | tr '\n' ' ')"
     fi
   fi
 fi
@@ -528,6 +553,6 @@ if [ "$problems" -gt 0 ]; then
   exit 1
 fi
 echo "OK: every gateway requires gateway-client-keys and runs strict, the console reads Felyx's own key, and a"
-echo "    deploy given no files mints both keys, binds each to its own ids, keeps them on a re-run, rebinds"
+echo "    deploy given no files mints the three keys, binds each to its own ids, keeps them on a re-run, rebinds"
 echo "    the map alone when the trust domain moves, leaves the operator's keys alone, writes the agents' key"
 echo "    to a 0600 file and names it, and the pinned gateway image reads the pair."

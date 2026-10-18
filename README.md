@@ -90,7 +90,7 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | Deployment + Service + NetworkPolicy x4 | `52-tokenfuse-mcp-broker.yaml`, tokenfuse's own MCP credential broker fronting typryx. **Not in the default apply, applied by the same `--with-typed` flag as 51-typryx.yaml, right after it**. Free, reaches nowhere but typryx itself. Refuses to start without its own credential | |
 | Deployment + Service + NetworkPolicy x4 | `56-typryx-wardryx-proxy.yaml`, typryx's `wardryx-proxy`: between the MCP broker and wardryx, it adds the risk class of a pending tool call to the decision request, so a `hold_if_signal` policy can hold the call for a person. **Not in the default apply, rendered only by `--typed-risk-signal`** (off by default, refused when the typed mode is off). No claim, no journal, no ledger: it keeps no state. See "A typed risk signal" below | 4330 |
 | Deployment + Service + PVC + NetworkPolicy x3 | `54-delegation.yaml`, vouchryx, the delegation-token service. **Not in the default apply, applied by `delegation/up.sh`**, which also refuses before applying anything unless a trusted upstream issuer, audience and JWKS file are given. Reachable only from the gateway and the console. See "The delegation plane" below | |
-| Patch (Deployment) | `55-copilot-cloud.yaml`: moves the console's copilot, Felyx, to a larger model. By default Felyx already reaches Anthropic through this stack's own gateway (by its Service name, under `agent://<trust domain>/genaryx/felyx`, metered and policy-checked like any agent) and needs only the `stack-copilot` Secret holding your key; without it Felyx says it is not configured. **Not in the default apply, opt-in, and METERED**: every conversation is billed by the model provider to the key's owner, on a bill separate from the cluster. See its own header before applying | |
+| Patch (Deployment) | `55-copilot-cloud.yaml`: moves the console's copilot, Felyx, to a larger model (`claude-sonnet-5`). A model switch only: Felyx already reaches Anthropic through this stack's own gateway (by its Service name, under `agent://<trust domain>/genaryx/felyx`, metered and policy-checked like any agent) with its own client key, and the gateway holds the provider key (see "The provider key" below). **Not in the default apply**: the deploy scripts apply it when they are given `--anthropic-key-file`, and every conversation is METERED on that key's account. See its own header before applying | |
 | Namespace labels + NetworkPolicy x2 | `60-harden-neighbours.yaml`: Pod Security `restricted` plus default-deny ingress and egress for the cluster's `default` namespace, i.e. hardening for a namespace this stack does not own (`security-tests.sh` check 12 reports on the gap this closes). **Not in the default apply**: it changes a namespace that belongs to whoever runs the cluster, and it WILL stop anything already running in `default`. Read its header before applying | |
 
 ### CostCrew, the FinOps plane
@@ -173,7 +173,7 @@ manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm).
                 apply. Every other manifest is opt-in, applied by a flag, a script
                 or by hand: among them 45-heraldyx.yaml (notifications),
                 49-costcrew.yaml (the FinOps plane), 55-copilot-cloud.yaml (a
-                metered cloud copilot) and 60-harden-neighbours.yaml (hardening for
+                larger copilot model) and 60-harden-neighbours.yaml (hardening for
                 the cluster's other namespaces). See "What runs as what" above
 images/         one Dockerfile per language family, plus the console's mixed build
 GOTCHAS.md      every trap this cost us, each with the fix that is already applied
@@ -839,9 +839,46 @@ sides use one secret, and it is off unless you turn it on:
 ```
 
 A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
-console v1.1.34 or later. The images pinned here are tokenfuse v1.15.0 and console v1.1.46,
+console v1.1.34 or later. The images pinned here are tokenfuse v1.16.0 and console v1.1.46,
 both later than those minimums; an older image
 ignores the setting.
+
+## The provider key
+
+The gateway holds your model provider's key, and nothing else in the cluster does.
+Give it once, on the deploy:
+
+```bash
+./deploy.sh ... --anthropic-key-file /path/to/the/key
+```
+
+`deploy-gcp.sh` and `deploy-aws.sh` take the same flag (`--copilot-key-file`, its
+older name, still works). The file is read on your machine, sent to the cluster on
+stdin, and made into the Secret `gateway-upstream-key`, which only the gateway's pod
+mounts, as a file it reads when it starts. The key is never printed and never a
+value in a manifest. The console and the agents hold only their client keys, so a
+caller that sends its own provider key is refused 401 `provider_credential_refused`
+once the gateway holds one. Your agents then send their gateway key, not the
+provider's: see "Client keys and the identity map" below.
+
+On a cluster you applied by hand, with `kubectl apply -k` and no deploy script, make
+the Secret yourself, from the file, so no value reaches a command line:
+
+```bash
+kubectl -n agent-stack create secret generic gateway-upstream-key --from-file=anthropic_key=/path/to/the/key
+kubectl -n agent-stack rollout restart deploy/tokenfuse-gateway
+```
+
+A re-run keeps the Secret it finds and says so; the file you pass again is not
+read. To replace the key: delete `gateway-upstream-key`, deploy with the new file,
+and restart the gateway (`kubectl -n agent-stack rollout restart deploy/tokenfuse-gateway`),
+because it reads the file once. A deploy with no file and no Secret stops before
+the rollouts, so a gateway that cannot start is not left to time out.
+
+The one named exception is the scheduled CostCrew run, which still reads its
+engine keys from the `costcrew-engine` Secret (the CronJob `costcrew-crew` in
+`49-costcrew.yaml`, which is opt-in). It stays until its agent identity is decided. CLAUDE.md invariant 53 holds the rule
+and the gate that checks it.
 
 ## Client keys and the identity map
 
@@ -852,13 +889,14 @@ speak as another and take its policy and its budget. Its reference to the keys'
 Secret is not optional, so a gateway with no keys waits rather than starting
 open, and the map runs strict (`TOKENFUSE_IDENTITY_STRICT: enforce`).
 
-**Given no files, every deploy mints two keys** after it applies the manifests
+**Given no files, every deploy mints three keys** after it applies the manifests
 (`lib/identity-mint.sh`), and binds each in a map:
 
 | Key id | Unit | May speak as | Its secret |
 |---|---|---|---|
 | `felyx` | `console` | `agent://<trust domain>/genaryx/felyx`, exactly | the Secret `felyx-client-key`, which the console sends for Felyx |
 | `agents` | `agents` | `agent://<trust domain>/agents/*` | `agent-key` beside the deploy script, 0600, on the machine you deployed from |
+| `drills` | `drills` | `agent://mockryx.local/*`, the drill's own namespace | the Secret `drills-client-key`, mounted into the suspended drill job. Mockryx reads it from its release that adds `--client-key-file` (M1); the pinned v0.2.1 sends no key yet, so the drill is refused 401 until that pin moves |
 
 The trust domain is the one `--trust-domain` sets. The deploy prints the key
 file's path and the ids, never the key. Your agents then send, on every call,
