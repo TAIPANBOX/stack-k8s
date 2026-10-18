@@ -1,0 +1,32 @@
+# The broker BEFORE agent tokens: the product's own env subset, no agent-token door, no taint key.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: tokenfuse-mcp-broker, namespace: agent-stack, labels: { app: tokenfuse-mcp-broker } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  template:
+    metadata: { labels: { app: tokenfuse-mcp-broker } }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: broker
+          image: ghcr.io/taipanbox/tokenfuse:v1.16.0
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/tokenfuse"]
+          args: ["mcp-broker"]
+          env:
+            - { name: TOKENFUSE_MCP_ADDR, value: "0.0.0.0:4200" }
+            - { name: TOKENFUSE_MCP_UPSTREAM, value: "http://mcp-stub:4320/mcp" }
+          envFrom:
+            - secretRef: { name: tokenfuse-mcp-broker-keys }
+          ports: [{ name: mcp, containerPort: 4200 }]
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: tokenfuse-mcp-broker, namespace: agent-stack }
+spec:
+  selector: { app: tokenfuse-mcp-broker }
+  ports: [{ name: mcp, port: 4200, targetPort: mcp }]

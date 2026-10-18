@@ -54,3 +54,18 @@ Feature: an agent's own token is the door credential, off by default and stopped
     When the gate reads the manifests
     Then the gate passes
     -> agent-tokens: a comment naming the switch in the default gateway is not a fault
+
+  Scenario: the MCP broker's relayed check is answered, not refused with a 401
+    Given the door is turned on and the MCP broker is deployed
+    When its key file is empty, its key is not minted, its Secret has another name, or its check fails open
+    Then the gate refuses it, because a token-admitted broker call would be checked with no key or not at all
+    -> agent-tokens: broker key missing while the door is on
+    -> agent-tokens: the mint does not give the broker its key
+    -> agent-tokens: the broker's key Secret is projected under another name
+    -> agent-tokens: the broker's taint check fails open
+
+  Scenario: the MCP broker reaches only the gateway and vouchryx
+    Given the network rules for the MCP broker
+    When they open its egress to the internet
+    Then the gate refuses them
+    -> agent-tokens: the broker may reach the open internet

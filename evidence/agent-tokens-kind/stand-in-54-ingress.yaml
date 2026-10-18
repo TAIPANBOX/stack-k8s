@@ -1,0 +1,12 @@
+# The stand-in for 54-delegation.yaml's vouchryx-ingress (the product's delegation plane applies it;
+# this kind namespace does not carry the delegation plane's own manifests).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: vouchryx-ingress, namespace: agent-stack }
+spec:
+  podSelector: { matchLabels: { app: vouchryx } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: tokenfuse-gateway } }
+      ports: [{ protocol: TCP, port: 4310 }]

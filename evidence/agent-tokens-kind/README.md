@@ -26,4 +26,26 @@ Measured 2026-10-18:
 NOT covered by this run: the k3s issuer string (kind's `https://kubernetes.default.svc.cluster.local`
 was read, not k3s's); the kubelet's own rotation of a projected token; a ban that must survive a
 vouchryx restart on a PVC (kind used an emptyDir); NetworkPolicy enforcement (kind's default CNI does
-not enforce it); the broker's taint check (not in this path).
+not enforce it).
+
+Broker, measured 2026-10-18 (the MCP broker's relayed check, CLAUDE.md invariant 54):
+- `broker-base.yaml` is the stand-in broker before the door (the product's env subset, the stand-in
+  upstream `mcp-stub` and its keys Secret). `agent-tokens/up.sh` then patched it with
+  `manifests/58-agent-tokens-broker-patch.yaml`: the door on, the broker's own key from
+  `broker-taint-key` at `/run/taint/key`, and `TOKENFUSE_MCP_TAINT_FAILMODE=closed`.
+- `stand-in-52-upstream.yaml` and `stand-in-54-ingress.yaml` mirror the product rules that let the
+  broker reach its upstream and let the gateway and vouchryx admit it. `stand-in-dns.yaml` gives every
+  pod the DNS egress rule that the product's `30-network-policy.yaml` has: this kind enforces
+  NetworkPolicy, so a restricted pod could not resolve a service name, and a call by name hung. With
+  that rule the same call by name returned 200. `mcp-stub.yaml` and `mcp-stub.py` answer `tools/call`
+  as the upstream.
+- `broker_call.py` sends one `tools/call` through the broker's port-forward
+  (`kubectl -n agent-stack port-forward svc/tokenfuse-mcp-broker 14420:4200`) with an enrolled agent
+  token and a DPoP proof whose `htu` is the broker's own address. Result: HTTP 200 with the stub's
+  answer. The broker fails closed on the taint check, so the 200 means the gateway answered allow.
+- At the gateway's check route, the broker's key with the token gets 200 (allow), and no key gets 401
+  (measured the same day). Under the broker's closed failmode a 401 at the check is a refusal; that
+  refusal was not run through the broker.
+- Stand-in only: the broker's upstream and taint gateway were set with `kubectl set env` (the upstream
+  to `mcp-stub`, the taint gateway to `tokenfuse-gateway`). The product manifests were not changed by
+  this run.

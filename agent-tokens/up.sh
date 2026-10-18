@@ -55,6 +55,8 @@ if kubectl -n "$NS" get deployment tokenfuse-mcp-broker >/dev/null 2>&1; then
   # `broker`, invariant 54). Without that key the relayed check is refused 401, so refuse here.
   kubectl -n "$NS" get secret broker-taint-key >/dev/null 2>&1 \
     || die "the broker is deployed but Secret broker-taint-key is missing: deploy so it is minted with the gateway's keys (lib/identity-mint.sh), or give the broker's key by hand. Nothing was applied."
+  kubectl -n "$NS" get secret gateway-client-keys >/dev/null 2>&1 \
+    || die "Secret gateway-client-keys is missing: the gateway has no client keys to hold the broker's. Nothing was applied."
   kubectl -n "$NS" get secret gateway-client-keys -o jsonpath='{.data.client_keys}' | base64 --decode | tr ',' '\n' | grep -q ':broker$' \
     || die "the gateway's client keys have no entry for the broker (key id broker): add one, or deploy to mint them. Nothing was applied."
   BROKER=1
