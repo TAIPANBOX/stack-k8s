@@ -176,7 +176,8 @@ while [ $# -gt 0 ]; do
     --agents)        AGENTS="$2"; shift 2 ;;
     --ssh-key)       SSH_KEY="$2"; shift 2 ;;
     --console-token) CONSOLE_TOKEN="$2"; shift 2 ;;
-    --anthropic-key-file|--copilot-key-file) ANTHROPIC_KEY_FILE="$2"; shift 2 ;;
+    --anthropic-key-file) ANTHROPIC_KEY_FILE="$2"; shift 2 ;;
+    --copilot-key-file) ANTHROPIC_KEY_FILE="$2"; shift 2 ;;
     --alert-to)      ALERT_TO="$2"; ALERT_ASKED=1; shift 2 ;;
     --no-alerts)     ALERT_TO=""; ALERT_ASKED=1; shift ;;
     --smtp-host)     SMTP_HOST="$2"; shift 2 ;;

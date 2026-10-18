@@ -623,8 +623,8 @@ run_case "secret-keys-agree: a manifest starts reading a key no installer writes
 
 run_case "secret-keys-agree: a manifest reads a key no installer writes, multi-line spelling" fail \
 	'./scripts/secret-keys-agree.sh' \
-	"$(py 'edit("manifests/55-copilot-cloud.yaml", "key: api_key\n", "key: api_key_v2\n")')" \
-	"does not create key api_key_v2"
+	"$(py 'edit("manifests/10-planes.yaml", "valueFrom: { secretKeyRef: { name: stack-keys, key: gateway_admin } }", "valueFrom:\n                secretKeyRef:\n                  name: stack-keys\n                  key: gateway_admin_v2")')" \
+	"does not create key gateway_admin_v2"
 
 run_case "secret-keys-agree: no manifest left that reads a Secret" fail \
 	'./scripts/secret-keys-agree.sh' \
