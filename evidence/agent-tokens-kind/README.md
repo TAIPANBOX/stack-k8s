@@ -25,8 +25,8 @@ Measured 2026-10-18:
 
 NOT covered by this run: the k3s issuer string (kind's `https://kubernetes.default.svc.cluster.local`
 was read, not k3s's); the kubelet's own rotation of a projected token; a ban that must survive a
-vouchryx restart on a PVC (kind used an emptyDir); NetworkPolicy enforcement (kind's default CNI does
-not enforce it).
+vouchryx restart on a PVC (kind used an emptyDir); NetworkPolicy enforcement, which was not probed directly (see the broker section for what
+behaved as if it were enforced).
 
 Broker, measured 2026-10-18 (the MCP broker's relayed check, CLAUDE.md invariant 54):
 - `broker-base.yaml` is the stand-in broker before the door (the product's env subset, the stand-in
@@ -35,8 +35,9 @@ Broker, measured 2026-10-18 (the MCP broker's relayed check, CLAUDE.md invariant
   `broker-taint-key` at `/run/taint/key`, and `TOKENFUSE_MCP_TAINT_FAILMODE=closed`.
 - `stand-in-52-upstream.yaml` and `stand-in-54-ingress.yaml` mirror the product rules that let the
   broker reach its upstream and let the gateway and vouchryx admit it. `stand-in-dns.yaml` gives every
-  pod the DNS egress rule that the product's `30-network-policy.yaml` has: this kind enforces
-  NetworkPolicy, so a restricted pod could not resolve a service name, and a call by name hung. With
+  pod the DNS egress rule that the product's `30-network-policy.yaml` has: this kind appears to
+  enforce NetworkPolicy (inferred from this result, not probed directly), so a restricted pod could not
+  resolve a service name, and a call by name hung. With
   that rule the same call by name returned 200. `mcp-stub.yaml` and `mcp-stub.py` answer `tools/call`
   as the upstream.
 - `broker_call.py` sends one `tools/call` through the broker's port-forward
