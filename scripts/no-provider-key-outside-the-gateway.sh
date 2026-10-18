@@ -32,10 +32,12 @@
 #
 # NAMED EXCEPTIONS
 #
-# None. The scheduled costcrew run once read its engine keys from costcrew-engine; it now
-# reads its client key, and its gateway identity is costcrew.<domain>, which the minted key
-# binds exactly (CLAUDE.md invariant 53). Adding an entry to EXCEPTIONS needs an invariant
-# change in CLAUDE.md, not a line here.
+# costcrew-crew, the scheduled CostCrew run, still reads its engine keys from
+# costcrew-engine into its environment. It is the one agent-facing container that does,
+# and it stays until its agent identity is decided: costcrew sends the analyst's own id
+# (agent://<domain>/<analyst>), which the gateway identity map cannot bind to one client
+# key without listing the roster. The exception names the container and the Secret, so a
+# second container, or the same container with another Secret, goes red.
 #
 # HOW, WITHOUT A YAML LIBRARY
 #
@@ -57,9 +59,10 @@ PROVIDER_ENV_RE = re.compile(r"(ANTHROPIC|OPENAI|OPENROUTER|COPILOT_KEY|JEV_KEY)
 CLIENT_KEY_RE = re.compile(r"-client-keys?$")
 
 # (kind, object name, container name, Secret) -> the reason it is allowed for now.
-# Empty: costcrew reads its own client key, costcrew-client-key, and its agent authority is
-# costcrew.<domain>, which that key is bound to (CLAUDE.md invariant 53). Keep it empty.
-EXCEPTIONS = {}
+EXCEPTIONS = {
+    ("CronJob", "costcrew-crew", "crew", "costcrew-engine"):
+        "costcrew sends agent://<domain>/<analyst>; no client key binds those ids yet",
+}
 
 POD_PATHS = {
     "Deployment": ["spec", "template", "spec"],
