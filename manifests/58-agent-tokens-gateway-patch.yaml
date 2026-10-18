@@ -1,0 +1,31 @@
+# The agent-token door on the gateway (CLAUDE.md invariant 54, WAVE1-DESIGN 1.5, 1.6).
+#
+# NOT in kustomization.yaml, and it is applied only by agent-tokens/up.sh, after the
+# delegation plane (54-delegation-gateway-patch.yaml) is on: the door verifies with that
+# plane's issuer, JWKS and revocation list, so it cannot stand alone. Off by default: the
+# binary's own default is `off`, and an unpatched gateway admits no agent token (only static
+# client keys, as before).
+#
+#   TOKENFUSE_AGENT_TOKENS=accept   an agent's own DPoP-bound token is a door credential beside
+#                                   the static client keys (`require` is a later, dated step)
+#   TOKENFUSE_DELEGATION_AUDIENCE   must be non-empty for the door to start. 54's patch leaves it
+#                                   empty, which is right for delegation alone; an agent token is
+#                                   minted for VOUCHRYX_ISSUER, so that is the one audience this
+#                                   door accepts. Consequence (breaking, see the report): delegated
+#                                   calls minted for any other audience are refused once this is on.
+#   REVOCATIONS_FAILMODE=closed     a revocation list that cannot be read stops the gateway
+#                                   honouring agent tokens, rather than letting a stopped agent
+#                                   keep working (tokenfuse refuses `open` with this switch)
+#   REVOCATIONS_MAX_AGE_SECS=60     a list older than this is refused: the stop reaches every
+#                                   door within about one poll (12 s) while vouchryx answers, and
+#                                   within 60 s of its going dark
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          env:
+            - { name: TOKENFUSE_AGENT_TOKENS, value: "accept" }
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "http://vouchryx:4310" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: "closed" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: "60" }

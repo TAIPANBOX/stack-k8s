@@ -182,6 +182,10 @@ jobs:
       - name: the provider key is held by the gateway from a file, and no other container holds one
         run: ./scripts/no-provider-key-outside-the-gateway.sh
 
+      # An agent token is the door credential only when the opt-in turns it on (invariant 54).
+      - name: an agent token is the door credential only when the opt-in turns it on
+        run: ./scripts/agent-tokens-are-wired.sh
+
       # Added 2026-10-04. heraldyx v0.3.0 and idryx v1.1.0 refuse an event whose
       # source is not allowed for the file it was read from, so a stream this
       # launcher names differently, or a --load pair naming the wrong source,

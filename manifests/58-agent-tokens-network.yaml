@@ -1,0 +1,52 @@
+# The network for agent-token pods (CLAUDE.md invariant 54). Applied only by agent-tokens/up.sh.
+#
+# A pod that presents its own agent token is labelled taipanbox.dev/agent-token=true (see
+# agent-tokens/example-agent.yaml). It may reach exactly two things: vouchryx, to exchange its
+# projected token for an agent token, and the gateway, to call the model with it. Nothing
+# else is added: the default-deny rules in 30-network-policy.yaml still hold for everything
+# this does not name, and DNS is already open to every pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-token-pods-egress
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { taipanbox.dev/agent-token: "true" } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: vouchryx } }
+      ports:
+        - { protocol: TCP, port: 4310 }
+    - to:
+        - podSelector: { matchLabels: { app: tokenfuse-gateway } }
+      ports:
+        - { protocol: TCP, port: 4100 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vouchryx-ingress-agent-token-pods
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: vouchryx } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { taipanbox.dev/agent-token: "true" } }
+      ports:
+        - { protocol: TCP, port: 4310 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-ingress-agent-token-pods
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-gateway } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { taipanbox.dev/agent-token: "true" } }
+      ports:
+        - { protocol: TCP, port: 4100 }

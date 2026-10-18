@@ -1,0 +1,12 @@
+# The stand-in for the broker's upstream rule (52-tokenfuse-mcp-broker.yaml carries the product's
+# broker-egress-typryx and broker-egress-wardryx; this kind namespace has the MCP stub instead).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: broker-egress-mcp-stub, namespace: agent-stack }
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: mcp-stub } }
+      ports: [{ protocol: TCP, port: 4320 }]
