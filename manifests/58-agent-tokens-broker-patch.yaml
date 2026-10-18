@@ -14,9 +14,12 @@
 #   TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE           the broker's own client key (id `broker`, minted with the
 #                                                  gateway's keys, the Secret broker-taint-key), read from a file
 #   TOKENFUSE_MCP_TAINT_FAILMODE=closed            a check the gateway does not answer refuses the call
+#   fsGroup 10001                                  gives the taint key's file its group, so uid 10001 reads it
+#                                                  at 0440 (invariant 32); the broker's own pod already has it
 spec:
   template:
     spec:
+      securityContext: { fsGroup: 10001 }
       containers:
         - name: broker
           env:
