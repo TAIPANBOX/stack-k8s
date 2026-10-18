@@ -1,0 +1,23 @@
+# Reverses 58-agent-tokens-vouchryx-patch.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vouchryx
+  namespace: agent-stack
+spec:
+  template:
+    spec:
+      containers:
+        - name: vouchryx
+          env:
+            - name: VOUCHRYX_ALLOWED_AUDIENCES
+              $patch: delete
+            - name: VOUCHRYX_AGENTS
+              $patch: delete
+            - name: VOUCHRYX_WORKLOAD_ISSUERS
+              $patch: delete
+          volumeMounts:
+            - { name: workload-jwks, mountPath: /etc/vouchryx/workload, $patch: delete }
+      volumes:
+        - name: workload-jwks
+          $patch: delete

@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: vouchryx, namespace: agent-stack, labels: { app: vouchryx } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: vouchryx } }
+  template:
+    metadata: { labels: { app: vouchryx } }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 10002, runAsGroup: 10002, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: vouchryx
+          image: ghcr.io/taipanbox/vouchryx:v0.4.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: VOUCHRYX_ADDR, value: "0.0.0.0:4310" }
+            - { name: VOUCHRYX_ISSUER, value: "http://vouchryx:4310" }
+            - { name: VOUCHRYX_SIGNING_KEY, value: "/etc/vouchryx/keys/signing.pem" }
+            - name: VOUCHRYX_REVOKE_KEYS
+              valueFrom: { secretKeyRef: { name: vouchryx-keys, key: revoke_key } }
+            - { name: VOUCHRYX_REVOCATIONS_PATH, value: "/var/lib/vx/revocations.ndjson" }
+            - { name: VOUCHRYX_EVENTS_PATH, value: "/var/lib/vx/events.ndjson" }
+            - { name: VOUCHRYX_ALLOWED_AUDIENCES, value: "http://vouchryx:4310" }
+            - name: VOUCHRYX_AGENTS
+              valueFrom: { configMapKeyRef: { name: vouchryx-agents, key: agents } }
+            - name: VOUCHRYX_TRUSTED_ISSUERS
+              valueFrom: { configMapKeyRef: { name: vouchryx-trusted-issuers, key: trusted_issuers } }
+            - name: VOUCHRYX_WORKLOAD_ISSUERS
+              valueFrom: { configMapKeyRef: { name: vouchryx-workload, key: issuers } }
+          ports: [{ name: http, containerPort: 4310 }]
+          volumeMounts:
+            - { name: keys, mountPath: /etc/vouchryx/keys, readOnly: true }
+            - { name: workload-jwks, mountPath: /etc/vouchryx/workload, readOnly: true }
+            - { name: trusted-issuer-jwks, mountPath: /etc/vouchryx/trusted, readOnly: true }
+            - { name: state, mountPath: /var/lib/vx }
+          readinessProbe: { httpGet: { path: /healthz, port: http }, initialDelaySeconds: 1 }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+      volumes:
+        - name: keys
+          secret: { secretName: vouchryx-keys, defaultMode: 0440 }
+        - name: workload-jwks
+          configMap: { name: vouchryx-workload-jwks, defaultMode: 0444 }
+        - name: trusted-issuer-jwks
+          configMap: { name: vouchryx-trusted-issuer-jwks }
+        - name: state
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata: { name: vouchryx, namespace: agent-stack }
+spec:
+  selector: { app: vouchryx }
+  ports: [{ name: http, port: 4310, targetPort: http }]

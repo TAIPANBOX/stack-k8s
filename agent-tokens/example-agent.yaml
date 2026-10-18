@@ -1,0 +1,43 @@
+# The shape of an agent pod that presents its own agent token (CLAUDE.md invariant 54).
+# A template, not applied by anything: copy it, give the agent its own ServiceAccount name
+# (the one the registry binds to `workload:<issuer>#system:serviceaccount:agent-stack:<name>`)
+# and its own image. It holds no key: its only credential is the projected token below,
+# which the kubelet rotates, and which grants no Kubernetes API access because its audience
+# is vouchryx, not the API server.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-example
+  namespace: agent-stack
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-example
+  namespace: agent-stack
+  labels: { app: agent-example }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: agent-example } }
+  template:
+    metadata:
+      labels: { app: agent-example, taipanbox.dev/agent-token: "true" }
+    spec:
+      serviceAccountName: agent-example
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: agent
+          image: ghcr.io/taipanbox/agent-example:replace-with-a-pinned-tag
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          volumeMounts:
+            - { name: vouchryx-token, mountPath: /var/run/agent, readOnly: true }
+      volumes:
+        - name: vouchryx-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: "http://vouchryx:4310"
+                  expirationSeconds: 600
+                  path: token

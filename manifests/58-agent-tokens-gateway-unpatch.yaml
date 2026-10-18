@@ -1,0 +1,20 @@
+# Reverses 58-agent-tokens-gateway-patch.yaml: the switch and the two revocation settings are
+# deleted, and the audience goes back to the empty value 54's patch leaves for delegation.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tokenfuse-gateway
+  namespace: agent-stack
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          env:
+            - name: TOKENFUSE_AGENT_TOKENS
+              $patch: delete
+            - name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE
+              $patch: delete
+            - name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS
+              $patch: delete
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "" }

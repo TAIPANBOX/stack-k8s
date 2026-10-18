@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: upstream, namespace: agent-stack, labels: { app: upstream } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: upstream } }
+  template:
+    metadata: { labels: { app: upstream } }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: upstream
+          image: python:3.12-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "/stub/server.py"]
+          volumeMounts:
+            - { name: stub, mountPath: /stub, readOnly: true }
+            - { name: upstream-key, mountPath: /run/upstream, readOnly: true }
+          ports: [{ name: http, containerPort: 18080 }]
+      volumes:
+        - name: stub
+          configMap: { name: upstream-stub }
+        - name: upstream-key
+          secret: { secretName: gateway-upstream-key, defaultMode: 0440 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: upstream, namespace: agent-stack }
+spec:
+  selector: { app: upstream }
+  ports: [{ name: http, port: 18080, targetPort: http }]

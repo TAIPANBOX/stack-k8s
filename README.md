@@ -880,6 +880,31 @@ engine keys from the `costcrew-engine` Secret (the CronJob `costcrew-crew` in
 `49-costcrew.yaml`, which is opt-in). It stays until its agent identity is decided. CLAUDE.md invariant 53 holds the rule
 and the gate that checks it.
 
+## Agent tokens (opt-in)
+
+An agent can hold its own short-lived credential instead of a shared client key.
+It is off by default, and it needs the delegation plane (`delegation/up.sh`), because
+the gateway checks an agent's token with the same vouchryx and the same revocation list.
+
+```bash
+./agent-tokens/up.sh --registry agents.txt --check-only   # what it would check
+./agent-tokens/up.sh --registry agents.txt                # turn it on
+./agent-tokens/down.sh                                    # turn it off again
+```
+
+`agents.txt` has one line per agent, `agent://<trust domain>/<path>|<unit>|<org>|<credential>`,
+where the credential is `sha256:<digest of an enrolment key>` or
+`workload:<the cluster's issuer>#system:serviceaccount:agent-stack:<ServiceAccount>`. A pod
+that is one of these agents is labelled `taipanbox.dev/agent-token: "true"` and mounts a
+projected token for `http://vouchryx:4310` (see `agent-tokens/example-agent.yaml`). It holds no
+Kubernetes API token and no secret.
+
+Turning it on sets the gateway's audience to vouchryx's issuer, so delegated calls minted for
+any other audience are refused from then on. A stop is one call to vouchryx with `ban: true`,
+and the gateway refuses the agent within one poll (12 s). The measured run is in
+`evidence/agent-tokens-kind/`. Not yet: the broker's own key, and `require` (refusing static
+keys), which is a later, dated decision. CLAUDE.md invariant 54 holds the rule.
+
 ## Client keys and the identity map
 
 The gateway answers no caller without a client key, and a key may speak only as

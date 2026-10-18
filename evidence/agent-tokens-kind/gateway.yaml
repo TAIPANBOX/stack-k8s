@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: tokenfuse-gateway, namespace: agent-stack, labels: { app: tokenfuse-gateway } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: tokenfuse-gateway } }
+  template:
+    metadata: { labels: { app: tokenfuse-gateway } }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: gateway
+          image: ghcr.io/taipanbox/tokenfuse:v1.16.0
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/tokenfuse"]
+          env:
+            - { name: TOKENFUSE_ADDR, value: "0.0.0.0:4100" }
+            - { name: TOKENFUSE_UPSTREAM, value: "http://upstream:18080/v1/messages" }
+            - { name: TOKENFUSE_UPSTREAM_KEY_FILE, value: "/run/upstream/anthropic_key" }
+            - name: TOKENFUSE_CLIENT_KEYS
+              valueFrom: { secretKeyRef: { name: gw-clients, key: client_keys } }
+            - { name: TOKENFUSE_MODE, value: "enforce" }
+            - { name: TOKENFUSE_CACHE, value: "off" }
+            - { name: TOKENFUSE_DATA_DIR, value: "/tmp/tf" }
+            # agent-token door (this experiment's switch) and the delegation door it verifies with
+            - { name: TOKENFUSE_AGENT_TOKENS, value: "accept" }
+            - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
+            - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "http://vouchryx:4310" }
+            - { name: TOKENFUSE_DELEGATION_URL, value: "http://tokenfuse-gateway:4100" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS, value: "http://vouchryx:4310/v1/revocations" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: "closed" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, value: "12000" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: "60" }
+          ports: [{ name: http, containerPort: 4100 }]
+          volumeMounts:
+            - { name: upstream, mountPath: /run/upstream, readOnly: true }
+            - { name: delegation-jwks, mountPath: /etc/tokenfuse/delegation, readOnly: true }
+            - { name: tmp, mountPath: /tmp/tf }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+      volumes:
+        - name: upstream
+          secret: { secretName: gateway-upstream-key, defaultMode: 0440 }
+        - name: delegation-jwks
+          configMap: { name: vouchryx-jwks }
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata: { name: tokenfuse-gateway, namespace: agent-stack }
+spec:
+  selector: { app: tokenfuse-gateway }
+  ports: [{ name: http, port: 4100, targetPort: http }]

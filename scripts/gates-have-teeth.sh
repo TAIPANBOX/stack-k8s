@@ -2919,6 +2919,73 @@ run_case "no-provider-key: no gateway left to judge" fail \
 	"$(py 'import os; os.remove("manifests/10-planes.yaml")')" \
 	"measured nothing"
 
+# ---- agent tokens are wired and off by default (CLAUDE.md invariant 54) ----------------
+AGT=./scripts/agent-tokens-are-wired.sh
+
+run_case "agent-tokens: the gateway patch turns the door off" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "{ name: TOKENFUSE_AGENT_TOKENS, value: \"accept\" }", "{ name: TOKENFUSE_AGENT_TOKENS, value: \"off\" }")')" \
+	"does not set TOKENFUSE_AGENT_TOKENS to exactly accept once"
+
+run_case "agent-tokens: the gateway door starts with no audience" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx:4310\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"\" }")')" \
+	"leaves TOKENFUSE_DELEGATION_AUDIENCE empty"
+
+run_case "agent-tokens: the gateway accepts a wider audience than vouchryx's issuer" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx:4310\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx.other:4310\" }")')" \
+	"not vouchryx's issuer"
+
+run_case "agent-tokens: a stopped agent keeps working while the list is unreadable" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "{ name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: \"closed\" }", "{ name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: \"open\" }")')" \
+	"does not set TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE to closed"
+
+run_case "agent-tokens: the revocation list may be 300 s old" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "{ name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: \"60\" }", "{ name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: \"300\" }")')" \
+	"at most 60 seconds"
+
+run_case "agent-tokens: the door is on in the default gateway" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n", "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n            - { name: TOKENFUSE_AGENT_TOKENS, value: \"accept\" }\n")')" \
+	"names TOKENFUSE_AGENT_TOKENS"
+
+run_case "agent-tokens: vouchryx takes its registry as a literal, not from a ConfigMap" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-vouchryx-patch.yaml", "valueFrom: { configMapKeyRef: { name: vouchryx-agents, key: agents } }", "value: \"agent://k2.example/agents/x|agents|acme|sha256:00\"")')" \
+	"does not read VOUCHRYX_AGENTS from a ConfigMap"
+
+run_case "agent-tokens: the example agent keeps the default ServiceAccount token" fail \
+	"$AGT" \
+	"$(py 'edit("agent-tokens/example-agent.yaml", "      automountServiceAccountToken: false\n      securityContext", "      automountServiceAccountToken: true\n      securityContext")')" \
+	"does not turn off the default ServiceAccount token"
+
+run_case "agent-tokens: the example agent's token is for another audience" fail \
+	"$AGT" \
+	"$(py 'edit("agent-tokens/example-agent.yaml", "audience: \"http://vouchryx:4310\"", "audience: \"http://other.example:4310\"")')" \
+	"not vouchryx's issuer"
+
+run_case "agent-tokens: agent pods may reach the open internet" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-network.yaml", "    - to:\n        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n", "    - to:\n        - ipBlock: { cidr: 0.0.0.0/0 }\n    - to:\n        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n")')" \
+	"opens egress to 0.0.0.0/0"
+
+run_case "agent-tokens: the opt-in applies before it refuses" fail \
+	"$AGT" \
+	"$(py 'edit("agent-tokens/up.sh", "[ -n \"$REGISTRY\" ] || die \"--registry FILE is required. Nothing was applied.\"", "true")')" \
+	"does not refuse before it applies anything"
+
+run_case "agent-tokens: no gateway patch left to judge" fail \
+	"$AGT" \
+	"$(py 'import os; os.remove("manifests/58-agent-tokens-gateway-patch.yaml")')" \
+	"measured nothing"
+
+run_case "agent-tokens: a comment naming the switch in the default gateway is not a fault" pass \
+	"$AGT" \
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n", "            # TOKENFUSE_AGENT_TOKENS is set by 58-agent-tokens-gateway-patch.yaml, never here.\n            - { name: TOKENFUSE_CACHE, value: \"off\" }\n")')"
+
 # A listing is not a run. Stop before the verdict, which would count cases this
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then
