@@ -1857,8 +1857,8 @@ run_case "temp: the console's temp is mounted read-only" fail \
 
 run_case "temp: no container left that needs a temp" fail \
 	'./scripts/read-only-root-has-a-temp.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.7.0", "image: registry.invalid/costcrew:v0.6.0")
-edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.7.0", "image: registry.invalid/costcrew:v0.6.0")')" \
+	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.8.0", "image: registry.invalid/costcrew:v0.6.0")
+edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.8.0", "image: registry.invalid/costcrew:v0.6.0")')" \
 	"measured NOTHING"
 
 run_case "temp: TMPDIR inside the data volume instead of a /tmp mount" pass \
@@ -2795,6 +2795,11 @@ run_case "metered-doors-require-keys: the mint block is gone" fail \
 	"$(py 'edit("lib/identity-mint.sh", "# identity-mint: begin\n", "# identity-mint: start\n")')" \
 	"measured nothing about the keys"
 
+run_case "metered-doors-require-keys: the CostCrew crew's key is bound to every agent id, not its analysts" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "agent://%s/costcrew/*", "agent://%s/*")')" \
+	"binds the CostCrew crew's key to"
+
 run_case "metered-doors-require-keys: a comment in the mint library is reworded" pass \
 	'./scripts/metered-doors-require-keys.sh' \
 	"$(py 'edit("lib/identity-mint.sh", "# What the end of a deploy says about the minted keys", "# What the end of a deploy says of the minted keys")')"
@@ -2901,10 +2906,10 @@ run_case "no-provider-key: a provider-shaped variable reads a Secret that is not
 	"$(py 'edit("manifests/20-console.yaml", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n            - name: OPENAI_API_KEY\n              valueFrom: { secretKeyRef: { name: stack-keys, key: cloud_admin } }\n")')" \
 	"is provider-shaped and reads Secret stack-keys"
 
-run_case "no-provider-key: a second container takes costcrew-engine, the named exception does not cover it" fail \
+run_case "no-provider-key: a container takes costcrew-engine, and no exception covers it any more" fail \
 	"$GATE53" \
-	"$(py 'edit("manifests/49-costcrew.yaml", "            - name: crew\n", "            - name: crew-two\n")')" \
-	"container crew-two: env OPENROUTER_API_KEY reads the provider Secret costcrew-engine"
+	"$(py 'edit("manifests/49-costcrew.yaml", "                - name: ANTHROPIC_API_KEY\n", "                - name: COSTCREW_ENGINE_KEY\n                  valueFrom:\n                    secretKeyRef: { name: costcrew-engine, key: openrouter, optional: true }\n                - name: ANTHROPIC_API_KEY\n")')" \
+	"reads the provider Secret costcrew-engine"
 
 run_case "no-provider-key: a client key under a provider-shaped name is the agent's own credential" pass \
 	"$GATE53" \

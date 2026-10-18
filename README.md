@@ -99,9 +99,9 @@ CostCrew reads the bills and works out what to do about them. It is off by defau
 
 Once applied, the crew CronJob `costcrew-crew` runs every day at 05:57 and is **not suspended**. Firing is not spending: each run does only the work that the console's cadence has marked due (`-due`). With cadence off, which is the default, a run exits 2, creates nothing and spends nothing.
 
-When cadence is on and a run has work, the crew calls a model API (OpenRouter or Anthropic, with keys from the optional `costcrew-engine` Secret). That call is the metered part, and the provider bills the key's owner. Without a provider key the run refuses at the call and names the missing variable. Two caps bound each run, and the smaller one applies: `COSTCREW_CEILING`, which the operator sets in `stack-wiring` (no value ships, and the pod does not start until the key exists), and the console's own `cadence.ceiling_cents`, set at the console's `/cadence` page.
+When cadence is on and a run has work, the crew calls a model through the gateway, with the crew's own client key from the optional `costcrew-client-key` Secret, minted with the gateway's keys. The gateway holds the provider key, and the provider bills it. Without the client key the run refuses at the call and names the missing variable. An analyst hired with the OpenRouter engine is refused, because no gateway route for OpenRouter exists in this stack yet. Two caps bound each run, and the smaller one applies: `COSTCREW_CEILING`, which the operator sets in `stack-wiring` (no value ships, and the pod does not start until the key exists), and the console's own `cadence.ceiling_cents`, set at the console's `/cadence` page.
 
-To switch it on, create the `costcrew-engine` Secret, set `COSTCREW_CEILING` in `stack-wiring`, then turn cadence on and set its ceiling at `/cadence`. To switch it off, turn cadence off at `/cadence`. Every deliverable the crew writes is a draft marked live, which only a person's stamp publishes.
+To switch it on, the deploy has minted `costcrew-client-key` with the gateway's keys, set `COSTCREW_CEILING` in `stack-wiring`, then turn cadence on and set its ceiling at `/cadence`. To switch it off, turn cadence off at `/cadence`. Every deliverable the crew writes is a draft marked live, which only a person's stamp publishes.
 
 ## Keys stay yours
 
@@ -875,10 +875,9 @@ and restart the gateway (`kubectl -n agent-stack rollout restart deploy/tokenfus
 because it reads the file once. A deploy with no file and no Secret stops before
 the rollouts, so a gateway that cannot start is not left to time out.
 
-The one named exception is the scheduled CostCrew run, which still reads its
-engine keys from the `costcrew-engine` Secret (the CronJob `costcrew-crew` in
-`49-costcrew.yaml`, which is opt-in). It stays until its agent identity is decided. CLAUDE.md invariant 53 holds the rule
-and the gate that checks it.
+No named exception remains. The scheduled CostCrew run (the CronJob `costcrew-crew` in
+`49-costcrew.yaml`, which is opt-in) presents its own client key, `costcrew-client-key`, and holds no
+provider key. CLAUDE.md invariant 53 holds the rule and the gate that checks it.
 
 ## Agent tokens (opt-in)
 
@@ -921,6 +920,7 @@ open, and the map runs strict (`TOKENFUSE_IDENTITY_STRICT: enforce`).
 |---|---|---|---|
 | `felyx` | `console` | `agent://<trust domain>/genaryx/felyx`, exactly | the Secret `felyx-client-key`, which the console sends for Felyx |
 | `agents` | `agents` | `agent://<trust domain>/agents/*` | `agent-key` beside the deploy script, 0600, on the machine you deployed from |
+| `costcrew` | `costcrew` | `agent://<trust domain>/costcrew/*`, the crew's analysts (CostCrew v0.8.0) | the Secret `costcrew-client-key`, which the scheduled crew reads as its client key |
 | `drills` | `drills` | `agent://mockryx.local/*`, the drill's own namespace | the Secret `drills-client-key`, mounted into the suspended drill job. Mockryx reads it from its release that adds `--client-key-file` (M1); the pinned v0.2.1 sends no key yet, so the drill is refused 401 until that pin moves |
 
 The trust domain is the one `--trust-domain` sets. The deploy prints the key

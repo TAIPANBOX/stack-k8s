@@ -207,3 +207,17 @@ spec:
         - podSelector: { matchLabels: { role: drills } }
       ports:
         - { protocol: TCP, port: 4100 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-ingress-costcrew
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-gateway } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: costcrew-crew } }
+      ports:
+        - { protocol: TCP, port: 4100 }

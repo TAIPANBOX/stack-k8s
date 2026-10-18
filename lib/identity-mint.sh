@@ -15,6 +15,9 @@
 #   agents  the operator's own agents, bound to agent://<td>/agents/*, in unit
 #           `agents`; its secret is written to a file on this machine, 0600, whose
 #           PATH the deploy prints and never the value
+#   costcrew the scheduled CostCrew crew, bound to agent://<td>/costcrew/* (its
+#           analysts' ids), in unit `costcrew`; its secret is also in the Secret
+#           costcrew-client-key, which 49-costcrew.yaml reads (no provider key)
 #
 # <td> is TRAILRYX_TRUST_DOMAIN as stack-wiring holds it after the deploy's
 # --trust-domain patch, the domain the console already names Felyx in. The agents'
@@ -61,6 +64,8 @@ IDM_FELYX_KEY=client_key
 IDM_DRILLS_SECRET=drills-client-key
 IDM_BROKER_SECRET=broker-taint-key
 IDM_BROKER_KEY=client_key
+IDM_COSTCREW_SECRET=costcrew-client-key
+IDM_COSTCREW_KEY=client_key
 IDM_DRILLS_KEY=client_key
 IDM_CM=gateway-identity-map
 IDM_MAP_KEY=identity.json
@@ -75,7 +80,7 @@ IDM_DOMAIN=""      # the trust domain the minted map names
 
 # DOMAIN: the map, one line, on stdout. No secret in it.
 identity_mint_map() {
-  printf '{"units":[{"id":"console","name":"Felyx, the console copilot"},{"id":"agents","name":"The operator agents"},{"id":"drills","name":"The scheduled drills"},{"id":"broker","name":"The MCP broker"}],"keys":[{"key_id":"felyx","unit":"console","agents":["agent://%s/genaryx/felyx"]},{"key_id":"agents","unit":"agents","agents":["agent://%s/agents/*"]},{"key_id":"drills","unit":"drills","agents":["agent://mockryx.local/*"]},{"key_id":"broker","unit":"broker","agents":["agent://%s/*"]}]}' "$1" "$1" "$1"
+  printf '{"units":[{"id":"console","name":"Felyx, the console copilot"},{"id":"agents","name":"The operator agents"},{"id":"drills","name":"The scheduled drills"},{"id":"broker","name":"The MCP broker"},{"id":"costcrew","name":"The CostCrew crew"}],"keys":[{"key_id":"felyx","unit":"console","agents":["agent://%s/genaryx/felyx"]},{"key_id":"agents","unit":"agents","agents":["agent://%s/agents/*"]},{"key_id":"drills","unit":"drills","agents":["agent://mockryx.local/*"]},{"key_id":"broker","unit":"broker","agents":["agent://%s/*"]},{"key_id":"costcrew","unit":"costcrew","agents":["agent://%s/costcrew/*"]}]}' "$1" "$1" "$1" "$1"
 }
 
 identity_mint_sha() { # the sha256 of stdin, hex
@@ -85,8 +90,8 @@ identity_mint_sha() { # the sha256 of stdin, hex
 # KEYFILE: settle the gateway's client keys, then roll what reads them. Prints notes
 # and never a secret.
 identity_mint_settle() {
-  local keyfile="$1" have domain label spec felyx="" agents="" drills="" broker="" entry id rest want cur esc rv sha t frv
-  have="$(k_ "-n $IDM_NS get secret/$IDM_SECRET configmap/$IDM_CM secret/$IDM_FELYX_SECRET secret/$IDM_DRILLS_SECRET secret/$IDM_BROKER_SECRET --ignore-not-found -o name")" \
+  local keyfile="$1" have domain label spec felyx="" agents="" drills="" broker="" costcrew="" entry id rest want cur esc rv sha t frv
+  have="$(k_ "-n $IDM_NS get secret/$IDM_SECRET configmap/$IDM_CM secret/$IDM_FELYX_SECRET secret/$IDM_DRILLS_SECRET secret/$IDM_BROKER_SECRET secret/$IDM_COSTCREW_SECRET --ignore-not-found -o name")" \
     || die "could not ask the cluster whether the gateway's client keys exist, so the identity step did not run"
   domain="$(k_ "-n $IDM_NS get configmap stack-wiring -o jsonpath='{.data.TRAILRYX_TRUST_DOMAIN}'")" \
     || die "could not read TRAILRYX_TRUST_DOMAIN from stack-wiring, which the minted keys are bound to"
@@ -116,14 +121,15 @@ identity_mint_settle() {
           agents) [ -z "$agents" ] || agents=bad; [ "$agents" = bad ] || agents="${entry%:*}" ;;
           drills) [ -z "$drills" ] || drills=bad; [ "$drills" = bad ] || drills="${entry%:*}" ;;
           broker) [ -z "$broker" ] || broker=bad; [ "$broker" = bad ] || broker="${entry%:*}" ;;
+          costcrew) [ -z "$costcrew" ] || costcrew=bad; [ "$costcrew" = bad ] || costcrew="${entry%:*}" ;;
           *) felyx=bad ;;
         esac
       done
-      if [ -z "$felyx" ] || [ -z "$agents" ] || [ "$felyx" = bad ] || [ "$agents" = bad ] || [ "$drills" = bad ] || [ "$broker" = bad ]; then
-        die "Secret $IDM_SECRET is labelled $IDM_LABEL=minted and does not hold exactly the keys this deploy mints (felyx, agents, drills and broker), so it was edited by hand. Remove the label to make it yours, or delete it and deploy again to mint new keys. Nothing was changed."
+      if [ -z "$felyx" ] || [ -z "$agents" ] || [ "$felyx" = bad ] || [ "$agents" = bad ] || [ "$drills" = bad ] || [ "$broker" = bad ] || [ "$costcrew" = bad ]; then
+        die "Secret $IDM_SECRET is labelled $IDM_LABEL=minted and does not hold exactly the keys this deploy mints (felyx, agents, drills, broker and costcrew), so it was edited by hand. Remove the label to make it yours, or delete it and deploy again to mint new keys. Nothing was changed."
       fi
-      if [ -z "$drills" ] || [ -z "$broker" ]; then
-        # A cluster minted before the drills key or the broker key: each missing key is made,
+      if [ -z "$drills" ] || [ -z "$broker" ] || [ -z "$costcrew" ]; then
+        # A cluster minted before the drills key, the broker key or the CostCrew key: each missing key is made,
         # or taken from its own Secret; the others are kept byte for byte, and the spec is
         # patched on stdin.
         if [ -z "$drills" ]; then
@@ -142,10 +148,18 @@ identity_mint_settle() {
             *) broker="$(gen 40)" || die "could not mint the broker's client key" ;;
           esac
         fi
-        printf '{"stringData":{"%s":"%s:felyx,%s:agents,%s:drills,%s:broker"}}\n' "$IDM_SECRET_KEY" "$felyx" "$agents" "$drills" "$broker" \
+        if [ -z "$costcrew" ]; then
+          case "$have" in
+            *"secret/$IDM_COSTCREW_SECRET"*)
+              costcrew="$(k_ "-n $IDM_NS get secret $IDM_COSTCREW_SECRET -o jsonpath='{.data.$IDM_COSTCREW_KEY}'" | base64 --decode)" \
+                || die "could not read Secret $IDM_COSTCREW_SECRET" ;;
+            *) costcrew="$(gen 40)" || die "could not mint the CostCrew crew's client key" ;;
+          esac
+        fi
+        printf '{"stringData":{"%s":"%s:felyx,%s:agents,%s:drills,%s:broker,%s:costcrew"}}\n' "$IDM_SECRET_KEY" "$felyx" "$agents" "$drills" "$broker" "$costcrew" \
           | k_ "-n $IDM_NS patch secret $IDM_SECRET --type merge --patch-file /dev/stdin" >/dev/null \
           || die "could not add the missing keys to Secret $IDM_SECRET"
-        note "client keys: keys for the scheduled drills and for the MCP broker added to Secret $IDM_SECRET (never printed)"
+        note "client keys: keys for the scheduled drills, the MCP broker and the CostCrew crew added to Secret $IDM_SECRET (never printed)"
       fi
       ;;
     *)
@@ -172,11 +186,18 @@ identity_mint_settle() {
             || die "could not read Secret $IDM_BROKER_SECRET" ;;
         *) broker="$(gen 40)" || die "could not mint the broker's client key" ;;
       esac
-      [ "$felyx" != "$agents" ] && [ "$felyx" != "$drills" ] && [ "$felyx" != "$broker" ] \
-        && [ "$agents" != "$drills" ] && [ "$agents" != "$broker" ] && [ "$drills" != "$broker" ] \
+      case "$have" in
+        *"secret/$IDM_COSTCREW_SECRET"*)
+          costcrew="$(k_ "-n $IDM_NS get secret $IDM_COSTCREW_SECRET -o jsonpath='{.data.$IDM_COSTCREW_KEY}'" | base64 --decode)" \
+            || die "could not read Secret $IDM_COSTCREW_SECRET" ;;
+        *) costcrew="$(gen 40)" || die "could not mint the CostCrew crew's client key" ;;
+      esac
+      [ "$felyx" != "$agents" ] && [ "$felyx" != "$drills" ] && [ "$felyx" != "$broker" ] && [ "$felyx" != "$costcrew" ] \
+        && [ "$agents" != "$drills" ] && [ "$agents" != "$broker" ] && [ "$agents" != "$costcrew" ] \
+        && [ "$drills" != "$broker" ] && [ "$drills" != "$costcrew" ] && [ "$broker" != "$costcrew" ] \
         || die "two of the minted keys came out the same; deploy again"
-      printf '{"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"%s","namespace":"%s","labels":{"app.kubernetes.io/part-of":"agent-stack","%s":"minted"}},"stringData":{"%s":"%s:felyx,%s:agents,%s:drills,%s:broker"}}\n' \
-        "$IDM_SECRET" "$IDM_NS" "$IDM_LABEL" "$IDM_SECRET_KEY" "$felyx" "$agents" "$drills" "$broker" \
+      printf '{"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"%s","namespace":"%s","labels":{"app.kubernetes.io/part-of":"agent-stack","%s":"minted"}},"stringData":{"%s":"%s:felyx,%s:agents,%s:drills,%s:broker,%s:costcrew"}}\n' \
+        "$IDM_SECRET" "$IDM_NS" "$IDM_LABEL" "$IDM_SECRET_KEY" "$felyx" "$agents" "$drills" "$broker" "$costcrew" \
         | k_ "-n $IDM_NS create -f -" >/dev/null \
         || die "could not create Secret $IDM_SECRET"
       note "client keys: minted for Felyx and for your agents, in Secret $IDM_SECRET (never printed)"
@@ -221,8 +242,21 @@ identity_mint_settle() {
         | k_ "-n $IDM_NS create -f -" >/dev/null \
         || die "could not create Secret $IDM_BROKER_SECRET" ;;
   esac
+  # The CostCrew crew's own Secret: its TokenFuse client key, which 49-costcrew.yaml reads as
+  # ANTHROPIC_API_KEY (the runner sends it to the gateway as its x-api-key). Never a provider key.
+  case "$have" in
+    *"secret/$IDM_COSTCREW_SECRET"*)
+      [ "$(k_ "-n $IDM_NS get secret $IDM_COSTCREW_SECRET -o jsonpath='{.data.$IDM_COSTCREW_KEY}'" | base64 --decode)" = "$costcrew" ] \
+        || die "Secret $IDM_COSTCREW_SECRET does not hold the key Secret $IDM_SECRET binds to the CostCrew crew, so the crew would be refused 401. Delete $IDM_COSTCREW_SECRET and deploy again. Nothing was changed." ;;
+    *)
+      printf '{"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"%s","namespace":"%s","labels":{"app.kubernetes.io/part-of":"agent-stack","%s":"minted"}},"stringData":{"%s":"%s"}}\n' \
+        "$IDM_COSTCREW_SECRET" "$IDM_NS" "$IDM_LABEL" "$IDM_COSTCREW_KEY" "$costcrew" \
+        | k_ "-n $IDM_NS create -f -" >/dev/null \
+        || die "could not create Secret $IDM_COSTCREW_SECRET" ;;
+  esac
   drills=""
   broker=""
+  costcrew=""
 
   # The map, rebuilt from the trust domain on every run: the same bytes, unless the
   # domain moved. It holds no secret.

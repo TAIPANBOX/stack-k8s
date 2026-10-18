@@ -32,12 +32,11 @@
 #
 # NAMED EXCEPTIONS
 #
-# costcrew-crew, the scheduled CostCrew run, still reads its engine keys from
-# costcrew-engine into its environment. It is the one agent-facing container that does,
-# and it stays until its agent identity is decided: costcrew sends the analyst's own id
-# (agent://<domain>/<analyst>), which the gateway identity map cannot bind to one client
-# key without listing the roster. The exception names the container and the Secret, so a
-# second container, or the same container with another Secret, goes red.
+# None. costcrew-crew read its engine keys from costcrew-engine until v0.8.0 of CostCrew,
+# whose analysts are agent://<domain>/costcrew/<name>: the identity map binds that pattern
+# to the crew's own client key (costcrew-client-key, unit costcrew), so the crew now presents
+# that key to the gateway and holds no provider key. costcrew-engine stays in the provider
+# set below, so a container that reads it goes red.
 #
 # HOW, WITHOUT A YAML LIBRARY
 #
@@ -59,10 +58,7 @@ PROVIDER_ENV_RE = re.compile(r"(ANTHROPIC|OPENAI|OPENROUTER|COPILOT_KEY|JEV_KEY)
 CLIENT_KEY_RE = re.compile(r"-client-keys?$")
 
 # (kind, object name, container name, Secret) -> the reason it is allowed for now.
-EXCEPTIONS = {
-    ("CronJob", "costcrew-crew", "crew", "costcrew-engine"):
-        "costcrew sends agent://<domain>/<analyst>; no client key binds those ids yet",
-}
+EXCEPTIONS = {}
 
 POD_PATHS = {
     "Deployment": ["spec", "template", "spec"],
