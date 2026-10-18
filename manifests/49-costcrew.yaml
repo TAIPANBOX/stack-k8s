@@ -111,7 +111,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: costcrew
-          image: ghcr.io/taipanbox/costcrew:v0.7.0
+          image: ghcr.io/taipanbox/costcrew:v0.8.0
           imagePullPolicy: IfNotPresent
           args:
             - "-addr"
@@ -223,14 +223,10 @@ spec:
 # `cadence.ceiling_cents`, also set at /cadence. Neither alone is the
 # guarantee; the smaller of the two is, and a person sets both.
 #
-# It needs a key, which is not in this file and never should be:
-#
-#   kubectl -n agent-stack create secret generic costcrew-engine \
-#     --from-file=openrouter=/path/to/a/file/holding/the/key
-#
-# --from-file, not --from-literal: a literal puts the key in this machine's
-# shell history and in the argument list of a running process, where anyone
-# with a terminal on the box can read it out of `ps`.
+# It needs a key, and the key is minted with the gateway's client keys, not made
+# by hand: costcrew-client-key, the crew's own TokenFuse client key (the deploy
+# mints it, lib/identity-mint.sh). The crew holds no provider key; the gateway
+# does (CLAUDE.md invariant 53).
 #
 # It can also be run once, by hand, outside the schedule:
 #
@@ -294,7 +290,7 @@ spec:
           securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
           containers:
             - name: crew
-              image: ghcr.io/taipanbox/costcrew:v0.7.0
+              image: ghcr.io/taipanbox/costcrew:v0.8.0
               imagePullPolicy: IfNotPresent
               # Overrides the image's ENTRYPOINT (the console server): this is
               # another binary in the same image (since v0.4.0 it carries five:
@@ -327,6 +323,11 @@ spec:
                 - "/var/lib/stack/events/costcrew.ndjson"
                 - "-stack-host"
                 - "$(TRAILRYX_TRUST_DOMAIN)"
+                # The crew's model calls go through the gateway (CLAUDE.md invariant 53): the
+                # Anthropic route, presenting the crew's own client key. Without this flag the
+                # runner calls the provider directly, with whatever key it holds.
+                - "-gateway"
+                - "http://tokenfuse-gateway:4100"
               env:
                 # NOT optional, and that is the point.
                 #
@@ -355,18 +356,17 @@ spec:
                     configMapKeyRef: { name: stack-wiring, key: COSTCREW_CEILING }
                 - name: TRAILRYX_TRUST_DOMAIN
                   valueFrom: { configMapKeyRef: { name: stack-wiring, key: TRAILRYX_TRUST_DOMAIN } }
-                # optional: true on both, so this manifest applies to a cluster
-                # that has no key yet. The runner then refuses at the call and
-                # says which variable is missing, which is the right failure:
-                # loud, before anything is spent.
-                # NAMED EXCEPTION to CLAUDE.md invariant 53: this container reads its engine keys
-                # from costcrew-engine until costcrew's agent identity is decided (see that invariant).
-                - name: OPENROUTER_API_KEY
-                  valueFrom:
-                    secretKeyRef: { name: costcrew-engine, key: openrouter, optional: true }
+                # optional: true, so this manifest applies to a cluster that has no key yet. The
+                # runner then refuses at its first call and says which variable is missing: loud,
+                # before anything is spent. The value is the crew's own TokenFuse client key,
+                # minted with the gateway's keys (lib/identity-mint.sh), not a provider key: the
+                # runner sends it to the gateway as x-api-key, and the gateway holds the provider
+                # key (CLAUDE.md invariant 53). No OpenRouter key is read here, so an analyst
+                # hired with the OpenRouter engine is refused (no gateway route) until a
+                # gateway-openai route exists.
                 - name: ANTHROPIC_API_KEY
                   valueFrom:
-                    secretKeyRef: { name: costcrew-engine, key: anthropic, optional: true }
+                    secretKeyRef: { name: costcrew-client-key, key: client_key, optional: true }
               volumeMounts:
                 - { name: state, mountPath: /var/lib/costcrew }
                 # Read-write: the run APPENDS to the shared stream, the same
@@ -393,16 +393,11 @@ spec:
             - name: tmp
               emptyDir: { medium: Memory, sizeLimit: 128Mi }
 ---
-# The widest grant in this file, and the only one. The crew pod reaches a model
-# provider over HTTPS; the console pod is not selected by this rule and stays
-# unable to open anything.
-#
-# Same shape as heraldyx's mail egress: the whole public internet MINUS the
-# private ranges and the cloud metadata address every provider parks on
-# 169.254.169.254, so a compromised runner cannot turn an outbound grant into a
-# path back into the cluster or into the node's credentials.
-#
-# Port 443 only. A model API that needs plain HTTP is not one to hand a key to.
+# The crew's only outbound door is the gateway: the Anthropic route through
+# tokenfuse-gateway:4100 (CLAUDE.md invariant 53). The crew holds no provider key
+# and needs no internet, so the rule that used to open 443 to the public internet
+# is gone. The gateway admits this pod by gateway-ingress-costcrew in
+# 30-network-policy.yaml.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -413,12 +408,6 @@ spec:
   policyTypes: ["Egress"]
   egress:
     - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-            except:
-              - 10.0.0.0/8
-              - 172.16.0.0/12
-              - 192.168.0.0/16
-              - 169.254.0.0/16
+        - podSelector: { matchLabels: { app: tokenfuse-gateway } }
       ports:
-        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 4100 }

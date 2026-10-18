@@ -39,8 +39,8 @@ Feature: the provider key is held by the gateway only
     Then the gate allows it, because a client key is the agent's own credential
     -> no-provider-key: a client key under a provider-shaped name is the agent's own credential
 
-  Scenario: the named costcrew exception covers one container and one Secret only
-    Given the scheduled costcrew run reads its engine keys from costcrew-engine
-    When a second container reads the same Secret
-    Then the gate refuses it
-    -> no-provider-key: a second container takes costcrew-engine, the named exception does not cover it
+  Scenario: no container reads the old costcrew engine Secret, and the scheduled costcrew run holds no provider key
+    Given the scheduled costcrew run presents its own client key to the gateway
+    When a container reads costcrew-engine
+    Then the gate refuses it, because no exception covers that Secret any more
+    -> no-provider-key: a container takes costcrew-engine, and no exception covers it any more
