@@ -766,6 +766,34 @@ else
   echo "   secret stack-policy-db already exists, left as is"
 fi
 
+# wardryx-role: begin
+# wardryx 2.0.0 refuses a viewer key on POST /v1/decide and POST /v1/filter-tools.
+# A stack-keys Secret minted before that release gives the gateway's entry as
+# viewer, and an existing Secret is never rewritten by a re-run, so that entry is
+# rewritten here, role only: its secret, its org, any agent list and every other
+# entry stay as they were. Input and output travel on stdin and stdout, never as an
+# argument, so no process table ever shows a key.
+#   stdin:  line 1, the gateway's bare secret; line 2, the wardryx_keys spec
+#   stdout: the spec, with the gateway's entry at pep (unchanged when it was not viewer)
+wardryx_gateway_role_keys() {
+  awk -F, '
+    NR == 1 { gw = $0; next }
+    NR == 2 {
+      out = ""
+      for (i = 1; i <= NF; i++) {
+        e = $i
+        n = split(e, p, ":")
+        if (p[1] == gw && n >= 3 && p[3] == "viewer") p[3] = "pep"
+        e = p[1]
+        for (k = 2; k <= n; k++) e = e ":" p[k]
+        out = (i == 1 ? e : out "," e)
+      }
+      printf "%s", out
+    }'
+}
+b64dec() { base64 -d 2>/dev/null || base64 -D; }
+# wardryx-role: end
+
 if ! k_ "-n agent-stack get secret stack-keys" >/dev/null 2>&1; then
   say "plane credentials (generated, never committed)"
   CLOUD_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
@@ -794,7 +822,7 @@ if ! k_ "-n agent-stack get secret stack-keys" >/dev/null 2>&1; then
       --from-file=declassify_key=/dev/stdin \
       --from-literal=cloud_keys='$CLOUD_SECRET:default:admin' \
       --from-literal=cloud_admin='$CLOUD_SECRET' \
-      --from-literal=wardryx_keys='$WARDRYX_ADMIN_SECRET:default:admin,$WARDRYX_GATEWAY_SECRET:default:viewer' \
+      --from-literal=wardryx_keys='$WARDRYX_ADMIN_SECRET:default:admin,$WARDRYX_GATEWAY_SECRET:default:pep' \
       --from-literal=wardryx_admin='$WARDRYX_ADMIN_SECRET' \
       --from-literal=wardryx_gateway='$WARDRYX_GATEWAY_SECRET' \
       --from-literal=gateway_admin='$GATEWAY_ADMIN_SECRET'" >/dev/null
@@ -833,6 +861,22 @@ else
     DECLASSIFY_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     printf '%s' "{\"stringData\":{\"declassify_key\":\"$DECLASSIFY_SECRET\"}}" | k_ "-n agent-stack patch secret stack-keys --type merge --patch-file /dev/stdin" >/dev/null
     echo "   added declassify_key to the existing stack-keys secret (read it: kubectl -n agent-stack get secret stack-keys -o jsonpath='{.data.declassify_key}' | base64 -d)"
+  fi
+
+  # wardryx 2.0.0 refuses a viewer key on /v1/decide (the block above). The
+  # gateway's entry in wardryx_keys is rewritten to pep, read before write: a read
+  # that fails stops the installer here, and the new spec goes in on STDIN, never
+  # as an argument.
+  WARDRYX_GW_B64="$(k_ "-n agent-stack get secret stack-keys -o jsonpath={.data.wardryx_gateway}")"
+  WARDRYX_KEYS_B64="$(k_ "-n agent-stack get secret stack-keys -o jsonpath={.data.wardryx_keys}")"
+  if [ -n "$WARDRYX_GW_B64" ] && [ -n "$WARDRYX_KEYS_B64" ]; then
+    WARDRYX_GW_PLAIN="$(printf '%s' "$WARDRYX_GW_B64" | b64dec)"
+    WARDRYX_KEYS_PLAIN="$(printf '%s' "$WARDRYX_KEYS_B64" | b64dec)"
+    WARDRYX_KEYS_NEW="$(printf '%s\n%s\n' "$WARDRYX_GW_PLAIN" "$WARDRYX_KEYS_PLAIN" | wardryx_gateway_role_keys)"
+    if [ "$WARDRYX_KEYS_NEW" != "$WARDRYX_KEYS_PLAIN" ]; then
+      printf '%s' "{\"stringData\":{\"wardryx_keys\":\"$WARDRYX_KEYS_NEW\"}}" | k_ "-n agent-stack patch secret stack-keys --type merge --patch-file /dev/stdin" >/dev/null
+      echo "   wardryx_keys: the gateway's entry moves from viewer to pep (its secret is unchanged)"
+    fi
   fi
 fi
 

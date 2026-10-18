@@ -763,7 +763,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.14.0\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.15.0\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 # The gateway's declassify key (invariant 27). POST /v1/fuse/declassify lifts a
@@ -818,7 +818,7 @@ run_case "declassify-is-keyed: an installer never gives an existing Secret the k
 # Each must say it measured nothing, never OK.
 run_case "declassify-is-keyed: no gateway container left to judge" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.14.0\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.15.0\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the declassify key"
 
 run_case "declassify-is-keyed: no installer left to read" fail \
@@ -1423,7 +1423,7 @@ run_case "run-budget-ceiling-is-set: a comment next to the ceiling changes" pass
 
 run_case "run-budget-ceiling-is-set: no gateway container left to judge" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.14.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.15.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')" \
 	"measured nothing about the run-budget ceiling"
 
 run_case "run-budget-ceiling-is-set: budget/ceiling.sh taken away" fail \
@@ -1485,7 +1485,7 @@ run_case "typed-mode-is-honest: the broker fails open" fail \
 run_case "typed-mode-is-honest: the broker uses the admin key" fail \
 	'./scripts/typed-mode-is-honest.sh' \
 	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "key: wardryx_gateway \x7d \x7d", "key: wardryx_admin \x7d \x7d")')" \
-	"does not use the viewer key"
+	"does not use the pep key"
 
 run_case "typed-mode-is-honest: the broker waits less than the proxy may take" fail \
 	'./scripts/typed-mode-is-honest.sh' \
@@ -1857,8 +1857,8 @@ run_case "temp: the console's temp is mounted read-only" fail \
 
 run_case "temp: no container left that needs a temp" fail \
 	'./scripts/read-only-root-has-a-temp.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.6.0", "image: registry.invalid/costcrew:v0.6.0")
-edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.6.0", "image: registry.invalid/costcrew:v0.6.0")')" \
+	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.7.0", "image: registry.invalid/costcrew:v0.6.0")
+edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.7.0", "image: registry.invalid/costcrew:v0.6.0")')" \
 	"measured NOTHING"
 
 run_case "temp: TMPDIR inside the data volume instead of a /tmp mount" pass \
@@ -2488,6 +2488,51 @@ run_case "typed-door-is-minted: no launcher is left to judge" fail \
 	"measured NOTHING about the launchers"
 
 echo
+run_case "wardryx-key-is-pep: a fresh secret mints the gateway's key as viewer again" fail \
+	'./scripts/wardryx-gateway-key-is-pep.sh' \
+	"$(py 'edit("install.sh", "$WARDRYX_GATEWAY_SECRET:default:pep", "$WARDRYX_GATEWAY_SECRET:default:viewer")')" \
+	"does not mint the gateway's wardryx_keys entry as pep"
+
+run_case "wardryx-key-is-pep: the aws installer mints the gateway's key as viewer again" fail \
+	'./scripts/wardryx-gateway-key-is-pep.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "$WARDRYX_GATEWAY_SECRET:default:pep", "$WARDRYX_GATEWAY_SECRET:default:viewer")')" \
+	"does not mint the gateway's wardryx_keys entry as pep"
+
+run_case "wardryx-key-is-pep: the hub gives a site's gateway viewer again" fail \
+	'./scripts/wardryx-gateway-key-is-pep.sh' \
+	"$(py 'edit("hub/add-site.sh", "NEW_WARDRYX_ENTRY=\"${WARDRYX_SECRET}:default:pep\"", "NEW_WARDRYX_ENTRY=\"${WARDRYX_SECRET}:default:viewer\"")')" \
+	"does not give a site's gateway entry pep"
+
+run_case "wardryx-key-is-pep: the transform rewrites every key, not the gateway's" fail \
+	'./scripts/wardryx-gateway-key-is-pep.sh' \
+	"$(py 'edit("install.sh", "if (p[1] == gw && n >= 3 && p[3] == \"viewer\") p[3] = \"pep\"", "if (n >= 3 && p[3] == \"viewer\") p[3] = \"pep\"")')" \
+	"is not the one install.sh has"
+
+run_case "wardryx-key-is-pep: the transform changes the gateway's secret" fail \
+	'./scripts/wardryx-gateway-key-is-pep.sh' \
+	"$(py 'edit("install.sh", "        e = p[1]\n        for (k = 2; k <= n; k++) e = e \":\" p[k]", "        e = p[1] \"x\"\n        for (k = 2; k <= n; k++) e = e \":\" p[k]")')" \
+	"is not the one install.sh has"
+
+run_case "wardryx-key-is-pep: the migration is not in the aws installer" fail \
+	'./scripts/wardryx-gateway-key-is-pep.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "| wardryx_gateway_role_keys)\"\n", "| true)\"\n")')" \
+	"never runs the migration"
+
+run_case "wardryx-key-is-pep: the migration writes the key on the command line" fail \
+	'./scripts/wardryx-gateway-key-is-pep.sh' \
+	"$(py 'edit("install.sh", "printf '\''%s'\'' \"{\\\"stringData\\\":{\\\"wardryx_keys\\\":\\\"$WARDRYX_KEYS_NEW\\\"}}\" | k_ \"-n agent-stack patch secret stack-keys --type merge --patch-file /dev/stdin\" >/dev/null", "k_ \"-n agent-stack patch secret stack-keys --type merge -p $WARDRYX_KEYS_NEW\" >/dev/null")')" \
+	"puts a key on a command line"
+
+run_case "wardryx-key-is-pep: a pin moves back to the old wardryx" fail \
+	'./scripts/wardryx-gateway-key-is-pep.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.0.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
+	"does not pin wardryx v2.0.0"
+
+run_case "wardryx-key-is-pep: a reworded comment is not a fault" pass \
+	'./scripts/wardryx-gateway-key-is-pep.sh' \
+	"$(py 'edit("install.sh", "policy it enforces is not one. wardryx 2.0.0 refuses a viewer", "policy it enforces is not one; wardryx 2.0.0 refuses a viewer")')"
+
+
 if [ "${TEETH_LIST:-}" != 1 ] && [ -n "$(git status --porcelain)" ]; then
 	printf 'FAIL: this script left the tree dirty, so it cannot be trusted about anything above\n'
 	git status --porcelain | head -5
@@ -2810,7 +2855,7 @@ run_case "broker-blocks-raw-secrets: the broker cannot reach wardryx" fail \
 
 run_case "broker-blocks-raw-secrets: the broker image cannot be pulled" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.14.0\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.15.0\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
 	"could not pull ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag"
 
 run_case "broker-blocks-raw-secrets: no broker left to judge" fail \

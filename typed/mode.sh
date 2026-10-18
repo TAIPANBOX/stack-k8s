@@ -376,7 +376,7 @@ with_training() { # env-fragment
 }
 
 # The broker's wardryx settings. manifests/52 asks wardryx itself about every tool call
-# (CLAUDE.md invariant 51): mode enforce, fail closed, the gateway's VIEWER key (`wardryx_gateway`
+# (CLAUDE.md invariant 51): mode enforce, fail closed, the gateway's PEP key (`wardryx_gateway`
 # in stack-keys, minted by every installer: /v1/decide needs any authenticated principal, and an
 # admin key here would let the enforcement point rewrite the policy it enforces). Without the risk
 # signal the broker is manifests/52 byte for byte. With it, ONLY two lines move: the URL, to

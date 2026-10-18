@@ -155,7 +155,7 @@ spec:
           # The gateway's own image and pin, exactly (see pinned-images.sh
           # and CLAUDE.md invariant 7): this is a subcommand of the same
           # binary, not a separate published artifact.
-          image: ghcr.io/taipanbox/tokenfuse:v1.14.0
+          image: ghcr.io/taipanbox/tokenfuse:v1.15.0
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse"]
           args: ["mcp-broker"]
@@ -198,7 +198,7 @@ spec:
             # cannot attribute (no x-fuse-agent-id) is refused. Until 2026-10-17 the
             # broker had no hook unless the typed risk signal was on, so a tool the
             # policy denied was called anyway. Fail closed, as the gateway does; the
-            # gateway's own VIEWER key, which may call /v1/decide and nothing else.
+            # gateway's own PEP key, which may ask /v1/decide and /v1/filter-tools and read what a viewer reads.
             # With --typed-risk-signal, typed/mode.sh moves only the URL to typryx's
             # wardryx-proxy and gives a tool call the longer wait the proxy needs.
             - { name: TOKENFUSE_WARDRYX_MODE, value: "enforce" }

@@ -106,12 +106,29 @@ WARDRYX_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 # every other key in this stack-keys Secret already uses; there is one
 # tokenfuse-cloud per hub, not one per org.
 NEW_CLOUD_ENTRY="${CLOUD_SECRET}:default:ingest:${SITE}"
-# key:tenant:role triples (wardryx's own spec, 10-planes.yaml), viewer: a
-# site's gateway needs to ask /v1/decide, not to write policy.
-NEW_WARDRYX_ENTRY="${WARDRYX_SECRET}:default:viewer"
+# key:tenant:role triples (wardryx's own spec, 10-planes.yaml), pep: a site's
+# gateway asks /v1/decide and /v1/filter-tools, and does not write policy. wardryx
+# 2.0.0 refuses a viewer on those routes.
+NEW_WARDRYX_ENTRY="${WARDRYX_SECRET}:default:pep"
 
 APPENDED_CLOUD="${CLOUD_KEYS},${NEW_CLOUD_ENTRY}"
-APPENDED_WARDRYX="${WARDRYX_KEYS},${NEW_WARDRYX_ENTRY}"
+# Every viewer entry already in this hub's wardryx_keys is a site gateway's key
+# (this script is the only writer of one), so each moves to pep before the new
+# one is appended: wardryx 2.0.0 refuses a viewer on /v1/decide. The spec goes to
+# awk on stdin, never as an argument.
+MIGRATED_WARDRYX="$(printf '%s' "$WARDRYX_KEYS" | awk -F, '{
+  out = ""
+  for (i = 1; i <= NF; i++) {
+    e = $i
+    n = split(e, p, ":")
+    if (n >= 3 && p[3] == "viewer") p[3] = "pep"
+    e = p[1]
+    for (k = 2; k <= n; k++) e = e ":" p[k]
+    out = (i == 1 ? e : out "," e)
+  }
+  printf "%s", out
+}')"
+APPENDED_WARDRYX="${MIGRATED_WARDRYX},${NEW_WARDRYX_ENTRY}"
 
 say "appending to stack-keys (existing keys untouched)"
 # The patch travels on stdin, never as an argument: an argument is in `ps` for
