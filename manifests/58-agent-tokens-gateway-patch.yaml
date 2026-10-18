@@ -19,11 +19,6 @@
 #   REVOCATIONS_MAX_AGE_SECS=60     a list older than this is refused: the stop reaches every
 #                                   door within about one poll (12 s) while vouchryx answers, and
 #                                   within 60 s of its going dark
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: tokenfuse-gateway
-  namespace: agent-stack
 spec:
   template:
     spec:

@@ -1,9 +1,4 @@
 # Reverses 58-agent-tokens-vouchryx-patch.yaml.
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: vouchryx
-  namespace: agent-stack
 spec:
   template:
     spec:

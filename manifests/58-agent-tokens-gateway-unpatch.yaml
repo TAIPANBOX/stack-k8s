@@ -1,10 +1,5 @@
 # Reverses 58-agent-tokens-gateway-patch.yaml: the switch and the two revocation settings are
 # deleted, and the audience goes back to the empty value 54's patch leaves for delegation.
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: tokenfuse-gateway
-  namespace: agent-stack
 spec:
   template:
     spec:

@@ -11,11 +11,6 @@
 #
 # A ConfigMap read here is not optional: vouchryx refuses to start without the registry it
 # was told to load, which is the point.
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: vouchryx
-  namespace: agent-stack
 spec:
   template:
     spec:
