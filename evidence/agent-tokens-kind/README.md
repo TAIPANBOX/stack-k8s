@@ -20,8 +20,8 @@ Measured 2026-10-18:
   key, 401; a stranger's proof, 401; a forged token and no credential, 401; a replayed proof on
   its second use, 401.
 - off (after down.sh): the agent token is refused 401 and a static key still gets 200.
-- ban (ban_trials.py 6): refused after 1.69, 9.68, 9.42, 9.47, 9.63, 9.41 s; mean 8.22 s.
-- fail closed (failclosed.py): vouchryx down; the agent token refused at 51.6 s; the static key 200.
+- ban (ban_trials.py): six trials on the first configuration: refused after 1.69, 9.68, 9.42, 9.47, 9.63, 9.41 s; three trials on the final configuration (the patch bodies applied by up.sh): 10.48, 9.51, 9.59 s. Nine trials: 1.69 to 10.48 s, mean 8.88 s; the gateway polls every 12 s.
+- fail closed (failclosed.py): vouchryx down; the agent token refused at 51.6 s and, on a second run, at 57.9 s; the static key 200 throughout. The list is refused at its 60 s age limit, so this is the bound.
 
 NOT covered by this run: the k3s issuer string (kind's `https://kubernetes.default.svc.cluster.local`
 was read, not k3s's); the kubelet's own rotation of a projected token; a ban that must survive a

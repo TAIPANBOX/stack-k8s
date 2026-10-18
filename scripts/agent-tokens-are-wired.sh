@@ -133,8 +133,9 @@ ex = read(EX)
 if ex:
     if not re.search(r'taipanbox\.dev/agent-token:\s*"true"', ex):
         fail(f"{EX} is not labelled taipanbox.dev/agent-token: \"true\", so the network rules do not select it")
-    if not re.search(r'automountServiceAccountToken:\s*false', ex):
-        fail(f"{EX} does not turn off the default ServiceAccount token")
+    pod = ex.split("template:", 1)[1] if "template:" in ex else ""
+    if not re.search(r'automountServiceAccountToken:\s*false', pod):
+        fail(f"{EX} does not turn off the default ServiceAccount token on its pod")
     if "serviceAccountName:" not in ex:
         fail(f"{EX} names no ServiceAccount of its own")
     aud = re.search(r'audience:\s*"([^"]*)"', ex)

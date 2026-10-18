@@ -2924,27 +2924,27 @@ AGT=./scripts/agent-tokens-are-wired.sh
 
 run_case "agent-tokens: the gateway patch turns the door off" fail \
 	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "{ name: TOKENFUSE_AGENT_TOKENS, value: \"accept\" }", "{ name: TOKENFUSE_AGENT_TOKENS, value: \"off\" }")')" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_AGENT_TOKENS, value: \"accept\"", "TOKENFUSE_AGENT_TOKENS, value: \"off\"")')" \
 	"does not set TOKENFUSE_AGENT_TOKENS to exactly accept once"
 
 run_case "agent-tokens: the gateway door starts with no audience" fail \
 	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx:4310\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"\" }")')" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx:4310\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"\"")')" \
 	"leaves TOKENFUSE_DELEGATION_AUDIENCE empty"
 
 run_case "agent-tokens: the gateway accepts a wider audience than vouchryx's issuer" fail \
 	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx:4310\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx.other:4310\" }")')" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx:4310\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx.other:4310\"")')" \
 	"not vouchryx's issuer"
 
 run_case "agent-tokens: a stopped agent keeps working while the list is unreadable" fail \
 	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "{ name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: \"closed\" }", "{ name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: \"open\" }")')" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: \"closed\"", "TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: \"open\"")')" \
 	"does not set TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE to closed"
 
 run_case "agent-tokens: the revocation list may be 300 s old" fail \
 	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "{ name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: \"60\" }", "{ name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: \"300\" }")')" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: \"60\"", "TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: \"300\"")')" \
 	"at most 60 seconds"
 
 run_case "agent-tokens: the door is on in the default gateway" fail \
