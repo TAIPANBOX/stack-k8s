@@ -1,0 +1,103 @@
+
+== cluster keyryx-l2
+Creating cluster "keyryx-l2" ...
+ • Ensuring node image (kindest/node:v1.37.0) 🖼️  ...
+ ✓ Ensuring node image (kindest/node:v1.37.0) 🖼️
+ • Preparing nodes 📦   ...
+ ✓ Preparing nodes 📦 
+ • Writing configuration 📜  ...
+ ✓ Writing configuration 📜
+ • Starting control-plane 🕹️  ...
+ ✓ Starting control-plane 🕹️
+ • Installing CNI 🔌  ...
+ ✓ Installing CNI 🔌
+ • Installing StorageClass 💾  ...
+ ✓ Installing StorageClass 💾
+ • Waiting ≤ 2m0s for control-plane = Ready ⏳  ...
+ ✓ Waiting ≤ 2m0s for control-plane = Ready ⏳
+ • Ready after 16s 💚
+Set kubectl context to "kind-keyryx-l2"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-keyryx-l2
+
+Have a question, bug, or feature request? Let us know! https://kind.sigs.k8s.io/#community 🙂
+NAME                      STATUS   ROLES           AGE   VERSION
+keyryx-l2-control-plane   Ready    control-plane   21s   v1.37.0
+
+== namespace, the events volume (one node: ReadWriteOnce is shared by pods on it)
+
+== keyryx/up.sh steps 1 to 3 (no wardryx patch: kind has no wardryx)
+minted keyryx-root
+minted keyryx-witness-root
+minted keyryx-wardryx-client
+serviceaccount/keyryx-custody created
+serviceaccount/keyryx-witness created
+persistentvolumeclaim/keyryx-state created
+persistentvolumeclaim/keyryx-witness-state created
+deployment.apps/keyryx-custody created
+deployment.apps/keyryx-witness created
+service/keyryx-custody created
+service/keyryx-witness created
+networkpolicy.networking.k8s.io/keyryx-custody-ingress created
+networkpolicy.networking.k8s.io/keyryx-witness-ingress created
+Waiting for deployment "keyryx-custody" rollout to finish: 0 of 1 updated replicas are available...
+deployment "keyryx-custody" successfully rolled out
+deployment "keyryx-witness" successfully rolled out
+NAME                             READY   STATUS    RESTARTS   AGE   IP           NODE                      NOMINATED NODE   READINESS GATES
+keyryx-custody-f499ff74c-c8vdk   1/1     Running   0          12s   10.244.0.9   keyryx-l2-control-plane   <none>           <none>
+keyryx-witness-54c676576-md2gw   1/1     Running   0          12s   10.244.0.8   keyryx-l2-control-plane   <none>           <none>
+
+== 1. custody: health and the published key set
+{"status":"ok"}
+ <- healthz
+{"keys":[{"alg":"ES256","crv":"P-256","kid":"JKRSdqWWilXpjz12_z11S9LC0xDwuap3_2QsTXMLoDo","kty":"EC","use":"sig","x":"m_rOEjGNNvmDJ4IvW6Be1X9yPH3b3DaTYGpFLUazTUI","y":"Qk7FRxzBQ7wLesmZv-NFXeiHaqjyoYyFgqS5NnvdozY"}]}
+ <- jwks (truncated)
+
+== 2. a consumer with the minted key signs; a stranger does not
+good bearer:
+  HTTP/1.1 200 OK
+  Cache-Control: no-store
+  Content-Type: application/json
+  X-Content-Type-Options: nosniff
+  Date: Sun, 18 Oct 2026 21:28:05 GMT
+  Content-Length: 283
+  Connection: close
+  
+{"alg":"ES256","kid":"JKRSdqWWilXpjz12_z11S9LC0xDwuap3_2QsTXMLoDo","public_key_b64":"BJv6zhIxjTb5gyeCL1ugXtV/cjx929w2k2BqRS1Gs01CQk7FRxzBQ7wLesmZv+NFXeiHaqjyoYyFgqS5NnvdozY=","signature_b64":"SSzV3sqlGrb3J6
+wrong bearer:
+  HTTP/1.1 401 Unauthorized
+wget: server returned error: HTTP/1.1 401 Unauthorized
+no bearer:
+  HTTP/1.1 401 Unauthorized
+wget: server returned error: HTTP/1.1 401 Unauthorized
+
+== 3. two producer uids on one events volume
+producer-a append: exit 0
+-rw-rw----    1 20001    20001           27 Oct 18 21:28 /events/wardryx.ndjson
+producer-b append to a stream it does not own: exit 1
+sh: can't create /events/wardryx.ndjson: Permission denied
+-rw-rw----    1 20001    20001           27 Oct 18 21:28 /events/wardryx.ndjson
+
+== 4. a read-only mount of the event streams (the witness's mount) refuses a write
+sh: can't create /events/witness-was-here: Read-only file system
+write exit=1
+
+== 5. the witness: its log, and its head after it has read the streams (one interval is 60 s)
+wget: download timed out
+command terminated with exit code 1
+ <- witness head (probe carries keyryx-consumer, so step 6 decides whether it may reach the witness)
+Defaulted container "keyryx-witness" out of: keyryx-witness, root-key-copy (init)
+2026/10/18 21:28:03 keyryx witness v0.1.0: listening on 0.0.0.0:4341; reading /var/lib/stack/events every 1m0s
+
+== 6. NetworkPolicy: which pod reaches which role (does this CNI enforce them?)
+daemonset.apps/kindnet daemonset.apps/kube-proxy 
+label none: custody=no answer witness=no answer
+label consumer: custody=HTTP/1.1 200 witness=no answer
+label witness-client: custody=no answer witness=HTTP/1.1 404
+no answer
+
+== cleanup of probe pods
+Deleting cluster "keyryx-l2" ...
+Deleted nodes: ["keyryx-l2-control-plane"]
+RUN_EXIT=0

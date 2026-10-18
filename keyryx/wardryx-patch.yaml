@@ -1,0 +1,46 @@
+# wardryx signs its approval tokens through Keyryx (wardryx v2.2.0, the 2.2 signer).
+# Applied by keyryx/up.sh with `kubectl patch --type strategic`, never by
+# `apply -k`: a patch leaves the last-applied annotation alone, so the default
+# manifests/10-planes.yaml stays what the default install applies (GOTCHAS 113,
+# invariant 24's mechanism). keyryx/down.sh reverses it with wardryx-unpatch.yaml.
+#
+# The credential is a bearer key (key_digest in keyryx/policy.json.tmpl), read
+# by wardryx once at start. It is not a projected service-account token: wardryx
+# v2.2.0 reads its credential file once, and a projected token expires in an
+# hour (wave2 section 5.2 wanted that path; see the L2 report).
+#
+# The label keyryx-consumer: "true" is what lets this pod reach custody through
+# keyryx-custody-ingress (keyryx-reaches-only-consumers gate).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wardryx
+  namespace: agent-stack
+spec:
+  template:
+    metadata:
+      labels:
+        keyryx-consumer: "true"
+    spec:
+      containers:
+        - name: wardryx
+          image: ghcr.io/taipanbox/wardryx:v2.2.0
+          env:
+            - name: WARDRYX_APPROVAL_SIGNER
+              value: keyryx
+            - name: WARDRYX_KEYRYX_URL
+              value: http://keyryx-custody.agent-stack.svc.cluster.local:4340
+            - name: WARDRYX_KEYRYX_CREDENTIAL_FILE
+              value: /run/keyryx-client/credential
+          volumeMounts:
+            - name: keyryx-client
+              mountPath: /run/keyryx-client
+              readOnly: true
+      volumes:
+        - name: keyryx-client
+          secret:
+            secretName: keyryx-wardryx-client
+            defaultMode: 0440
+            items:
+              - key: credential
+                path: credential

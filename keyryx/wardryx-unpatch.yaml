@@ -1,0 +1,29 @@
+# Reverses keyryx/wardryx-patch.yaml: the 2.1.0 image the default manifest
+# pins, the three signer variables and the client volume gone, the label gone.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wardryx
+  namespace: agent-stack
+spec:
+  template:
+    metadata:
+      labels:
+        keyryx-consumer: null
+    spec:
+      containers:
+        - name: wardryx
+          image: ghcr.io/taipanbox/wardryx:v2.1.0
+          env:
+            - name: WARDRYX_APPROVAL_SIGNER
+              $patch: delete
+            - name: WARDRYX_KEYRYX_URL
+              $patch: delete
+            - name: WARDRYX_KEYRYX_CREDENTIAL_FILE
+              $patch: delete
+          volumeMounts:
+            - name: keyryx-client
+              $patch: delete
+      volumes:
+        - name: keyryx-client
+          $patch: delete

@@ -128,6 +128,9 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/wardryx-gateway-key-is-pep.sh # invariant 52
 ./scripts/no-provider-key-outside-the-gateway.sh # invariant 53
 ./scripts/agent-tokens-are-wired.sh # invariant 54
+./scripts/keyryx-root-is-not-in-env.sh # invariant 55 (Keyryx, opt-in: keyryx/up.sh)
+./scripts/witness-is-separate.sh   # invariant 56 (Keyryx, opt-in)
+./scripts/keyryx-reaches-only-consumers.sh # invariant 57 (Keyryx, opt-in)
 ./scripts/bus-names-match-the-source-rule.sh # invariant 30
 ./scripts/chain-verifier-watches-the-bus.sh # invariant 31
 ./scripts/mounted-keys-are-readable.sh # invariant 32; GOTCHAS 117
@@ -1190,6 +1193,54 @@ an absent invariant.
 53. **The gateway holds the provider key, from a file it mounts, and no agent-facing container holds one.** `@decided 2026-10-18` (paraphrased, from the agent-security review of 2026-10-17): the gateway is the one place a provider key lives, so a caller's own key is refused and an agent never sees the key that pays. `@claude 2026-10-18`: the gateway reads `TOKENFUSE_UPSTREAM_KEY_FILE` (tokenfuse v1.16.0, which refuses a caller's provider credential when the file is set) from the Secret `gateway-upstream-key`, mounted read only into the gateway alone, not optional, mode 0440 with `fsGroup` 10001. The Secret is made by the deploy from `--anthropic-key-file` (`lib/upstream-key.sh`), on stdin, once; a re-run keeps it. The console no longer reads a provider key from `stack-copilot` and sends Felyx's gateway client key instead; `55-copilot-cloud.yaml` is a model switch with no key. A container other than a gateway start may not read a provider Secret, nor take a provider-shaped variable (ANTHROPIC, OPENAI, OPENROUTER, COPILOT_KEY, JEV_KEY) from a Secret that is not a client key. `@claude 2026-10-18`: no named exception remains. The scheduled CostCrew run (costcrew v0.8.0) sends the analyst's own agent id, `agent://<domain>/costcrew/<name>`, and the identity map binds `agent://<td>/costcrew/*` to the crew's own client key `costcrew-client-key` (unit `costcrew`, invariant 50); the crew routes its Anthropic calls through the gateway (`-gateway`), holds no provider key, and reads no Secret but that client key. `costcrew-engine` stays in the provider set, so a container that reads it goes red. Typed-answer backends (typryx's Jev and own-model keys) are file mounts under invariant 26 and are outside this gate, which covers the manifests in `manifests/`, not the typed renders. Breaking, on purpose: a deployment that sets the key file refuses a caller that still sends its own provider key (401 `provider_credential_refused`); the migration is the TokenFuse key in `x-fuse-key`, or in `x-api-key` or `Authorization: Bearer`. *(gate: `scripts/no-provider-key-outside-the-gateway.sh`, nine teeth cases in `scripts/gates-have-teeth.sh`, both callers; scenarios in `features/the-provider-key-is-held-by-the-gateway.feature`. Not covered: that a running gateway refuses a caller's key and uses its own, which needs a cluster and a published v1.16.0 image; the value of the Secret, which no manifest holds; and whether the key file is readable by the pod on a live cluster, which the mounted-keys gate reads from the manifest only.)*
 
 54. **An agent's own token is a door credential only when the opt-in turns it on, and a stop reaches every door.** `@decided 2026-10-17` (paraphrased, wave 1 design 1.3 to 1.7): an agent holds a short-lived token bound to a proof key, from its registry entry, and a ban on that entry stops it at every door. `@claude 2026-10-18`: the switch (`TOKENFUSE_AGENT_TOKENS=accept`) and the vouchryx registry are set by `agent-tokens/up.sh`, applied only after the delegation plane (invariant 24) is up, and reversed by `agent-tokens/down.sh`; no default manifest names them. The gateway's audience becomes vouchryx's issuer (from empty), the revocation list fails closed and is at most 60 s old; the agent registry and the cluster's workload issuer and JWKS are ConfigMaps; an agent pod takes a projected token for vouchryx's audience, for 600 s at most, and no Kubernetes API token. A ban takes effect at the gateway within one poll of 12 s (measured below). Breaking, when on: delegated calls minted for any audience other than vouchryx's issuer are refused, because the delegation door's audience moves from empty to that issuer. The MCP broker holds its own client key: `broker` is the fourth minted key (after `felyx`, `agents` and `drills`), unit `broker`, bound to `agent://<td>/*`, and its Secret `broker-taint-key` is mounted as `TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE` when the door is on, with `TOKENFUSE_MCP_TAINT_FAILMODE` closed; `agent-tokens/up.sh` refuses to turn the door on without that Secret or the key's entry. Not built: `require`, which refuses static keys, is a later dated step (D8). *(gate: `scripts/agent-tokens-are-wired.sh`, eighteen teeth cases in `scripts/gates-have-teeth.sh` (seventeen fail, one pass), both callers; scenarios in `features/agent-tokens-at-the-door.feature`; @measured 2026-10-18 on kind (kindest/node 1.37.0) with the real `vouchryx:v0.4.0` and `tokenfuse:v1.16.0` images, `evidence/agent-tokens-kind/`: admitted, refused, replayed and banned as the scenarios say; a ban was refused within 10.5 s over nine trials; with vouchryx down, an agent token was refused at 51.6 s and 57.9 s and a static key kept working; one broker call by agent token returned 200 with the gateway's taint check answering allow (the broker fails closed, so a refused check is not a 200; `evidence/agent-tokens-kind/broker_call.py`). Not covered: the real k3s issuer string (kind's issuer was read, not k3s's), a cluster's projected-token rotation, a live Felyx or costcrew run, a durable ban across a vouchryx restart on a PVC, and a direct NetworkPolicy probe (kind's enforcement was inferred from the broker's name lookups; the cluster was deleted before a probe).)*
+
+55. **A Keyryx root key never reaches a process as an environment variable, a
+    secretKeyRef or a literal; its own init container copies it into memory for
+    its own role.** `@decided 2026-10-18` (paraphrased, the hybrid architecture
+    of the 2026-10-17 agent-security review): key custody and the record witness
+    run as Keyryx, off every request path, and each holds its own root key. `@claude
+    2026-10-18`: `keyryx/manifests/59-keyryx.yaml` mounts the Secret `keyryx-root`
+    (or `keyryx-witness-root`) in the init container `root-key-copy` only. That
+    container runs as the role's uid, copies the key to a memory-backed volume and
+    sets it 0400, because keyryx refuses any key file a group or other user can
+    read and a Secret volume cannot be owned by the role's uid. The copy is done by
+    a busybox image pinned by digest, since the distroless keyryx image has no shell.
+    *(gate: `scripts/keyryx-root-is-not-in-env.sh`; six cases in
+    `scripts/gates-have-teeth.sh`, one a pass case; scenarios in
+    `features/keyryx-custody-and-witness.feature`. Not covered: whether the copy
+    succeeds on a live cluster, which `evidence/keyryx-kind/` shows for kind only.)*
+
+56. **The Keyryx witness and custody share nothing but the image.** `@decided
+    2026-10-18` (paraphrased): the witness exists to disagree with custody after a
+    compromise, so it must not share custody's identity, state or keys. `@claude
+    2026-10-18`: the two Deployments name different ServiceAccounts, run as
+    different uids (20101 custody, 20100 witness), mount different state claims and
+    different root key Secrets, and the witness mounts the event streams
+    `stack-events` read only and writes its alerts to its own volume, not into the
+    event directory. The witness therefore reads the record without being able to
+    write it.
+    *(gate: `scripts/witness-is-separate.sh`; eight cases in
+    `scripts/gates-have-teeth.sh`, one a pass case; scenarios in
+    `features/keyryx-custody-and-witness.feature`. Not covered: the uid separation
+    on a live cluster with the real event producers, and what the witness reports
+    when the stream directory is missing.)*
+
+57. **Only consumers labelled `keyryx-consumer: "true"` reach custody on 4340, only
+    `keyryx-witness-client: "true"` reaches the witness on 4341, and neither
+    Keyryx role has an egress rule.** `@decided 2026-10-18` (paraphrased): custody
+    signs with keys it holds, so reachability is the first control and the policy
+    file is the second. `@claude 2026-10-18`: the NetworkPolicies
+    `keyryx-custody-ingress` and `keyryx-witness-ingress` in `59-keyryx.yaml` admit
+    labelled pods only and declare `egress: []`; the label is set only on the
+    wardryx pod by `keyryx/wardryx-patch.yaml`. `@measured 2026-10-18`, kind
+    v1.37.0 (kindnet), `evidence/keyryx-kind/run.sh` step 6: a pod with no label
+    reached neither role, a `keyryx-consumer` pod reached custody (200) and not the
+    witness, a `keyryx-witness-client` pod reached the witness and not custody, so
+    this CNI enforces the policies. The production CNI of the launchers is not run.
+    *(gate: `scripts/keyryx-reaches-only-consumers.sh`; five cases in
+    `scripts/gates-have-teeth.sh`, one a pass case; scenarios in
+    `features/keyryx-custody-and-witness.feature`. Not covered: that a pod without
+    the label is refused on the launchers' own CNI (kind's was measured).)*
 
 ## Decisions that have no gate yet
 

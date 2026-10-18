@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "keys": [
+    {"name": "wardryx-approval", "alg": "ES256"}
+  ],
+  "consumers": [
+    {"name": "wardryx",
+     "auth": {"key_digest": "sha256:@WARDRYX_DIGEST@"},
+     "grants": {"wardryx-approval": ["sign"]}}
+  ]
+}

@@ -3023,6 +3023,82 @@ if [ "${TEETH_LIST:-}" = 1 ]; then
 	exit 0
 fi
 
+# Keyryx on the cluster (wave 2, L2; CLAUDE.md invariants 55 to 57). Every case
+# edits keyryx/manifests/59-keyryx.yaml, the file the three gates read.
+run_case "keyryx-root-is-not-in-env: a root key read through a secretKeyRef" fail \
+	'./scripts/keyryx-root-is-not-in-env.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "            - name: KEYRYX_WITNESS_EVENTS\n", "            - name: KEYRYX_LEAK\n              valueFrom: { secretKeyRef: { name: keyryx-root, key: root.key } }\n            - name: KEYRYX_WITNESS_EVENTS\n")')" \
+	"a root key is read through a secretKeyRef"
+run_case "keyryx-root-is-not-in-env: an environment variable named ...ROOT_KEY" fail \
+	'./scripts/keyryx-root-is-not-in-env.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "            - name: KEYRYX_WITNESS_EVENTS\n", "            - name: KEYRYX_WITNESS_ROOT_KEY\n              value: /run/keyryx/root.key\n            - name: KEYRYX_WITNESS_EVENTS\n")')" \
+	"would carry key material"
+run_case "keyryx-root-is-not-in-env: a 64-hex-character key written into a manifest" fail \
+	'./scripts/keyryx-root-is-not-in-env.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "              value: /var/lib/stack/events\n", "              value: /var/lib/stack/events\n            - name: KEYRYX_LEAK\n              value: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n")')" \
+	"64-hex-character literal"
+run_case "keyryx-root-is-not-in-env: the custody main container mounts the root key" fail \
+	'./scripts/keyryx-root-is-not-in-env.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "          args: [custody]\n", "          args: [custody]\n          volumeMounts:\n            - name: keyryx-root\n              mountPath: /in\n")')" \
+	"custody main container mounts keyryx-root"
+run_case "keyryx-root-is-not-in-env: the witness names the custody root key" fail \
+	'./scripts/keyryx-root-is-not-in-env.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "      serviceAccountName: keyryx-witness\n", "      serviceAccountName: keyryx-witness\n      # keyryx-root\n")')" \
+	"the witness Deployment names the custody root key"
+run_case "keyryx-root-is-not-in-env: a comment naming ROOT_KEY in prose (must pass)" pass \
+	'./scripts/keyryx-root-is-not-in-env.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "apiVersion: v1\n", "# KEYRYX_ROOT_KEY is named here in prose, and no variable carries it.\napiVersion: v1\n")')"
+run_case "witness-is-separate: the witness mounts the custody root key Secret" fail \
+	'./scripts/witness-is-separate.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "            secretName: keyryx-witness-root\n", "            secretName: keyryx-root\n")')" \
+	"the other role's root key Secret"
+run_case "witness-is-separate: the witness mounts custody's state claim" fail \
+	'./scripts/witness-is-separate.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "            claimName: keyryx-witness-state\n", "            claimName: keyryx-state\n")')" \
+	"the other role's state claim"
+run_case "witness-is-separate: the witness runs as custody's uid" fail \
+	'./scripts/witness-is-separate.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "        runAsUser: 20100\n", "        runAsUser: 20101\n")')" \
+	"do not run as two different uids"
+run_case "witness-is-separate: the witness event mount is writable" fail \
+	'./scripts/witness-is-separate.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "              mountPath: /var/lib/stack/events\n              readOnly: true\n", "              mountPath: /var/lib/stack/events\n")')" \
+	"without readOnly: true"
+run_case "witness-is-separate: custody mounts the event streams" fail \
+	'./scripts/witness-is-separate.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "      serviceAccountName: keyryx-custody\n", "      serviceAccountName: keyryx-custody\n      # claimName: stack-events\n")')" \
+	"custody mounts the event streams"
+run_case "witness-is-separate: the witness writes its alerts into the event directory" fail \
+	'./scripts/witness-is-separate.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "value: /var/lib/keyryx-witness/alerts/keyryx.ndjson", "value: /var/lib/stack/events/keyryx.ndjson")')" \
+	"writes its alerts into the event directory"
+run_case "witness-is-separate: the witness Deployment is absent (measured nothing)" fail \
+	'./scripts/witness-is-separate.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "kind: Deployment\nmetadata:\n  name: keyryx-witness\n", "kind: Pod\nmetadata:\n  name: keyryx-witness\n")')" \
+	"measured NOTHING"
+run_case "witness-is-separate: a comment in the manifest (must pass)" pass \
+	'./scripts/witness-is-separate.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "apiVersion: v1\n", "# the witness is read only over the events, and separate in every other way\napiVersion: v1\n")')"
+run_case "keyryx-reaches-only-consumers: custody admits every pod" fail \
+	'./scripts/keyryx-reaches-only-consumers.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "        - podSelector:\n            matchLabels: { keyryx-consumer: \"true\" }\n", "        - {}\n")')" \
+	"admits every pod"
+run_case "keyryx-reaches-only-consumers: custody declares an egress rule" fail \
+	'./scripts/keyryx-reaches-only-consumers.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "  egress: []\n", "  egress:\n    - to: [{ ipBlock: { cidr: 0.0.0.0/0 } }]\n")')" \
+	"has egress rules"
+run_case "keyryx-reaches-only-consumers: a Keyryx workload carries the consumer label" fail \
+	'./scripts/keyryx-reaches-only-consumers.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "      labels: { app: keyryx-custody, app.kubernetes.io/part-of: agent-stack }\n", "      labels: { app: keyryx-custody, keyryx-consumer: \"true\", app.kubernetes.io/part-of: agent-stack }\n")')" \
+	"carries the keyryx-consumer label"
+run_case "keyryx-reaches-only-consumers: the policy taken away (measured nothing)" fail \
+	'./scripts/keyryx-reaches-only-consumers.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "kind: NetworkPolicy\nmetadata:\n  name: keyryx-witness-ingress\n", "kind: Service\nmetadata:\n  name: keyryx-witness-ingress\n")')" \
+	"measured NOTHING"
+run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)" pass \
+	'./scripts/keyryx-reaches-only-consumers.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "apiVersion: v1\n", "# keyryx-consumer is a label on consumers, set by keyryx/wardryx-patch.yaml.\napiVersion: v1\n")')"
+
 # A shard that owns no case has measured nothing, and CI must not show it green.
 if [ -n "$shard_i" ] && [ "$ran" -eq 0 ]; then
 	printf 'shard %s/%s owns no case, so it measured NOTHING\n' "$shard_i" "$shard_n"
