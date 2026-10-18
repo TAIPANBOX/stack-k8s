@@ -2901,10 +2901,15 @@ run_case "no-provider-key: a provider-shaped variable reads a Secret that is not
 	"$(py 'edit("manifests/20-console.yaml", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n            - name: OPENAI_API_KEY\n              valueFrom: { secretKeyRef: { name: stack-keys, key: cloud_admin } }\n")')" \
 	"is provider-shaped and reads Secret stack-keys"
 
-run_case "no-provider-key: a second container takes costcrew-engine, the named exception does not cover it" fail \
+run_case "no-provider-key: the crew reads costcrew-engine again, in place of its client key" fail \
 	"$GATE53" \
-	"$(py 'edit("manifests/49-costcrew.yaml", "            - name: crew\n", "            - name: crew-two\n")')" \
-	"container crew-two: env OPENROUTER_API_KEY reads the provider Secret costcrew-engine"
+	"$(py 'edit("manifests/49-costcrew.yaml", "secretKeyRef: { name: costcrew-client-key, key: client_key, optional: true }", "secretKeyRef: { name: costcrew-engine, key: anthropic, optional: true }")')" \
+	"reads the provider Secret costcrew-engine"
+
+run_case "metered-doors: costcrew is bound to a wider pattern than its own host" fail \
+	"./scripts/metered-doors-require-keys.sh" \
+	"$(py 'edit("lib/identity-mint.sh", "agent://costcrew.%s/*", "agent://%s/*")')" \
+	"not exactly agent://costcrew."
 
 run_case "no-provider-key: a client key under a provider-shaped name is the agent's own credential" pass \
 	"$GATE53" \

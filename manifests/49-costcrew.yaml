@@ -37,6 +37,14 @@
 # from one place. Note that key ships as `set-me.invalid`: set it before
 # expecting the seal to accept anything, here or anywhere else.
 #
+# Since K1 (CLAUDE.md invariant 53) the crew's agent authority is `costcrew.<domain>`,
+# a host of its own under the trust domain. Its gateway client key may speak only
+# for that host (agent://costcrew.<domain>/*), so the key cannot speak as Felyx or
+# as an operator's agent. BUS CONSEQUENCE: trailryx accepts an event only when its
+# domain equals TRAILRYX_TRUST_DOMAIN exactly, so the record plane refuses these
+# events as foreign until that changes. They still reach the bus files that heraldyx
+# and genaryx read. Decision for the owner, recorded in the report, before a merge.
+#
 #
 # ## What this plane deliberately does not do
 #
@@ -125,7 +133,7 @@ spec:
             - "/var/lib/costcrew/passports"
             # The same value the seal is given, from one place. See the header.
             - "-stack-host"
-            - "$(TRAILRYX_TRUST_DOMAIN)"
+            - "costcrew.$(TRAILRYX_TRUST_DOMAIN)"
             - "-stack-owner"
             - "$(COSTCREW_OWNER)"
           env:
@@ -223,14 +231,10 @@ spec:
 # `cadence.ceiling_cents`, also set at /cadence. Neither alone is the
 # guarantee; the smaller of the two is, and a person sets both.
 #
-# It needs a key, which is not in this file and never should be:
-#
-#   kubectl -n agent-stack create secret generic costcrew-engine \
-#     --from-file=openrouter=/path/to/a/file/holding/the/key
-#
-# --from-file, not --from-literal: a literal puts the key in this machine's
-# shell history and in the argument list of a running process, where anyone
-# with a terminal on the box can read it out of `ps`.
+# It needs no key made by hand: the deploy mints costcrew-client-key with the gateway's
+# client keys (lib/identity-mint.sh, CLAUDE.md invariant 50), and the gateway holds the
+# provider key (invariant 53). The crew calls the model through the gateway and nowhere
+# else.
 #
 # It can also be run once, by hand, outside the schedule:
 #
@@ -326,7 +330,7 @@ spec:
                 - "-stack-events"
                 - "/var/lib/stack/events/costcrew.ndjson"
                 - "-stack-host"
-                - "$(TRAILRYX_TRUST_DOMAIN)"
+                - "costcrew.$(TRAILRYX_TRUST_DOMAIN)"
               env:
                 # NOT optional, and that is the point.
                 #
@@ -355,18 +359,18 @@ spec:
                     configMapKeyRef: { name: stack-wiring, key: COSTCREW_CEILING }
                 - name: TRAILRYX_TRUST_DOMAIN
                   valueFrom: { configMapKeyRef: { name: stack-wiring, key: TRAILRYX_TRUST_DOMAIN } }
-                # optional: true on both, so this manifest applies to a cluster
+                # optional: true, so this manifest applies to a cluster
                 # that has no key yet. The runner then refuses at the call and
                 # says which variable is missing, which is the right failure:
                 # loud, before anything is spent.
-                # NAMED EXCEPTION to CLAUDE.md invariant 53: this container reads its engine keys
-                # from costcrew-engine until costcrew's agent identity is decided (see that invariant).
-                - name: OPENROUTER_API_KEY
-                  valueFrom:
-                    secretKeyRef: { name: costcrew-engine, key: openrouter, optional: true }
+                # costcrew's model calls go through the gateway (CLAUDE.md invariant 53):
+                # the URL, and the costcrew client key the deploy mints, which the runner
+                # sends as x-api-key. The engine must be Anthropic: with a gateway set, an
+                # OpenRouter or Bedrock engine is refused before any request, not made.
+                - { name: COSTCREW_GATEWAY, value: "http://tokenfuse-gateway:4100" }
                 - name: ANTHROPIC_API_KEY
                   valueFrom:
-                    secretKeyRef: { name: costcrew-engine, key: anthropic, optional: true }
+                    secretKeyRef: { name: costcrew-client-key, key: client_key, optional: true }
               volumeMounts:
                 - { name: state, mountPath: /var/lib/costcrew }
                 # Read-write: the run APPENDS to the shared stream, the same
@@ -393,16 +397,9 @@ spec:
             - name: tmp
               emptyDir: { medium: Memory, sizeLimit: 128Mi }
 ---
-# The widest grant in this file, and the only one. The crew pod reaches a model
-# provider over HTTPS; the console pod is not selected by this rule and stays
-# unable to open anything.
-#
-# Same shape as heraldyx's mail egress: the whole public internet MINUS the
-# private ranges and the cloud metadata address every provider parks on
-# 169.254.169.254, so a compromised runner cannot turn an outbound grant into a
-# path back into the cluster or into the node's credentials.
-#
-# Port 443 only. A model API that needs plain HTTP is not one to hand a key to.
+# The crew reaches the model through the gateway and through nothing else (CLAUDE.md
+# invariant 53): the one destination this rule allows. The gateway admits the crew by
+# the rule below, and nothing else on the cluster reaches the gateway from here.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -413,12 +410,20 @@ spec:
   policyTypes: ["Egress"]
   egress:
     - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-            except:
-              - 10.0.0.0/8
-              - 172.16.0.0/12
-              - 192.168.0.0/16
-              - 169.254.0.0/16
+        - podSelector: { matchLabels: { app: tokenfuse-gateway } }
       ports:
-        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 4100 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-ingress-costcrew
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-gateway } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: costcrew-crew } }
+      ports:
+        - { protocol: TCP, port: 4100 }

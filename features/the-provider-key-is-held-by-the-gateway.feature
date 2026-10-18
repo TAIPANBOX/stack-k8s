@@ -39,8 +39,14 @@ Feature: the provider key is held by the gateway only
     Then the gate allows it, because a client key is the agent's own credential
     -> no-provider-key: a client key under a provider-shaped name is the agent's own credential
 
-  Scenario: the named costcrew exception covers one container and one Secret only
-    Given the scheduled costcrew run reads its engine keys from costcrew-engine
-    When a second container reads the same Secret
-    Then the gate refuses it
-    -> no-provider-key: a second container takes costcrew-engine, the named exception does not cover it
+  Scenario: the scheduled costcrew run holds its own gateway client key, not an engine key
+    Given the scheduled costcrew run calls its model through the gateway
+    When the run reads its engine key from costcrew-engine instead of its client key
+    Then the gate refuses it, and no exception remains
+    -> no-provider-key: the crew reads costcrew-engine again, in place of its client key
+
+  Scenario: costcrew's gateway key speaks only for costcrew's own host
+    Given the identity map binds the costcrew key to a pattern
+    When the pattern is wider than agent://costcrew.<trust domain>/*
+    Then the metered-doors gate refuses it, because the key could then speak as Felyx or an operator's agent
+    -> metered-doors: costcrew is bound to a wider pattern than its own host
