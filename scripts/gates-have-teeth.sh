@@ -3034,7 +3034,7 @@ run_case "keyryx-root-is-not-in-env: a 64-hex-character key written into a manif
 	"64-hex-character literal"
 run_case "keyryx-root-is-not-in-env: the custody main container mounts the root key" fail \
 	'./scripts/keyryx-root-is-not-in-env.sh' \
-	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "          args: [custody]\n", "          args: [custody]\n          volumeMounts: [{ name: keyryx-root, mountPath: /in, readOnly: true }]\n")')" \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "          args: [custody]\n", "          args: [custody]\n          volumeMounts:\n            - name: keyryx-root\n              mountPath: /in\n")')" \
 	"custody main container mounts keyryx-root"
 run_case "keyryx-root-is-not-in-env: the witness names the custody root key" fail \
 	'./scripts/keyryx-root-is-not-in-env.sh' \
