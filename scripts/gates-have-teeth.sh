@@ -2945,7 +2945,7 @@ run_case "agent-tokens: a stopped agent keeps working while the list is unreadab
 run_case "agent-tokens: the revocation list may be 300 s old" fail \
 	"$AGT" \
 	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: \"60\"", "TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: \"300\"")')" \
-	"at most 60 seconds"
+	"60 seconds or less"
 
 run_case "agent-tokens: the door is on in the default gateway" fail \
 	"$AGT" \
