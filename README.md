@@ -994,6 +994,38 @@ kubectl -n agent-stack delete configmap gateway-identity-map
 ./identity/up.sh
 ```
 
+## Keyryx on the cluster (opt-in)
+
+Keyryx (`ghcr.io/taipanbox/keyryx:v0.1.0`) is the key custody service and the
+independent witness of the record. Off by default: `kubectl apply -k manifests/`
+never applies it. `keyryx/up.sh` turns it on, `keyryx/down.sh` turns it off and
+keeps every key and claim.
+
+```bash
+KUBECONFIG=./kubeconfig.yaml ./keyryx/up.sh
+```
+
+What it runs, in the `agent-stack` namespace: `keyryx-custody` (port 4340, uid
+20101, the signing keys) and `keyryx-witness` (port 4341, uid 20100, reads the
+event streams read only and keeps its own log). Each role has its own service
+account, state claim and root key Secret (`keyryx-root`, `keyryx-witness-root`),
+and the root key reaches the process only through a memory volume copied by an
+init container. wardryx is moved to v2.2.0 and signs its approval tokens through
+custody; its bearer key is `keyryx-wardryx-client`. Only pods labelled
+`keyryx-consumer: "true"` may reach custody.
+
+Not wired yet: vouchryx and tokenfuse (their Keyryx releases are not published
+yet, so their pins stay where they are) and trailryx (its next release is later).
+
+NOT PROVEN here: that the launchers' own CNI enforces the policies (kind's
+kindnet did, in `evidence/keyryx-kind/run.out`, step 6); wardryx was not run
+against Keyryx on a cluster; the witness answered 404 on its head route in the
+kind run (no signed head yet after about three minutes, not investigated); the
+event producers do not yet write under per-producer identities in the default
+planes (the kind run shows the mechanism on a test volume only); the projected
+service-account token path is not used, because wardryx v2.2.0 reads its
+credential once at start and a projected token expires within an hour.
+
 ## Status
 
 **Proven on a live five-node cluster, 2026-07-25.** Five Hetzner CPX42 in
