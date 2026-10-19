@@ -3838,7 +3838,7 @@ run_case "witness-records: the witness runs outside the record plane's group" fa
 run_case "witness-records: the witness init runs outside the record plane's group" fail \
 	'./scripts/keyryx-witness-shares-the-record.sh' \
 	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "runAsUser: 20100\n            runAsGroup: 10001", "runAsUser: 20100\n            runAsGroup: 20100")')" \
-	"root-key-copy init does not run as group 10001"
+	"root-key-copy does not run as group 10001"
 run_case "witness-records: the opt-out keeps the pod affinity" fail \
 	'./scripts/keyryx-witness-shares-the-record.sh' \
 	"$(py 'edit("keyryx/record-seal-unpatch.yaml", "affinity: null", "affinity: {}")')" \
