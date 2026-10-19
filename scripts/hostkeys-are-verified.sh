@@ -37,6 +37,8 @@
 #      without it, accept-new, and the accepted key is printed with how to pin it.
 #   I  The builder's peer file names each node by its public and its private address, with the same verified key.
 #   J  A strict connection from the builder to a peer's private address succeeds with that file, and is refused without the name.
+#   N  cloud/gcp/main.tf turns guest attributes on for every node, without which GCE
+#      publishes no host keys and E can never happen on a real cluster.
 #   K  No tracked script (prose excepted) disables host key checking.
 #   L  Each launcher that pushes an image to its peers writes the peer file before its first such ssh, and that ssh is strict against it.
 #   M  Each such launcher builds the peer file from the verified keys (hostkeys_peer_file).
@@ -288,6 +290,14 @@ for f in $subjects; do
   fi
   if [ "$(grep -c 'hostkeys_peer_file' "$f")" -gt 0 ]; then pass "M  $f builds its peer file from the verified keys (hostkeys_peer_file)"; else bad "M  $f does not build its peer file with hostkeys_peer_file"; fi
 done
+
+# ---- N: GCE publishes host keys only with guest attributes on ----
+tf=cloud/gcp/main.tf
+nodes="$(grep -c '^resource "google_compute_instance"' "$tf")"
+on="$(grep -cE '^[[:space:]]*enable-guest-attributes[[:space:]]*=[[:space:]]*"TRUE"' "$tf")"
+if [ "$nodes" -eq 0 ]; then bad "N  $tf declares no google_compute_instance, so N measured nothing"
+elif [ "$on" -ge "$nodes" ]; then pass "N  $tf turns guest attributes on for its $nodes instance resource(s)"
+else bad "N  $tf sets enable-guest-attributes = \"TRUE\" $on time(s) for $nodes instance resource(s): GCE then publishes no host keys and every deploy is refused"; fi
 
 if [ "$fails" -gt 0 ]; then
   printf '\nFAIL: %d case(s) of the host key checks did not hold.\n' "$fails"

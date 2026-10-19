@@ -4665,3 +4665,9 @@ Fixed: `hostkeys_console_fingerprints` in `lib/hostkeys.sh` removes that prefix 
 
 Gate: `scripts/hostkeys-are-verified.sh` cases D2 (the live shape is read) and D3 (another program's line is not), red first on the old parser (D2 refused, rc 2); two teeth cases in `gates-have-teeth.sh`.
 
+## 146. GCE published no host keys, because the Terraform never turned guest attributes on
+
+**Ours, and fixed.** The first live GCP run of the out-of-band host key check refused all three nodes at the 300 s deadline: "no SSH host keys in the guest attributes". Measured 2026-10-19 on 3 x e2-standard-4 in europe-west3-a: `gcloud compute instances get-guest-attributes --query-path=hostkeys/` answered HTTP 404, and the instance metadata had no `enable-guest-attributes`. The guest agent writes the `hostkeys/` attributes only when that key is `TRUE`, and `cloud/gcp/main.tf` never set it. Setting it on a running node did not publish keys within about four minutes; on nodes created with it, all three key types (ecdsa, ed25519, rsa) were published about 30 s after boot. The refusal was the safe outcome: nothing was connected to.
+
+Fixed: `enable-guest-attributes = "TRUE"` in the node metadata. Gate: `scripts/hostkeys-are-verified.sh` case N, which counts the instance resources in `cloud/gcp/main.tf` and requires the key on each; one teeth case.
+

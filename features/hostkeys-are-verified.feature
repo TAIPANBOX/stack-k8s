@@ -36,6 +36,12 @@ Feature: a node's host key is verified before the first connection
     Then it reads no fingerprint from those lines and refuses the node, writing nothing
     # -> hostkeys-are-verified.sh case D3
 
+  Scenario: every GCE node publishes its host keys
+    Given the GCP Terraform that creates the nodes
+    When it declares a node
+    Then that node has guest attributes turned on, so its guest agent publishes the host keys
+    # -> hostkeys-are-verified.sh case N
+
   Scenario: GCE keys come from the guest attributes through the API
     Given a GCE instance whose guest agent published its host keys
     When the installer reads the guest attributes
