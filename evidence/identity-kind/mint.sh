@@ -32,6 +32,7 @@ cleanup() {
 }
 trap cleanup EXIT
 rnd() { head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/secret-doc.sh"
 
 kind delete cluster --name "$CLUSTER" >/dev/null 2>&1 || true
 kind create cluster --name "$CLUSTER" --wait 120s >/dev/null 2>&1 || { echo "FAIL  kind create cluster"; exit 1; }
@@ -96,11 +97,10 @@ open(out, "w").write("\n---\n".join(keep))
 PY
 [ -s "$work/stack.yaml" ] || { echo "FAIL  could not cut the namespace, stack-wiring, the gateway and the console's Felyx lines out of the manifests"; exit 1; }
 kubectl apply -f "$work/stack.yaml" >/dev/null || { echo "FAIL  kubectl apply"; exit 1; }
-kubectl -n "$NS" create secret generic stack-keys \
-  --from-literal=cloud_keys="$(rnd):org" --from-literal=cloud_admin="$(rnd)" \
-  --from-literal=wardryx_keys="$(rnd):org:admin" --from-literal=wardryx_admin="$(rnd)" \
-  --from-literal=wardryx_gateway="$(rnd)" --from-literal=gateway_admin="$(rnd)" \
-  --from-literal=declassify_key="$(rnd)" >/dev/null || { echo "FAIL  stack-keys"; exit 1; }
+secret_doc stack-keys cloud_keys="$(rnd):org" cloud_admin="$(rnd)" \
+  wardryx_keys="$(rnd):org:admin" wardryx_admin="$(rnd)" \
+  wardryx_gateway="$(rnd)" gateway_admin="$(rnd)" \
+  declassify_key="$(rnd)" | kubectl -n "$NS" create -f - >/dev/null || { echo "FAIL  stack-keys"; exit 1; }
 
 # ---- 1. before the mint: the gateway does not start without its keys ---------------------
 reason=""

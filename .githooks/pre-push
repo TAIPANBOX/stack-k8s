@@ -86,6 +86,7 @@ step "every node stops its pods before its network goes" "./scripts/nodes-stop-t
 step "every shell script parses under the bash a Mac ships" "./scripts/shell-scripts-parse.sh"
 step "node checks read only their own answer" "./scripts/node-checks-read-their-own-answer.sh"
 step "every k3s server starts with --secrets-encryption" "./scripts/servers-encrypt-secrets.sh"
+step "no secret value on any command line" "./scripts/no-secret-on-argv.sh"
 step "the teeth shards cover every case once" "./scripts/teeth-shards-cover-every-case.sh"
 
 echo

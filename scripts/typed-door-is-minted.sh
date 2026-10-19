@@ -270,7 +270,9 @@ tracked = subprocess.run(["git", "ls-files", "*.sh"], capture_output=True, text=
 for p in tracked:
     if p.startswith("scripts/") or not os.path.isfile(p):
         continue
-    for m in re.finditer(r"create secret generic\s+([a-z0-9][a-z0-9.-]*)", code_of(open(p).read())):
+    # two spellings of a creator: the kubectl line, and the manifest a secret_doc
+    # call builds on stdin (CLAUDE.md invariant 60)
+    for m in re.finditer(r"(?:create secret generic|secret_doc)\s+([a-z0-9][a-z0-9.-]*)", code_of(open(p).read())):
         installer_made.add(m.group(1))
 
 door_keys = {}

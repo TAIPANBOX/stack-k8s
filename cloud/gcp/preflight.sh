@@ -299,7 +299,7 @@ if [ -n "$PROJECT" ] && printf '%s\n' "$ENABLED" | grep -qx compute.googleapis.c
   FAM_CODE="$(printf '%s' "$MACHINE_TYPE" | cut -d- -f1 | tr '[:lower:]' '[:upper:]')"
   PF_URL="https://serviceusage.googleapis.com/v1beta1/projects/$PROJECT/services/compute.googleapis.com"
   PF_URL="$PF_URL/consumerQuotaMetrics/compute.googleapis.com%2Fcpus_per_vm_family/limits/%2Fproject%2Fregion%2Fvm_family"
-  PF_LIMIT="$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token 2>/dev/null)" "$PF_URL" 2>/dev/null \
+  PF_LIMIT="$(curl -s --config <(printf 'header = "Authorization: Bearer %s"\n' "$(gcloud auth print-access-token 2>/dev/null)") "$PF_URL" 2>/dev/null \
     | jq -r --arg r "$REGION" --arg f "$FAM_CODE" \
       '.quotaBuckets[]? | select(.dimensions.region==$r and .dimensions.vm_family==$f) | .effectiveLimit' 2>/dev/null | head -1)"
   if [ -z "$PF_LIMIT" ] || [ "$PF_LIMIT" = "null" ]; then
@@ -342,7 +342,7 @@ fi
 # ---- 9. access to the Genaryx console -------------------------------------
 say "github access for the Genaryx console (optional)"
 if [ -n "${CONSOLE_TOKEN:-}" ]; then
-  if curl -sf -o /dev/null -H "Authorization: Bearer $CONSOLE_TOKEN" \
+  if curl -sf -o /dev/null --config <(printf 'header = "Authorization: Bearer %s"\n' "$CONSOLE_TOKEN") \
        "https://api.github.com/repos/TAIPANBOX/genaryx" 2>/dev/null; then
     ok "CONSOLE_TOKEN can read TAIPANBOX/genaryx"
   else

@@ -134,17 +134,17 @@ else:
 # ---- 4. up.sh mints once, without a newline, and never prints it ------------
 lines = UP.read_text().splitlines()
 code = [(n, ln) for n, ln in enumerate(lines, 1) if not ln.lstrip().startswith("#")]
-creates = [(n, ln) for n, ln in code if "create secret generic closure-keys" in ln]
+creates = [(n, ln) for n, ln in code if "create secret generic closure-keys" in ln or "secret_doc closure-keys" in ln]
 if not creates:
     errors.append(f"{UP} never creates the closure-keys Secret, so this measured nothing "
                   "about how it is minted")
 reuse = [n for n, ln in code if re.search(r"\bif\b.*\bget secret closure-keys\b", ln)]
 for n, ln in creates:
-    if "--from-file" in ln:
-        errors.append(f"{UP}:{n} creates closure-keys with --from-file: a file's trailing "
-                      "newline would reach the gateway and not the console")
-    if not re.search(r"--from-literal=\"?secret=", ln):
-        errors.append(f"{UP}:{n} creates closure-keys without --from-literal=secret=")
+    if "--from-file" in ln or re.search(r"secret=@", ln):
+        errors.append(f"{UP}:{n} creates closure-keys from a file (--from-file or secret=@path): a file's "
+                      "trailing newline would reach the gateway and not the console")
+    if not re.search(r"(--from-literal=\"?secret=|secret_doc closure-keys \"secret=)", ln):
+        errors.append(f"{UP}:{n} creates closure-keys without secret=, as a manifest on stdin (secret_doc) or --from-literal")
     if not reuse or reuse[0] > n:
         errors.append(f"{UP}:{n} creates closure-keys without first checking it exists, so a "
                       "re-run would mint a second secret")
@@ -157,7 +157,7 @@ for n, ln in code:
     if "${#CLOSURE_SECRET}" in ln and not re.search(
             r"\$\{?CLOSURE_SECRET\b", ln.replace("${#CLOSURE_SECRET}", "")):
         continue
-    if "create secret generic closure-keys" in ln:
+    if "create secret generic closure-keys" in ln or "secret_doc closure-keys" in ln:
         continue
     errors.append(f"{UP}:{n} expands the closure secret outside its length check and the "
                   f"create line, where it could be printed: {ln.strip()!r}")

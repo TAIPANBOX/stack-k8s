@@ -80,7 +80,10 @@ for f in $scripts; do
 	# the install; a read has to come before it. Anchoring on the `sh -s` line
 	# alone let a wrapped first-server install slide the anchor down to the
 	# joining-server line and pass a read placed between them.
-	inv_line=$(grep -nE '^[^#]*(su_|sh_) "\$FIRST" "INSTALL_K3S_VERSION=' "$f" | head -1 | cut -d: -f1 || true)
+	# The install is spelled two ways, both checked: the token on the command line (the
+	# old form) or read from the first line of stdin by the node's shell (CLAUDE.md invariant
+	# 60, the form every installer now uses: `{ printf '%s\n' "$K3S_TOKEN_VALUE"; curl ...; } | sh_ "$FIRST" "sh -c \"IFS= read -r K3S_TOKEN; ...`).
+	inv_line=$(grep -nE '^[^#]*(su_|sh_) "\$FIRST" "(INSTALL_K3S_VERSION=|sh -c \\"IFS= read -r K3S_TOKEN)' "$f" | head -1 | cut -d: -f1 || true)
 	srv_line=$(grep -nE '^[^#]*sh -s - serv[e]r' "$f" | head -1 | cut -d: -f1 || true)
 	if [ -z "$inv_line" ] || [ -z "$srv_line" ]; then
 		printf 'FAIL: %s matched as an installer but its first-server install could not be located\n' "$f"
@@ -90,7 +93,7 @@ for f in $scripts; do
 	fi
 	install_line=$inv_line
 	[ "$srv_line" -lt "$install_line" ] && install_line=$srv_line
-	inv_helper=$(sed -n "${inv_line}p" "$f" | sed -E 's/^[[:space:]]*([a-z_]+) .*/\1/')
+	inv_helper=$(sed -n "${inv_line}p" "$f" | grep -oE '(su_|sh_) "' | head -1 | cut -d' ' -f1)
 
 	# The read is an ASSIGNMENT from the token file over the same helper, not a
 	# mention of the path: `echo "recovery: cat .../token"` above the install is

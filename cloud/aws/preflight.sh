@@ -110,7 +110,7 @@ fi
 # and the cluster gets it without a token. A token is for a private fork only.
 say "github access for the Genaryx console (optional)"
 if [ -n "${CONSOLE_TOKEN:-}" ]; then
-  if curl -sf -o /dev/null -H "Authorization: Bearer $CONSOLE_TOKEN" \
+  if curl -sf -o /dev/null --config <(printf 'header = "Authorization: Bearer %s"\n' "$CONSOLE_TOKEN") \
        "https://api.github.com/repos/TAIPANBOX/genaryx" 2>/dev/null; then
     ok "CONSOLE_TOKEN can read TAIPANBOX/genaryx"
   else

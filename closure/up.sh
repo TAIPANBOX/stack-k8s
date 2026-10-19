@@ -57,7 +57,9 @@ else
   say "minting the closure secret (generated here, never committed, never printed)"
   CLOSURE_SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   [ "${#CLOSURE_SECRET}" -eq 64 ] || die "could not read 32 bytes from /dev/urandom"
-  k create secret generic closure-keys --from-literal="secret=$CLOSURE_SECRET" >/dev/null
+  # on stdin as a manifest (CLAUDE.md invariant 60): the value is on no command line
+  . "$ROOT/lib/secret-doc.sh"
+  secret_doc closure-keys "secret=$CLOSURE_SECRET" | k create -f - >/dev/null
   unset CLOSURE_SECRET
   echo "   created secret closure-keys (secret). Its value is not printed above."
 fi

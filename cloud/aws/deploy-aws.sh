@@ -355,6 +355,15 @@ SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=
 [ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
 sh_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "${@:2}"; }
 su_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "sudo ${*:2}"; }
+# The IMDSv2 session token is a bearer for the instance metadata, which includes
+# the instance profile's credentials: it is read by curl from stdin, not put on
+# a command line (CLAUDE.md invariant 60).
+imds() {
+  su_ "$1" "sh -c 'T=\$(curl -sf -X PUT \"http://169.254.169.254/latest/api/token\" \
+      -H \"X-aws-ec2-metadata-token-ttl-seconds: 60\" --max-time 5) || exit 1
+    printf \"header = \\\"X-aws-ec2-metadata-token: %s\\\"\\n\" \"\$T\" \
+      | curl -sf --config - --max-time 5 \"http://169.254.169.254/latest/meta-data/$2\"'"
+}
 k_()  { su_ "$FIRST" "/usr/local/bin/k3s kubectl $*"; }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
@@ -528,15 +537,15 @@ else
   #
   # So the clone is unconditional now. CONSOLE_TOKEN survives for the one case
   # it is still good for: building from a private fork of your own.
-  if [ -n "$CONSOLE_TOKEN" ]; then
-    CONSOLE_AUTH="x-access-token:$CONSOLE_TOKEN@"
-  else
-    CONSOLE_AUTH=""
-  fi
+  # The token reaches git through its environment and a credential helper, and
+  # the URL stays bare: a URL is an argument of git and of ps (CLAUDE.md
+  # invariant 60). An empty token is an anonymous clone, which is what a public
+  # repository needs; git calls the helper only when the server asks for a login.
   say "fetching the console source here, so any token stays on this machine"
   TMP="$(mktemp -d)"
-  if git -c credential.helper= clone -q --depth 1 \
-       "https://${CONSOLE_AUTH}github.com/TAIPANBOX/genaryx.git" \
+  if CONSOLE_TOKEN="$CONSOLE_TOKEN" git -c credential.helper= \
+       -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$CONSOLE_TOKEN"; }; f' \
+       clone -q --depth 1 https://github.com/TAIPANBOX/genaryx.git \
        "$TMP/genaryx-a360" 2>/dev/null; then
     git -C "$TMP/genaryx-a360" remote set-url origin https://github.com/TAIPANBOX/genaryx.git
     BUILT_FROM="$(git -C "$TMP/genaryx-a360" rev-parse --short HEAD)"
@@ -602,7 +611,7 @@ else
   PRIVS=""
   for n in "${ALL_NODES[@]}"; do
     [ "$n" = "$BUILDER" ] && continue
-    p="$(su_ "$n" 'sh -c "T=\$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H \"X-aws-ec2-metadata-token-ttl-seconds: 60\" --max-time 5); curl -sf -H \"X-aws-ec2-metadata-token: \$T\" --max-time 5 http://169.254.169.254/latest/meta-data/local-ipv4"')"
+    p="$(imds "$n" local-ipv4)"
     [ -n "$p" ] || die "could not read the private address of $n"
     PRIVS="$PRIVS $p"
     sh_ "$n" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qF '$DIST_PUB' ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '$DIST_PUB' >> ~/.ssh/authorized_keys"
@@ -840,7 +849,7 @@ CONSOLE_ADDR=""
 if [ -n "$CONSOLE_NODE" ]; then
   CONSOLE_PRIV="$(k_ "get node $CONSOLE_NODE -o jsonpath='{.status.addresses[?(@.type==\"InternalIP\")].address}'" 2>/dev/null || true)"
   for n in "${ALL_NODES[@]}"; do
-    p="$(su_ "$n" 'sh -c "T=\$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H \"X-aws-ec2-metadata-token-ttl-seconds: 60\" --max-time 5); curl -sf -H \"X-aws-ec2-metadata-token: \$T\" --max-time 5 http://169.254.169.254/latest/meta-data/local-ipv4"' 2>/dev/null || true)"
+    p="$(imds "$n" local-ipv4 2>/dev/null || true)"
     [ -n "$p" ] && [ "$p" = "$CONSOLE_PRIV" ] && { CONSOLE_ADDR="$n"; break; }
   done
   [ -n "$CONSOLE_ADDR" ] || CONSOLE_ADDR="$CONSOLE_PRIV"

@@ -64,6 +64,7 @@ case "${#SERVER_LIST[@]}" in
   *) echo "warning: ${#SERVER_LIST[@]} servers. etcd wants an ODD number (1, 3 or 5) or it cannot hold quorum." ;;
 esac
 
+. "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/secret-doc.sh"
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes)
 [ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
 sh_() { ssh "${SSH_OPTS[@]}" "root@$1" "${@:2}"; }
@@ -202,7 +203,7 @@ else:
     print(f"   firewall {fw['id']} already covers all {len(servers)} node(s)")
 print(f"   everything inbound dropped except 22, 6443 and icmp from {MY}")
 PY
-    sh_ "$FIRST" "HCLOUD_TOKEN='$HCLOUD_TOKEN' python3 /tmp/fw.py '$OPERATOR_IP' ${ALL_NODES[*]} && rm -f /tmp/fw.py"
+    printf '%s\n' "$HCLOUD_TOKEN" | sh_ "$FIRST" "IFS= read -r HCLOUD_TOKEN; export HCLOUD_TOKEN; python3 /tmp/fw.py '$OPERATOR_IP' ${ALL_NODES[*]} && rm -f /tmp/fw.py"
     echo "   NOTE: if your address changes, re-run this script or widen the rule, or you will be locked out."
   fi
 else
@@ -406,7 +407,7 @@ if [ -z "$K3S_TOKEN_VALUE" ]; then
   fi
 fi
 put_graceful_shutdown "$FIRST"
-sh_ "$FIRST" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - server \
+{ printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | sh_ "$FIRST" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' sh -s - server \
     --cluster-init \
     --node-name '$FIRST_NODE_NAME' \
     --node-ip '$FIRST_PRIV' --advertise-address '$FIRST_PRIV' \
@@ -416,7 +417,7 @@ sh_ "$FIRST" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh
     --disable=local-storage \
     --secrets-encryption \
     --kubelet-arg=provider-id=hcloud://$(sid_of "$FIRST") \
-    --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
+    --write-kubeconfig-mode 0600\""
 
 say "waiting for the API server"
 for i in $(seq 1 60); do
@@ -434,7 +435,7 @@ for n in "${SERVER_LIST[@]:1}"; do
   JOINED_NAME="$(node_name_of "$n")"
   [ -n "$JOINED_NAME" ] || die "could not read a host name from $n to pin --node-name to"
   put_graceful_shutdown "$n"
-  sh_ "$n" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - server \
+  { printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | sh_ "$n" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' sh -s - server \
       --server 'https://$FIRST_PRIV:6443' \
       --node-name '$JOINED_NAME' \
       --node-ip '$(priv_of "$n")' --advertise-address '$(priv_of "$n")' \
@@ -444,7 +445,7 @@ for n in "${SERVER_LIST[@]:1}"; do
       --disable=local-storage \
       --secrets-encryption \
       --kubelet-arg=provider-id=hcloud://$(sid_of "$n") \
-      --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
+      --write-kubeconfig-mode 0600\""
   for i in $(seq 1 40); do
     k_ "get node $JOINED_NAME -o name" >/dev/null 2>&1 && break
     sleep 5
@@ -454,10 +455,10 @@ done
 for n in ${AGENT_LIST[@]+"${AGENT_LIST[@]}"}; do
   say "k3s agent: $n ($(priv_of "$n"))"
   put_graceful_shutdown "$n"
-  sh_ "$n" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_URL='https://$FIRST_PRIV:6443' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - agent \
+  { printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | sh_ "$n" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' K3S_URL='https://$FIRST_PRIV:6443' sh -s - agent \
       --node-name '$(node_name_of "$n")' \
       --node-ip '$(priv_of "$n")' \
-      --kubelet-arg=provider-id=hcloud://$(sid_of "$n")" < <(curl -sfL https://get.k3s.io)
+      --kubelet-arg=provider-id=hcloud://$(sid_of "$n")\""
 done
 
 say "nodes"
@@ -658,8 +659,8 @@ k_ "apply -f /tmp/stack-policy.yaml"
 if [ -n "$HCLOUD_TOKEN" ]; then
   say "hcloud-cloud-controller-manager $CCM_VERSION (load balancers only)"
   NET_ID="$(sh_ "$FIRST" "curl -sf --max-time 5 http://169.254.169.254/hetzner/v1/metadata/private-networks" | awk '/network_id:/ {print $2; exit}')"
-  k_ "-n kube-system create secret generic hcloud --from-literal=token='$HCLOUD_TOKEN' --from-literal=network='$NET_ID' --dry-run=client -o yaml" \
-    | sh_ "$FIRST" "/usr/local/bin/k3s kubectl apply -f -"
+  secret_doc hcloud token="$HCLOUD_TOKEN" network="$NET_ID" \
+    | sh_ "$FIRST" "/usr/local/bin/k3s kubectl -n kube-system apply -f -" >/dev/null
   k_ "apply -f https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/download/$CCM_VERSION/ccm-networks.yaml"
   sh_ "$FIRST" "cat > /tmp/ccm-args.yaml" <<'YAML'
 spec:
@@ -717,10 +718,10 @@ if ! k_ "-n agent-stack get secret stack-policy-db" >/dev/null 2>&1; then
   PW="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   AS="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   k_ "create namespace agent-stack --dry-run=client -o yaml" | sh_ "$FIRST" "/usr/local/bin/k3s kubectl apply -f -" >/dev/null
-  k_ "-n agent-stack create secret generic stack-policy-db \
-      --from-literal=password='$PW' \
-      --from-literal=dsn='postgres://wardryx:$PW@policy-db:5432/wardryx?sslmode=disable' \
-      --from-literal=approval_secret='$AS'" >/dev/null
+  secret_doc stack-policy-db password="$PW" \
+      dsn="postgres://wardryx:$PW@policy-db:5432/wardryx?sslmode=disable" \
+      approval_secret="$AS" \
+    | k_ "-n agent-stack create -f -" >/dev/null
   echo "   created secret stack-policy-db"
 else
   echo "   secret stack-policy-db already exists, left as is"
@@ -798,14 +799,15 @@ if ! k_ "-n agent-stack get secret stack-keys" >/dev/null 2>&1; then
   # stdin (`--from-file=declassify_key=/dev/stdin`) and `printf` is a builtin,
   # so it is on no argv at all. scripts/declassify-is-keyed.sh holds that.
   DECLASSIFY_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-  printf '%s' "$DECLASSIFY_SECRET" | k_ "-n agent-stack create secret generic stack-keys \
-      --from-file=declassify_key=/dev/stdin \
-      --from-literal=cloud_keys='$CLOUD_SECRET:default:admin' \
-      --from-literal=cloud_admin='$CLOUD_SECRET' \
-      --from-literal=wardryx_keys='$WARDRYX_ADMIN_SECRET:default:admin,$WARDRYX_GATEWAY_SECRET:default:pep' \
-      --from-literal=wardryx_admin='$WARDRYX_ADMIN_SECRET' \
-      --from-literal=wardryx_gateway='$WARDRYX_GATEWAY_SECRET' \
-      --from-literal=gateway_admin='$GATEWAY_ADMIN_SECRET'" >/dev/null
+  secret_doc stack-keys \
+      cloud_keys="$CLOUD_SECRET:default:admin" \
+      cloud_admin="$CLOUD_SECRET" \
+      wardryx_keys="$WARDRYX_ADMIN_SECRET:default:admin,$WARDRYX_GATEWAY_SECRET:default:pep" \
+      wardryx_admin="$WARDRYX_ADMIN_SECRET" \
+      wardryx_gateway="$WARDRYX_GATEWAY_SECRET" \
+      gateway_admin="$GATEWAY_ADMIN_SECRET" \
+      declassify_key="$DECLASSIFY_SECRET" \
+    | k_ "-n agent-stack create -f -" >/dev/null
   echo "   created secret stack-keys"
   echo "   declassify_key in it is what clearing a run's taint label needs (POST /v1/fuse/declassify on the gateway,"
   echo "   sent as x-fuse-declassify-key). Nothing prints it; read it with:"
@@ -827,7 +829,7 @@ else
   GATEWAY_ADMIN_B64="$(k_ "-n agent-stack get secret stack-keys -o jsonpath={.data.gateway_admin}")"
   if [ -z "$GATEWAY_ADMIN_B64" ]; then
     GATEWAY_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-    k_ "-n agent-stack patch secret stack-keys --type merge -p '{\"stringData\":{\"gateway_admin\":\"$GATEWAY_ADMIN_SECRET\"}}'" >/dev/null
+    printf '{"stringData":{"gateway_admin":"%s"}}' "$GATEWAY_ADMIN_SECRET" | k_ "-n agent-stack patch secret stack-keys --type merge --patch-file /dev/stdin" >/dev/null
     echo "   added gateway_admin to the existing stack-keys secret"
   fi
 
@@ -913,11 +915,11 @@ if ! k_ "-n agent-stack get secret stack-tunnel-proxy" >/dev/null 2>&1; then
     # The authority stops existing here, before anything is stored. Nothing
     # after this point can issue a second certificate for this name.
     rm -f "$PROXY_TMP/ca.key"
-    k_ "-n agent-stack create secret generic stack-tunnel-proxy \
-        --from-literal=token='$PROXY_TOKEN' \
-        --from-literal=ca.crt='$(cat "$PROXY_TMP/ca.crt")' \
-        --from-literal=tls.crt='$(cat "$PROXY_TMP/tls.crt")' \
-        --from-literal=tls.key='$(cat "$PROXY_TMP/tls.key")'" >/dev/null
+    secret_doc stack-tunnel-proxy token="$PROXY_TOKEN" \
+        ca.crt=@"$PROXY_TMP/ca.crt" \
+        tls.crt=@"$PROXY_TMP/tls.crt" \
+        tls.key=@"$PROXY_TMP/tls.key" \
+      | k_ "-n agent-stack create -f -" >/dev/null
     rm -rf "$PROXY_TMP"
     echo "   created secret stack-tunnel-proxy for $PROXY_DNS_SHORT"
   fi

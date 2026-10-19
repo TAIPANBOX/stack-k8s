@@ -84,6 +84,7 @@ esac
 
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes)
 [ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/secret-doc.sh"
 sh_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "${@:2}"; }
 su_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "sudo ${*:2}"; }
 k_()  { su_ "$FIRST" "/usr/local/bin/k3s kubectl $*"; }
@@ -340,7 +341,7 @@ if [ -z "$K3S_TOKEN_VALUE" ]; then
   fi
 fi
 put_graceful_shutdown "$FIRST"
-su_ "$FIRST" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - server \
+{ printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | su_ "$FIRST" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' sh -s - server \
     --cluster-init \
     --node-name '$FIRST_NODE_NAME' \
     --node-ip '$FIRST_PRIV' --advertise-address '$FIRST_PRIV' \
@@ -351,7 +352,7 @@ su_ "$FIRST" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh
     --secrets-encryption \
     --kubelet-arg=provider-id=$(provider_id_of "$FIRST") \
     --node-label 'topology.kubernetes.io/zone=$(zone_of "$FIRST")' \
-    --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
+    --write-kubeconfig-mode 0600\""
 
 say "waiting for the API server"
 for i in $(seq 1 60); do
@@ -367,7 +368,7 @@ for n in "${SERVER_LIST[@]:1}"; do
   JOINED_NAME="$(node_name_of "$n")"
   [ -n "$JOINED_NAME" ] || die "could not read a host name from $n to pin --node-name to"
   put_graceful_shutdown "$n"
-  su_ "$n" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - server \
+  { printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | su_ "$n" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' sh -s - server \
       --server 'https://$FIRST_PRIV:6443' \
       --node-name '$JOINED_NAME' \
       --node-ip '$(priv_of "$n")' --advertise-address '$(priv_of "$n")' \
@@ -378,7 +379,7 @@ for n in "${SERVER_LIST[@]:1}"; do
       --secrets-encryption \
       --kubelet-arg=provider-id=$(provider_id_of "$n") \
       --node-label 'topology.kubernetes.io/zone=$(zone_of "$n")' \
-      --write-kubeconfig-mode 0600" < <(curl -sfL https://get.k3s.io)
+      --write-kubeconfig-mode 0600\""
   # This lookup used to be a guess. GCE sets the host name to the FULLY QUALIFIED
   # internal name, so k3s registered stack-k8s-server-2.europe-west3-a.c.PROJECT
   # .internal while the metadata service answered stack-k8s-server-2; looking up
@@ -395,11 +396,11 @@ done
 for n in ${AGENT_LIST[@]+"${AGENT_LIST[@]}"}; do
   say "k3s agent: $n ($(priv_of "$n"))"
   put_graceful_shutdown "$n"
-  su_ "$n" "INSTALL_K3S_VERSION='$K3S_VERSION' K3S_URL='https://$FIRST_PRIV:6443' K3S_TOKEN='$K3S_TOKEN_VALUE' sh -s - agent \
+  { printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | su_ "$n" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' K3S_URL='https://$FIRST_PRIV:6443' sh -s - agent \
       --node-name '$(node_name_of "$n")' \
       --node-ip '$(priv_of "$n")' \
       --kubelet-arg=provider-id=$(provider_id_of "$n") \
-      --node-label 'topology.kubernetes.io/zone=$(zone_of "$n")'" < <(curl -sfL https://get.k3s.io)
+      --node-label 'topology.kubernetes.io/zone=$(zone_of "$n")'\""
 done
 
 say "nodes"
@@ -856,10 +857,10 @@ if ! k_ "-n agent-stack get secret stack-policy-db" >/dev/null 2>&1; then
   PW="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   AS="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   k_ "create namespace agent-stack --dry-run=client -o yaml" | su_ "$FIRST" "/usr/local/bin/k3s kubectl apply -f -" >/dev/null
-  k_ "-n agent-stack create secret generic stack-policy-db \
-      --from-literal=password='$PW' \
-      --from-literal=dsn='postgres://wardryx:$PW@policy-db:5432/wardryx?sslmode=disable' \
-      --from-literal=approval_secret='$AS'" >/dev/null
+  secret_doc stack-policy-db password="$PW" \
+      dsn="postgres://wardryx:$PW@policy-db:5432/wardryx?sslmode=disable" \
+      approval_secret="$AS" \
+    | k_ "-n agent-stack create -f -" >/dev/null
   echo "   created secret stack-policy-db"
 else
   echo "   secret stack-policy-db already exists, left as is"
@@ -917,14 +918,15 @@ if ! k_ "-n agent-stack get secret stack-keys" >/dev/null 2>&1; then
   # stdin (`--from-file=declassify_key=/dev/stdin`) and `printf` is a builtin,
   # so it is on no argv at all. scripts/declassify-is-keyed.sh holds that.
   DECLASSIFY_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-  printf '%s' "$DECLASSIFY_SECRET" | k_ "-n agent-stack create secret generic stack-keys \
-      --from-file=declassify_key=/dev/stdin \
-      --from-literal=cloud_keys='$CLOUD_SECRET:default:admin' \
-      --from-literal=cloud_admin='$CLOUD_SECRET' \
-      --from-literal=wardryx_keys='$WARDRYX_ADMIN_SECRET:default:admin,$WARDRYX_GATEWAY_SECRET:default:pep' \
-      --from-literal=wardryx_admin='$WARDRYX_ADMIN_SECRET' \
-      --from-literal=wardryx_gateway='$WARDRYX_GATEWAY_SECRET' \
-      --from-literal=gateway_admin='$GATEWAY_ADMIN_SECRET'" >/dev/null
+  secret_doc stack-keys \
+      cloud_keys="$CLOUD_SECRET:default:admin" \
+      cloud_admin="$CLOUD_SECRET" \
+      wardryx_keys="$WARDRYX_ADMIN_SECRET:default:admin,$WARDRYX_GATEWAY_SECRET:default:pep" \
+      wardryx_admin="$WARDRYX_ADMIN_SECRET" \
+      wardryx_gateway="$WARDRYX_GATEWAY_SECRET" \
+      gateway_admin="$GATEWAY_ADMIN_SECRET" \
+      declassify_key="$DECLASSIFY_SECRET" \
+    | k_ "-n agent-stack create -f -" >/dev/null
   echo "   created secret stack-keys"
   echo "   declassify_key in it is what clearing a run's taint label needs (POST /v1/fuse/declassify on the gateway,"
   echo "   sent as x-fuse-declassify-key). Nothing prints it; read it with:"
@@ -943,7 +945,7 @@ else
   GATEWAY_ADMIN_B64="$(k_ "-n agent-stack get secret stack-keys -o jsonpath={.data.gateway_admin}")"
   if [ -z "$GATEWAY_ADMIN_B64" ]; then
     GATEWAY_ADMIN_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-    k_ "-n agent-stack patch secret stack-keys --type merge -p '{\"stringData\":{\"gateway_admin\":\"$GATEWAY_ADMIN_SECRET\"}}'" >/dev/null
+    printf '{"stringData":{"gateway_admin":"%s"}}' "$GATEWAY_ADMIN_SECRET" | k_ "-n agent-stack patch secret stack-keys --type merge --patch-file /dev/stdin" >/dev/null
     echo "   added gateway_admin to the existing stack-keys secret"
   else
     echo "   secret stack-keys already exists, left as is"

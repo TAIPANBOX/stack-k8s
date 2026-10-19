@@ -315,13 +315,21 @@ def installers():
     # do, in prose and in strings. The phrase is also built from two halves
     # below, never written whole in this file: secret-keys-agree.sh reads every
     # tracked script for it, and found THIS one as a subject the first time.
+    # Two spellings create the Secret: the kubectl line (the old one) and the
+    # manifest the installers build with secret_doc (CLAUDE.md invariant 60), which
+    # is written on stdin and piped into `create -f -`.
     mention = subprocess.run(
-        ["git", "grep", "-l", CREATE_STACK_KEYS, "--", "*.sh"],
+        ["git", "grep", "-l", "-E", CREATE_STACK_KEYS + "|secret_doc stack-keys", "--", "*.sh"],
         capture_output=True, text=True,
     ).stdout.split()
-    runs = re.compile(r'(?:k_|su_|sh_) +"[^"]*' + CREATE_STACK_KEYS)
+    runs = re.compile(r'(?:k_|su_|sh_) +"[^"]*' + CREATE_STACK_KEYS + r'|secret_doc stack-keys\b')
     out = []
     for path in mention:
+        # Not installers: this gate's own text, the teeth harness, and the evidence
+        # harnesses that build a throwaway stack-keys on a kind cluster with a local
+        # kubectl. Those were never subjects (the phrase was never on a `k_` line).
+        if path.startswith(("scripts/", "evidence/")):
+            continue
         for l in pathlib.Path(path).read_text().split("\n"):
             if not l.strip().startswith("#") and runs.search(l):
                 out.append(path)
@@ -353,6 +361,10 @@ for path in scripts:
         r"(?:[^\n]*\\\n)*[^\n]*--from-file=declassify_key=/dev/stdin", joined)
     piped_create = piped_create or re.search(
         r"\|\s*(?:k_|su_|sh_)\s+\"[^\n]*" + CREATE_STACK_KEYS + r"[^\n]*--from-file=declassify_key=/dev/stdin", joined)
+    # the secret_doc spelling: the manifest, declassify_key among its keys, is the
+    # stdin of a `create -f -` (the value is in the document, never in an argument)
+    piped_create = piped_create or re.search(
+        r"secret_doc stack-keys(?:[^\n]*\\\n)*?[^\n]*declassify_key=\"[^\n]*\\\n\s*\|\s*(?:k_|su_|sh_)\s+\"[^\n]*create -f -", joined)
     if not piped_create:
         failures.append(f"{path} never creates declassify_key from stdin: the create block "
                         f"for stack-keys must be fed by a pipe and carry "

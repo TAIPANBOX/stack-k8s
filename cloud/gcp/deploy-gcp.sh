@@ -524,15 +524,15 @@ else
   #
   # So the clone is unconditional now. CONSOLE_TOKEN survives for the one case
   # it is still good for: building from a private fork of your own.
-  if [ -n "$CONSOLE_TOKEN" ]; then
-    CONSOLE_AUTH="x-access-token:$CONSOLE_TOKEN@"
-  else
-    CONSOLE_AUTH=""
-  fi
+  # The token reaches git through its environment and a credential helper, and
+  # the URL stays bare: a URL is an argument of git and of ps (CLAUDE.md
+  # invariant 60). An empty token is an anonymous clone, which is what a public
+  # repository needs; git calls the helper only when the server asks for a login.
   say "fetching the console source here, so any token stays on this machine"
   TMP="$(mktemp -d)"
-  if git -c credential.helper= clone -q --depth 1 \
-       "https://${CONSOLE_AUTH}github.com/TAIPANBOX/genaryx.git" \
+  if CONSOLE_TOKEN="$CONSOLE_TOKEN" git -c credential.helper= \
+       -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$CONSOLE_TOKEN"; }; f' \
+       clone -q --depth 1 https://github.com/TAIPANBOX/genaryx.git \
        "$TMP/genaryx-a360" 2>/dev/null; then
     git -C "$TMP/genaryx-a360" remote set-url origin https://github.com/TAIPANBOX/genaryx.git
     BUILT_FROM="$(git -C "$TMP/genaryx-a360" rev-parse --short HEAD)"

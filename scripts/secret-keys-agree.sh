@@ -111,12 +111,23 @@ manifest_refs() {
 created_keys() {
 	local f="$1"
 	awk '
+		# A comment names no Secret and no key: the teeth harness and this gate
+		# both write the spellings in prose.
+		/^[ \t]*#/ { next }
 		/create secret generic [A-Za-z0-9_.-]+/ {
 			match($0, /create secret generic [A-Za-z0-9_.-]+/)
 			name = substr($0, RSTART + 22, RLENGTH - 22)
 			inblock = 1
 		}
-		inblock {
+		# The manifest spelling (CLAUDE.md invariant 60): `secret_doc <name> KEY=VALUE ...`,
+		# the keys are the words before `="` (or `=@` for a file) that start a
+		# word, and the block runs on through backslash continuations.
+		/(^|[ \t])secret_doc [A-Za-z0-9_.-]+/ && $0 !~ /secret_doc\(\)/ {
+			match($0, /secret_doc [A-Za-z0-9_.-]+/)
+			name = substr($0, RSTART + 11, RLENGTH - 11)
+			inblock = 2
+		}
+		inblock == 1 {
 			line = $0; gsub(/["\x27]/, "", line)
 			while (match(line, /--from-(literal|file)=[A-Za-z0-9_.-]+=/)) {
 				kv = substr(line, RSTART, RLENGTH)
@@ -126,10 +137,21 @@ created_keys() {
 				line = substr(line, RSTART + RLENGTH)
 			}
 			if ($0 !~ /\\[ \t]*$/) inblock = 0
+			next
+		}
+		inblock == 2 {
+			line = $0
+			while (match(line, /(^|[ \t"\x27])[A-Za-z0-9_.-]+=["@$]/)) {
+				kv = substr(line, RSTART, RLENGTH)
+				sub(/^[ \t"\x27]/, "", kv)
+				sub(/=["@$]$/, "", kv)
+				print name, kv
+				line = substr(line, RSTART + RLENGTH)
+			}
+			if ($0 !~ /\\[ \t]*$/) inblock = 0
 		}
 	' "$f"
 }
-
 refs=$(manifest_refs | sort -u)
 if printf '%s\n' "$refs" | grep -q '^UNPARSED'; then
 	printf 'FAIL: a secretKeyRef this gate could not parse, so it cannot say what that pod reads:\n'
@@ -144,7 +166,7 @@ fi
 
 # `|| true` is load-bearing: grep exits 1 on no match and `set -e` would end
 # this script before the sentence below.
-scripts=$(git grep -lE 'create secret generic [A-Za-z0-9_.-]+' -- '*.sh' 2>/dev/null | sort || true)
+scripts=$(git grep -lE '(create secret generic [A-Za-z0-9_.-]+|secret_doc [A-Za-z0-9_.-]+[ ])' -- '*.sh' 2>/dev/null | sort || true)
 
 problems=0
 checked=0
