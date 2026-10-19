@@ -120,7 +120,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/risk-hold-follows-the-flag.sh # invariant 65
 ./scripts/costcrew-ceiling-is-set.sh # invariant 66
 ./scripts/workflow-checkouts-are-pinned.sh # invariant 68
-./scripts/hub-add-site-reads-the-pinned-image.sh # hub/add-site.sh, GOTCHAS-free: the pinned-image read
+./scripts/hub-add-site-reads-the-pinned-image.sh # hub/add-site.sh reads a pinned image reference
 ./scripts/cost-live-refuses-unknown-rates.sh # invariant 44; GOTCHAS 127
 ./scripts/cluster-dns-has-a-budget.sh # invariant 45; GOTCHAS 128
 ./scripts/run-budget-ceiling-is-set.sh # invariant 28 (its flag half is deploy-flags-agree.sh)
