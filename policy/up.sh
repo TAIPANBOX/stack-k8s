@@ -39,6 +39,12 @@ $KUBECTL -n cosign-system rollout status deployment/webhook --timeout=300s
 # admitting any repository's signature for every TAIPANBOX image, because apply does not prune.
 $KUBECTL delete clusterimagepolicy taipanbox-signed --ignore-not-found >/dev/null
 $KUBECTL apply -f policy/image-policy.yaml
+# The operator's own entries (policy/operator-image-policy.example.yaml is the template): applied when the
+# copy is present and holds an entry, before the namespace is labelled, so an agent image the operator
+# lists is admitted from its first pod. `grep` finds an entry, so a copy of the bare template is skipped.
+if [ -f policy/operator-image-policy.yaml ] && grep -q '^kind: ClusterImagePolicy' policy/operator-image-policy.yaml; then
+  $KUBECTL apply -f policy/operator-image-policy.yaml
+fi
 
 if [ "$ENFORCE" = 1 ]; then
   $KUBECTL label namespace agent-stack policy.sigstore.dev/include=true --overwrite

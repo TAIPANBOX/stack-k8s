@@ -1,0 +1,71 @@
+# Operator image admission (CLAUDE.md invariant 58). Copy this file to policy/operator-image-policy.yaml,
+# list your own agent images in the copy, and run the deploy again. policy/up.sh applies that copy when it
+# is present, before the stack's namespace is labelled. The copy is not in git (.gitignore), so it stays yours.
+#
+# Why it exists: with admission on, an image that no policy covers is refused (no-match-policy: deny). An
+# agent's image is not a TAIPANBOX image, so nothing in policy/image-policy.yaml admits it. This file is the one
+# place to admit it. scripts/verified-images-are-enforced.sh holds it to four rules:
+#
+#   1. Every glob names an image by its digest: "<registry>/<name>@sha256:<64 hex digits>". A wildcard name is
+#      refused. A digest wildcard "@sha256:*" is allowed only with an identity or a key, never with static.
+#   2. A static entry (no signature; the image is trusted by its digest alone) names one exact digest per glob.
+#   3. A signed entry names its signer: a keyless identity (an issuer, and an anchored subject expression that
+#      names one repository's workflow on a version tag), or a public key. A subject expression that accepts
+#      any identity is refused.
+#   4. No entry covers ghcr.io/taipanbox/. A TAIPANBOX image is admitted through its own repository's row in
+#      policy/image-policy.yaml, which the gate holds separately. No private key material may appear here.
+#
+# Name each entry operator-<something> and give each entry its own ClusterImagePolicy.
+#
+# Static, by digest (the image is trusted by its digest alone):
+#
+# apiVersion: policy.sigstore.dev/v1beta1
+# kind: ClusterImagePolicy
+# metadata:
+#   name: operator-agent-static
+# spec:
+#   mode: enforce
+#   images:
+#     - glob: "registry.example.com/acme/agent@sha256:<64 hex digits of the digest you pinned>"
+#   authorities:
+#     - static:
+#         action: pass
+#
+# Keyless, by the identity that signed it (your repository's release workflow, on a version tag):
+#
+# apiVersion: policy.sigstore.dev/v1beta1
+# kind: ClusterImagePolicy
+# metadata:
+#   name: operator-agent-keyless
+# spec:
+#   mode: enforce
+#   images:
+#     - glob: "registry.example.com/acme/agent@sha256:*"
+#   authorities:
+#     - keyless:
+#         url: https://fulcio.sigstore.dev
+#         identities:
+#           - issuer: https://token.actions.githubusercontent.com
+#             subjectRegExp: "^https://github[.]com/acme/agent/[.]github/workflows/release[.]yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$"
+#
+# Public key (the key your images are signed with):
+#
+# apiVersion: policy.sigstore.dev/v1beta1
+# kind: ClusterImagePolicy
+# metadata:
+#   name: operator-agent-key
+# spec:
+#   mode: enforce
+#   images:
+#     - glob: "registry.example.com/acme/agent@sha256:*"
+#   authorities:
+#     - key:
+#         data: |
+#           -----BEGIN PUBLIC KEY-----
+#           ...
+#           -----END PUBLIC KEY-----
+#
+# Remove an entry by deleting its ClusterImagePolicy: kubectl delete clusterimagepolicy <name>.
+# A pod that is already running is not checked again; a pod that is created again is.
+#
+# (end of the template: operators add entries above this line)

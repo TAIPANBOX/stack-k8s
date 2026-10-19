@@ -29,6 +29,9 @@ spec:
       securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: agent
+          # Replace with your agent's own image, pinned by digest. With admission on, the stack refuses this
+          # image until policy/operator-image-policy.yaml lists it (copy the template there; see
+          # policy/README.md, "Your own agent images"). The line below is a placeholder, not a real image.
           image: ghcr.io/taipanbox/agent-example:replace-with-a-pinned-tag
           env:
             # The audience this agent asks vouchryx for, sent as RFC 8707 `resource=` in its token request

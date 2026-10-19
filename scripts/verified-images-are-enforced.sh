@@ -36,6 +36,9 @@
 #      exceptions are listed below with reasons.
 #   7. The default apply set (manifests/kustomization.yaml) does not name policy/, and deploy.sh turns
 #      admission on for the stack's namespace after its apply (the default install).
+#   8. The operator's entries (policy/operator-image-policy.example.yaml, and the operator's copy when it exists,
+#      gitignored) follow the operator rules: digest-pinned or signed by a named identity or key, no wildcard name,
+#      no digest wildcard under static, no entry for ghcr.io/taipanbox/, no permissive subject expression.
 #
 # A subject that is absent is "measured NOTHING", never a pass.
 set -uo pipefail
@@ -351,6 +354,105 @@ elif apply_at is None:
 elif enforce_at < apply_at:
     bad.append("deploy.sh turns admission on before it applies the manifests, when the namespace does not exist yet")
 
+# 8. Operator entries: the template is tracked, and the operator's copy is not (it is gitignored, and this gate
+#    reads it when it exists). Each live ClusterImagePolicy in either follows the operator rules, and none covers a
+#    TAIPANBOX image: those go through their repository's row above. Kept out of BINDINGS on purpose.
+OP_TEMPLATE = "policy/operator-image-policy.example.yaml"
+OP_COPY = "policy/operator-image-policy.yaml"
+# Identities no operator's subject expression may accept: an empty value, a stranger's repository, a branch,
+# a second line. A subject expression that accepts any of them names no one repository.
+PROBES_REFUSED = [
+    "",
+    "x",
+    "https://example.invalid/anything",
+    "https://github.com/evil/x/.github/workflows/release.yml@refs/tags/v1.0.0",
+    "https://github.com/evil/x/.github/workflows/release.yml@refs/heads/main",
+    "https://github.com/evil/x/.github/workflows/release.yml@refs/tags/v1.0.0\nextra",
+]
+
+
+def operator_problems(text, where):
+    out = []
+    live = "\n".join(l for l in text.split("\n") if not l.lstrip().startswith("#"))
+    if "PRIVATE KEY" in live:
+        out.append(f"{where}: private key material appears in a policy file; only the public key belongs here")
+    for d in re.split(r"\n---\s*\n", live):
+        if not re.search(r"\S", d):
+            continue
+        kind = re.search(r"^kind:\s*(\S+)\s*$", d, re.M)
+        if not kind:
+            out.append(f"{where}: a document names no kind")
+            continue
+        if kind.group(1) != "ClusterImagePolicy":
+            out.append(f"{where}: kind {kind.group(1)} is not a ClusterImagePolicy")
+            continue
+        name = re.search(r"^  name:\s*(\S+)\s*$", d, re.M)
+        n = name.group(1) if name else ""
+        tag = f"{where} {n or '(unnamed)'}"
+        if not re.fullmatch(r"operator-[a-z0-9-]+", n):
+            out.append(f"{tag}: the name must be operator-<something>")
+        mode = re.search(r"^\s*mode:\s*(\S+)\s*$", d, re.M)
+        if mode and mode.group(1) != "enforce":
+            out.append(f"{tag}: mode is not enforce (a warn entry admits the unlisted image)")
+        globs = re.findall(r"^\s*-\s*glob:\s*\"?([^\"\s]+)\"?\s*$", d, re.M)
+        if not globs:
+            out.append(f"{tag}: names no glob, so it covers no image")
+        kinds = [k for k in ("static", "keyless", "key") if re.search(rf"^\s*-?\s*{k}:\s*$", d, re.M)]
+        if len(kinds) != 1:
+            out.append(f"{tag}: names {len(kinds)} authorities, expected exactly one of static, keyless, key")
+        auth = kinds[0] if len(kinds) == 1 else None
+        for g in globs:
+            if g.startswith("ghcr.io/taipanbox/"):
+                out.append(f"{tag}: glob {g} covers a TAIPANBOX image, which is admitted through its repository's row in image-policy.yaml")
+                continue
+            m = re.fullmatch(r"([a-z0-9.-]+(?::[0-9]+)?/[a-z0-9._/-]+)@sha256:(\*|[0-9a-f]{64})", g)
+            if not m:
+                if "*" in g.split("@", 1)[0]:
+                    out.append(f"{tag}: glob {g} is a wildcard name, which would admit every image of its registry")
+                elif "@sha256:" not in g:
+                    out.append(f"{tag}: glob {g} is not digest-pinned (name@sha256:<64 hex digits>)")
+                else:
+                    out.append(f"{tag}: glob {g} is not a digest-pinned image name")
+                continue
+            if m.group(2) == "*" and auth == "static":
+                out.append(f"{tag}: glob {g} is a digest wildcard, and a static allow needs one exact digest")
+        if auth == "keyless":
+            issuers = re.findall(r"issuer:\s*\"?([^\"\s]+)\"?", d)
+            if not issuers or not all(i.startswith("https://") for i in issuers):
+                out.append(f"{tag}: the keyless issuer must be an https URL")
+            subjects = re.findall(r"subjectRegExp:\s*\"?(.+?)\"?\s*$", d, re.M)
+            if len(subjects) != 1:
+                out.append(f"{tag}: names {len(subjects)} subjectRegExp, expected one")
+            else:
+                expr = subjects[0]
+                if not (expr.startswith("^") and expr.endswith("$")):
+                    out.append(f"{tag}: subjectRegExp must be anchored with ^ and $")
+                try:
+                    rx = re.compile(expr)
+                except re.error as e:
+                    out.append(f"{tag}: subjectRegExp does not compile: {e}")
+                    rx = None
+                if rx is not None:
+                    for probe in PROBES_REFUSED:
+                        if rx.fullmatch(probe):
+                            out.append(f"{tag}: subjectRegExp accepts the probe identity {probe!r}, so it names no one repository")
+        if auth == "key":
+            if "BEGIN PUBLIC KEY" not in d or "END PUBLIC KEY" not in d:
+                out.append(f"{tag}: the key authority carries no PEM public key block")
+    return out
+
+
+if not os.path.exists(OP_TEMPLATE):
+    bad.append(f"{OP_TEMPLATE} is absent, so this gate measured NOTHING about operator entries")
+else:
+    bad += operator_problems(read(OP_TEMPLATE), OP_TEMPLATE)
+if os.path.exists(OP_COPY):
+    bad += operator_problems(read(OP_COPY), OP_COPY)
+if not re.search(r"^policy/operator-image-policy\.yaml\s*$", read(".gitignore") if os.path.exists(".gitignore") else "", re.M):
+    bad.append(".gitignore does not ignore policy/operator-image-policy.yaml, so an operator's copy could be committed")
+if not re.search(r"apply -f policy/operator-image-policy\.yaml", up):
+    bad.append("policy/up.sh does not apply the operator's copy of the entries when it is present")
+
 if bad:
     for b in bad:
         print("FAIL " + b)
@@ -359,5 +461,5 @@ if bad:
 print(f"OK: {len(refs)} image reference(s) pinned by digest; {len(taipanbox_policies)} policies, one per repository, "
       f"cover {len(cover)} TAIPANBOX image names with the workflow of their own repository; {len(static_digests)} static "
       "allow(s) carry a reason; policy/up.sh waits for the webhook before it opts the namespace in; deploy.sh opts "
-      "agent-stack in after its apply.")
+      "agent-stack in after its apply; the operator template and any operator copy follow the operator rules.")
 PY

@@ -901,6 +901,8 @@ Kubernetes API token and no secret. To get an agent token, the agent asks vouchr
 `resource=https://vouchryx.agent-stack.invalid` (RFC 8707; the example carries it as `VOUCHRYX_AGENT_RESOURCE`).
 A request that names no resource is refused `audience_not_allowed`: vouchryx does not fall back to its own issuer.
 
+**Admission.** With admission on (the default install turns it on for `agent-stack`, see `policy/README.md`), an agent pod's image is refused until it is listed. Before you turn the agents on, copy `policy/operator-image-policy.example.yaml` to `policy/operator-image-policy.yaml` and list each agent image there, by digest, or with the identity or key that signs it. `policy/README.md` has the templates and the rules.
+
 Turning it on sets the gateway's audience to `https://vouchryx.agent-stack.invalid`, the same
 identifier the broker's door and vouchryx's allowed audiences name, so delegated calls minted for
 any other audience are refused from then on. It is an identifier, not an address, and nothing serves

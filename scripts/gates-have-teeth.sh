@@ -3197,6 +3197,63 @@ run_case "verified-images: the default install stops turning admission on" fail 
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("deploy.sh", "bash policy/up.sh --enforce'"'"'", "bash policy/up.sh'"'"'")')" \
 	"does not turn admission on for agent-stack"
+run_case "verified-images: an operator entry admits every image (a wildcard name)" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-open\nspec:\n  images:\n    - glob: \"*@sha256:*\"\n  authorities:\n    - keyless:\n        url: https://fulcio.sigstore.dev\n        identities:\n          - issuer: https://token.actions.githubusercontent.com\n            subjectRegExp: \".*\"\n# (end of the template: operators add entries above this line)")')" \
+	"is a wildcard name"
+
+run_case "verified-images: an operator entry names a wildcard repository" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/*@sha256:*\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')" \
+	"is a wildcard name"
+
+run_case "verified-images: an operator entry names no digest" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/agent:1.0\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')" \
+	"is not digest-pinned"
+
+run_case "verified-images: an operator static entry with a digest wildcard" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/agent@sha256:*\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')" \
+	"a static allow needs one exact digest"
+
+run_case "verified-images: an operator keyless entry accepts any repository" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/agent@sha256:*\"\n  authorities:\n    - keyless:\n        url: https://fulcio.sigstore.dev\n        identities:\n          - issuer: https://token.actions.githubusercontent.com\n            subjectRegExp: \"^https://github[.]com/[^/]+/[^/]+/[.]github/workflows/release[.]yml@refs/tags/v.*$\"\n# (end of the template: operators add entries above this line)")')" \
+	"accepts the probe identity"
+
+run_case "verified-images: an operator entry covers a TAIPANBOX image" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/taipanbox/mockryx@sha256:*\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')" \
+	"covers a TAIPANBOX image"
+
+run_case "verified-images: an operator entry in warn mode" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  mode: warn\n  images:\n    - glob: \"ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')" \
+	"mode is not enforce"
+
+run_case "verified-images: a private key in the operator entries" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/agent@sha256:*\"\n  authorities:\n    - key:\n        data: |\n          -----BEGIN " + "PRIVATE KEY-----\n          -----END " + "PRIVATE KEY-----\n# (end of the template: operators add entries above this line)")')" \
+	"private key material"
+
+run_case "verified-images: an operator static entry pinned by digest (must pass)" pass \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-agent-static\nspec:\n  mode: enforce\n  images:\n    - glob: \"registry.example.com/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')"
+
+run_case "verified-images: an operator keyless entry naming its repository (must pass)" pass \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-agent-keyless\nspec:\n  mode: enforce\n  images:\n    - glob: \"registry.example.com/acme/agent@sha256:*\"\n  authorities:\n    - keyless:\n        url: https://fulcio.sigstore.dev\n        identities:\n          - issuer: https://token.actions.githubusercontent.com\n            subjectRegExp: \"^https://github[.]com/acme/agent/[.]github/workflows/release[.]yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$\"\n# (end of the template: operators add entries above this line)")')"
+
+run_case "verified-images: the operator's copy is not ignored" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit(".gitignore", "policy/operator-image-policy.yaml\n", "")')" \
+	"does not ignore policy/operator-image-policy.yaml"
+
+run_case "verified-images: up.sh no longer applies the operator copy" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/up.sh", "  $KUBECTL apply -f policy/operator-image-policy.yaml\n", "")')" \
+	"does not apply the operator's copy"
 run_case "verified-images: a reason reworded (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres), an upstream image", "# reason: the policy store (postgres), an upstream image")')"

@@ -12,6 +12,9 @@ kubectl delete validatingwebhookconfiguration validating.clusterimagepolicy.sigs
 kubectl delete mutatingwebhookconfiguration defaulting.clusterimagepolicy.sigstore.dev policy.sigstore.dev --ignore-not-found
 kubectl delete -f policy/image-policy.yaml --ignore-not-found
 kubectl delete clusterimagepolicy taipanbox-signed --ignore-not-found
+if [ -f policy/operator-image-policy.yaml ]; then
+  kubectl delete -f policy/operator-image-policy.yaml --ignore-not-found
+fi
 kubectl delete -f policy/policy-controller.yaml --ignore-not-found --wait=false
 
 echo "admission is off: the webhooks are gone. The cosign-system namespace finishes terminating on its own."

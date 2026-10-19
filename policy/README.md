@@ -16,6 +16,8 @@ scripts (`cloud/gcp/deploy-gcp.sh`, `cloud/aws/deploy-aws.sh`) do not turn it on
 | `image-policy.yaml` | One `ClusterImagePolicy` per TAIPANBOX repository (fifteen), and `upstream-pinned`. Each TAIPANBOX policy names the image names of one repository, digest-anchored (`name@sha256:*`), and one keyless identity: that repository's `release.yml` on a version tag, or for stack-k8s, `console-image.yml` (the console) or `tunnel-images.yml` (the tunnel images). `upstream-pinned`: three upstream images, by digest, each with its reason. |
 | `up.sh` | Installs the controller and the policies, in that order, and waits for the webhook. With `--enforce`, it also opts `agent-stack` in, last. `KUBECTL` names the client (deploy.sh sets it to k3s's kubectl on the node). |
 | `down.sh` | Removes the webhooks first, then the policies and the controller. |
+| `operator-image-policy.example.yaml` | The template for your own agent images, tracked, all comments. See "Your own agent images". |
+| `operator-image-policy.yaml` | Your copy of the template, with your entries. Gitignored: it is yours, not the repository's. When it exists and holds an entry, `up.sh` applies it. |
 
 No manifest names this directory. The default install runs `up.sh --enforce` from `deploy.sh`, not from `kubectl apply -k`.
 
@@ -71,6 +73,40 @@ Upstream images are trusted only by digest, and only where listed with a reason:
 
 A new upstream image is refused until it is pinned by digest and listed with a reason in `image-policy.yaml`.
 
+## Your own agent images
+
+With admission on, an image that no policy covers is refused, and an agent's image is not a TAIPANBOX image. An
+agent pod (one that carries `taipanbox.dev/agent-token: "true"`, see `agent-tokens/example-agent.yaml`) is refused
+until its image is listed. To list it:
+
+```bash
+cp policy/operator-image-policy.example.yaml policy/operator-image-policy.yaml
+# add one ClusterImagePolicy per image above the end marker, then:
+policy/up.sh --enforce   # or the deploy, which runs it
+```
+
+Each entry is one of three forms, and the template has all three:
+
+- **static**: the image is trusted by its digest alone. The glob names one exact digest:
+  `registry.example.com/acme/agent@sha256:<64 hex digits>`.
+- **keyless**: the image is signed by a workflow, and the entry names that workflow. The subject expression is
+  anchored and names one repository, on a version tag.
+- **key**: the image is signed with a key, and the entry carries the public key (PEM). Never the private key.
+
+The gate (`scripts/verified-images-are-enforced.sh`, section 8) holds every entry to four rules, and refuses the
+entry, not the deploy:
+
+1. a glob names an image by digest; a wildcard name (`*`) is refused, and so is a digest wildcard under `static`;
+2. a `static` entry names one exact digest per glob;
+3. a signed entry names its signer, and a subject expression that accepts a stranger's repository, a branch or any
+   identity is refused (the gate tries it on probe identities);
+4. no entry covers `ghcr.io/taipanbox/`. TAIPANBOX images go through their repository's row in
+   `image-policy.yaml`, which the gate keeps separately.
+
+Measured on kind (`evidence/verified-images-kind/admission-operator-v120.sh`): an agent pod whose image is not listed
+is refused; the same image, listed as a `static` entry in the copy, is admitted. The keyless and key forms are checked
+by the gate's teeth cases, not measured on a cluster.
+
 ## Running it
 
 ```bash
@@ -85,6 +121,7 @@ labelled before that refuses every pod create in it.
 
 ## Not covered
 
+- **Keyless and key operator entries on a cluster.** The gate checks their rules; the kind run measured the `static` form only.
 - **The cloud deploy scripts.** `cloud/gcp/deploy-gcp.sh` and `cloud/aws/deploy-aws.sh` apply the manifests but do not
   run `policy/up.sh --enforce` yet. A cloud cluster is therefore not admitted until that is wired in, and the Hetzner
   path (`deploy.sh`) is the only default install that turns it on.

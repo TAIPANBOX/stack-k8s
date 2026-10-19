@@ -1,0 +1,26 @@
+# operator agent images on kind, measured 2026-10-19T08:48:12Z, kind v0.33.0
+kubernetes v1.37.0
+repo 8009ce7 with local changes
+controller release: v0.15.1 image: ghcr.io/sigstore/policy-controller/policy-controller:v0.15.1@sha256:0492bb264fb1d9bdc8e3f343ef542cc85b7dd7c7fd8d9524b453c2bd31a1d128 
+
+## 1. the default install's call, no operator copy
+    up.sh --enforce exit=0
+    policies: 16
+    agent-stack   Active   26s   true
+REFUSED    agent image, not listed (alpine:3.20)                alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+           reason: validation failed: no matching policies: spec.containers[0].image alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc 
+
+## 2. the operator lists the agent image by digest in the copy, and runs the deploy's call again
+    copy written: policy/operator-image-policy.yaml (one static entry, alpine:3.20 by digest)
+    up.sh --enforce exit=0
+    operator entries applied (lines naming it): 1
+ADMITTED   agent image, listed (alpine:3.20)                    alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+REFUSED    other digest of the same name, not listed (alpine:3.19) alpine@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1
+           reason: validation failed: no matching policies: spec.containers[0].image alpine@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1 
+
+## 3. policy/down.sh removes the admission and the operator's entry
+    down.sh exit=0
+    operator entry left: 0 (0 is right)
+
+finished 2026-10-19T08:49:16Z
+EXIT 0
