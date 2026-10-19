@@ -30,6 +30,12 @@ Feature: a node's host key is verified before the first connection
     Then the keys are written to the per-run known_hosts
     # -> hostkeys-are-verified.sh case D2
 
+  Scenario: the console block with the CRLF line ends EC2 returns is read
+    Given a console whose prefixed fingerprint lines end in a carriage return and a newline
+    When the installer keyscans the node and the fingerprints are the same
+    Then the keys are written to the per-run known_hosts
+    # -> hostkeys-are-verified.sh case D4
+
   Scenario: a fingerprint printed by another program is not taken
     Given a console where the matching fingerprints appear behind another program's syslog prefix
     When the installer reads the console

@@ -28,6 +28,8 @@
 #   D  AWS, the console answers base64: decoded, and A holds.
 #   D2 AWS, every console line carries cloud-init's syslog prefix, as EC2 prints it:
 #      the fingerprints are read, and A holds.
+#   D4 AWS, the prefixed block with CRLF line ends, the bytes get-console-output
+#      really returns: the fingerprints are read, and A holds.
 #   D3 AWS, the matching fingerprint is printed under another program's prefix:
 #      not read, so the node is refused.
 #   E  GCE, the guest attributes carry the keys: written, and a strict connection
@@ -163,6 +165,12 @@ block_for "$K1_FP" | sed 's/^/<14>Oct 19 17:25:04 cloud-init: /' > "$T/console";
 : > "$T/kh-d2"
 helper hostkeys_aws i-0123 "$IP" "$T/kh-d2" >"$T/out-d2" 2>&1; rc=$?
 if [ "$rc" = 0 ] && grep -qF "$K1_LINE" "$T/kh-d2"; then pass "D2 a console block with cloud-init's syslog prefix is read"; else bad "D2 prefixed console: rc=$rc, $(cat "$T/out-d2")"; fi
+
+# ---- D4: AWS, prefixed lines with CRLF ends (the live get-console-output bytes) ---------
+block_for "$K1_FP" | sed 's/^/<14>Oct 19 17:25:04 cloud-init: /' | sed "s/\$/$(printf '\r')/" > "$T/console"; printf '%s\n' "$K1_LINE" > "$T/scan"
+: > "$T/kh-d4"
+helper hostkeys_aws i-0123 "$IP" "$T/kh-d4" >"$T/out-d4" 2>&1; rc=$?
+if [ "$rc" = 0 ] && grep -qF "$K1_LINE" "$T/kh-d4" && grep -q "$(printf '\r')" "$T/console"; then pass "D4 a prefixed console block with CRLF line ends is read"; else bad "D4 CRLF console: rc=$rc, $(cat "$T/out-d4")"; fi
 
 # ---- D3: AWS, the fingerprint under another program's prefix -------------------------
 block_for "$K1_FP" | sed 's/^/<14>Oct  9 17:25:04 sshd-forger: /' > "$T/console"
