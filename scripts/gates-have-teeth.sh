@@ -3712,6 +3712,55 @@ run_case "add-site: a comment reworded beside the reader (must pass)" pass \
 	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
 	"$(py 'edit("hub/add-site.sh", "# The manifests pin the image as name:tag@sha256", "# The manifests pin the image, as name:tag@sha256")')"
 
+# The witness reads the record it countersigns, and the record-seal reads the attestations, through shared volumes (CLAUDE.md invariant 70).
+run_case "witness-records: the witness stops reading the record" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "KEYRYX_WITNESS_RECORDS", "KEYRYX_WITNESS_RECORDSX")')" \
+	"does not read the record"
+run_case "witness-records: the witness mounts the record writable" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "            - name: trailryx-records\n              mountPath: /var/lib/stack/records\n              readOnly: true\n", "            - name: trailryx-records\n              mountPath: /var/lib/stack/records\n")')" \
+	"does not mount the trailryx-records claim read-only"
+run_case "witness-records: the record claim is not read only" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "            claimName: trailryx-records\n            readOnly: true\n", "            claimName: trailryx-records\n")')" \
+	"is not a read-only claim of trailryx-records"
+run_case "witness-records: the witness Deployment is no longer Recreate" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("strategy: { type: Recreate }"); open(p, "w").write(s[:i] + "strategy: { type: RollingUpdate }" + s[i + len("strategy: { type: Recreate }"):])')" \
+	"is not Recreate"
+run_case "witness-records: the witness init stops making the attestation directory" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "mkdir -p /var/lib/keyryx-witness/data/attestations && chmod 0750 /var/lib/keyryx-witness/data/attestations &&", "true &&")')" \
+	"does not make data/attestations"
+run_case "witness-records: the record-seal is not pinned to the witness node" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "topologyKey: kubernetes.io/hostname", "topologyKey: topology.kubernetes.io/zone")')" \
+	"not pod-affined to the witness"
+run_case "witness-records: the record-seal mounts the whole witness state" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "                  subPath: data/attestations\n", "")')" \
+	"without the subPath data/attestations"
+run_case "witness-records: the record-seal reads attestations it cannot read (mode 0600)" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "                - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE\n", "                - name: TRAILRYX_WITNESS_ATTESTATIONS\n                  value: /var/lib/stack/attestations\n                - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE\n")')" \
+	"sets TRAILRYX_WITNESS_ATTESTATIONS while"
+run_case "witness-records: the attestation blocker is dropped from the patch" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "TODO(keyryx-attest-mode)", "TODO(attest)")')" \
+	"named as TODO(keyryx-attest-mode)"
+run_case "witness-records: the opt-out keeps the pod affinity" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/record-seal-unpatch.yaml", "affinity: null", "affinity: {}")')" \
+	"does not remove the pod affinity"
+run_case "witness-records: the record-seal passes its own tenant" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "--seal-records 500 || true", "--tenant other --seal-records 500 || true")')" \
+	"passes --tenant"
+run_case "witness-records: a comment reworded in the record-seal patch (must pass)" pass \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "# Applied by lib/keyryx-install.sh", "# Applied by the library lib/keyryx-install.sh")')"
+
 # Workflow checkouts of other repositories are pinned to a full commit (CLAUDE.md invariant 68).
 run_case "workflow-checkouts: a checkout of another repository has no ref" fail \
 	'./scripts/workflow-checkouts-are-pinned.sh' \

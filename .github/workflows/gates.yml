@@ -371,6 +371,11 @@ jobs:
       - name: Keyryx is installed by default, with --without-keyryx as the opt-out (invariant 69)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/keyryx-is-default.sh
 
+      # Added 2026-10-19 with invariant 70. The Keyryx witness reads the record it countersigns, and the record-seal
+      # reads the witness's attestations, through volumes the two share. See CLAUDE.md invariant 70.
+      - name: the Keyryx witness reads the record and the record-seal reads attestations through shared volumes (invariant 70)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/keyryx-witness-shares-the-record.sh
+
       # Added 2026-10-14 with invariant 44. A cost report that meets a machine type with no
       # rate exits non-zero and names it, instead of counting it as zero. See GOTCHAS 127.
       - name: a cost report refuses an unknown machine rate (invariant 44)

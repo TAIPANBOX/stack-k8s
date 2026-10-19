@@ -1,6 +1,6 @@
-# Reverses keyryx/record-seal-patch.yaml (CLAUDE.md invariant 69): the signer, its custody URL and credential
-# file come off, and the consumer label with them. The credential volume stays, unused, because a strategic
-# patch can remove it but the mount is harmless without the signer; keyryx/down.sh and the opt-out say so.
+# Reverses keyryx/record-seal-patch.yaml (CLAUDE.md invariants 69 and 70): the signer, its custody URL and credential
+# file come off, the consumer label goes, the pod affinity to the witness goes, and the witness-state mount goes with
+# them. The credential secret and the policy stay, because keyryx/down.sh and the opt-out say so.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -14,6 +14,7 @@ spec:
           labels:
             keyryx-consumer: null
         spec:
+          affinity: null
           containers:
             - name: trailryx
               env:
@@ -23,3 +24,9 @@ spec:
                   $patch: delete
                 - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE
                   $patch: delete
+              volumeMounts:
+                - name: witness-attestations
+                  $patch: delete
+          volumes:
+            - name: witness-attestations
+              $patch: delete

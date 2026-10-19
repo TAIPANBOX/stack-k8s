@@ -123,6 +123,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/hub-add-site-reads-the-pinned-image.sh # hub/add-site.sh reads a pinned image reference
 ./scripts/approver-key-is-minted.sh # invariant 67
 ./scripts/keyryx-is-default.sh # invariant 69
+./scripts/keyryx-witness-shares-the-record.sh # invariant 70
 ./scripts/cost-live-refuses-unknown-rates.sh # invariant 44; GOTCHAS 127
 ./scripts/cluster-dns-has-a-budget.sh # invariant 45; GOTCHAS 128
 ./scripts/run-budget-ceiling-is-set.sh # invariant 28 (its flag half is deploy-flags-agree.sh)
@@ -1182,7 +1183,7 @@ an absent invariant.
     different uids (20101 custody, 20100 witness), mount different state claims and
     different root key Secrets, and the witness mounts the event streams
     `stack-events` read only and writes its alerts to its own volume, not into the
-    event directory. The witness therefore reads the record without being able to
+    event directory. From 2026-10-19 (invariant 70) it also mounts the trailryx record read only, the one claim it adds. The witness therefore reads the record without being able to
     write it.
     *(gate: `scripts/witness-is-separate.sh`; eight cases in
     `scripts/gates-have-teeth.sh`, one a pass case; scenarios in
@@ -1240,11 +1241,19 @@ an absent invariant.
 
     *(gate: `scripts/approver-key-is-minted.sh`, in both callers. Its static half reads the library, the three deploy paths, both manifests and every live file for the override; its behavioural half runs the mint against a stub kubectl over three starting states. Eleven teeth cases in `scripts/gates-have-teeth.sh`, among them an apply over the key, a SEC1 key, a non-P-256 curve, an optional console Secret, an optional JWK set, a cloud launcher that never mints, the override set, wardryx pinned before the statements, and a mint that rewrites a kept pair; one pass case. Scenarios: `features/the-approver-key-is-minted-once.feature`. Not covered: that wardryx v2.4.0's signature verifies (cosign is not installed here and installs are not allowed; the legacy `.sig` tag is present); that a live approval through the console is refused without a statement and granted with one; and that tokenfuse sends a fresh DPoP proof per decide, which v2.4.0 now requires.)*
 
+68. **A workflow that checks out another repository names the commit it builds, as a full 40-hex SHA, read from one env block per workflow; never a branch, a tag, or no ref.** `@decided 2026-10-19` (paraphrased, the supply-chain finding on the console image): a published image is built from the commit its tag names, not from whatever another repository's main held when the tag was pushed. `@claude 2026-10-19`: `console-image.yml` holds the five commits in its top-level `env:` block (qryx v1.1.0, mockryx v0.3.0, verdryx v0.1.0 and engram v3.0.0 as their peeled tag commits; genaryx at the merge commit of its #132, since it has no tags), and each checkout reads its `ref:` from there. *(gate: `scripts/workflow-checkouts-are-pinned.sh`, in both callers; six teeth cases in `scripts/gates-have-teeth.sh`.)*
+
 69. **Keyryx is installed by default in every launcher: custody holds the record's signing key, the witness reads the record, wardryx signs its approvals through custody, and the record-seal signs each root through custody. `--without-keyryx` removes that wiring, which is the weaker setting.** `@decided 2026-10-19` (paraphrased, the widening of the hybrid architecture): custody and the witness are part of every install, not an opt-in. `@claude 2026-10-19`: `lib/keyryx-install.sh` mints the two root keys and the two consumer bearers once, applies the policy (keys `trailryx-root` and `wardryx-approval`; consumers `wardryx` and `trailryx-node`, each by digest) and `keyryx/manifests/59` and `60`, patches wardryx and the record-seal after the last apply, and rolls them out. The wardryx patches pin the manifest's wardryx image, so a patch never rolls wardryx back. The record-seal sets `TRAILRYX_SIGNER=keyryx`, the custody URL and the consumer credential file. It does not set `TRAILRYX_WITNESS_ATTESTATIONS`, because keyryx v0.1.1 writes no attestation. The witness reads the shared stream directory through `KEYRYX_WITNESS_EVENTS`, the name keyryx's source reads.
 
     **TODO(trailryx-kid):** the trailryx pin, `TRAILRYX_KEYRYX_KID` (trailryx#112), is not released. Until it is, record-seal takes Keyryx's key from the JWKS it fetches, unpinned.
 
     *(gate: `scripts/keyryx-is-default.sh`, in both callers; eleven teeth cases and one pass case in `scripts/gates-have-teeth.sh`. Not covered: a Keyryx install on a live cluster, the record-seal's first signed seal, the CNI's enforcement of the consumer egress, and wardryx v2.4.0 running with the Keyryx approval signer, which its release notes do not cover.)*
+
+70. **The Keyryx witness reads the trailryx record it countersigns, and the record-seal reads the witness's attestations, through volumes the two share. Both claims are ReadWriteOnce, so the record-seal is pod-affined to the witness; the attestation read is withheld until keyryx writes the files readable.** `@claude 2026-10-19`: the witness has `KEYRYX_WITNESS_RECORDS="acme|/var/lib/stack/records"` (keyryx v0.1.1, `internal/wconfig/wconfig.go`) and the record mounted read only from `trailryx-records`; the witness writes `KEYRYX_WITNESS_DATA/attestations/<tenant>/<root>.json` (`internal/witness/witness.go`); the record-seal runs `read --pack` for tenant `acme` (the default in trailryx v1.4.0's `main.rs`), and reads attestations through `TRAILRYX_WITNESS_ATTESTATIONS`. The record-seal is pod-affined to the witness (`kubernetes.io/hostname`), and it mounts the witness state through `subPath: data/attestations` only, read only, so the witness key stays out of its reach.
+
+    **Blocked:** keyryx v0.1.1 writes each attestation with `os.CreateTemp`, which is mode 0600 owned by the witness's uid 20100, and the record-seal runs as uid 10001, so it cannot read the file. `TRAILRYX_WITNESS_ATTESTATIONS` is therefore not set (`TODO(keyryx-attest-mode)`). Setting it now would make the pack step fail, and the job's own fallback would print "nothing sealed here to pack yet" and exit 0. That fallback is a defect of the record-seal command, found here and not yet fixed.
+
+    *(gate: `scripts/keyryx-witness-shares-the-record.sh`, in both callers; `scripts/witness-is-separate.sh` holds the one claim the witness adds, read only, and that custody adds none. Twelve teeth cases in `scripts/gates-have-teeth.sh`: eleven that must fail, among them the record unread, the record writable, the record claim writable, the witness Deployment not Recreate, the attestation directory not made, the record-seal not pod-affined, the whole witness state mounted, the attestation variable set, the blocker dropped, the affinity kept on the opt-out, and a tenant passed explicitly; one pass case. Not covered: that the pod affinity holds on a live cluster, the RWO attach behaviour of Longhorn under a Recreate rollout, whether the record reads cleanly while the sealer writes it on the same node, and the attestation read itself, which waits on keyryx.)*
 
 ## Decisions that have no gate yet
 
