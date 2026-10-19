@@ -56,7 +56,7 @@ for f in $LAUNCHERS; do
     bad "$f does not validate the CostCrew ceiling with budget/costcrew-ceiling.sh"
     continue
   fi
-  install_line=$(printf '%s\n' "$live" | grep -nE '(install\.sh|install-gcp\.sh|install-aws\.sh|terraform (apply|init))' | head -1 | cut -d: -f1)
+  install_line=$(printf '%s\n' "$live" | grep -nE '(/install\.sh|/install-gcp\.sh|/install-aws\.sh|terraform (apply|init))' | head -1 | cut -d: -f1)
   if [ -n "$install_line" ] && [ "$check_line" -gt "$install_line" ]; then
     bad "$f validates the CostCrew ceiling after its install step (line $install_line), so a refusal would come after the install"
   fi
