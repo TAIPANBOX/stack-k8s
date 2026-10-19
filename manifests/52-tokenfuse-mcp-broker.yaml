@@ -150,12 +150,20 @@ spec:
       tolerations:
         - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+      # The broker's copy of vouchryx's key set (CLAUDE.md invariant 54), as the gateway's: fetched before start,
+      # into a memory volume, and retried until vouchryx answers.
+      initContainers:
+        - name: fetch-vouchryx-jwks
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until wget -q -T 5 -O /jwks/jwks.json http://vouchryx:4310/.well-known/jwks.json && grep -q keys /jwks/jwks.json; do i=$((i+1)); [ $i -gt 150 ] && exit 1; sleep 2; done"]
+          volumeMounts: [{ name: vouchryx-jwks, mountPath: /jwks }]
       containers:
         - name: broker
           # The gateway's own image and pin, exactly (see pinned-images.sh
           # and CLAUDE.md invariant 7): this is a subcommand of the same
           # binary, not a separate published artifact.
-          image: ghcr.io/taipanbox/tokenfuse:v1.18.0@sha256:7cbaa794670560468b15a7a6a3c37396767435332e8eca3a30af627de29ad6d9
+          image: ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse"]
           args: ["mcp-broker"]
@@ -209,6 +217,25 @@ spec:
             - { name: TOKENFUSE_WARDRYX_TIMEOUT_MS, value: "250" }
             - { name: TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: "1000" }
             - { name: TOKENFUSE_WARDRYX_CACHE_TTL_MS, value: "3000" }
+            # tokenfuse v1.19.0 governed profile (invariant 62), as on the gateway.
+            - { name: TOKENFUSE_PROFILE, value: "governed" }
+            # The door (invariant 54): an agent's own token bound to its DPoP proof. A static key is admitted only from the list below.
+            - { name: TOKENFUSE_AGENT_TOKENS, value: "require" }
+            # broker static key broker-caller: the typed-answer door's own caller key, minted with the door (typed/mode.sh). It does not sign a DPoP proof.
+            # It must also be in TOKENFUSE_MCP_KEYS, which the broker reads from tokenfuse-mcp-broker-keys; the broker refuses to start otherwise.
+            - { name: TOKENFUSE_MCP_AGENT_TOKENS_STATIC_KEYS, value: "broker-caller" }
+            - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
+            - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "https://vouchryx.agent-stack.invalid" }
+            - { name: TOKENFUSE_DELEGATION_URL, value: "http://tokenfuse-mcp-broker:4200" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS, value: "http://vouchryx:4310/v1/revocations" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, value: "12000" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: "closed" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: "60" }
+            # The tool-call check: the gateway's, asked with the broker's own key (invariant 54). Closed when it does not answer.
+            - { name: TOKENFUSE_MCP_TAINT_GATEWAY, value: "http://tokenfuse-gateway:4100" }
+            - { name: TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE, value: "/run/taint/key" }
+            - { name: TOKENFUSE_MCP_TAINT_FAILMODE, value: "closed" }
           envFrom:
             # NOT optional. Missing here is not an unconfigured feature, it
             # is a door with nothing on it or a vault with nothing in it; see
@@ -219,6 +246,8 @@ spec:
           lifecycle: { preStop: { sleep: { seconds: 5 } } }
           volumeMounts:
             - { name: events, mountPath: /var/lib/stack/events }
+            - { name: vouchryx-jwks, mountPath: /etc/tokenfuse/delegation, readOnly: true }
+            - { name: taint-key, mountPath: /run/taint, readOnly: true }
           readinessProbe:
             # /healthz needs no credential, the same stance every plane here
             # takes on its own probe.
@@ -234,6 +263,12 @@ spec:
       volumes:
         - name: events
           persistentVolumeClaim: { claimName: stack-events }
+        - name: vouchryx-jwks
+          emptyDir: { medium: Memory, sizeLimit: 1Mi }
+        # The broker's own client key for the tool-call check (minted with the gateway's keys, lib/identity-mint.sh).
+        # fsGroup 10001 above gives it group 10001, so the uid reads it at 0440 (invariant 32).
+        - name: taint-key
+          secret: { secretName: broker-taint-key, defaultMode: 0440, items: [{ key: client_key, path: key }] }
 ---
 apiVersion: v1
 kind: Service
@@ -262,6 +297,20 @@ spec:
 # 30-network-policy.yaml lets `plane: money` in on 8090); this is the egress half,
 # additive beside the file every install ships. With --typed-risk-signal the
 # broker asks typryx's wardryx-proxy instead (56-typryx-wardryx-proxy.yaml).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: broker-egress-gateway
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: tokenfuse-gateway } }
+      ports:
+        - { protocol: TCP, port: 4100 }
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

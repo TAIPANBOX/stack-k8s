@@ -17,15 +17,13 @@
 # address (http://vouchryx:4310, once this script has applied the manifest)
 # is a reasonable choice, but this script does not invent it for you.
 #
-# Off by default: `kubectl apply -k manifests/` never applies
-# manifests/54-delegation.yaml or either patch beside it. This script is the
-# only path that turns delegation on.
+# vouchryx itself is in the default install and runs agents-only (CLAUDE.md invariant 24, amended
+# 2026-10-19). This script is the opt-in step that TRUSTS an upstream identity provider as one more issuer
+# of subject tokens, and it is the only path that does. The agent tokens of invariant 54 do not need it.
 #
-# Idempotent (CLAUDE.md invariant 4): the signing key and the revoke key are
-# generated once, into the vouchryx-keys Secret, and REUSED on every later
-# run, never regenerated or dropped (the same stance hub/add-site.sh takes on
-# a site's keys). The revocation store lives on its own PersistentVolumeClaim,
-# so a revocation survives a pod restart across runs of this script too.
+# Idempotent (CLAUDE.md invariant 4): the signing key, the revoke key and the first agent are minted once
+# by lib/vouchryx-mint.sh and REUSED on every later run. The revocation store lives on its own
+# PersistentVolumeClaim, so a revocation survives a pod restart across runs of this script too.
 #
 # KUBECONFIG comes from the environment, same as every other script here.
 set -euo pipefail
@@ -37,14 +35,12 @@ NS="${NS:-agent-stack}"
 ISSUER=""
 AUDIENCE=""
 JWKS_FILE=""
-REVOCATIONS_INTERVAL_MS="12000"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --issuer) ISSUER="$2"; shift 2 ;;
     --audience) AUDIENCE="$2"; shift 2 ;;
     --jwks-file) JWKS_FILE="$2"; shift 2 ;;
-    --revocations-interval-ms) REVOCATIONS_INTERVAL_MS="$2"; shift 2 ;;
     -h|--help) sed -n '2,25p' "$0" | sed -E 's/^# ?//'; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
@@ -67,9 +63,6 @@ if [ -n "$missing" ]; then
    guess (CLAUDE.md invariant 14). Nothing was applied to the cluster."
 fi
 
-case "$REVOCATIONS_INTERVAL_MS" in
-  ''|*[!0-9]*|0) die "--revocations-interval-ms must be a positive whole number of milliseconds, got '$REVOCATIONS_INTERVAL_MS'. Nothing was applied to the cluster." ;;
-esac
 [ -f "$JWKS_FILE" ] || die "--jwks-file $JWKS_FILE does not exist. Nothing was applied to the cluster."
 python3 -c "
 import json, sys
@@ -96,6 +89,7 @@ k() { kubectl -n "$NS" "$@"; }
 # credential this script mints, so there is nothing here to protect by
 # refusing to overwrite it. A JWKS is a set of PUBLIC keys, which is why this
 # is a ConfigMap and not a Secret.
+k get deployment vouchryx >/dev/null 2>&1 || die "vouchryx is not deployed in $NS: deploy the stack first (it is in the default install). Nothing was applied to the cluster."
 say "writing the trusted issuer into vouchryx-trusted-issuers"
 TRUSTED_ISSUERS_LINE="${ISSUER}|${AUDIENCE}|/etc/vouchryx/trusted/idp.jwks.json"
 # The namespace must already exist: this turns a plane on in an installed
@@ -113,89 +107,24 @@ k create configmap vouchryx-trusted-issuers \
   --dry-run=client -o yaml | k apply -f - >/dev/null
 echo "   issuer=$ISSUER audience=$AUDIENCE"
 
-# ---- the signing key and the revoke key, minted once and reused -----------
-# Requirement 3: never regenerated or dropped once they exist, the same
-# stance hub/add-site.sh takes on a site's keys.
-if k get secret vouchryx-keys >/dev/null 2>&1; then
-  say "vouchryx-keys already exists, reusing the signing key and revoke key"
-else
-  say "minting the signing key and the revoke key (generated here, never committed)"
-  TMP="$(mktemp -d)"
-  trap 'rm -rf "$TMP"' EXIT
-  ( umask 077
-    openssl ecparam -genkey -name prime256v1 -noout -out "$TMP/signing.pem" 2>/dev/null
-  ) || die "could not mint the EC P-256 signing key"
-  REVOKE_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-  # on stdin as a manifest (CLAUDE.md invariant 60): neither value is on a command line
-  . "$ROOT/lib/secret-doc.sh"
-  secret_doc vouchryx-keys "signing.pem=@$TMP/signing.pem" "revoke_key=$REVOKE_KEY" \
-    | k create -f - >/dev/null
-  rm -rf "$TMP"
-  trap - EXIT
-  echo "   created secret vouchryx-keys (signing.pem, revoke_key). Neither value is printed above."
-fi
+# ---- the keys and the agent registry: the same objects the default install mints ---------
+# vouchryx runs agents-only by default (CLAUDE.md invariant 24, amended). This script adds an upstream
+# issuer on top: lib/vouchryx-mint.sh mints the keys and the first agent only when they are absent.
+say "vouchryx keys and the registry (kept when they exist)"
+k_() { eval "kubectl $*"; }
+. "$ROOT/lib/secret-doc.sh"
+. "$ROOT/lib/vouchryx-mint.sh" || die "no lib/vouchryx-mint.sh in $ROOT"
+note() { printf '   %s\n' "$*"; }
+vouchryx_mint_settle
 
-# ---- apply the plane itself -------------------------------------------------
-say "applying manifests/54-delegation.yaml"
-kubectl apply -f "$ROOT/manifests/54-delegation.yaml" 2>&1 | sed 's/^/   /'
-
-say "waiting for vouchryx to roll out"
+# vouchryx reads its trusted issuers at start, so it is rolled to read the ConfigMap written above.
+say "rolling vouchryx to read the trusted issuer"
+k rollout restart deployment/vouchryx >/dev/null
 k rollout status deployment/vouchryx --timeout=120s \
   || die "vouchryx did not roll out. kubectl -n $NS describe pod -l app=vouchryx"
 
-# ---- fetch vouchryx's OWN served JWKS, the trap this manifest's header
-# names: a JWKS minted any other way does not carry the RFC 7638 thumbprint
-# vouchryx actually signs with, and every token is refused BadToken. Reached
-# by port-forward: the NetworkPolicy above narrows the Service to the gateway
-# and the console, and port-forward attaches to the pod's network namespace
-# directly rather than crossing it, the same reason hub/up.sh reads the
-# hub-ingress pod's own logs instead of asking through its Service.
-say "fetching vouchryx's own JWKS (its /.well-known/jwks.json, not the operator's)"
-PF_LOG="$(mktemp)"
-kubectl -n "$NS" port-forward svc/vouchryx 14310:4310 >"$PF_LOG" 2>&1 &
-PF_PID=$!
-# Under `set -e`, a failing command INSIDE an EXIT trap overrides the
-# script's own exit status, which is what happened here the first time this
-# ran on forge: the script printed "up" and every step had already succeeded,
-# but `kill "$PF_PID"` found the port-forward already reaped (the main flow
-# above kills it explicitly) and the whole run reported exit 1 anyway. Each
-# cleanup command needs its own `|| true`, not a shared one after the `;`.
-trap 'kill "$PF_PID" 2>/dev/null || true; rm -f "$PF_LOG" "$JWKS_TMP" 2>/dev/null || true' EXIT
-JWKS_TMP="$(mktemp)"
-ok=0
-for _ in $(seq 1 30); do
-  if curl -fsS -o "$JWKS_TMP" http://127.0.0.1:14310/.well-known/jwks.json 2>/dev/null; then
-    ok=1
-    break
-  fi
-  sleep 1
-done
-kill "$PF_PID" 2>/dev/null || true
-wait "$PF_PID" 2>/dev/null || true
-[ "$ok" = 1 ] || die "could not reach vouchryx's /.well-known/jwks.json through a port-forward after 30s.
-   $(cat "$PF_LOG" 2>/dev/null)"
-python3 -c "
-import json, sys
-doc = json.load(open('$JWKS_TMP'))
-keys = doc.get('keys') if isinstance(doc, dict) else None
-if not keys:
-    print('vouchryx served a JWKS with no keys, which cannot be right for a Ready pod.')
-    sys.exit(1)
-" || die "vouchryx's own JWKS looked wrong; nothing was patched onto the gateway."
-kubectl -n "$NS" create configmap vouchryx-jwks --from-file="jwks.json=$JWKS_TMP" \
-  --dry-run=client -o yaml | kubectl -n "$NS" apply -f - >/dev/null
-echo "   stored in the vouchryx-jwks ConfigMap"
-
-# ---- point the gateway and the console at it -------------------------------
-say "patching tokenfuse-gateway (delegation door on)"
-k patch deployment tokenfuse-gateway --patch-file "$ROOT/manifests/54-delegation-gateway-patch.yaml" >/dev/null
-# The patch file carries the product default (12000); the flag's value is set
-# here, so the interval this script reports below is the one the gateway runs.
-k set env deployment/tokenfuse-gateway -c gateway \
-  "TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS=${REVOCATIONS_INTERVAL_MS}" >/dev/null
-k rollout status deployment/tokenfuse-gateway --timeout=120s \
-  || die "tokenfuse-gateway did not roll out after the patch. kubectl -n $NS describe pod -l app=tokenfuse-gateway"
-
+# The gateway needs no change: it verifies agent tokens against vouchryx's own key set by default, and an
+# upstream issuer does not change that key set (invariant 54). Only the console's revoke command is patched.
 say "patching genaryx-console (so it can revoke from its own delegation_revoke command)"
 k patch deployment genaryx-console --patch-file "$ROOT/manifests/54-delegation-console-patch.yaml" >/dev/null
 k rollout status deployment/genaryx-console --timeout=120s \
@@ -203,9 +132,9 @@ k rollout status deployment/genaryx-console --timeout=120s \
 
 say "up"
 cat <<EOF
-   vouchryx:          http://vouchryx:4310 (in-cluster only)
-   gateway door:      ON, delegation chains reaching the PDP are verified
-   revocation poll:   every ${REVOCATIONS_INTERVAL_MS}ms
+   vouchryx:          http://vouchryx:4310 (in-cluster only), trusting one upstream issuer
+   gateway door:      agent tokens required by default (invariant 54); unchanged by this script
+   revocation poll:   every 12 s (set in 10-planes.yaml and 52-tokenfuse-mcp-broker.yaml)
 
    Revoke a subject (bearer: the revoke_key inside the vouchryx-keys Secret,
    never printed by this script):

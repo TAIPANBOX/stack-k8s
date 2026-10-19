@@ -1,0 +1,14 @@
+# DNS for every pod, as 30-network-policy.yaml's dns rule gives it (this kind namespace does not
+# carry that file; without it a pod whose egress is restricted cannot resolve a service name).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: dns-for-all, namespace: agent-stack }
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }

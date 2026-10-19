@@ -127,11 +127,10 @@ jobs:
       - name: Felyx reaches its model through the gateway (invariant 25)
         run: ./scripts/felyx-through-the-gateway.sh
 
-      # manifests/54-delegation.yaml (vouchryx) is opt-in, applied only by
-      # delegation/up.sh, never by the default apply set. See CLAUDE.md
-      # invariant 24 and GOTCHAS.md entry 105.
-      - name: delegation is off by default (invariant 24)
-        run: ./scripts/delegation-off-by-default.sh
+      # manifests/54-delegation.yaml (vouchryx) is in the default apply set and runs agents-only; an
+      # upstream identity provider stays opt-in (delegation/up.sh). CLAUDE.md invariant 24, as amended.
+      - name: vouchryx runs agents-only in the default install (invariant 24)
+        run: ./scripts/vouchryx-runs-agents-only.sh
       - name: closing a retained reservation is off by default (invariant 36)
         run: ./scripts/closure-off-by-default.sh
 
@@ -188,9 +187,15 @@ jobs:
       - name: the provider key is held by the gateway from a file, and no other container holds one
         run: ./scripts/no-provider-key-outside-the-gateway.sh
 
-      # An agent token is the door credential only when the opt-in turns it on (invariant 54).
-      - name: an agent token is the door credential only when the opt-in turns it on
-        run: ./scripts/agent-tokens-are-wired.sh
+      # The agent token is the door credential in the default install (invariant 54), and every door verifies it the same way.
+      - name: agent tokens are required at the doors, with one audience and a closed revocation list
+        run: ./scripts/agent-tokens-are-required.sh
+      # Static client keys are admitted only from the named allow-lists (invariant 62).
+      - name: a static client key is admitted only from the named lists
+        run: ./scripts/static-keys-are-named.sh
+      # wardryx verifies the agent's token and its DPoP proof itself (invariant 63, decision D3(b)).
+      - name: wardryx verifies agent tokens and proofs
+        run: ./scripts/wardryx-verifies-agent-tokens.sh
 
       # Added 2026-10-04. heraldyx v0.3.0 and idryx v1.1.0 refuse an event whose
       # source is not allowed for the file it was read from, so a stream this

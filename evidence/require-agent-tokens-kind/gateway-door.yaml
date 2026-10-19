@@ -1,0 +1,83 @@
+# Stand-in gateway for the measured run (evidence/require-agent-tokens-kind/run-v1.19.0.sh). Its image line is
+# filled in by run-v1.19.0.sh from manifests/10-planes.yaml, so it is the pinned tokenfuse. Its door env is copied
+# from manifests/10-planes.yaml (the gateway container); the rest of that container (the cloud plane, the trace
+# volume, stack-wiring) is left out, because the run has no control plane. Keep the two in step by hand; the
+# gates read the product manifests, not this file.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: tokenfuse-gateway, namespace: agent-stack, labels: { app: tokenfuse-gateway, plane: money } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: tokenfuse-gateway } }
+  template:
+    metadata: { labels: { app: tokenfuse-gateway, plane: money } }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      initContainers:
+        - name: fetch-vouchryx-jwks
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until wget -q -T 5 -O /jwks/jwks.json http://vouchryx:4310/.well-known/jwks.json && grep -q keys /jwks/jwks.json; do i=$((i+1)); [ $i -gt 150 ] && exit 1; sleep 2; done"]
+          volumeMounts: [{ name: vouchryx-jwks, mountPath: /jwks }]
+      containers:
+        - name: gateway
+          image: @@TOKENFUSE_IMAGE@@
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/tokenfuse"]
+          env:
+            - { name: TOKENFUSE_ADDR, value: "0.0.0.0:4100" }
+            - { name: TOKENFUSE_PROFILE, value: "governed" }
+            - { name: TOKENFUSE_MODE, value: "enforce" }
+            - { name: TOKENFUSE_FIREWALL, value: "enforce" }
+            - { name: TOKENFUSE_CACHE, value: "off" }
+            - { name: TOKENFUSE_DATA_DIR, value: "/tmp/tf" }
+            - { name: TOKENFUSE_UPSTREAM, value: "http://upstream:18080/v1/messages" }
+            - { name: TOKENFUSE_UPSTREAM_KEY_FILE, value: "/run/upstream/anthropic_key" }
+            - name: TOKENFUSE_CLIENT_KEYS
+              valueFrom: { secretKeyRef: { name: gateway-client-keys, key: client_keys } }
+            - name: TOKENFUSE_ADMIN_KEYS
+              valueFrom: { secretKeyRef: { name: kind-stack-keys, key: gateway_admin } }
+            - name: TOKENFUSE_DECLASSIFY_KEY
+              valueFrom: { secretKeyRef: { name: kind-stack-keys, key: declassify_key } }
+            - { name: TOKENFUSE_IDENTITY_STRICT, value: "enforce" }
+            - { name: TOKENFUSE_WARDRYX_MODE, value: "enforce" }
+            - { name: TOKENFUSE_WARDRYX_URL, value: "http://wardryx:8090" }
+            - name: TOKENFUSE_WARDRYX_KEY
+              valueFrom: { secretKeyRef: { name: kind-stack-keys, key: wardryx_gateway } }
+            - { name: TOKENFUSE_WARDRYX_FAILMODE, value: "closed" }
+            - { name: TOKENFUSE_WARDRYX_TIMEOUT_MS, value: "250" }
+            - { name: TOKENFUSE_WARDRYX_CACHE_TTL_MS, value: "3000" }
+            - { name: TOKENFUSE_AGENT_TOKENS, value: "require" }
+            - { name: STACK_STATIC_KEY_IDS, value: "felyx,agents,drills,costcrew,broker" }
+            - name: OPERATOR_STATIC_KEY_IDS
+              valueFrom: { configMapKeyRef: { name: gateway-static-keys, key: operator_key_ids } }
+            - { name: TOKENFUSE_AGENT_TOKENS_STATIC_KEYS, value: "$(STACK_STATIC_KEY_IDS)$(OPERATOR_STATIC_KEY_IDS)" }
+            - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
+            - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "https://vouchryx.agent-stack.invalid" }
+            - { name: TOKENFUSE_DELEGATION_URL, value: "http://tokenfuse-gateway:4100" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS, value: "http://vouchryx:4310/v1/revocations" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, value: "12000" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: "closed" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: "60" }
+          ports: [{ name: http, containerPort: 4100 }]
+          volumeMounts:
+            - { name: upstream, mountPath: /run/upstream, readOnly: true }
+            - { name: vouchryx-jwks, mountPath: /etc/tokenfuse/delegation, readOnly: true }
+            - { name: tmp, mountPath: /tmp/tf }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+      volumes:
+        - name: upstream
+          secret: { secretName: gateway-upstream-key, defaultMode: 0440 }
+        - name: vouchryx-jwks
+          emptyDir: { medium: Memory, sizeLimit: 1Mi }
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata: { name: tokenfuse-gateway, namespace: agent-stack }
+spec:
+  selector: { app: tokenfuse-gateway }
+  ports: [{ name: http, port: 4100, targetPort: http }]

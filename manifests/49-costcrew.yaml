@@ -119,11 +119,17 @@ spec:
           volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
       containers:
         - name: costcrew
-          image: ghcr.io/taipanbox/costcrew:v0.9.0@sha256:4f7883951aac2a0b723e5b0d7b36cf4005c8b94e4a6335ed051c14370a37b9b7
+          image: ghcr.io/taipanbox/costcrew:v0.10.0@sha256:26316b1c99706529a4589a328b2ddd3fc5f4db4cf0b5a46466e8be1ddd8f0de9
           imagePullPolicy: IfNotPresent
+          # costcrew v0.10.0 refuses a console on a non-loopback -addr unless TLS is in front (-behind-tls) or plain
+          # HTTP is named (-insecure-http). This launcher has no TLS proxy for the console, so -insecure-http is the
+          # flag, and it is honest only because the Service is ClusterIP: the console is reached through an encrypted
+          # tunnel (kubectl port-forward, or the operator's own ssh -L), never on a public address. Prompt data stays
+          # masked: costcrew v0.10.0 defaults to it, and no flag here sends full prompts. Stated in the release notes.
           args:
             - "-addr"
             - "0.0.0.0:8321"
+            - "-insecure-http"
             - "-data"
             - "/var/lib/costcrew"
             # The name is the integration. See the header.
@@ -306,7 +312,7 @@ spec:
               volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
           containers:
             - name: crew
-              image: ghcr.io/taipanbox/costcrew:v0.9.0@sha256:4f7883951aac2a0b723e5b0d7b36cf4005c8b94e4a6335ed051c14370a37b9b7
+              image: ghcr.io/taipanbox/costcrew:v0.10.0@sha256:26316b1c99706529a4589a328b2ddd3fc5f4db4cf0b5a46466e8be1ddd8f0de9
               imagePullPolicy: IfNotPresent
               # Overrides the image's ENTRYPOINT (the console server): this is
               # another binary in the same image (since v0.4.0 it carries five:

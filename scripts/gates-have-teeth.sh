@@ -455,18 +455,20 @@ subprocess.run(["git", "add", "-f", p], check=True)')" \
 # no longer tracks is a hole with a reason attached to it, and nothing would
 # notice it sitting there unused. Mutates the gate's own ALLOWED dict, the
 # same way other cases here mutate the file a gate reads.
+TEETH_EDIT_1="$(py 'edit("scripts/no-operator-files-tracked.sh", "ALLOWED = {\n", "ALLOWED = {\n    \"cloud/gcp/nonexistent.tfvars.bak\": \"planted by gates-have-teeth.sh: this path is not tracked\",\n")')"
 run_case "no-operator-files-tracked: a stale allow-list entry" fail \
 	'./scripts/no-operator-files-tracked.sh' \
-	"$(py 'edit("scripts/no-operator-files-tracked.sh", "ALLOWED = {\n", "ALLOWED = {\n    \"cloud/gcp/nonexistent.tfvars.bak\": \"planted by gates-have-teeth.sh: this path is not tracked\",\n")')" \
+	"$TEETH_EDIT_1" \
 	"is allow-listed in this script but"
 
 # The allow list rots the other way too: a path that IS tracked but whose
 # basename never matched a shape in the first place has been suppressing
 # nothing since the day it was written, and nobody would notice that
 # either. CLAUDE.md is always tracked and matches none of the SHAPES above.
+TEETH_EDIT_2="$(py 'edit("scripts/no-operator-files-tracked.sh", "ALLOWED = {\n", "ALLOWED = {\n    \"CLAUDE.md\": \"planted by gates-have-teeth.sh: this path matches no shape at all\",\n")')"
 run_case "no-operator-files-tracked: an allow-list entry that matches no shape" fail \
 	'./scripts/no-operator-files-tracked.sh' \
-	"$(py 'edit("scripts/no-operator-files-tracked.sh", "ALLOWED = {\n", "ALLOWED = {\n    \"CLAUDE.md\": \"planted by gates-have-teeth.sh: this path matches no shape at all\",\n")')" \
+	"$TEETH_EDIT_2" \
 	"matches no operator-file shape"
 
 echo
@@ -584,14 +586,16 @@ run_case "manifests-valid: a skipped patch is no longer listed as one" fail \
 # line numbers instead of counting a flag. A `--trust-domain` parsed and applied
 # BEFORE the kustomization reads identically in a flag list and is silently
 # useless, because the apply that follows reverts it.
+TEETH_EDIT_3="$(py 'edit("deploy.sh", "    --trust-domain)  TRUST_DOMAIN=\"$2\"; shift 2 ;;\n", "")')"
 run_case "deploy-flags-agree: a deploy path stops taking --trust-domain" fail \
 	'./scripts/deploy-flags-agree.sh' \
-	"$(py 'edit("deploy.sh", "    --trust-domain)  TRUST_DOMAIN=\"$2\"; shift 2 ;;\n", "")')" \
+	"$TEETH_EDIT_3" \
 	"does not parse --trust-domain"
 
+TEETH_EDIT_4="$(py 'edit("deploy.sh", "TRAILRYX_TRUST_DOMAIN\\\":\\\"$TRUST_DOMAIN", "TRAILRYX_TRUST_DOMAI_N\\\":\\\"$TRUST_DOMAIN")')"
 run_case "deploy-flags-agree: the flag is accepted and patches nothing" fail \
 	'./scripts/deploy-flags-agree.sh' \
-	"$(py 'edit("deploy.sh", "TRAILRYX_TRUST_DOMAIN\\\":\\\"$TRUST_DOMAIN", "TRAILRYX_TRUST_DOMAI_N\\\":\\\"$TRUST_DOMAIN")')" \
+	"$TEETH_EDIT_4" \
 	"never applies"
 
 run_case "deploy-flags-agree: no deploy path left to judge" fail \
@@ -611,9 +615,10 @@ for f in ("deploy.sh", "cloud/aws/deploy-aws.sh", "cloud/gcp/deploy-gcp.sh"):
 # inside "$(...)" is exactly the bash 3.2 expansion the header above describes,
 # and the first version of this case applied a different edit, missed the fault
 # and reported TOOTHLESS here while the gate itself was fine.
+TEETH_EDIT_5="$(py 'edit("install.sh", "      gateway_admin=\"$GATEWAY_ADMIN_SECRET\" \\\n", "")')"
 run_case "secret-keys-agree: an installer stops creating a key the manifests read" fail \
 	'./scripts/secret-keys-agree.sh' \
-	"$(py 'edit("install.sh", "      gateway_admin=\"$GATEWAY_ADMIN_SECRET\" \\\n", "")')" \
+	"$TEETH_EDIT_5" \
 	"does not create key gateway_admin"
 
 run_case "secret-keys-agree: a manifest starts reading a key no installer writes" fail \
@@ -642,11 +647,12 @@ run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
 # it is an (installer, Secret) subject too: the gate judges it and passes it, which is
 # correct. Taking the installers away therefore takes it away too, or the case would
 # measure a Secret creator instead of none. evidence/agent-tokens-kind/run-v1.18.0.sh creates the
-# stand-in Secrets of its scratch cluster the same way, so it goes with them.
+# stand-in Secrets of its scratch cluster the same way, so it goes with them, and so does the v1.19.0 run.
+# lib/vouchryx-mint.sh creates vouchryx-keys with a literal name, so it is a Secret creator too, and goes with them.
 run_case "secret-keys-agree: no installer left to judge" fail \
 	'./scripts/secret-keys-agree.sh' \
 	"$(py 'import os
-for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh", "delegation/up.sh", "closure/up.sh", "evidence/identity-kind/run.sh", "evidence/agent-tokens-kind/run-v1.18.0.sh", "evidence/identity-kind/mint.sh"):
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh", "delegation/up.sh", "closure/up.sh", "evidence/identity-kind/run.sh", "evidence/require-agent-tokens-kind/run-v1.19.0.sh", "lib/vouchryx-mint.sh", "evidence/agent-tokens-kind/run-v1.18.0.sh", "evidence/identity-kind/mint.sh"):
     os.remove(f)')" \
 	"measured NOTHING"
 
@@ -690,9 +696,10 @@ open(p, "w").write(s)')" \
 # The silent mutant: the read over the login helper instead of the sudo one.
 # On the box the token file is root-owned 0600, so `sh_` reads nothing and the
 # installer mints a fresh token with every line of the reuse block in place.
+TEETH_EDIT_6="$(py 'edit("cloud/aws/install-aws.sh", "K3S_TOKEN_VALUE=\"$(su_ \"$FIRST\" \"sh -c", "K3S_TOKEN_VALUE=\"$(sh_ \"$FIRST\" \"sh -c")')"
 run_case "k3s-token-is-reused: the token is read over a helper that cannot read it" fail \
 	'./scripts/k3s-token-is-reused.sh' \
-	"$(py 'edit("cloud/aws/install-aws.sh", "K3S_TOKEN_VALUE=\"$(su_ \"$FIRST\" \"sh -c", "K3S_TOKEN_VALUE=\"$(sh_ \"$FIRST\" \"sh -c")')" \
+	"$TEETH_EDIT_6" \
 	"reads the token over sh_ and installs over su_"
 
 run_case "k3s-token-is-reused: no installer left to judge" fail \
@@ -718,9 +725,10 @@ subprocess.run(["git", "rm", "-r", "--cached", "-q", "."], check=True)')" \
 # (GOTCHAS 103, invariant 19). The gate runs the real script under stubs over a
 # seeded tfvars; the fault is the read-back of the file's value taken away, so
 # the default wins again exactly as it did on 2026-09-13.
+TEETH_EDIT_7="$(py 'edit("cloud/gcp/preflight.sh", "MACHINE_TYPE=\"${MACHINE_TYPE:-$(tfvar_ machine_type || true)}\"", "MACHINE_TYPE=\"${MACHINE_TYPE:-}\"")')"
 run_case "preflight-keeps-tfvars: the file's machine type is no longer read back" fail \
 	'./scripts/preflight-keeps-tfvars.sh' \
-	"$(py 'edit("cloud/gcp/preflight.sh", "MACHINE_TYPE=\"${MACHINE_TYPE:-$(tfvar_ machine_type || true)}\"", "MACHINE_TYPE=\"${MACHINE_TYPE:-}\"")')" \
+	"$TEETH_EDIT_7" \
 	"machine_type: the file said c2d-highcpu-8"
 
 # The default itself changing is not the fault: the gate judges what the file
@@ -738,16 +746,18 @@ os.remove("cloud/gcp/preflight.sh")')" \
 # The gateway's semantic cache defaults to shadow mode, one global mutex per
 # call, whenever TOKENFUSE_CACHE is unset (tokenfuse#319). A container losing
 # the line is the ordinary drift this gate exists for.
+TEETH_EDIT_8="$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n", "")')"
 run_case "gateway-cache-is-off: a gateway container loses TOKENFUSE_CACHE" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n", "")')" \
+	"$TEETH_EDIT_8" \
 	"no TOKENFUSE_CACHE env var"
 
 # The variable present but wrong is a different failure than absent, and the
 # gate has to say which value it actually found.
+TEETH_EDIT_9="$(py 'edit("manifests/10-planes.yaml", "- { name: TOKENFUSE_CACHE, value: \"off\" }", "- { name: TOKENFUSE_CACHE, value: \"on\" }")')"
 run_case "gateway-cache-is-off: a gateway container sets TOKENFUSE_CACHE to something other than off" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "- { name: TOKENFUSE_CACHE, value: \"off\" }", "- { name: TOKENFUSE_CACHE, value: \"on\" }")')" \
+	"$TEETH_EDIT_9" \
 	"TOKENFUSE_CACHE='on'"
 
 # A sidecar that runs the same published image but with a subcommand (here,
@@ -764,7 +774,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.18.0@sha256:7cbaa794670560468b15a7a6a3c37396767435332e8eca3a30af627de29ad6d9\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 # The gateway's declassify key (invariant 27). POST /v1/fuse/declassify lifts a
@@ -777,9 +787,10 @@ run_case "declassify-is-keyed: the gateway container loses TOKENFUSE_DECLASSIFY_
 	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_DECLASSIFY_KEY\n              valueFrom: { secretKeyRef: { name: stack-keys, key: declassify_key } }\n", "")')" \
 	"no TOKENFUSE_DECLASSIFY_KEY env var"
 
+TEETH_EDIT_10="$(py 'edit("manifests/10-planes.yaml", "              valueFrom: { secretKeyRef: { name: stack-keys, key: declassify_key } }\n", "              value: \"change-me\"\n")')"
 run_case "declassify-is-keyed: the key becomes a literal in the manifest" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "              valueFrom: { secretKeyRef: { name: stack-keys, key: declassify_key } }\n", "              value: \"change-me\"\n")')" \
+	"$TEETH_EDIT_10" \
 	"set from a literal value"
 
 run_case "declassify-is-keyed: the key is marked optional" fail \
@@ -794,24 +805,28 @@ run_case "declassify-is-keyed: the gateway reads some other key of the Secret" f
 
 # The key travels on stdin. An argument is readable in the process table of
 # both ends of the ssh, and the audit found --from-literal values on ssh argv.
+TEETH_EDIT_11="$(py 'edit("install.sh", "      declassify_key=\"$DECLASSIFY_SECRET\" \\\n", "      declassify_key=\"$DECLASSIFY_SECRET\" \\\n      --from-literal=declassify_key=\x27$DECLASSIFY_SECRET\x27 \\\n")')"
 run_case "declassify-is-keyed: an installer passes the key with --from-literal" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("install.sh", "      declassify_key=\"$DECLASSIFY_SECRET\" \\\n", "      declassify_key=\"$DECLASSIFY_SECRET\" \\\n      --from-literal=declassify_key=\x27$DECLASSIFY_SECRET\x27 \\\n")')" \
+	"$TEETH_EDIT_11" \
 	"puts declassify_key on a command line with --from-literal"
 
+TEETH_EDIT_12="$(py 'edit("cloud/gcp/install-gcp.sh", "    printf \x27%s\x27 \"{\\\"stringData\\\":{\\\"declassify_key\\\":\\\"$DECLASSIFY_SECRET\\\"}}\" | k_ \"-n agent-stack patch secret stack-keys --type merge --patch-file /dev/stdin\" >/dev/null\n", "    k_ \"-n agent-stack patch secret stack-keys --type merge -p \x27{\\\"stringData\\\":{\\\"declassify_key\\\":\\\"$DECLASSIFY_SECRET\\\"}}\x27\" >/dev/null\n")')"
 run_case "declassify-is-keyed: an installer migrates the key with patch -p" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("cloud/gcp/install-gcp.sh", "    printf \x27%s\x27 \"{\\\"stringData\\\":{\\\"declassify_key\\\":\\\"$DECLASSIFY_SECRET\\\"}}\" | k_ \"-n agent-stack patch secret stack-keys --type merge --patch-file /dev/stdin\" >/dev/null\n", "    k_ \"-n agent-stack patch secret stack-keys --type merge -p \x27{\\\"stringData\\\":{\\\"declassify_key\\\":\\\"$DECLASSIFY_SECRET\\\"}}\x27\" >/dev/null\n")')" \
+	"$TEETH_EDIT_12" \
 	"patches declassify_key on a command line"
 
+TEETH_EDIT_13="$(py 'edit("install.sh", "      declassify_key=\"$DECLASSIFY_SECRET\" \\\n    | k_ \"-n agent-stack create -f -\" >/dev/null", "      declassify_key=\"$DECLASSIFY_SECRET\" \\\n    k_ \"-n agent-stack create -f -\" >/dev/null")')"
 run_case "declassify-is-keyed: an installer creates the Secret without piping the key in" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("install.sh", "      declassify_key=\"$DECLASSIFY_SECRET\" \\\n    | k_ \"-n agent-stack create -f -\" >/dev/null", "      declassify_key=\"$DECLASSIFY_SECRET\" \\\n    k_ \"-n agent-stack create -f -\" >/dev/null")')" \
+	"$TEETH_EDIT_13" \
 	"never creates declassify_key from stdin"
 
+TEETH_EDIT_14="$(py 'edit("install.sh", "--patch-file /dev/stdin\" >/dev/null\n    echo \"   added declassify_key", "--patch-file /tmp/p\" >/dev/null\n    echo \"   added declassify_key")')"
 run_case "declassify-is-keyed: an installer never gives an existing Secret the key" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("install.sh", "--patch-file /dev/stdin\" >/dev/null\n    echo \"   added declassify_key", "--patch-file /tmp/p\" >/dev/null\n    echo \"   added declassify_key")')" \
+	"$TEETH_EDIT_14" \
 	"has no stdin patch for declassify_key"
 
 # The subjects taken away: the gateway container's image line is what makes it
@@ -819,7 +834,7 @@ run_case "declassify-is-keyed: an installer never gives an existing Secret the k
 # Each must say it measured nothing, never OK.
 run_case "declassify-is-keyed: no gateway container left to judge" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.18.0@sha256:7cbaa794670560468b15a7a6a3c37396767435332e8eca3a30af627de29ad6d9\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the declassify key"
 
 run_case "declassify-is-keyed: no installer left to read" fail \
@@ -911,9 +926,10 @@ for f in glob.glob("manifests/*.yaml"):
 # Longhorn holds a dead node's volumes unless told otherwise; the setting is a
 # block copied into three installers, the shape that drifted three times
 # before (GOTCHAS 90, 101, 102).
+TEETH_EDIT_15="$(py 'edit("cloud/aws/install-aws.sh", "  if k_ \"-n longhorn-system patch settings.longhorn.io node-down-pod-deletion-policy", "  if k_ \"-n longhorn-system get settings.longhorn.io node-down-pod-deletion-policy-was-here")')"
 run_case "longhorn-releases-a-dead-node: an installer never sets the policy" fail \
 	'./scripts/longhorn-releases-a-dead-node.sh' \
-	"$(py 'edit("cloud/aws/install-aws.sh", "  if k_ \"-n longhorn-system patch settings.longhorn.io node-down-pod-deletion-policy", "  if k_ \"-n longhorn-system get settings.longhorn.io node-down-pod-deletion-policy-was-here")')" \
+	"$TEETH_EDIT_15" \
 	"never sets node-down-pod-deletion-policy"
 
 run_case "longhorn-releases-a-dead-node: an installer sets the policy to the wrong value" fail \
@@ -949,19 +965,22 @@ run_case "policy-store-survives-a-partition: the policy-db claim names the RWX c
 	"$(py 'edit("manifests/15-policy-store.yaml", "storageClassName: stack-policy", "storageClassName: stack-rwx")')" \
 	"not \`stack-policy\`"
 
+TEETH_EDIT_16="$(py 'edit("install.sh", "  dataLocality: \"best-effort\"", "  dataLocality: \"disabled\"")')"
 run_case "policy-store-survives-a-partition: an installer leaves data locality disabled" fail \
 	'./scripts/policy-store-survives-a-partition.sh' \
-	"$(py 'edit("install.sh", "  dataLocality: \"best-effort\"", "  dataLocality: \"disabled\"")')" \
+	"$TEETH_EDIT_16" \
 	"parameter dataLocality"
 
+TEETH_EDIT_17="$(py 'edit("cloud/aws/install-aws.sh", "  disableRevisionCounter: \"false\"", "  disableRevisionCounter: \"true\"")')"
 run_case "policy-store-survives-a-partition: an installer turns the revision counter off" fail \
 	'./scripts/policy-store-survives-a-partition.sh' \
-	"$(py 'edit("cloud/aws/install-aws.sh", "  disableRevisionCounter: \"false\"", "  disableRevisionCounter: \"true\"")')" \
+	"$TEETH_EDIT_17" \
 	"parameter disableRevisionCounter"
 
+TEETH_EDIT_18="$(py 'edit("cloud/gcp/install-gcp.sh", "  staleReplicaTimeout: \"2880\"", "  staleReplicaTimeout: \"30\"")')"
 run_case "policy-store-survives-a-partition: an installer keeps a failed replica 30 minutes" fail \
 	'./scripts/policy-store-survives-a-partition.sh' \
-	"$(py 'edit("cloud/gcp/install-gcp.sh", "  staleReplicaTimeout: \"2880\"", "  staleReplicaTimeout: \"30\"")')" \
+	"$TEETH_EDIT_18" \
 	"parameter staleReplicaTimeout"
 
 run_case "policy-store-survives-a-partition: an installer lets the class delete its data" fail \
@@ -969,14 +988,16 @@ run_case "policy-store-survives-a-partition: an installer lets the class delete 
 	"$(py 'edit("install.sh", "  name: stack-policy\nprovisioner: driver.longhorn.io\nallowVolumeExpansion: true\nreclaimPolicy: Retain", "  name: stack-policy\nprovisioner: driver.longhorn.io\nallowVolumeExpansion: true\nreclaimPolicy: Delete")')" \
 	"reclaimPolicy"
 
+TEETH_EDIT_19="$(py 'edit("cloud/gcp/install-gcp.sh", "  name: stack-policy\n", "  name: stack-policy\n  annotations: { storageclass.kubernetes.io/is-default-class: \"true\" }\n")')"
 run_case "policy-store-survives-a-partition: an installer marks the class as the default" fail \
 	'./scripts/policy-store-survives-a-partition.sh' \
-	"$(py 'edit("cloud/gcp/install-gcp.sh", "  name: stack-policy\n", "  name: stack-policy\n  annotations: { storageclass.kubernetes.io/is-default-class: \"true\" }\n")')" \
+	"$TEETH_EDIT_19" \
 	"marked as the default class"
 
+TEETH_EDIT_20="$(py 'edit("install.sh", "k_ \"apply -f /tmp/stack-policy.yaml\"", "k_ \"apply -f /tmp/stack-policy.yaml\"\nk_ \"-n longhorn-system patch settings.longhorn.io auto-salvage --type merge -p {value:false}\"")')"
 run_case "policy-store-survives-a-partition: an installer turns auto-salvage off" fail \
 	'./scripts/policy-store-survives-a-partition.sh' \
-	"$(py 'edit("install.sh", "k_ \"apply -f /tmp/stack-policy.yaml\"", "k_ \"apply -f /tmp/stack-policy.yaml\"\nk_ \"-n longhorn-system patch settings.longhorn.io auto-salvage --type merge -p {value:false}\"")')" \
+	"$TEETH_EDIT_20" \
 	"auto-salvage off"
 
 run_case "policy-store-survives-a-partition: an installer never writes the class" fail \
@@ -1002,9 +1023,10 @@ run_case "policy-store-survives-a-partition: the class reworded in spacing is no
 
 # Invariant 43, the refusal half (GOTCHAS 129): a deploy stops, with one sentence
 # that names the migration, BEFORE its first apply, when policy-db is on another class.
+TEETH_EDIT_21="$(py 'edit("lib/policy-store.sh", "  [ \"$cls\" = \"stack-policy\" ] && return 0", "  return 0")')"
 run_case "policy-store-refuses-an-old-claim: the guard lets an old claim through" fail \
 	'./scripts/policy-store-refuses-an-old-claim.sh' \
-	"$(py 'edit("lib/policy-store.sh", "  [ \"$cls\" = \"stack-policy\" ] && return 0", "  return 0")')" \
+	"$TEETH_EDIT_21" \
 	"scenario old: expected a refusal"
 
 run_case "policy-store-refuses-an-old-claim: the refusal loses its pointer to GOTCHAS 129" fail \
@@ -1012,14 +1034,16 @@ run_case "policy-store-refuses-an-old-claim: the refusal loses its pointer to GO
 	"$(py 'edit("lib/policy-store.sh", "migrate the policy store first as GOTCHAS 129 describes", "migrate the policy store first as the notes describe")')" \
 	"lacks 'GOTCHAS 129'"
 
+TEETH_EDIT_22="$(py 'edit("lib/policy-store.sh", "|| die \"could not ask the cluster whether policy-db exists, so the manifests were not applied\"", "|| return 0")')"
 run_case "policy-store-refuses-an-old-claim: an unreachable cluster lets the apply through" fail \
 	'./scripts/policy-store-refuses-an-old-claim.sh' \
-	"$(py 'edit("lib/policy-store.sh", "|| die \"could not ask the cluster whether policy-db exists, so the manifests were not applied\"", "|| return 0")')" \
+	"$TEETH_EDIT_22" \
 	"scenario unreachable-name: expected a refusal"
 
+TEETH_EDIT_23="$(py 'edit("lib/policy-store.sh", "  [ -n \"$existing\" ] || return 0", "  [ -n \"$existing\" ] || die \"fresh cluster refused\"")')"
 run_case "policy-store-refuses-an-old-claim: a fresh cluster is refused" fail \
 	'./scripts/policy-store-refuses-an-old-claim.sh' \
-	"$(py 'edit("lib/policy-store.sh", "  [ -n \"$existing\" ] || return 0", "  [ -n \"$existing\" ] || die \"fresh cluster refused\"")')" \
+	"$TEETH_EDIT_23" \
 	"scenario fresh"
 
 run_case "policy-store-refuses-an-old-claim: the AWS deploy drops its guard call" fail \
@@ -1038,9 +1062,10 @@ s = s.replace(g, "", 1).replace(a, a + "policy_store_guard\n", 1)
 open(p, "w").write(s)')" \
 	"after its first apply"
 
+TEETH_EDIT_24="$(py 'edit("deploy.sh", ". \"$ROOT/lib/policy-store.sh\" || die \"no lib/policy-store.sh in $ROOT\"\n", "")')"
 run_case "policy-store-refuses-an-old-claim: the top-level deploy does not source the helper" fail \
 	'./scripts/policy-store-refuses-an-old-claim.sh' \
-	"$(py 'edit("deploy.sh", ". \"$ROOT/lib/policy-store.sh\" || die \"no lib/policy-store.sh in $ROOT\"\n", "")')" \
+	"$TEETH_EDIT_24" \
 	"does not source lib/policy-store.sh"
 
 run_case "policy-store-refuses-an-old-claim: no deploy script left to judge" fail \
@@ -1116,36 +1141,288 @@ run_case "hub-entry-is-narrow: the file is removed" fail \
 os.remove("manifests/53-hub-entry.yaml")')" \
 	"This measured nothing"
 
-# The delegation plane (GOTCHAS 105, invariant 24) must stay opt-in the same
-# way the hub entry does: three cases, the manifest joining the default apply
-# set, a delegation env var leaking into a manifest the default apply set
-# DOES install, and the subject taken away entirely.
-run_case "delegation-off-by-default: the manifest joins the default apply" fail \
-	'./scripts/delegation-off-by-default.sh' \
+# vouchryx runs agents-only in the default install (CLAUDE.md invariant 24, as amended on 2026-10-19).
+# The default install carries vouchryx, its IdP inputs stay optional, its keys are minted by the deploy,
+# and the console's revoke wiring stays opt-in. Seven cases: the four faults the gate names, the console
+# leak, a missing subject, and one comment that must not be a fault.
+run_case "vouchryx-runs-agents-only: the manifest leaves the default apply set" fail \
+	'./scripts/vouchryx-runs-agents-only.sh' \
 	"$(py 'edit("manifests/kustomization.yaml",
-    "  - 40-routines-and-secrets.yaml\n",
-    "  - 40-routines-and-secrets.yaml\n  - 54-delegation.yaml\n")')" \
-	"is listed in manifests/kustomization.yaml"
+    "  - 54-delegation.yaml\n",
+    "")')" \
+	"is not in manifests/kustomization.yaml's resources"
 
-run_case "delegation-off-by-default: a delegation env var leaks into the default gateway manifest" fail \
-	'./scripts/delegation-off-by-default.sh' \
-	"$(py 'edit("manifests/10-planes.yaml",
-    "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n",
-    "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n            - { name: TOKENFUSE_DELEGATION_ISSUER, value: \"http://vouchryx:4310\" }\n")')" \
-	"a delegation env var, in the manifest"
+run_case "vouchryx-runs-agents-only: the IdP ConfigMap is required again" fail \
+	'./scripts/vouchryx-runs-agents-only.sh' \
+	"$(py 'edit("manifests/54-delegation.yaml",
+    "key: trusted_issuers, optional: true } }",
+    "key: trusted_issuers } }")')" \
+	"without optional: true, so vouchryx needs an IdP to start"
 
-run_case "delegation-off-by-default: up.sh re-applies the namespace and drops its Pod Security labels" fail \
-	'./scripts/delegation-off-by-default.sh' \
-	"$(py 'edit("delegation/up.sh",
-    "say \"writing the trusted issuer into vouchryx-trusted-issuers\"\n",
-    "say \"writing the trusted issuer into vouchryx-trusted-issuers\"\nkubectl create namespace \"$NS\" --dry-run=client -o yaml | kubectl apply -f - >/dev/null\n")')" \
-	"applies a Namespace object"
+run_case "vouchryx-runs-agents-only: the console's revoke wiring goes into the default console" fail \
+	'./scripts/vouchryx-runs-agents-only.sh' \
+	"$(py 'edit("manifests/20-console.yaml",
+    "            - { name: GENARYX_COPILOT_API_KEY_REF, value: \"env:GENARYX_COPILOT_FUSE_KEY\" }\n",
+    "            - { name: GENARYX_COPILOT_API_KEY_REF, value: \"env:GENARYX_COPILOT_FUSE_KEY\" }\n            - { name: GENARYX_VOUCHRYX_URL, value: \"http://vouchryx:4310\" }\n")')" \
+	"sets a GENARYX_VOUCHRYX_* variable"
 
-run_case "delegation-off-by-default: the subject taken away entirely" fail \
-	'./scripts/delegation-off-by-default.sh' \
-	"$(py 'import os
-os.remove("manifests/54-delegation.yaml")')" \
+run_case "vouchryx-runs-agents-only: the deploy stops minting vouchryx's keys" fail \
+	'./scripts/vouchryx-runs-agents-only.sh' \
+	"$(py 'edit("deploy.sh",
+    "vouchryx_mint_settle\n",
+    "")')" \
+	"never calls vouchryx_mint_settle"
+
+run_case "vouchryx-runs-agents-only: the mint library is taken away" fail \
+	'./scripts/vouchryx-runs-agents-only.sh' \
+	"$(py 'import os; os.remove("lib/vouchryx-mint.sh")')" \
+	"does not exist"
+
+run_case "vouchryx-runs-agents-only: the subject taken away entirely" fail \
+	'./scripts/vouchryx-runs-agents-only.sh' \
+	"$(py 'import os; os.remove("manifests/54-delegation.yaml")')" \
 	"measured nothing"
+
+run_case "vouchryx-runs-agents-only: a comment naming the IdP input is not a fault" pass \
+	'./scripts/vouchryx-runs-agents-only.sh' \
+	"$(py 'edit("manifests/54-delegation.yaml",
+    "# Reachable only from the doors",
+    "# Note: trusted_issuers is optional, so vouchryx-trusted-issuers may be absent.\n# Reachable only from the doors")')"
+
+# The door (CLAUDE.md invariant 54, as amended): agent tokens are required at the gateway and the broker, with
+# one audience, a closed revocation list at most 60 s old, the same issuer and JWKS, and an agent-pod network
+# that opens nothing else. Each fault below is one the gate names.
+AGT=./scripts/agent-tokens-are-required.sh
+
+TEETH_EDIT_25="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_AGENT_TOKENS, value: \"require\" }", "{ name: TOKENFUSE_AGENT_TOKENS, value: \"accept\" }")')"
+run_case "agent-tokens-are-required: the gateway accepts static keys beside tokens (accept, not require)" fail \
+	"$AGT" \
+	"$TEETH_EDIT_25" \
+	"TOKENFUSE_AGENT_TOKENS must be exactly 'require'"
+
+TEETH_EDIT_26="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_PROFILE, value: \"governed\" }", "{ name: TOKENFUSE_PROFILE, value: \"observe\" }")')"
+run_case "agent-tokens-are-required: the gateway drops the governed profile" fail \
+	"$AGT" \
+	"$TEETH_EDIT_26" \
+	"TOKENFUSE_PROFILE must be exactly 'governed'"
+
+run_case "agent-tokens-are-required: the gateway runs a tokenfuse that predates the governed profile" fail \
+	"$AGT" \
+	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.19\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
+	"predates the governed profile and the static-key list"
+
+TEETH_EDIT_27="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"\" }")')"
+run_case "agent-tokens-are-required: the gateway's audience is empty, so any audience passes" fail \
+	"$AGT" \
+	"$TEETH_EDIT_27" \
+	"TOKENFUSE_DELEGATION_AUDIENCE must be exactly"
+
+TEETH_EDIT_28="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.other.invalid\" }")')"
+run_case "agent-tokens-are-required: the gateway's audience is a second, unchecked one" fail \
+	"$AGT" \
+	"$TEETH_EDIT_28" \
+	"TOKENFUSE_DELEGATION_AUDIENCE must be exactly"
+
+TEETH_EDIT_29="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: \"closed\" }", "{ name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: \"open\" }")')"
+run_case "agent-tokens-are-required: the revocation list fails open" fail \
+	"$AGT" \
+	"$TEETH_EDIT_29" \
+	"REVOCATIONS_FAILMODE must be exactly"
+
+TEETH_EDIT_30="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: \"60\" }", "{ name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: \"300\" }")')"
+run_case "agent-tokens-are-required: the revocation list may be 300 s old" fail \
+	"$AGT" \
+	"$TEETH_EDIT_30" \
+	"MAX_AGE_SECS must be exactly"
+
+run_case "agent-tokens-are-required: the gateway's init container does not fetch the key set" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/10-planes.yaml", "wget -q -T 5 -O /jwks/jwks.json http://vouchryx:4310/.well-known/jwks.json", "wget -q -T 5 -O /jwks/jwks.json http://127.0.0.1:4310/.well-known/jwks.json")')" \
+	"does not fetch vouchryx's JWKS"
+
+TEETH_EDIT_31="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "{ name: TOKENFUSE_AGENT_TOKENS, value: \"require\" }", "{ name: TOKENFUSE_AGENT_TOKENS, value: \"accept\" }")')"
+run_case "agent-tokens-are-required: the broker accepts static keys beside tokens" fail \
+	"$AGT" \
+	"$TEETH_EDIT_31" \
+	"TOKENFUSE_AGENT_TOKENS must be exactly 'require'"
+
+TEETH_EDIT_32="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "{ name: TOKENFUSE_MCP_TAINT_FAILMODE, value: \"closed\" }", "{ name: TOKENFUSE_MCP_TAINT_FAILMODE, value: \"open\" }")')"
+run_case "agent-tokens-are-required: the broker's tool-call check fails open" fail \
+	"$AGT" \
+	"$TEETH_EDIT_32" \
+	"TOKENFUSE_MCP_TAINT_FAILMODE must be exactly"
+
+TEETH_EDIT_33="$(py 'edit("manifests/54-delegation.yaml", "{ name: VOUCHRYX_ALLOWED_AUDIENCES, value: \"https://vouchryx.agent-stack.invalid\" }", "{ name: VOUCHRYX_ALLOWED_AUDIENCES, value: \"https://vouchryx.other.invalid\" }")')"
+run_case "agent-tokens-are-required: vouchryx allows an audience the doors do not check" fail \
+	"$AGT" \
+	"$TEETH_EDIT_33" \
+	"VOUCHRYX_ALLOWED_AUDIENCES must be exactly"
+
+run_case "agent-tokens-are-required: the agent-pod network opens the open internet" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-network.yaml", "    - to:\n        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n", "    - to:\n        - ipBlock: { cidr: 0.0.0.0/0 }\n    - to:\n        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n")')" \
+	"opens an ipBlock or 0.0.0.0/0"
+
+run_case "agent-tokens-are-required: the agent-pod network left out of the default set" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/kustomization.yaml", "  - 58-agent-tokens-network.yaml\n", "")')" \
+	"is not in manifests/kustomization.yaml's resources"
+
+# The broker's own door into the gateway (58's last document): removed, moved to another port, admitted from
+# another app, or widened to the whole namespace. Each one drops the broker's tool-call check or hands it to
+# something else, and the gate must say which.
+run_case "agent-tokens-are-required: the MCP broker's door into the gateway is removed" fail \
+	"$AGT" \
+	"$(py 'p = "manifests/58-agent-tokens-network.yaml"; s = open(p).read(); i = s.index("  name: gateway-ingress-mcp-broker"); open(p, "w").write(s[:s.rindex("\n---", 0, i)] + "\n")')" \
+	"has no gateway-ingress-mcp-broker"
+
+run_case "agent-tokens-are-required: the broker's door opens another port than the gateway's 4100" fail \
+	"$AGT" \
+	"$(py 'p = "manifests/58-agent-tokens-network.yaml"; s = open(p).read(); i = s.index("  name: gateway-ingress-mcp-broker"); open(p, "w").write(s[:i] + s[i:].replace("port: 4100", "port: 4200", 1))')" \
+	"does not open exactly TCP 4100"
+
+run_case "agent-tokens-are-required: the broker's door admits another app, not the broker" fail \
+	"$AGT" \
+	"$(py 'p = "manifests/58-agent-tokens-network.yaml"; s = open(p).read(); i = s.index("  name: gateway-ingress-mcp-broker"); open(p, "w").write(s[:i] + s[i:].replace("app: tokenfuse-mcp-broker", "app: typryx", 1))')" \
+	"does not admit exactly the MCP broker"
+
+run_case "agent-tokens-are-required: the broker's door admits a whole namespace" fail \
+	"$AGT" \
+	"$(py 'p = "manifests/58-agent-tokens-network.yaml"; s = open(p).read(); i = s.index("  name: gateway-ingress-mcp-broker"); open(p, "w").write(s[:i] + s[i:].replace("- podSelector: \x7b matchLabels: \x7b app: tokenfuse-mcp-broker \x7d \x7d", "- namespaceSelector: \x7b \x7d", 1))')" \
+	"does not admit exactly the MCP broker"
+
+run_case "agent-tokens-are-required: the example agent keeps the default ServiceAccount token" fail \
+	"$AGT" \
+	"$(py 'edit("agent-tokens/example-agent.yaml", "      automountServiceAccountToken: false", "      automountServiceAccountToken: true")')" \
+	"does not set automountServiceAccountToken: false"
+
+run_case "agent-tokens-are-required: up.sh applies a kustomization instead of writing the registry" fail \
+	"$AGT" \
+	"$(py 'edit("agent-tokens/up.sh", "rollout restart deployment/vouchryx >/dev/null\n", "rollout restart deployment/vouchryx >/dev/null\nkubectl apply -k manifests/ >/dev/null\n")')" \
+	"patches a door or applies a kustomization"
+
+run_case "agent-tokens-are-required: up.sh stops refusing before it writes" fail \
+	"$AGT" \
+	"$(py 'import re; p = "agent-tokens/up.sh"; s = open(p).read(); s = s.replace("Nothing was written", "Written"); open(p, "w").write(s)')" \
+	"no longer refuses before it writes the registry"
+
+run_case "agent-tokens-are-required: a comment naming the old switch in the gateway is not a fault" pass \
+	"$AGT" \
+	"$(py 'edit("manifests/10-planes.yaml", "            # The door credential: an agent'"'"'s own token", "            # TOKENFUSE_AGENT_TOKENS=accept was the switch before this release.\n            # The door credential: an agent'"'"'s own token")')"
+
+run_case "agent-tokens-are-required: the example agent is no longer a file" fail \
+	"$AGT" \
+	"$(py 'import os; os.remove("agent-tokens/example-agent.yaml")')" \
+	"measured nothing"
+
+# Static client keys (CLAUDE.md invariant 62): admitted only from the named lists, each with a reason, each
+# a minted key, and the operator's additions from a ConfigMap that is required, not optional.
+SKY=./scripts/static-keys-are-named.sh
+
+run_case "static-keys-are-named: the operator's list is read optionally" fail \
+	"$SKY" \
+	"$(py 'edit("manifests/10-planes.yaml", "              valueFrom: { configMapKeyRef: { name: gateway-static-keys, key: operator_key_ids } }", "              valueFrom: { configMapKeyRef: { name: gateway-static-keys, key: operator_key_ids, optional: true } }")')" \
+	"OPERATOR_STATIC_KEY_IDS is optional"
+
+TEETH_EDIT_34="$(py 'edit("manifests/10-planes.yaml", "value: \"felyx,agents,drills,costcrew,broker\" }", "value: \"felyx,agents,drills,costcrew,broker,stranger\" }")')"
+run_case "static-keys-are-named: an id that the stack does not mint joins the list" fail \
+	"$SKY" \
+	"$TEETH_EDIT_34" \
+	"is not one of the stack's minted keys"
+
+run_case "static-keys-are-named: a listed id loses its reason" fail \
+	"$SKY" \
+	"$(py 'edit("manifests/10-planes.yaml", "            # static key drills: the scheduled mockryx drills, which cannot sign a DPoP proof.\n", "")')" \
+	"has no \`# static key drills: <reason>\` line"
+
+TEETH_EDIT_35="$(py 'edit("manifests/10-planes.yaml", "value: \"felyx,agents,drills,costcrew,broker\" }", "value: \"felyx,agents,drills,costcrew\" }")')"
+run_case "static-keys-are-named: a minted key is dropped from the list without a written reason" fail \
+	"$SKY" \
+	"$TEETH_EDIT_35" \
+	"has no \`# not static-listed: broker: <reason>\` line"
+
+TEETH_EDIT_36="$(py 'edit("manifests/10-planes.yaml", "value: \"$(STACK_STATIC_KEY_IDS)$(OPERATOR_STATIC_KEY_IDS)\" }", "value: \"felyx,agents,drills,costcrew,broker\" }")')"
+run_case "static-keys-are-named: the list is written as a literal instead of the two parts" fail \
+	"$SKY" \
+	"$TEETH_EDIT_36" \
+	"TOKENFUSE_AGENT_TOKENS_STATIC_KEYS must be"
+
+TEETH_EDIT_37="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "{ name: TOKENFUSE_MCP_AGENT_TOKENS_STATIC_KEYS, value: \"broker-caller\" }", "{ name: TOKENFUSE_MCP_AGENT_TOKENS_STATIC_KEYS, value: \"broker-caller,agents\" }")')"
+run_case "static-keys-are-named: the broker admits an id outside its own key list" fail \
+	"$SKY" \
+	"$TEETH_EDIT_37" \
+	"is not one of ['broker-caller']"
+
+TEETH_EDIT_38="$(py 'edit("manifests/49-costcrew.yaml", "          env:\n            - name: TRAILRYX_TRUST_DOMAIN\n", "          env:\n            - { name: TOKENFUSE_AGENT_TOKENS_STATIC_KEYS, value: \"costcrew\" }\n            - name: TRAILRYX_TRUST_DOMAIN\n")')"
+run_case "static-keys-are-named: a costcrew manifest sets a second list" fail \
+	"$SKY" \
+	"$TEETH_EDIT_38" \
+	"sets a static-key list"
+
+run_case "static-keys-are-named: the deploy stops creating the operator's list" fail \
+	"$SKY" \
+	"$(py 'edit("deploy.sh", "static_keys_settle\n", "")')" \
+	"never calls static_keys_settle"
+
+run_case "static-keys-are-named: the operator's list is written by hand, not kept when present" fail \
+	"$SKY" \
+	"$(py 'import os; os.remove("lib/static-keys.sh")')" \
+	"does not exist"
+
+run_case "static-keys-are-named: a comment naming the list is not a fault" pass \
+	"$SKY" \
+	"$(py 'edit("manifests/10-planes.yaml", "            # The operator'"'"'s own additions, from the ConfigMap gateway-static-keys", "            # The operator'"'"'s own additions are set with kubectl patch, then a rollout.\n            # The operator'"'"'s own additions, from the ConfigMap gateway-static-keys")')"
+
+# wardryx verifies the agent's token and its proof itself (CLAUDE.md invariant 63, decision D3(b)).
+WVA=./scripts/wardryx-verifies-agent-tokens.sh
+
+run_case "wardryx-verifies-agent-tokens: wardryx is pinned before the token check" fail \
+	"$WVA" \
+	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"wardryx:v\d+\.\d+\.\d+@sha256", "wardryx:v2.2.1@sha256", s); assert n == 1, n; open(p, "w").write(s)')" \
+	"predates the agent-token check"
+
+run_case "wardryx-verifies-agent-tokens: the JWKS source is dropped, so the key set has no source" fail \
+	"$WVA" \
+	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"            - \{ name: WARDRYX_AGENT_TOKEN_JWKS_URL[^\n]*\n", "", s); assert n == 1, n; open(p, "w").write(s)')" \
+	"WARDRYX_AGENT_TOKEN_JWKS_URL must be"
+
+TEETH_EDIT_39="$(py 'edit("manifests/10-planes.yaml", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS", "            - { name: WARDRYX_AGENT_TOKEN_REQUIRE_PROOF, value: \"0\" }\n            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS")')"
+run_case "wardryx-verifies-agent-tokens: the proof is switched off" fail \
+	"$WVA" \
+	"$TEETH_EDIT_39" \
+	"proof is required by default and must not be switched off"
+
+TEETH_EDIT_40="$(py 'edit("manifests/10-planes.yaml", "value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }", "value: \"http://tokenfuse-mcp-broker:4200\" }")')"
+run_case "wardryx-verifies-agent-tokens: the gateway's door origin is not named" fail \
+	"$WVA" \
+	"$TEETH_EDIT_40" \
+	"does not name the gateway"
+
+TEETH_EDIT_41="$(py 'edit("manifests/10-planes.yaml", "{ name: WARDRYX_AGENT_TOKEN_ISSUER, value: \"http://vouchryx:4310\" }", "{ name: WARDRYX_AGENT_TOKEN_ISSUER, value: \"http://vouchryx.other:4310\" }")')"
+run_case "wardryx-verifies-agent-tokens: the issuer is another vouchryx" fail \
+	"$WVA" \
+	"$TEETH_EDIT_41" \
+	"WARDRYX_AGENT_TOKEN_ISSUER must be"
+
+run_case "wardryx-verifies-agent-tokens: wardryx has no network path to vouchryx" fail \
+	"$WVA" \
+	"$(py 'edit("manifests/54-delegation.yaml", "name: wardryx-egress-vouchryx", "name: wardryx-egress-nothing")')" \
+	"has no NetworkPolicy wardryx-egress-vouchryx"
+
+run_case "wardryx-verifies-agent-tokens: vouchryx refuses wardryx" fail \
+	"$WVA" \
+	"$(py 'edit("manifests/54-delegation.yaml", "        - podSelector: { matchLabels: { app: wardryx } }\n        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }\n", "        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }\n")')" \
+	"vouchryx-ingress does not admit wardryx"
+
+run_case "wardryx-verifies-agent-tokens: the subject taken away entirely" fail \
+	"$WVA" \
+	"$(py 'import os; os.remove("manifests/54-delegation.yaml")')" \
+	"measured nothing"
+
+run_case "wardryx-verifies-agent-tokens: a comment naming the proof switch is not a fault" pass \
+	"$WVA" \
+	"$(py 'edit("manifests/10-planes.yaml", "            # together and checked by scripts/wardryx-verifies-agent-tokens.sh.", "            # together and checked by scripts/wardryx-verifies-agent-tokens.sh. (REQUIRE_PROOF=0 would switch the proof off; it is not set.)")')"
+
 
 # invariant 36: closing a retained reservation is off by default, and on, the
 # gateway and the console read the same secret bytes, never printed.
@@ -1163,9 +1440,10 @@ run_case "closure-off-by-default: a closure setting leaks into the default gatew
     "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n            - { name: TOKENFUSE_CLOSURE_SECRET, value: \"x\" }\n")')" \
 	"a closure setting, in the manifest"
 
+TEETH_EDIT_42="$(py 'edit("manifests/57-closure-console-patch.yaml", "value: \"/run/closure/secret\"", "value: \"/run/closure/key\"")')"
 run_case "closure-off-by-default: the console reads a file its volume does not mount" fail \
 	'./scripts/closure-off-by-default.sh' \
-	"$(py 'edit("manifests/57-closure-console-patch.yaml", "value: \"/run/closure/secret\"", "value: \"/run/closure/key\"")')" \
+	"$TEETH_EDIT_42" \
 	"does not name the file the patch mounts"
 
 run_case "closure-off-by-default: the console unpatch leaves the volume" fail \
@@ -1173,9 +1451,10 @@ run_case "closure-off-by-default: the console unpatch leaves the volume" fail \
 	"$(py 'edit("manifests/57-closure-console-unpatch.yaml", "        - { name: closure-secret, $patch: delete }\n", "")')" \
 	"does not delete"
 
+TEETH_EDIT_43="$(py 'edit("closure/up.sh", "secret_doc closure-keys \"secret=$CLOSURE_SECRET\"", "secret_doc closure-keys \"secret=@$CLOSURE_SECRET\"")')"
 run_case "closure-off-by-default: up.sh creates the Secret from a file" fail \
 	'./scripts/closure-off-by-default.sh' \
-	"$(py 'edit("closure/up.sh", "secret_doc closure-keys \"secret=$CLOSURE_SECRET\"", "secret_doc closure-keys \"secret=@$CLOSURE_SECRET\"")')" \
+	"$TEETH_EDIT_43" \
 	"creates closure-keys from a file"
 
 run_case "closure-off-by-default: up.sh mints a new secret on every run" fail \
@@ -1183,9 +1462,10 @@ run_case "closure-off-by-default: up.sh mints a new secret on every run" fail \
 	"$(py 'edit("closure/up.sh", "if k get secret closure-keys >/dev/null 2>&1; then", "if false; then")')" \
 	"without first checking it exists"
 
+TEETH_EDIT_44="$(py 'edit("closure/up.sh", "  unset CLOSURE_SECRET\n", "  echo \"$CLOSURE_SECRET\"\n  unset CLOSURE_SECRET\n")')"
 run_case "closure-off-by-default: up.sh prints the secret" fail \
 	'./scripts/closure-off-by-default.sh' \
-	"$(py 'edit("closure/up.sh", "  unset CLOSURE_SECRET\n", "  echo \"$CLOSURE_SECRET\"\n  unset CLOSURE_SECRET\n")')" \
+	"$TEETH_EDIT_44" \
 	"expands the closure secret"
 
 run_case "closure-off-by-default: a comment in up.sh is reworded" pass \
@@ -1210,14 +1490,16 @@ run_case "mounted-keys: the closure key mounted 0440 with no fsGroup in its patc
 
 # Felyx through the gateway (invariant 25): the base URL moved off the gateway,
 # a remote opt-in reintroduced anywhere, a harmless comment, and the subject gone.
+TEETH_EDIT_45="$(py 'edit("manifests/20-console.yaml", "GENARYX_COPILOT_BASE_URL, value: \"http://tokenfuse-gateway:4100\"", "GENARYX_COPILOT_BASE_URL, value: \"https://api.anthropic.com\"")')"
 run_case "felyx-through-the-gateway: the base URL points past the gateway" fail \
 	'./scripts/felyx-through-the-gateway.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "GENARYX_COPILOT_BASE_URL, value: \"http://tokenfuse-gateway:4100\"", "GENARYX_COPILOT_BASE_URL, value: \"https://api.anthropic.com\"")')" \
+	"$TEETH_EDIT_45" \
 	"would not reach its model through this stack's gateway"
 
+TEETH_EDIT_46="$(py 'edit("manifests/55-copilot-cloud.yaml", "            - { name: GENARYX_COPILOT_MODEL, value: \"claude-sonnet-5\" }\n", "            - { name: GENARYX_COPILOT_MODEL, value: \"claude-sonnet-5\" }\n            - { name: GENARYX_COPILOT_ALLOW_REMOTE, value: \"1\" }\n")')"
 run_case "felyx-through-the-gateway: a manifest sets the remote opt-in again" fail \
 	'./scripts/felyx-through-the-gateway.sh' \
-	"$(py 'edit("manifests/55-copilot-cloud.yaml", "            - { name: GENARYX_COPILOT_MODEL, value: \"claude-sonnet-5\" }\n", "            - { name: GENARYX_COPILOT_MODEL, value: \"claude-sonnet-5\" }\n            - { name: GENARYX_COPILOT_ALLOW_REMOTE, value: \"1\" }\n")')" \
+	"$TEETH_EDIT_46" \
 	"would skip the residency check"
 
 run_case "felyx-through-the-gateway: a comment about the copilot changes" pass \
@@ -1241,24 +1523,28 @@ run_case "typed-mode-is-honest: jev stops refusing a missing key file" fail \
 	"$(py 'edit("typed/mode.sh", "key_file_ok() { # path flag", "key_file_ok() { return 0 # path flag")')" \
 	"jev without a key file refuses"
 
+TEETH_EDIT_47="$(py 'edit("typed/mode.sh", "grep -q \x27[^[:space:]]\x27 \"$1\"", "true")')"
 run_case "typed-mode-is-honest: a blank key file is accepted" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "grep -q \x27[^[:space:]]\x27 \"$1\"", "true")')" \
+	"$TEETH_EDIT_47" \
 	"a blank file"
 
+TEETH_EDIT_48="$(py 'edit("typed/mode.sh", "- { name: TYPRYX_JEV_KEY_FILE, value: \"/etc/typryx/jev/key\" }", "- { name: TYPRYX_JEV_KEY, value: \"fake-test-key-not-a-real-key-7f3a9c2e\" }")')"
 run_case "typed-mode-is-honest: the jev key becomes an environment value" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "- { name: TYPRYX_JEV_KEY_FILE, value: \"/etc/typryx/jev/key\" }", "- { name: TYPRYX_JEV_KEY, value: \"fake-test-key-not-a-real-key-7f3a9c2e\" }")')" \
+	"$TEETH_EDIT_48" \
 	"an environment value"
 
+TEETH_EDIT_49="$(py 'edit("manifests/51-typryx.yaml", "- { name: TYPRYX_BACKEND, value: \"stub\" }", "- { name: TYPRYX_BACKEND, value: \"jev\" }")')"
 run_case "typed-mode-is-honest: the committed default stops being the stub" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "- { name: TYPRYX_BACKEND, value: \"stub\" }", "- { name: TYPRYX_BACKEND, value: \"jev\" }")')" \
+	"$TEETH_EDIT_49" \
 	"lost the stub backend"
 
+TEETH_EDIT_50="$(py 'edit("typed/mode.sh", "      public_peer | egress_policy 443 ;;", "      printf -- \"---\\nkind: ConfigMap\\n\"; public_peer | egress_policy 443 ;;")')"
 run_case "typed-mode-is-honest: a ConfigMap is rendered for a mode" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "      public_peer | egress_policy 443 ;;", "      printf -- \"---\\nkind: ConfigMap\\n\"; public_peer | egress_policy 443 ;;")')" \
+	"$TEETH_EDIT_50" \
 	"a ConfigMap is rendered"
 
 run_case "typed-mode-is-honest: manifests/51 drifts from the lines the modes rewrite" fail \
@@ -1266,19 +1552,22 @@ run_case "typed-mode-is-honest: manifests/51 drifts from the lines the modes rew
 	"$(py 'edit("manifests/51-typryx.yaml", "            - { name: events, mountPath: /var/lib/stack/events }", "            - { name: events,  mountPath: /var/lib/stack/events }")')" \
 	"no longer carries the three lines"
 
+TEETH_EDIT_51="$(py 'edit("cloud/aws/deploy-aws.sh", "    --typed-model-url)      TYPED_MODEL_URL=\"$2\"; shift 2 ;;\n", "")')"
 run_case "typed-mode-is-honest: a launcher loses a typed flag" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("cloud/aws/deploy-aws.sh", "    --typed-model-url)      TYPED_MODEL_URL=\"$2\"; shift 2 ;;\n", "")')" \
+	"$TEETH_EDIT_51" \
 	"does not parse --typed-model-url"
 
+TEETH_EDIT_52="$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/typed/mode.sh\" check ", "\"$ROOT/typed/mode.sh\" mode ")')"
 run_case "typed-mode-is-honest: a launcher stops checking before it installs" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/typed/mode.sh\" check ", "\"$ROOT/typed/mode.sh\" mode ")')" \
+	"$TEETH_EDIT_52" \
 	"never runs typed/mode.sh check"
 
+TEETH_EDIT_53="$(py 'edit("deploy.sh", "  \"$ROOT/typed/mode.sh\" render ${TYPED_ARGS[@]+\"${TYPED_ARGS[@]}\"} | k_ \"apply -f -\"", "  k_ \"apply -f /root/stack-k8s/manifests/51-typryx.yaml\"")')"
 run_case "typed-mode-is-honest: a launcher applies manifests/51 around the mode" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("deploy.sh", "  \"$ROOT/typed/mode.sh\" render ${TYPED_ARGS[@]+\"${TYPED_ARGS[@]}\"} | k_ \"apply -f -\"", "  k_ \"apply -f /root/stack-k8s/manifests/51-typryx.yaml\"")')" \
+	"$TEETH_EDIT_53" \
 	"bypassing the mode"
 
 run_case "typed-mode-is-honest: a comment in typed/mode.sh changes" pass \
@@ -1303,29 +1592,34 @@ run_case "typed-mode-is-honest: the training log is on without the flag" fail \
 	"$(py 'edit("typed/mode.sh", "TRAINING=0\nTRAINING_DIR=", "TRAINING=1\nTRAINING_DIR=")')" \
 	"WITHOUT --typed-training"
 
+TEETH_EDIT_54="$(py 'edit("typed/mode.sh", "printf \x27            - { name: TYPRYX_TRAINING_DIR, value: \"%s\" }\x27 \"$TRAINING_DIR\"", "printf \x27            - { name: TYPRYX_TRAINING_DIR, value: \"%s\" }\n            - { name: TYPRYX_EXTRA, value: \"x\" }\x27 \"$TRAINING_DIR\"")')"
 run_case "typed-mode-is-honest: the training flag brings another object" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "printf \x27            - { name: TYPRYX_TRAINING_DIR, value: \"%s\" }\x27 \"$TRAINING_DIR\"", "printf \x27            - { name: TYPRYX_TRAINING_DIR, value: \"%s\" }\n            - { name: TYPRYX_EXTRA, value: \"x\" }\x27 \"$TRAINING_DIR\"")')" \
+	"$TEETH_EDIT_54" \
 	"added more than the variable"
 
+TEETH_EDIT_55="$(py 'edit("typed/mode.sh", "  render_broker\n  if [ \"$RISK\" = 1 ]; then\n", "  render_broker\n  if [ \"$TRAINING\" = 1 ]; then printf -- \x27---\\napiVersion: v1\\nkind: PersistentVolumeClaim\\nmetadata:\\n  name: typryx-training\\n\x27; fi\n  if [ \"$RISK\" = 1 ]; then\n")')"
 run_case "typed-mode-is-honest: the training flag provisions a claim" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "  render_broker\n  if [ \"$RISK\" = 1 ]; then\n", "  render_broker\n  if [ \"$TRAINING\" = 1 ]; then printf -- \x27---\\napiVersion: v1\\nkind: PersistentVolumeClaim\\nmetadata:\\n  name: typryx-training\\n\x27; fi\n  if [ \"$RISK\" = 1 ]; then\n")')" \
+	"$TEETH_EDIT_55" \
 	"A claim is a billed disk"
 
+TEETH_EDIT_56="$(py 'edit("typed/mode.sh", "TRAINING_DIR=\"/var/lib/typryx/training\"", "TRAINING_DIR=\"/srv/training\"")')"
 run_case "typed-mode-is-honest: the training directory is under no mount" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "TRAINING_DIR=\"/var/lib/typryx/training\"", "TRAINING_DIR=\"/srv/training\"")')" \
+	"$TEETH_EDIT_56" \
 	"is under no volumeMount"
 
+TEETH_EDIT_57="$(py 'edit("typed/mode.sh", "TRAINING_DIR=\"/var/lib/typryx/training\"", "TRAINING_DIR=\"/var/lib/stack/events/training\"")')"
 run_case "typed-mode-is-honest: the training log lands on the shared bus" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "TRAINING_DIR=\"/var/lib/typryx/training\"", "TRAINING_DIR=\"/var/lib/stack/events/training\"")')" \
+	"$TEETH_EDIT_57" \
 	"shared events claim"
 
+TEETH_EDIT_58="$(py 'edit("typed/mode.sh", "if [ \"$TRAINING\" = 1 ] && [ \"$EFFECTIVE\" = off ]; then", "if false; then")')"
 run_case "typed-mode-is-honest: the training flag is accepted with no typryx" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "if [ \"$TRAINING\" = 1 ] && [ \"$EFFECTIVE\" = off ]; then", "if false; then")')" \
+	"$TEETH_EDIT_58" \
 	"11 training needs typryx"
 
 run_case "typed-mode-is-honest: a launcher loses --typed-training" fail \
@@ -1333,9 +1627,10 @@ run_case "typed-mode-is-honest: a launcher loses --typed-training" fail \
 	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "    --typed-training)       TYPED_TRAINING=1; shift ;;\n", "")')" \
 	"does not parse --typed-training"
 
+TEETH_EDIT_59="$(py 'edit("deploy.sh", "[ \"$TYPED_TRAINING\" = 1 ] && TYPED_ARGS+=(--typed-training)\n", "")')"
 run_case "typed-mode-is-honest: a launcher stops forwarding --typed-training" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("deploy.sh", "[ \"$TYPED_TRAINING\" = 1 ] && TYPED_ARGS+=(--typed-training)\n", "")')" \
+	"$TEETH_EDIT_59" \
 	"never adds it to the arguments"
 
 run_case "typed-mode-is-honest: the typryx pin goes back before the wardryx-proxy" fail \
@@ -1368,39 +1663,46 @@ run_case "typed-mode-is-honest: a comment in the training section changes" pass 
 # copy of the validation going loose or tight, a deploy path that checks too late,
 # stops taking the flag, applies it before the apply that reverts it, or accepts it
 # and applies nothing; then a comment (must pass) and both subjects taken away.
+TEETH_EDIT_60="$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d\n", "")')"
 run_case "run-budget-ceiling-is-set: the gateway container loses the ceiling" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d\n", "")')" \
+	"$TEETH_EDIT_60" \
 	"no TOKENFUSE_MAX_RUN_BUDGET_USD env var"
 
+TEETH_EDIT_61="$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"five\" \x7d")')"
 run_case "run-budget-ceiling-is-set: the ceiling is a word the gateway refuses" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"five\" \x7d")')" \
+	"$TEETH_EDIT_61" \
 	"is not a positive decimal"
 
+TEETH_EDIT_62="$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"0.00\" \x7d")')"
 run_case "run-budget-ceiling-is-set: the ceiling is zero" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"0.00\" \x7d")')" \
+	"$TEETH_EDIT_62" \
 	"is not a positive decimal"
 
+TEETH_EDIT_63="$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"10.00\" \x7d")')"
 run_case "run-budget-ceiling-is-set: the ceiling drifts from the documented default" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d", "\x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"10.00\" \x7d")')" \
+	"$TEETH_EDIT_63" \
 	"is not the documented default"
 
+TEETH_EDIT_64="$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d\n", "            - name: TOKENFUSE_MAX_RUN_BUDGET_USD\n              valueFrom: \x7b configMapKeyRef: \x7b name: stack-wiring, key: TOKENFUSE_MAX_RUN_BUDGET_USD, optional: true \x7d \x7d\n")')"
 run_case "run-budget-ceiling-is-set: the ceiling comes from somewhere other than a literal" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d\n", "            - name: TOKENFUSE_MAX_RUN_BUDGET_USD\n              valueFrom: \x7b configMapKeyRef: \x7b name: stack-wiring, key: TOKENFUSE_MAX_RUN_BUDGET_USD, optional: true \x7d \x7d\n")')" \
+	"$TEETH_EDIT_64" \
 	"not as a literal value"
 
+TEETH_EDIT_65="$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: PORT, value: \"8080\" \x7d\n", "            - \x7b name: PORT, value: \"8080\" \x7d\n            - \x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d\n")')"
 run_case "run-budget-ceiling-is-set: the control plane carries the ceiling" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: PORT, value: \"8080\" \x7d\n", "            - \x7b name: PORT, value: \"8080\" \x7d\n            - \x7b name: TOKENFUSE_MAX_RUN_BUDGET_USD, value: \"5.00\" \x7d\n")')" \
+	"$TEETH_EDIT_65" \
 	"not a gateway container"
 
+TEETH_EDIT_66="$(py 'edit("budget/ceiling.sh", "  \"\") refuse \"\x27$value\x27 is zero.", "  \"\") : \"\x27$value\x27 is zero.")')"
 run_case "run-budget-ceiling-is-set: budget/ceiling.sh accepts zero" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("budget/ceiling.sh", "  \"\") refuse \"\x27$value\x27 is zero.", "  \"\") : \"\x27$value\x27 is zero.")')" \
+	"$TEETH_EDIT_66" \
 	"accepted '0'"
 
 run_case "run-budget-ceiling-is-set: budget/ceiling.sh accepts a sign and an exponent" fail \
@@ -1413,18 +1715,20 @@ run_case "run-budget-ceiling-is-set: budget/ceiling.sh refuses a figure the gate
 	"$(py 'edit("budget/ceiling.sh", "(\\.[0-9]\x7b1,6\x7d)?$\x27", "(\\.[0-9]\x7b1,2\x7d)?$\x27")')" \
 	"refused '2.123456'"
 
+TEETH_EDIT_67="$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/budget/ceiling.sh\" check ", "\"$ROOT/budget/ceiling.sh\" true ")')"
 run_case "run-budget-ceiling-is-set: a deploy path stops checking the figure before it installs" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/budget/ceiling.sh\" check ", "\"$ROOT/budget/ceiling.sh\" true ")')" \
+	"$TEETH_EDIT_67" \
 	"never runs budget/ceiling.sh check"
 
 run_case "run-budget-ceiling-is-set: a comment next to the ceiling changes" pass \
 	'./scripts/run-budget-ceiling-is-set.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "# The operator\x27s ceiling on a run\x27s budget (tokenfuse v1.5.0,", "# The operator\x27s ceiling on the budget of a run (tokenfuse v1.5.0,")')"
 
+TEETH_EDIT_68="$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')"
 run_case "run-budget-ceiling-is-set: no gateway container left to judge" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.18.0@sha256:7cbaa794670560468b15a7a6a3c37396767435332e8eca3a30af627de29ad6d9\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')" \
+	"$TEETH_EDIT_68" \
 	"measured nothing about the run-budget ceiling"
 
 run_case "run-budget-ceiling-is-set: budget/ceiling.sh taken away" fail \
@@ -1435,9 +1739,10 @@ os.remove("budget/ceiling.sh")')" \
 
 # The other half of invariant 28, in deploy-flags-agree.sh beside the trust domain:
 # `apply -k` puts the declared figure back, so the flag has to act after it.
+TEETH_EDIT_69="$(py 'edit("cloud/aws/deploy-aws.sh", "    --run-budget-ceiling) RUN_BUDGET_CEILING=\"$2\"; shift 2 ;;\n", "")')"
 run_case "deploy-flags-agree: a deploy path stops taking --run-budget-ceiling" fail \
 	'./scripts/deploy-flags-agree.sh' \
-	"$(py 'edit("cloud/aws/deploy-aws.sh", "    --run-budget-ceiling) RUN_BUDGET_CEILING=\"$2\"; shift 2 ;;\n", "")')" \
+	"$TEETH_EDIT_69" \
 	"does not parse --run-budget-ceiling"
 
 run_case "deploy-flags-agree: the ceiling flag is accepted and applies nothing" fail \
@@ -1463,24 +1768,28 @@ open(p, "w").write(s)')" \
 # The risk signal (invariant 29, wardryx v1.2.0 hold_if_signal, typryx v0.4.0
 # wardryx-proxy). Off unless asked; on, one stateless proxy with typryx's own
 # backend, only the broker asking through it, one door, nothing seeded.
+TEETH_EDIT_70="$(py 'edit("typed/mode.sh", "TRAINING_DIR=\"/var/lib/typryx/training\"\nRISK=0\n", "TRAINING_DIR=\"/var/lib/typryx/training\"\nRISK=1\n")')"
 run_case "typed-mode-is-honest: the risk signal is on without the flag" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "TRAINING_DIR=\"/var/lib/typryx/training\"\nRISK=0\n", "TRAINING_DIR=\"/var/lib/typryx/training\"\nRISK=1\n")')" \
+	"$TEETH_EDIT_70" \
 	"WITHOUT --typed-risk-signal"
 
+TEETH_EDIT_71="$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_WARDRYX_URL, value: \"http://wardryx:8090\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_URL, value: \"http://typryx-wardryx-proxy:4330\" \x7d")')"
 run_case "typed-mode-is-honest: the gateway is pointed at the proxy" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_WARDRYX_URL, value: \"http://wardryx:8090\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_URL, value: \"http://typryx-wardryx-proxy:4330\" \x7d")')" \
+	"$TEETH_EDIT_71" \
 	"must never sit on the model path"
 
+TEETH_EDIT_72="$(py 'edit("typed/mode.sh", "TOKENFUSE_WARDRYX_URL, value: \\\"http://typryx-wardryx-proxy:4330\\\"", "TOKENFUSE_WARDRYX_URL, value: \\\"http://wardryx:8090\\\"")')"
 run_case "typed-mode-is-honest: the broker keeps asking wardryx directly" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "TOKENFUSE_WARDRYX_URL, value: \\\"http://typryx-wardryx-proxy:4330\\\"", "TOKENFUSE_WARDRYX_URL, value: \\\"http://wardryx:8090\\\"")')" \
+	"$TEETH_EDIT_72" \
 	"the broker's TOKENFUSE_WARDRYX_URL is"
 
+TEETH_EDIT_73="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_WARDRYX_FAILMODE, value: \"closed\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_FAILMODE, value: \"open\" \x7d")')"
 run_case "typed-mode-is-honest: the broker fails open" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_WARDRYX_FAILMODE, value: \"closed\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_FAILMODE, value: \"open\" \x7d")')" \
+	"$TEETH_EDIT_73" \
 	"not enforce/closed"
 
 run_case "typed-mode-is-honest: the broker uses the admin key" fail \
@@ -1488,34 +1797,40 @@ run_case "typed-mode-is-honest: the broker uses the admin key" fail \
 	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "key: wardryx_gateway \x7d \x7d", "key: wardryx_admin \x7d \x7d")')" \
 	"does not use the pep key"
 
+TEETH_EDIT_74="$(py 'edit("typed/mode.sh", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"7000\\\"", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"500\\\"")')"
 run_case "typed-mode-is-honest: the broker waits less than the proxy may take" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"7000\\\"", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"500\\\"")')" \
+	"$TEETH_EDIT_74" \
 	"14 deadlines nest"
 
+TEETH_EDIT_75="$(py 'edit("typed/mode.sh", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"7000\\\"", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"4000\\\"")')"
 run_case "typed-mode-is-honest: the broker waits less than the proxy's longest ask" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"7000\\\"", "TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: \\\"4000\\\"")')" \
+	"$TEETH_EDIT_75" \
 	"the wait must exceed the longest ask"
 
+TEETH_EDIT_76="$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"3000\"", "TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"1000\"")')"
 run_case "typed-mode-is-honest: the proxy's ask deadline is too short for an own model" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"3000\"", "TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"1000\"")')" \
+	"$TEETH_EDIT_76" \
 	"most own-model answers are dropped"
 
+TEETH_EDIT_77="$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "            - \x7b name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"3000\" \x7d\n", "            - \x7b name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"3000\" \x7d\n            - \x7b name: TYPRYX_EVENTS, value: \"/var/lib/stack/events/typryx.ndjson\" \x7d\n")')"
 run_case "typed-mode-is-honest: the proxy gets a journal on the shared bus" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "            - \x7b name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"3000\" \x7d\n", "            - \x7b name: TYPRYX_PROXY_ASK_TIMEOUT_MS, value: \"3000\" \x7d\n            - \x7b name: TYPRYX_EVENTS, value: \"/var/lib/stack/events/typryx.ndjson\" \x7d\n")')" \
+	"$TEETH_EDIT_77" \
 	"the proxy sets TYPRYX_EVENTS"
 
+TEETH_EDIT_78="$(py 'edit("typed/mode.sh", "render_typryx \"$1\" \"$2\" \"$3\" \"$M56\"", "render_typryx \"$(with_training \"$1\")\" \"$2\" \"$3\" \"$M56\"")')"
 run_case "typed-mode-is-honest: the proxy inherits the training log" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "render_typryx \"$1\" \"$2\" \"$3\" \"$M56\"", "render_typryx \"$(with_training \"$1\")\" \"$2\" \"$3\" \"$M56\"")')" \
+	"$TEETH_EDIT_78" \
 	"the proxy sets TYPRYX_TRAINING_DIR"
 
+TEETH_EDIT_79="$(py 'edit("typed/mode.sh", "render_typryx \"$1\" \"$2\" \"$3\" \"$M56\"", "render_typryx \x27            - \x7b name: TYPRYX_BACKEND, value: \"stub\" \x7d\x27 \"\" \"\" \"$M56\"")')"
 run_case "typed-mode-is-honest: the proxy answers from another backend than typryx" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "render_typryx \"$1\" \"$2\" \"$3\" \"$M56\"", "render_typryx \x27            - \x7b name: TYPRYX_BACKEND, value: \"stub\" \x7d\x27 \"\" \"\" \"$M56\"")')" \
+	"$TEETH_EDIT_79" \
 	"disagree on the backend"
 
 run_case "typed-mode-is-honest: the door admits every pod" fail \
@@ -1523,9 +1838,10 @@ run_case "typed-mode-is-honest: the door admits every pod" fail \
 	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "  ingress:\n    - from:\n        - podSelector: \x7b matchLabels: \x7b app: tokenfuse-mcp-broker \x7d \x7d\n      ports:\n        - \x7b protocol: TCP, port: 4330 \x7d", "  ingress:\n    - from:\n        - podSelector: \x7b\x7d\n      ports:\n        - \x7b protocol: TCP, port: 4330 \x7d")')" \
 	"admits or reaches more than the one named peer"
 
+TEETH_EDIT_80="$(py 'edit("typed/mode.sh", "  if [ \"$RISK\" = 1 ]; then\n    # The proxy answers from the same backend", "  if false; then\n    # The proxy answers from the same backend")')"
 run_case "typed-mode-is-honest: the model egress leaves the proxy out" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "  if [ \"$RISK\" = 1 ]; then\n    # The proxy answers from the same backend", "  if false; then\n    # The proxy answers from the same backend")')" \
+	"$TEETH_EDIT_80" \
 	"does not select the proxy"
 
 run_case "typed-mode-is-honest: a hold_if_signal policy is seeded" fail \
@@ -1533,9 +1849,10 @@ run_case "typed-mode-is-honest: a hold_if_signal policy is seeded" fail \
 	"$(py 'edit("manifests/00-base.yaml", "      deny_tool:\n        - shell_exec\n", "      deny_tool:\n        - shell_exec\n    - name: seeded\n      target: agent://*\n      hold_if_signal: \x7b name: action.risk_class, values: [destructive], min_probability: 0.8 \x7d\n")')" \
 	"seeds a hold_if_signal policy"
 
+TEETH_EDIT_81="$(py 'edit("typed/mode.sh", "if [ \"$RISK\" = 1 ] && [ \"$EFFECTIVE\" = off ]; then", "if false; then")')"
 run_case "typed-mode-is-honest: the risk flag is accepted with no typryx" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("typed/mode.sh", "if [ \"$RISK\" = 1 ] && [ \"$EFFECTIVE\" = off ]; then", "if false; then")')" \
+	"$TEETH_EDIT_81" \
 	"15 risk signal needs typryx"
 
 run_case "typed-mode-is-honest: a launcher loses --typed-risk-signal" fail \
@@ -1543,9 +1860,10 @@ run_case "typed-mode-is-honest: a launcher loses --typed-risk-signal" fail \
 	"$(py 'edit("cloud/aws/deploy-aws.sh", "    --typed-risk-signal)    TYPED_RISK_SIGNAL=1; shift ;;\n", "")')" \
 	"does not parse --typed-risk-signal"
 
+TEETH_EDIT_82="$(py 'edit("deploy.sh", "[ \"$TYPED_RISK_SIGNAL\" = 1 ] && TYPED_ARGS+=(--typed-risk-signal)\n", "")')"
 run_case "typed-mode-is-honest: a launcher stops forwarding --typed-risk-signal" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("deploy.sh", "[ \"$TYPED_RISK_SIGNAL\" = 1 ] && TYPED_ARGS+=(--typed-risk-signal)\n", "")')" \
+	"$TEETH_EDIT_82" \
 	"15 launchers hand --typed-risk-signal"
 
 run_case "typed-mode-is-honest: the proxy runs another typryx tag than typryx" fail \
@@ -1553,14 +1871,16 @@ run_case "typed-mode-is-honest: the proxy runs another typryx tag than typryx" f
 	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.5.0", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
 	"different tags"
 
+TEETH_EDIT_83="$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "args: [\"wardryx-proxy\"]", "args: [\"serve\"]")')"
 run_case "typed-mode-is-honest: the proxy runs the service, not the proxy" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "args: [\"wardryx-proxy\"]", "args: [\"serve\"]")')" \
+	"$TEETH_EDIT_83" \
 	"does not run \`typryx wardryx-proxy\`"
 
+TEETH_EDIT_84="$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "value: \"http://wardryx:8090\" \x7d", "value: \"http://wardryx.other:8090\" \x7d")')"
 run_case "typed-mode-is-honest: the proxy forwards to something other than wardryx" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "value: \"http://wardryx:8090\" \x7d", "value: \"http://wardryx.other:8090\" \x7d")')" \
+	"$TEETH_EDIT_84" \
 	"not wardryx's own Service"
 
 run_case "typed-mode-is-honest: manifests/56 drifts from the lines the modes rewrite" fail \
@@ -1583,29 +1903,34 @@ os.remove("manifests/56-typryx-wardryx-proxy.yaml")')" \
 # the wrong directory, writing a stream no reader opens, remembering in a place that
 # forgets, a second claim (a billed disk), a retry that hides the failure, no way to
 # create its file, the money plane's uid, an image that has no such subcommand.
+TEETH_EDIT_85="$(py 'edit("manifests/40-routines-and-secrets.yaml", "  schedule: \"*/15 * * * *\"\n", "  schedule: \"*/15 * * * *\"\n  suspend: true\n")')"
 run_case "chain-verifier: the verifier is suspended" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "  schedule: \"*/15 * * * *\"\n", "  schedule: \"*/15 * * * *\"\n  suspend: true\n")')" \
+	"$TEETH_EDIT_85" \
 	"suspended"
 
+TEETH_EDIT_86="$(py 'edit("manifests/40-routines-and-secrets.yaml", "  schedule: \"*/15 * * * *\"\n", "  schedule: \"0 * * * *\"\n")')"
 run_case "chain-verifier: the verifier runs hourly" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "  schedule: \"*/15 * * * *\"\n", "  schedule: \"0 * * * *\"\n")')" \
+	"$TEETH_EDIT_86" \
 	"not at least every 15 minutes"
 
+TEETH_EDIT_87="$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m", "                - \"/var/lib/stack\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m")')"
 run_case "chain-verifier: the verifier watches a directory that is not the bus" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m", "                - \"/var/lib/stack\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m")')" \
+	"$TEETH_EDIT_87" \
 	"not the bus"
 
+TEETH_EDIT_88="$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events/agent-conform.ndjson\"\n", "                - \"/var/lib/stack/events/wardryx.ndjson\"\n")')"
 run_case "chain-verifier: the verifier writes a stream named for another writer" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events/agent-conform.ndjson\"\n", "                - \"/var/lib/stack/events/wardryx.ndjson\"\n")')" \
+	"$TEETH_EDIT_88" \
 	"inside the bus (its name is the source"
 
+TEETH_EDIT_89="$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              emptyDir: \x7b\x7d\n")')"
 run_case "chain-verifier: the verifier remembers in an emptyDir" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              emptyDir: \x7b\x7d\n")')" \
+	"$TEETH_EDIT_89" \
 	"mounts an emptyDir"
 
 run_case "chain-verifier: the verifier is given a claim of its own" fail \
@@ -1658,19 +1983,22 @@ run_case "chain-verifier: no verifier left to judge" fail \
 # The bus file names (invariant 30). heraldyx v0.3.0 and idryx v1.1.0 refuse an event
 # whose source is not allowed for its file, so a stream renamed, or a --load pair that
 # names the wrong source, silences a plane without an error.
+TEETH_EDIT_90="$(py 'edit("manifests/00-base.yaml", "WARDRYX_EVENTS_PATH: \"/var/lib/stack/events/wardryx.ndjson\"", "WARDRYX_EVENTS_PATH: \"/var/lib/stack/events/policy-events.ndjson\"")')"
 run_case "bus-names: a stream is named for no source the readers know" fail \
 	'./scripts/bus-names-match-the-source-rule.sh' \
-	"$(py 'edit("manifests/00-base.yaml", "WARDRYX_EVENTS_PATH: \"/var/lib/stack/events/wardryx.ndjson\"", "WARDRYX_EVENTS_PATH: \"/var/lib/stack/events/policy-events.ndjson\"")')" \
+	"$TEETH_EDIT_90" \
 	"named for no source the readers know"
 
+TEETH_EDIT_91="$(py 'edit("manifests/10-planes.yaml", "            - \"tokenfuse:/var/lib/stack/events/tokenfuse.ndjson\"", "            - \"wardryx:/var/lib/stack/events/tokenfuse.ndjson\"")')"
 run_case "bus-names: an idryx --load pair names a source the file may not carry" fail \
 	'./scripts/bus-names-match-the-source-rule.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - \"tokenfuse:/var/lib/stack/events/tokenfuse.ndjson\"", "            - \"wardryx:/var/lib/stack/events/tokenfuse.ndjson\"")')" \
+	"$TEETH_EDIT_91" \
 	"may carry"
 
+TEETH_EDIT_92="$(py 'edit("manifests/10-planes.yaml", "            - \"tokenfuse:/var/lib/stack/events/tokenfuse.ndjson\"", "            - \"tokenfuse:/var/lib/stack/events/tokenfuse.log\"")')"
 run_case "bus-names: an idryx --load path is not a stream file" fail \
 	'./scripts/bus-names-match-the-source-rule.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - \"tokenfuse:/var/lib/stack/events/tokenfuse.ndjson\"", "            - \"tokenfuse:/var/lib/stack/events/tokenfuse.log\"")')" \
+	"$TEETH_EDIT_92" \
 	"names no *.ndjson file"
 
 run_case "bus-names: a renamed stream that the notifier declares is not a fault" pass \
@@ -1755,7 +2083,8 @@ assert n, "no manifest to rename"')" \
 run_case "mounted-keys: no typed render mounts a key" fail \
 	'./scripts/mounted-keys-are-readable.sh' \
 	"$(py 'edit("typed/mode.sh", "secret: \x7b secretName: typryx-jev-key, defaultMode: 0440 \x7d", "configMap: \x7b name: typryx-jev-key \x7d")
-edit("typed/mode.sh", "secret: \x7b secretName: typryx-model-key, defaultMode: 0440 \x7d", "configMap: \x7b name: typryx-model-key \x7d")')" \
+edit("typed/mode.sh", "secret: \x7b secretName: typryx-model-key, defaultMode: 0440 \x7d", "configMap: \x7b name: typryx-model-key \x7d")
+edit("manifests/52-tokenfuse-mcp-broker.yaml", "secret: \x7b secretName: broker-taint-key, defaultMode: 0440, items: \x5b\x7b key: client_key, path: key \x7d\x5d \x7d", "configMap: \x7b name: broker-taint-key \x7d")')" \
 	"no typed render mounts a Secret"
 
 # Invariant 33. tokenfuse splits a client key entry on its LAST colon, so an
@@ -1772,14 +2101,16 @@ run_case "client-key-ids: the manifest 52 example goes back to an agent:// key i
 	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:agent://acme.example/broker-caller\x27")')" \
 	"key id '//acme.example/broker-caller'"
 
+TEETH_EDIT_93="$(py 'open("README.md", "a").write("\n    env: [ \x7b name: TOKENFUSE_CLIENT_KEYS, value: \"sk-flow:agent://acme.example/flow\" \x7d ]\n")')"
 run_case "client-key-ids: a YAML flow env entry carries an agent:// key id" fail \
 	'./scripts/client-key-ids-are-bare.sh' \
-	"$(py 'open("README.md", "a").write("\n    env: [ \x7b name: TOKENFUSE_CLIENT_KEYS, value: \"sk-flow:agent://acme.example/flow\" \x7d ]\n")')" \
+	"$TEETH_EDIT_93" \
 	"key id '//acme.example/flow'"
 
+TEETH_EDIT_94="$(py 'open("README.md", "a").write("\n        - name: TOKENFUSE_MCP_KEYS\n          value: \"sk-block:agent://acme.example/block\"\n")')"
 run_case "client-key-ids: a YAML block env entry carries an agent:// key id" fail \
 	'./scripts/client-key-ids-are-bare.sh' \
-	"$(py 'open("README.md", "a").write("\n        - name: TOKENFUSE_MCP_KEYS\n          value: \"sk-block:agent://acme.example/block\"\n")')" \
+	"$TEETH_EDIT_94" \
 	"key id '//acme.example/block'"
 
 run_case "client-key-ids: a secret with colons and a bare key id (must pass)" pass \
@@ -1800,9 +2131,10 @@ run_case "no-owner-quotes: an owner provenance marker" fail \
 	"$(py 'open("README.md", "a").write("\n`@" + "yur" + "ii 2026-10-08`: keep it.\n")')" \
 	"the owner's provenance marker"
 
+TEETH_EDIT_95="$(py 'open("GOTCHAS.md", "a").write("\n\"\u0440\u043e\u0431\u0438 \u0432\u0441\u0435\"\n")')"
 run_case "no-owner-quotes: a quote in Ukrainian" fail \
 	'./scripts/no-owner-quotes.sh' \
-	"$(py 'open("GOTCHAS.md", "a").write("\n\"\u0440\u043e\u0431\u0438 \u0432\u0441\u0435\"\n")')" \
+	"$TEETH_EDIT_95" \
 	"Cyrillic text"
 
 run_case "no-owner-quotes: a quote in guillemets" fail \
@@ -1858,8 +2190,8 @@ run_case "temp: the console's temp is mounted read-only" fail \
 
 run_case "temp: no container left that needs a temp" fail \
 	'./scripts/read-only-root-has-a-temp.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.9.0", "image: registry.invalid/costcrew:v0.6.0")
-edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.9.0", "image: registry.invalid/costcrew:v0.6.0")')" \
+	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.10.0", "image: registry.invalid/costcrew:v0.6.0")
+edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.10.0", "image: registry.invalid/costcrew:v0.6.0")')" \
 	"measured NOTHING"
 
 run_case "temp: TMPDIR inside the data volume instead of a /tmp mount" pass \
@@ -1879,33 +2211,38 @@ run_case "temp: the temp size changes" pass \
 # real one, the validator taken away, a deploy path that checks the mode only after its
 # install, and a deploy path that takes --firewall and applies nothing. Then a comment (must
 # pass).
+TEETH_EDIT_96="$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n", "")')"
 run_case "firewall-is-enforce-by-default: the gateway container loses the switch" fail \
 	'./scripts/firewall-is-enforce-by-default.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n", "")')" \
+	"$TEETH_EDIT_96" \
 	"has no TOKENFUSE_FIREWALL env var"
 
+TEETH_EDIT_97="$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d", "\x7b name: TOKENFUSE_FIREWALL, value: \"shadow\" \x7d")')"
 run_case "firewall-is-enforce-by-default: the gateway defaults to shadow" fail \
 	'./scripts/firewall-is-enforce-by-default.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d", "\x7b name: TOKENFUSE_FIREWALL, value: \"shadow\" \x7d")')" \
+	"$TEETH_EDIT_97" \
 	'not "enforce"'
 
+TEETH_EDIT_98="$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d", "\x7b name: TOKENFUSE_FIREWALL, value: \"off\" \x7d")')"
 run_case "firewall-is-enforce-by-default: the gateway defaults to off" fail \
 	'./scripts/firewall-is-enforce-by-default.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d", "\x7b name: TOKENFUSE_FIREWALL, value: \"off\" \x7d")')" \
+	"$TEETH_EDIT_98" \
 	'not "enforce"'
 
+TEETH_EDIT_99="$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n", "            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n            - \x7b name: TOKENFUSE_FIREWALL, value: \"shadow\" \x7d\n")')"
 run_case "firewall-is-enforce-by-default: the switch is set twice, the second to shadow" fail \
 	'./scripts/firewall-is-enforce-by-default.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n", "            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n            - \x7b name: TOKENFUSE_FIREWALL, value: \"shadow\" \x7d\n")')" \
+	"$TEETH_EDIT_99" \
 	"set 2 times"
 
 run_case "firewall-is-enforce-by-default: a comment naming shadow beside the switch" pass \
 	'./scripts/firewall-is-enforce-by-default.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n", "            # shadow is the gateway default only when the variable is unset.\n            - \x7b name: TOKENFUSE_FIREWALL, value: \"enforce\" \x7d\n")')"
 
+TEETH_EDIT_100="$(py 'edit("manifests/10-planes.yaml", "          command: [\"/usr/local/bin/tokenfuse\"]\n", "          command: [\"/bin/true\"]\n")')"
 run_case "firewall-is-enforce-by-default: every gateway start taken away" fail \
 	'./scripts/firewall-is-enforce-by-default.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          command: [\"/usr/local/bin/tokenfuse\"]\n", "          command: [\"/bin/true\"]\n")')" \
+	"$TEETH_EDIT_100" \
 	"measured nothing"
 
 run_case "firewall/mode.sh: a misspelt mode is accepted" fail \
@@ -1923,14 +2260,16 @@ run_case "firewall/mode.sh: taken away" fail \
 	"$(py 'import os; os.remove("firewall/mode.sh")')" \
 	"firewall/mode.sh is missing"
 
+TEETH_EDIT_101="$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/firewall/mode.sh\" check \"$FIREWALL_MODE\"", "\"$ROOT/firewall/mode.sh\" true \"$FIREWALL_MODE\"")')"
 run_case "firewall-is-enforce-by-default: a deploy path checks the mode but does not stop on it" fail \
 	'./scripts/firewall-is-enforce-by-default.sh' \
-	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/firewall/mode.sh\" check \"$FIREWALL_MODE\"", "\"$ROOT/firewall/mode.sh\" true \"$FIREWALL_MODE\"")')" \
+	"$TEETH_EDIT_101" \
 	"before its first apply"
 
+TEETH_EDIT_102="$(py 'edit("cloud/aws/deploy-aws.sh", "    --firewall) FIREWALL_MODE=\"$2\"; shift 2 ;;\n", "")')"
 run_case "deploy-flags-agree: a deploy path stops taking --firewall" fail \
 	'./scripts/deploy-flags-agree.sh' \
-	"$(py 'edit("cloud/aws/deploy-aws.sh", "    --firewall) FIREWALL_MODE=\"$2\"; shift 2 ;;\n", "")')" \
+	"$TEETH_EDIT_102" \
 	"does not parse --firewall"
 
 run_case "deploy-flags-agree: the firewall flag is accepted and applies nothing" fail \
@@ -1945,48 +2284,56 @@ run_case "deploy-flags-agree: the firewall flag is accepted and applies nothing"
 # the validator accepting a misspelt word or refusing the real one, the validator taken away, a deploy
 # path that checks the mode only after its install, a deploy path that stops taking --pii-mode, and a
 # deploy path that applies the switch before its kustomization. Then a comment (must pass).
+TEETH_EDIT_103="$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n", "")')"
 run_case "pii-is-shadow-by-default: the gateway container loses the switch" fail \
 	'./scripts/pii-is-shadow-by-default.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n", "")')" \
+	"$TEETH_EDIT_103" \
 	"has no TOKENFUSE_DLP_PII env var"
 
+TEETH_EDIT_104="$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d", "\x7b name: TOKENFUSE_DLP_PII, value: \"off\" \x7d")')"
 run_case "pii-is-shadow-by-default: the gateway defaults to off" fail \
 	'./scripts/pii-is-shadow-by-default.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d", "\x7b name: TOKENFUSE_DLP_PII, value: \"off\" \x7d")')" \
+	"$TEETH_EDIT_104" \
 	'not "shadow"'
 
+TEETH_EDIT_105="$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d", "\x7b name: TOKENFUSE_DLP_PII, value: \"block\" \x7d")')"
 run_case "pii-is-shadow-by-default: the gateway defaults to block" fail \
 	'./scripts/pii-is-shadow-by-default.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d", "\x7b name: TOKENFUSE_DLP_PII, value: \"block\" \x7d")')" \
+	"$TEETH_EDIT_105" \
 	'not "shadow"'
 
+TEETH_EDIT_106="$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n", "            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n            - \x7b name: TOKENFUSE_DLP_PII, value: \"off\" \x7d\n")')"
 run_case "pii-is-shadow-by-default: the switch is set twice, the second to off" fail \
 	'./scripts/pii-is-shadow-by-default.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n", "            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n            - \x7b name: TOKENFUSE_DLP_PII, value: \"off\" \x7d\n")')" \
+	"$TEETH_EDIT_106" \
 	"set 2 times"
 
 run_case "pii-is-shadow-by-default: a comment naming block beside the switch" pass \
 	'./scripts/pii-is-shadow-by-default.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n", "            # block refuses a call that carries a finding; the literal below is shadow.\n            - \x7b name: TOKENFUSE_DLP_PII, value: \"shadow\" \x7d\n")')"
 
+TEETH_EDIT_107="$(py 'edit("manifests/10-planes.yaml", "          command: [\"/usr/local/bin/tokenfuse\"]\n", "          command: [\"/bin/true\"]\n")')"
 run_case "pii-is-shadow-by-default: every gateway start taken away" fail \
 	'./scripts/pii-is-shadow-by-default.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          command: [\"/usr/local/bin/tokenfuse\"]\n", "          command: [\"/bin/true\"]\n")')" \
+	"$TEETH_EDIT_107" \
 	"no gateway start was found"
 
+TEETH_EDIT_108="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - \x7b name: TOKENFUSE_MCP_DLP_PII, value: \"shadow\" \x7d\n", "")')"
 run_case "pii-is-shadow-by-default: the broker container loses the switch" fail \
 	'./scripts/pii-is-shadow-by-default.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - \x7b name: TOKENFUSE_MCP_DLP_PII, value: \"shadow\" \x7d\n", "")')" \
+	"$TEETH_EDIT_108" \
 	"has no TOKENFUSE_MCP_DLP_PII env var"
 
+TEETH_EDIT_109="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_MCP_DLP_PII, value: \"shadow\" \x7d", "\x7b name: TOKENFUSE_MCP_DLP_PII, value: \"off\" \x7d")')"
 run_case "pii-is-shadow-by-default: the MCP broker defaults to off" fail \
 	'./scripts/pii-is-shadow-by-default.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_MCP_DLP_PII, value: \"shadow\" \x7d", "\x7b name: TOKENFUSE_MCP_DLP_PII, value: \"off\" \x7d")')" \
+	"$TEETH_EDIT_109" \
 	'TOKENFUSE_MCP_DLP_PII is "off"'
 
+TEETH_EDIT_110="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          args: [\"mcp-broker\"]\n", "          args: [\"mcp-brokr\"]\n")')"
 run_case "pii-is-shadow-by-default: every MCP broker start taken away" fail \
 	'./scripts/pii-is-shadow-by-default.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          args: [\"mcp-broker\"]\n", "          args: [\"mcp-brokr\"]\n")')" \
+	"$TEETH_EDIT_110" \
 	"no MCP broker start was found"
 
 run_case "pii/mode.sh: a misspelt mode is accepted" fail \
@@ -2004,14 +2351,16 @@ run_case "pii/mode.sh: taken away" fail \
 	"$(py 'import os; os.remove("pii/mode.sh")')" \
 	"pii/mode.sh is missing"
 
+TEETH_EDIT_111="$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/pii/mode.sh\" check \"$PII_MODE\"", "\"$ROOT/pii/mode.sh\" true \"$PII_MODE\"")')"
 run_case "pii-is-shadow-by-default: a deploy path checks the mode but does not stop on it" fail \
 	'./scripts/pii-is-shadow-by-default.sh' \
-	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/pii/mode.sh\" check \"$PII_MODE\"", "\"$ROOT/pii/mode.sh\" true \"$PII_MODE\"")')" \
+	"$TEETH_EDIT_111" \
 	"before its first apply"
 
+TEETH_EDIT_112="$(py 'edit("cloud/aws/deploy-aws.sh", "    --pii-mode) PII_MODE=\"$2\"; shift 2 ;;\n", "")')"
 run_case "deploy-flags-agree: a deploy path stops taking --pii-mode" fail \
 	'./scripts/deploy-flags-agree.sh' \
-	"$(py 'edit("cloud/aws/deploy-aws.sh", "    --pii-mode) PII_MODE=\"$2\"; shift 2 ;;\n", "")')" \
+	"$TEETH_EDIT_112" \
 	"does not parse --pii-mode"
 
 run_case "deploy-flags-agree: the gateway PII switch is accepted and applies nothing" fail \
@@ -2024,9 +2373,10 @@ run_case "deploy-flags-agree: the broker PII switch is accepted and applies noth
 	"$(py 'edit("cloud/aws/deploy-aws.sh", "set env deploy/tokenfuse-mcp-broker -c broker TOKENFUSE_MCP_DLP_PII=$PII_MODE", "get deploy/tokenfuse-mcp-broker -c broker TOKENFUSE_MCP_DLP_PII=$PII_MODE")')" \
 	"never applies"
 
+TEETH_EDIT_113="$(py 'edit("cloud/gcp/deploy-gcp.sh", "  k_ \"-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_DLP_PII=$PII_MODE\" >/dev/null \\\n", "  true \\\n"); edit("cloud/gcp/deploy-gcp.sh", "k_ \"apply -k /root/stack-k8s/manifests\"", "k_ \"-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_DLP_PII=$PII_MODE\" >/dev/null\nk_ \"apply -k /root/stack-k8s/manifests\"")')"
 run_case "deploy-flags-agree: the gateway PII switch is applied before the kustomization" fail \
 	'./scripts/deploy-flags-agree.sh' \
-	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "  k_ \"-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_DLP_PII=$PII_MODE\" >/dev/null \\\n", "  true \\\n"); edit("cloud/gcp/deploy-gcp.sh", "k_ \"apply -k /root/stack-k8s/manifests\"", "k_ \"-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_DLP_PII=$PII_MODE\" >/dev/null\nk_ \"apply -k /root/stack-k8s/manifests\"")')" \
+	"$TEETH_EDIT_113" \
 	"BEFORE its"
 
 # Client keys and the identity map (CLAUDE.md invariant 39). Each case runs the one section of
@@ -2080,9 +2430,10 @@ run_case "identity-files: up.sh writes a path the gateway does not read" fail \
 	"$(py 'edit("identity/up.sh", "MAP_DIR=/etc/tokenfuse/identity\n", "MAP_DIR=/etc/tokenfuse/identities\n")')" \
 	"mounts nothing at /etc/tokenfuse/identities"
 
+TEETH_EDIT_114="$(py 'edit("manifests/10-planes.yaml", "          command: [\"/usr/local/bin/tokenfuse\"]\n", "          command: [\"/bin/true\"]\n")')"
 run_case "identity-files: no gateway start left to judge" fail \
 	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          command: [\"/usr/local/bin/tokenfuse\"]\n", "          command: [\"/bin/true\"]\n")')" \
+	"$TEETH_EDIT_114" \
 	"measured NOTHING"
 
 run_case "identity-files: identity/up.sh taken away" fail \
@@ -2094,9 +2445,10 @@ run_case "identity-files: a comment that names another form of the setting is no
 	'IDENTITY_SECTIONS=A ./scripts/identity-files-are-checked.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_CLIENT_KEYS\n", "            # optional: true would start a gateway that answers anyone; the reference below is required.\n            - name: TOKENFUSE_CLIENT_KEYS\n")')"
 
+TEETH_EDIT_115="$(py 'edit("identity/up.sh", "[ \"$\x7b#secret\x7d\" -lt 24 ]", "[ \"$\x7b#secret\x7d\" -lt 8 ]")')"
 run_case "identity-files: a short secret is accepted" fail \
 	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "[ \"$\x7b#secret\x7d\" -lt 24 ]", "[ \"$\x7b#secret\x7d\" -lt 8 ]")')" \
+	"$TEETH_EDIT_115" \
 	"(a secret of 23 characters) reached docker"
 
 run_case "identity-files: a quote or a dollar reaches the Secret" fail \
@@ -2104,9 +2456,10 @@ run_case "identity-files: a quote or a dollar reaches the Secret" fail \
 	"$(py 'edit("identity/up.sh", "re_chars=\x27^[A-Za-z0-9._~+/=@:-]+$\x27", "re_chars=\x27^.+$\x27")')" \
 	"(a secret with a dollar) reached docker"
 
+TEETH_EDIT_116="$(py 'edit("identity/up.sh", "die \"--client-keys-file: line $n gives a secret an earlier line already gave", ": \"--client-keys-file: line $n gives a secret an earlier line already gave")')"
 run_case "identity-files: a secret given twice is kept" fail \
 	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "die \"--client-keys-file: line $n gives a secret an earlier line already gave", ": \"--client-keys-file: line $n gives a secret an earlier line already gave")')" \
+	"$TEETH_EDIT_116" \
 	"(a secret given twice) reached docker"
 
 run_case "identity-files: a NUL byte is let through" fail \
@@ -2114,19 +2467,22 @@ run_case "identity-files: a NUL byte is let through" fail \
 	"$(py 'edit("identity/up.sh", "printf \x27names a file holding a NUL byte\x27; return 0;", ":;")')" \
 	"(a NUL byte) reached docker"
 
+TEETH_EDIT_117="$(py 'edit("identity/up.sh", "[ \"$count\" -gt 0 ] || die", "[ \"$count\" -ge 0 ] || die")')"
 run_case "identity-files: a keys file of comments alone is accepted" fail \
 	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "[ \"$count\" -gt 0 ] || die", "[ \"$count\" -ge 0 ] || die")')" \
+	"$TEETH_EDIT_117" \
 	"(comments and blank lines only) was accepted"
 
+TEETH_EDIT_118="$(py 'edit("identity/up.sh", "[ \"$first\" = \"\x7b\" ] || die", "[ -n \"$first\" ] || die")')"
 run_case "identity-files: a map that is not a JSON object passes the first half" fail \
 	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "[ \"$first\" = \"\x7b\" ] || die", "[ -n \"$first\" ] || die")')" \
+	"$TEETH_EDIT_118" \
 	"(a JSON array, not an object) reached docker"
 
+TEETH_EDIT_119="$(py 'edit("identity/up.sh", "die \"--client-keys-file: line $n $why.", "die \"--client-keys-file: line $n ($line) $why.")')"
 run_case "identity-files: a refusal repeats the secret" fail \
 	'IDENTITY_SECTIONS=B ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "die \"--client-keys-file: line $n $why.", "die \"--client-keys-file: line $n ($line) $why.")')" \
+	"$TEETH_EDIT_119" \
 	"repeats the secret"
 
 run_case "identity-files: a map larger than a ConfigMap holds is accepted" fail \
@@ -2134,74 +2490,88 @@ run_case "identity-files: a map larger than a ConfigMap holds is accepted" fail 
 	"$(py 'edit("identity/up.sh", "MAP_MAX=1044480\n", "MAP_MAX=10485760\n")')" \
 	"(a map larger than a ConfigMap holds) reached docker"
 
+TEETH_EDIT_120="$(py 'edit("identity/up.sh", "    *\"tokenfuse gateway listening\"*) ;;\n", "    *) ;;\n")')"
 run_case "identity-files: the gateway's own refusal is not heard" fail \
 	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "    *\"tokenfuse gateway listening\"*) ;;\n", "    *) ;;\n")')" \
+	"$TEETH_EDIT_120" \
 	"refused, but not saying: not declared in units[]"
 
+TEETH_EDIT_121="$(py 'edit("identity/up.sh", "grep -qF \x27identity map: ON (\x27 <<<\"$logs\" \\\n", "true \\\n")')"
 run_case "identity-files: a map that configures nothing is accepted" fail \
 	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "grep -qF \x27identity map: ON (\x27 <<<\"$logs\" \\\n", "true \\\n")')" \
+	"$TEETH_EDIT_121" \
 	"configures nothing ({}) was accepted"
 
+TEETH_EDIT_122="$(py 'edit("identity/up.sh", "orphans=\"$(sed -n", "orphans=\"$(: sed -n")')"
 run_case "identity-files: a map that binds a key with no secret is accepted" fail \
 	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "orphans=\"$(sed -n", "orphans=\"$(: sed -n")')" \
+	"$TEETH_EDIT_122" \
 	"binds a key id no client key carries was accepted"
 
+TEETH_EDIT_123="$(py 'edit("identity/up.sh", "unbound=\"$(sed -n", "unbound=\"$(: sed -n")')"
 run_case "identity-files: a client key the map does not bind is accepted" fail \
 	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "unbound=\"$(sed -n", "unbound=\"$(: sed -n")')" \
+	"$TEETH_EDIT_123" \
 	"a client key the map does not bind was accepted"
 
+TEETH_EDIT_124="$(py 'edit("identity/up.sh", "--name \"$CHECK_CONTAINER\" --network none \\\n", "--name \"$CHECK_CONTAINER\" \\\n")')"
 run_case "identity-files: the check container reaches the network" fail \
 	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "--name \"$CHECK_CONTAINER\" --network none \\\n", "--name \"$CHECK_CONTAINER\" \\\n")')" \
+	"$TEETH_EDIT_124" \
 	"with a network"
 
+TEETH_EDIT_125="$(py 'edit("identity/up.sh", "      -e TOKENFUSE_CLIENT_KEYS \\\n", "      -e \"TOKENFUSE_CLIENT_KEYS=$spec\" \\\n")')"
 run_case "identity-files: the keys ride the docker command line" fail \
 	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "      -e TOKENFUSE_CLIENT_KEYS \\\n", "      -e \"TOKENFUSE_CLIENT_KEYS=$spec\" \\\n")')" \
+	"$TEETH_EDIT_125" \
 	"put a secret on the docker command line"
 
+TEETH_EDIT_126="$(py 'edit("identity/up.sh", "      --entrypoint \"$GATEWAY_CMD\" \\\n", "")')"
 run_case "identity-files: the check gives the image no command" fail \
 	'IDENTITY_SECTIONS=C ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "      --entrypoint \"$GATEWAY_CMD\" \\\n", "")')" \
+	"$TEETH_EDIT_126" \
 	"with no ENTRYPOINT, the shape BUILD_FROM_SOURCE builds was refused"
 
+TEETH_EDIT_127="$(py 'edit("identity/up.sh", "identity_check \"$IMAGE\" \"$SPEC\" \"$MAPF\"\n", "true \"$IMAGE\" \"$SPEC\" \"$MAPF\"\n")')"
 run_case "identity-files: a refused file still writes to the cluster" fail \
 	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "identity_check \"$IMAGE\" \"$SPEC\" \"$MAPF\"\n", "true \"$IMAGE\" \"$SPEC\" \"$MAPF\"\n")')" \
+	"$TEETH_EDIT_127" \
 	"still wrote to the cluster"
 
+TEETH_EDIT_128="$(py 'edit("identity/up.sh", "SPEC=\"$KEPT_SPEC\"\n[ \"$KEYS_GIVEN\" = 0 ] || SPEC=\"$KEYS_NEW\"\n", "SPEC=\"$KEYS_NEW\"\n")')"
 run_case "identity-files: a re-run that names no file drops the kept keys" fail \
 	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "SPEC=\"$KEPT_SPEC\"\n[ \"$KEYS_GIVEN\" = 0 ] || SPEC=\"$KEYS_NEW\"\n", "SPEC=\"$KEYS_NEW\"\n")')" \
+	"$TEETH_EDIT_128" \
 	"a re-run that names no file"
 
+TEETH_EDIT_129="$(py 'edit("identity/up.sh", "[ -z \"$MAP_SHA\" ] || ANN_MAP_WANT=\"$MAP_SHA\"\n", "[ -z \"$MAP_SHA\" ] || ANN_MAP_WANT=\"$MAP_SHA-$$\"\n")')"
 run_case "identity-files: the same map again restarts the gateway" fail \
 	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "[ -z \"$MAP_SHA\" ] || ANN_MAP_WANT=\"$MAP_SHA\"\n", "[ -z \"$MAP_SHA\" ] || ANN_MAP_WANT=\"$MAP_SHA-$$\"\n")')" \
+	"$TEETH_EDIT_129" \
 	"the same map given again"
 
+TEETH_EDIT_130="$(py 'edit("identity/up.sh", "[ -z \"$MAP_SHA\" ] || ANN_MAP_WANT=\"$MAP_SHA\"\n", "[ -z \"$MAP_SHA\" ] || ANN_MAP_WANT=on\n")')"
 run_case "identity-files: a new map does not restart the gateway" fail \
 	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "[ -z \"$MAP_SHA\" ] || ANN_MAP_WANT=\"$MAP_SHA\"\n", "[ -z \"$MAP_SHA\" ] || ANN_MAP_WANT=on\n")')" \
+	"$TEETH_EDIT_130" \
 	"a new map did not roll the gateway"
 
+TEETH_EDIT_131="$(py 'edit("identity/up.sh", "[ \"$SECRET_PRESENT\" = 0 ] || ANN_KEYS_WANT=\"$SECRET_RV\"\n", "[ \"$SECRET_PRESENT\" = 0 ] || ANN_KEYS_WANT=on\n")')"
 run_case "identity-files: a new keys file does not restart the gateway" fail \
 	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "[ \"$SECRET_PRESENT\" = 0 ] || ANN_KEYS_WANT=\"$SECRET_RV\"\n", "[ \"$SECRET_PRESENT\" = 0 ] || ANN_KEYS_WANT=on\n")')" \
+	"$TEETH_EDIT_131" \
 	"a new keys file did not roll the gateway"
 
+TEETH_EDIT_132="$(py 'edit("identity/up.sh", "      | k create -f - >/dev/null \\\n      || die \"could not create Secret $SECRET_NAME\"", "      >/dev/null; k create secret generic \"$SECRET_NAME\" --from-literal=\"$SECRET_KEY=$SPEC\" >/dev/null \\\n      || die \"could not create Secret $SECRET_NAME\"")')"
 run_case "identity-files: the keys ride the kubectl command line" fail \
 	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "      | k create -f - >/dev/null \\\n      || die \"could not create Secret $SECRET_NAME\"", "      >/dev/null; k create secret generic \"$SECRET_NAME\" --from-literal=\"$SECRET_KEY=$SPEC\" >/dev/null \\\n      || die \"could not create Secret $SECRET_NAME\"")')" \
+	"$TEETH_EDIT_132" \
 	"a secret appeared on a kubectl command line"
 
+TEETH_EDIT_133="$(py 'edit("identity/up.sh", "if [ -n \"$seen_keys\" ] && [ \"$seen_keys\" != \"$CHECK_KEYS\" ]; then", "if false; then")')"
 run_case "identity-files: up.sh believes a gateway that reports other keys" fail \
 	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "if [ -n \"$seen_keys\" ] && [ \"$seen_keys\" != \"$CHECK_KEYS\" ]; then", "if false; then")')" \
+	"$TEETH_EDIT_133" \
 	"reported another number of keys than it was given was believed"
 
 run_case "identity-files: verify.sh stops asking for a call with no key" fail \
@@ -2246,9 +2616,10 @@ run_case "aws-takes-every-gcp-flag: a GCP-only flag with an allow-list entry pas
 	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "    --skip-images)", "    --probe-gcp-only) PROBE=1; shift ;;\n    --skip-images)")
 edit("scripts/aws-takes-every-gcp-flag.sh", "ALLOW=\"\"", "ALLOW=\"--probe-gcp-only|a probe flag for this case\"")')"
 
+TEETH_EDIT_134="$(py 'edit("scripts/aws-takes-every-gcp-flag.sh", "ALLOW=\"\"", "ALLOW=\"--no-such-flag|a flag nobody takes\"")')"
 run_case "aws-takes-every-gcp-flag: an allow-list entry names a flag GCP does not take" fail \
 	'./scripts/aws-takes-every-gcp-flag.sh' \
-	"$(py 'edit("scripts/aws-takes-every-gcp-flag.sh", "ALLOW=\"\"", "ALLOW=\"--no-such-flag|a flag nobody takes\"")')" \
+	"$TEETH_EDIT_134" \
 	"the allow-list names --no-such-flag"
 
 # Invariant 45: cluster DNS keeps a replica through a drain, and k3s's coredns is left to k3s.
@@ -2267,14 +2638,16 @@ run_case "cluster-dns-has-a-budget: the budget selects other pods" fail \
 	"$(py 'edit("cloud/aws/install-aws.sh", "matchLabels: \x7b k8s-app: kube-dns \x7d", "matchLabels: \x7b k8s-app: coredns \x7d")')" \
 	"not the document this gate holds"
 
+TEETH_EDIT_135="$(py 'edit("install.sh", "if [ \"$DNS_WANT\" -ge 2 ]; then", "if true; then")')"
 run_case "cluster-dns-has-a-budget: the budget is applied with one replica too" fail \
 	'./scripts/cluster-dns-has-a-budget.sh' \
-	"$(py 'edit("install.sh", "if [ \"$DNS_WANT\" -ge 2 ]; then", "if true; then")')" \
+	"$TEETH_EDIT_135" \
 	"outside"
 
+TEETH_EDIT_136="$(py 'edit("cloud/gcp/install-gcp.sh", "echo \"   coredns replicas=$DNS_WANT\"\n", "echo \"   coredns replicas=$DNS_WANT\"\nk_ \"-n kube-system patch deployment coredns --type merge -p x\" >/dev/null || true\n")')"
 run_case "cluster-dns-has-a-budget: an installer patches k3s's coredns Deployment" fail \
 	'./scripts/cluster-dns-has-a-budget.sh' \
-	"$(py 'edit("cloud/gcp/install-gcp.sh", "echo \"   coredns replicas=$DNS_WANT\"\n", "echo \"   coredns replicas=$DNS_WANT\"\nk_ \"-n kube-system patch deployment coredns --type merge -p x\" >/dev/null || true\n")')" \
+	"$TEETH_EDIT_136" \
 	"changes k3s's coredns Deployment"
 
 run_case "cluster-dns-has-a-budget: a comment about patching coredns is not a fault" pass \
@@ -2296,14 +2669,16 @@ run_case "cluster-dns-has-a-budget: no installer is left to judge" fail \
 	"measured NOTHING"
 
 # Invariant 45, the replica policy: three replicas from five nodes, two from two, one alone.
+TEETH_EDIT_137="$(py 'edit("install.sh", "[ \"${#ALL_NODES[@]}\" -ge 5 ] && DNS_WANT=3", "[ \"${#ALL_NODES[@]}\" -ge 5 ] && DNS_WANT=2")')"
 run_case "cluster-dns-has-a-budget: five nodes get two replicas" fail \
 	'./scripts/cluster-dns-has-a-budget.sh' \
-	"$(py 'edit("install.sh", "[ \"${#ALL_NODES[@]}\" -ge 5 ] && DNS_WANT=3", "[ \"${#ALL_NODES[@]}\" -ge 5 ] && DNS_WANT=2")')" \
+	"$TEETH_EDIT_137" \
 	"the replica policy"
 
+TEETH_EDIT_138="$(py 'edit("cloud/gcp/install-gcp.sh", "[ \"${#ALL_NODES[@]}\" -ge 5 ] && DNS_WANT=3\n", "")')"
 run_case "cluster-dns-has-a-budget: the three-replica line is dropped from one installer" fail \
 	'./scripts/cluster-dns-has-a-budget.sh' \
-	"$(py 'edit("cloud/gcp/install-gcp.sh", "[ \"${#ALL_NODES[@]}\" -ge 5 ] && DNS_WANT=3\n", "")')" \
+	"$TEETH_EDIT_138" \
 	"the replica policy"
 
 run_case "cluster-dns-has-a-budget: the installers disagree on the threshold" fail \
@@ -2315,14 +2690,16 @@ run_case "cluster-dns-has-a-budget: the installers disagree on the threshold" fa
 # unbounded line comes back, inside a caller and inside the generator; the generator
 # returns short, repeats, or is copied; a caller forgets the source or sources it too
 # late; a message that only names the device must pass; and the subject taken away.
+TEETH_EDIT_139="$(py 'edit("deploy.sh", "CONSOLE_PASSWORD=\"$(gen 28)\"", "CONSOLE_PASSWORD=\"$( set +o pipefail; LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 28 )\"")')"
 run_case "gen-is-bounded: a deploy script reads urandom with no bound" fail \
 	'./scripts/gen-is-bounded.sh' \
-	"$(py 'edit("deploy.sh", "CONSOLE_PASSWORD=\"$(gen 28)\"", "CONSOLE_PASSWORD=\"$( set +o pipefail; LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 28 )\"")')" \
+	"$TEETH_EDIT_139" \
 	"deploy.sh:"
 
+TEETH_EDIT_140="$(py 'edit("lib/gen.sh", "v=\"$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc \x27A-Za-z0-9\x27)\"", "v=\"$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 64)\"")')"
 run_case "gen-is-bounded: the generator itself reads with no bound" fail \
 	'./scripts/gen-is-bounded.sh' \
-	"$(py 'edit("lib/gen.sh", "v=\"$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc \x27A-Za-z0-9\x27)\"", "v=\"$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 64)\"")')" \
+	"$TEETH_EDIT_140" \
 	"lib/gen.sh:"
 
 run_case "gen-is-bounded: the generator returns short without saying so" fail \
@@ -2336,19 +2713,22 @@ run_case "gen-is-bounded: the generator says nothing and succeeds when it read n
 	"$(py 'edit("lib/gen.sh", "    return 1\n", "    return 0\n")')" \
 	"with nothing to read"
 
+TEETH_EDIT_141="$(py 'edit("lib/gen.sh", "  printf \x27%s\x27 \"$v\"\n", "  printf \x27%s\x27 \"$(printf %0\"$n\"d 0)\"\n")')"
 run_case "gen-is-bounded: the generator prints the same value every time" fail \
 	'./scripts/gen-is-bounded.sh' \
-	"$(py 'edit("lib/gen.sh", "  printf \x27%s\x27 \"$v\"\n", "  printf \x27%s\x27 \"$(printf %0\"$n\"d 0)\"\n")')" \
+	"$TEETH_EDIT_141" \
 	"printed the same value twice"
 
+TEETH_EDIT_142="$(py 'edit("cloud/gcp/deploy-gcp.sh", ". \"$ROOT/lib/gen.sh\" || die", "gen() \x7b local v; v=\"$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc A-Za-z0-9)\"; printf %s \"$\x7bv:0:$1\x7d\"; \x7d\n. \"$ROOT/lib/gen.sh\" || die")')"
 run_case "gen-is-bounded: a second copy of the generator in a deploy script" fail \
 	'./scripts/gen-is-bounded.sh' \
-	"$(py 'edit("cloud/gcp/deploy-gcp.sh", ". \"$ROOT/lib/gen.sh\" || die", "gen() \x7b local v; v=\"$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc A-Za-z0-9)\"; printf %s \"$\x7bv:0:$1\x7d\"; \x7d\n. \"$ROOT/lib/gen.sh\" || die")')" \
+	"$TEETH_EDIT_142" \
 	"a second gen() outside lib/gen.sh"
 
+TEETH_EDIT_143="$(py 'edit("cloud/aws/deploy-aws.sh", ". \"$ROOT/lib/gen.sh\" || die \"no lib/gen.sh in $ROOT\"\n", "")')"
 run_case "gen-is-bounded: a caller that never sources the generator" fail \
 	'./scripts/gen-is-bounded.sh' \
-	"$(py 'edit("cloud/aws/deploy-aws.sh", ". \"$ROOT/lib/gen.sh\" || die \"no lib/gen.sh in $ROOT\"\n", "")')" \
+	"$TEETH_EDIT_143" \
 	"asks gen for a value and never sources lib/gen.sh"
 
 run_case "gen-is-bounded: a caller that sources the generator below its first ask" fail \
@@ -2368,16 +2748,24 @@ run_case "gen-is-bounded: the generator is taken away" fail \
 os.remove("lib/gen.sh")')" \
 	"measured NOTHING"
 
+# Every ask of the generator with a length, in every tracked shell file the gate reads, not a list of the
+# files that asked when this case was written: a new mint library (lib/vouchryx-mint.sh) asked for 40 and
+# left this case TOOTHLESS on the teeth run for branch feat/require-agent-tokens.
 run_case "gen-is-bounded: nothing asks the generator for a length" fail \
 	'./scripts/gen-is-bounded.sh' \
-	"$(py 'for p in ("deploy.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh"):
-    edit(p, "\"$(gen 28)\"", "\"$(gen)\"")
-s = open("typed/mode.sh").read()
-assert "$(gen 40)" in s
-open("typed/mode.sh", "w").write(s.replace("$(gen 40)", "$(gen)"))
-s = open("lib/identity-mint.sh").read()
-assert "$(gen 40)" in s
-open("lib/identity-mint.sh", "w").write(s.replace("$(gen 40)", "$(gen)"))')" \
+	"$(py 'import re, subprocess
+names = subprocess.check_output(["git", "ls-files"]).decode().split("\n")
+kept = ("scripts/gen-is-bounded.sh", "scripts/gates-have-teeth.sh")
+asked = 0
+for n in names:
+    if n in kept or not (n.endswith(".sh") or n.startswith(".githooks/")):
+        continue
+    s = open(n, encoding="utf-8").read()
+    t, k = re.subn(r"\$\(gen [0-9]+\)", "$(gen)", s)
+    asked += k
+    if t != s:
+        open(n, "w", encoding="utf-8").write(t)
+assert asked > 0, "no ask of gen with a length to take away"')" \
 	"there is no length to run the generator for"
 
 # Invariant 42: a typed deploy comes up green on its own. A typed manifest reads a
@@ -2414,14 +2802,16 @@ e = s.index("\n", r) + 1
 open("cloud/gcp/deploy-gcp.sh", "w").write(s[:e] + block + s[e:])')" \
 	"after the render"
 
+TEETH_EDIT_144="$(py 'edit("cloud/aws/deploy-aws.sh", "\"$DOOR_DOCS\" | k_ \"-n agent-stack create -f -\"", "\"$DOOR_DOCS\" | k_ \"-n agent-stack apply -f -\"")')"
 run_case "typed-door-is-minted: a launcher applies the door's Secrets" fail \
 	'./scripts/typed-door-is-minted.sh' \
-	"$(py 'edit("cloud/aws/deploy-aws.sh", "\"$DOOR_DOCS\" | k_ \"-n agent-stack create -f -\"", "\"$DOOR_DOCS\" | k_ \"-n agent-stack apply -f -\"")')" \
+	"$TEETH_EDIT_144" \
 	"hands the door's Secrets to apply"
 
+TEETH_EDIT_145="$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$DOOR_DOCS\" | k_ \"-n agent-stack create -f -\"", "\"$DOOR_DOCS\" | head -n 9 | k_ \"-n agent-stack create -f -\"")')"
 run_case "typed-door-is-minted: a launcher hands create only part of the door" fail \
 	'./scripts/typed-door-is-minted.sh' \
-	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$DOOR_DOCS\" | k_ \"-n agent-stack create -f -\"", "\"$DOOR_DOCS\" | head -n 9 | k_ \"-n agent-stack create -f -\"")')" \
+	"$TEETH_EDIT_145" \
 	"not both door Secrets"
 
 run_case "typed-door-is-minted: a comment about apply beside the door is not a fault" pass \
@@ -2446,29 +2836,34 @@ assert a in s
 open(p, "w").write(s.replace(a, "    broker_key=\"$bearer\"\n    [ -n \"$broker_key\" ]"))')" \
 	"are the same"
 
+TEETH_EDIT_146="$(py 'edit("typed/mode.sh", "    bearer=\"$(gen 40)\" || refuse", "    bearer=\"$(gen 16)\" || refuse")')"
 run_case "typed-door-is-minted: typryx's bearer is short" fail \
 	'./scripts/typed-door-is-minted.sh' \
-	"$(py 'edit("typed/mode.sh", "    bearer=\"$(gen 40)\" || refuse", "    bearer=\"$(gen 16)\" || refuse")')" \
+	"$TEETH_EDIT_146" \
 	"not at least 32"
 
+TEETH_EDIT_147="$(py 'edit("typed/mode.sh", "DOOR_KEY_ID=\"broker-caller\"", "DOOR_KEY_ID=\"agent://acme.example/broker-caller\"")')"
 run_case "typed-door-is-minted: the broker's key id is an agent URI" fail \
 	'./scripts/typed-door-is-minted.sh' \
-	"$(py 'edit("typed/mode.sh", "DOOR_KEY_ID=\"broker-caller\"", "DOOR_KEY_ID=\"agent://acme.example/broker-caller\"")')" \
+	"$TEETH_EDIT_147" \
 	"not a bare name"
 
+TEETH_EDIT_148="$(py 'edit("typed/mode.sh", "    made=\"$DOOR_TYPRYX (identity", "    printf \x27%s\\n\x27 \"$bearer\" >&2\n    made=\"$DOOR_TYPRYX (identity")')"
 run_case "typed-door-is-minted: a minted value reaches stderr" fail \
 	'./scripts/typed-door-is-minted.sh' \
-	"$(py 'edit("typed/mode.sh", "    made=\"$DOOR_TYPRYX (identity", "    printf \x27%s\\n\x27 \"$bearer\" >&2\n    made=\"$DOOR_TYPRYX (identity")')" \
+	"$TEETH_EDIT_148" \
 	"appears on stderr"
 
+TEETH_EDIT_149="$(py 'edit("typed/mode.sh", "  elif [ \"$have_b\" = 1 ]; then\n", "  elif false; then\n")')"
 run_case "typed-door-is-minted: the broker's Secret alone mints typryx's anyway" fail \
 	'./scripts/typed-door-is-minted.sh' \
-	"$(py 'edit("typed/mode.sh", "  elif [ \"$have_b\" = 1 ]; then\n", "  elif false; then\n")')" \
+	"$TEETH_EDIT_149" \
 	"only the broker"
 
+TEETH_EDIT_150="$(py 'edit("typed/mode.sh", "  refuse \"--have and --trust-domain only go with door-secrets\"\n", "  true\n")')"
 run_case "typed-door-is-minted: --have rides along with another verb unnoticed" fail \
 	'./scripts/typed-door-is-minted.sh' \
-	"$(py 'edit("typed/mode.sh", "  refuse \"--have and --trust-domain only go with door-secrets\"\n", "  true\n")')" \
+	"$TEETH_EDIT_150" \
 	"--have with another verb"
 
 run_case "typed-door-is-minted: the minted Secrets are not schema-valid" fail \
@@ -2499,35 +2894,40 @@ run_case "wardryx-key-is-pep: the aws installer mints the gateway's key as viewe
 	"$(py 'edit("cloud/aws/install-aws.sh", "$WARDRYX_GATEWAY_SECRET:default:pep", "$WARDRYX_GATEWAY_SECRET:default:viewer")')" \
 	"does not mint the gateway's wardryx_keys entry as pep"
 
+TEETH_EDIT_151="$(py 'edit("hub/add-site.sh", "NEW_WARDRYX_ENTRY=\"${WARDRYX_SECRET}:default:pep\"", "NEW_WARDRYX_ENTRY=\"${WARDRYX_SECRET}:default:viewer\"")')"
 run_case "wardryx-key-is-pep: the hub gives a site's gateway viewer again" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("hub/add-site.sh", "NEW_WARDRYX_ENTRY=\"${WARDRYX_SECRET}:default:pep\"", "NEW_WARDRYX_ENTRY=\"${WARDRYX_SECRET}:default:viewer\"")')" \
+	"$TEETH_EDIT_151" \
 	"does not give a site's gateway entry pep"
 
+TEETH_EDIT_152="$(py 'edit("install.sh", "if (p[1] == gw && n >= 3 && p[3] == \"viewer\") p[3] = \"pep\"", "if (n >= 3 && p[3] == \"viewer\") p[3] = \"pep\"")')"
 run_case "wardryx-key-is-pep: the transform rewrites every key, not the gateway's" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("install.sh", "if (p[1] == gw && n >= 3 && p[3] == \"viewer\") p[3] = \"pep\"", "if (n >= 3 && p[3] == \"viewer\") p[3] = \"pep\"")')" \
+	"$TEETH_EDIT_152" \
 	"is not the one install.sh has"
 
+TEETH_EDIT_153="$(py 'edit("install.sh", "        e = p[1]\n        for (k = 2; k <= n; k++) e = e \":\" p[k]", "        e = p[1] \"x\"\n        for (k = 2; k <= n; k++) e = e \":\" p[k]")')"
 run_case "wardryx-key-is-pep: the transform changes the gateway's secret" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("install.sh", "        e = p[1]\n        for (k = 2; k <= n; k++) e = e \":\" p[k]", "        e = p[1] \"x\"\n        for (k = 2; k <= n; k++) e = e \":\" p[k]")')" \
+	"$TEETH_EDIT_153" \
 	"is not the one install.sh has"
 
+TEETH_EDIT_154="$(py 'edit("cloud/aws/install-aws.sh", "| wardryx_gateway_role_keys)\"\n", "| true)\"\n")')"
 run_case "wardryx-key-is-pep: the migration is not in the aws installer" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("cloud/aws/install-aws.sh", "| wardryx_gateway_role_keys)\"\n", "| true)\"\n")')" \
+	"$TEETH_EDIT_154" \
 	"never runs the migration"
 
+TEETH_EDIT_155="$(py 'edit("install.sh", "printf '\''%s'\'' \"{\\\"stringData\\\":{\\\"wardryx_keys\\\":\\\"$WARDRYX_KEYS_NEW\\\"}}\" | k_ \"-n agent-stack patch secret stack-keys --type merge --patch-file /dev/stdin\" >/dev/null", "k_ \"-n agent-stack patch secret stack-keys --type merge -p $WARDRYX_KEYS_NEW\" >/dev/null")')"
 run_case "wardryx-key-is-pep: the migration writes the key on the command line" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("install.sh", "printf '\''%s'\'' \"{\\\"stringData\\\":{\\\"wardryx_keys\\\":\\\"$WARDRYX_KEYS_NEW\\\"}}\" | k_ \"-n agent-stack patch secret stack-keys --type merge --patch-file /dev/stdin\" >/dev/null", "k_ \"-n agent-stack patch secret stack-keys --type merge -p $WARDRYX_KEYS_NEW\" >/dev/null")')" \
+	"$TEETH_EDIT_155" \
 	"puts a key on a command line"
 
 run_case "wardryx-key-is-pep: a pin moves back to the old wardryx" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.2.1", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
-	"does not pin wardryx v2.2.1"
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.3.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
+	"does not pin wardryx v2.3.0"
 
 run_case "wardryx-key-is-pep: a reworded comment is not a fault" pass \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
@@ -2571,9 +2971,10 @@ run_case "nodes-stop-their-pods-first: the logind delay is shorter than the peri
 	"$(py 'edit("install.sh", "InhibitDelayMaxSec=180", "InhibitDelayMaxSec=30")')" \
 	"is not the drop-in this gate holds"
 
+TEETH_EDIT_156="$(py 'edit("install.sh", "put_graceful_shutdown \"$FIRST\"\n", "")')"
 run_case "nodes-stop-their-pods-first: the first server gets no file" fail \
 	'./scripts/nodes-stop-their-pods-first.sh' \
-	"$(py 'edit("install.sh", "put_graceful_shutdown \"$FIRST\"\n", "")')" \
+	"$TEETH_EDIT_156" \
 	"without writing the graceful-shutdown files"
 
 run_case "nodes-stop-their-pods-first: an install passes its own config-dir" fail \
@@ -2592,14 +2993,16 @@ run_case "nodes-stop-their-pods-first: the installers disagree on the shutdown p
 	"$(py 'edit("cloud/gcp/install-gcp.sh", "shutdownGracePeriod: 60s", "shutdownGracePeriod: 61s")')" \
 	"is not the KubeletConfiguration this gate holds"
 
+TEETH_EDIT_157="$(py 'edit("verify.sh", "$2 == \"Failed\" && ($3 == \"Terminated\" || $3 == \"NodeShutdown\")", "$2 == \"Failed\" && $3 == \"NoSuchReason\"")')"
 run_case "nodes-stop-their-pods-first: verify.sh counts a pod a shutdown stopped" fail \
 	'./scripts/nodes-stop-their-pods-first.sh' \
-	"$(py 'edit("verify.sh", "$2 == \"Failed\" && ($3 == \"Terminated\" || $3 == \"NodeShutdown\")", "$2 == \"Failed\" && $3 == \"NoSuchReason\"")')" \
+	"$TEETH_EDIT_157" \
 	"did not report exactly one bad pod"
 
+TEETH_EDIT_158="$(py 'edit("verify.sh", "!($1 in gone) && $3 != \"Running\" && $3 != \"Completed\" { c++ }", "!($1 in gone) && $3 != \"Running\" && $3 != \"Completed\" && $3 != \"CrashLoopBackOff\" { c++ }")')"
 run_case "nodes-stop-their-pods-first: verify.sh stops counting a crash loop" fail \
 	'./scripts/nodes-stop-their-pods-first.sh' \
-	"$(py 'edit("verify.sh", "!($1 in gone) && $3 != \"Running\" && $3 != \"Completed\" { c++ }", "!($1 in gone) && $3 != \"Running\" && $3 != \"Completed\" && $3 != \"CrashLoopBackOff\" { c++ }")')" \
+	"$TEETH_EDIT_158" \
 	"did not report exactly one bad pod"
 
 run_case "nodes-stop-their-pods-first: every installer loses its server install" fail \
@@ -2647,9 +3050,10 @@ run_case "node-checks-read-their-own-answer: the helper keeps the banner" fail \
 	"$(py 'edit("security-tests.sh", "| sed -n \x27s/^SECCHK: //p\x27", "| cat")')" \
 	"printed more than the command"
 
+TEETH_EDIT_159="$(py 'edit("security-tests.sh", "SECCHK_SSH=\"-q -o LogLevel=ERROR", "SECCHK_OFF=\"-q -o LogLevel=ERROR")')"
 run_case "node-checks-read-their-own-answer: the quiet ssh setting is gone" fail \
 	'./scripts/node-checks-read-their-own-answer.sh' \
-	"$(py 'edit("security-tests.sh", "SECCHK_SSH=\"-q -o LogLevel=ERROR", "SECCHK_OFF=\"-q -o LogLevel=ERROR")')" \
+	"$TEETH_EDIT_159" \
 	"defines no SECCHK_SSH"
 # Invariant 48: every k3s server an installer starts is started with --secrets-encryption.
 run_case "servers-encrypt-secrets: the GCP joining server starts without the flag" fail \
@@ -2682,9 +3086,10 @@ s = open(p).read()
 open(p, "w").write(s + "\nsh_ \"$FIRST\" \"INSTALL_K3S_VERSION=1 sh -s - " + "serv" + "er --cluster-init\" < <(curl -sfL https://get.k3s.io)\n")')" \
 	"starts a k3s server without --secrets-encryption"
 
+TEETH_EDIT_160="$(py 'edit("security-tests.sh", "bad \"the Secret is plaintext in etcd, so", "bad \"the Secret is in etcd, so")')"
 run_case "servers-encrypt-secrets: section 7 stops expecting encryption" fail \
 	'./scripts/servers-encrypt-secrets.sh' \
-	"$(py 'edit("security-tests.sh", "bad \"the Secret is plaintext in etcd, so", "bad \"the Secret is in etcd, so")')" \
+	"$TEETH_EDIT_160" \
 	"section 7 no longer reports"
 
 # Invariant 49. The teeth run is split into CI shards, and a case that falls in no
@@ -2698,9 +3103,10 @@ run_case "teeth-shards-cover-every-case: the shard filter uses one shard too man
 	"$(py 'edit("scripts/gates-have-teeth.sh", "% shard_n )) -ne", "% (shard_n + 1) )) -ne")')" \
 	"do not cover the whole list"
 
+TEETH_EDIT_161="$(py 'edit("scripts/gates-have-teeth.sh", "printf \x27%s\\n\x27 \"$name\" >&3", ":")')"
 run_case "teeth-shards-cover-every-case: the listing prints nothing" fail \
 	'./scripts/teeth-shards-cover-every-case.sh' \
-	"$(py 'edit("scripts/gates-have-teeth.sh", "printf \x27%s\\n\x27 \"$name\" >&3", ":")')" \
+	"$TEETH_EDIT_161" \
 	"measured nothing"
 
 run_case "teeth-shards-cover-every-case: the CI matrix runs three shards" fail \
@@ -2721,9 +3127,10 @@ run_case "metered-doors-require-keys: TOKENFUSE_CLIENT_KEYS goes missing" fail \
 	"$(py 'edit("manifests/10-planes.yaml", "            - name: TOKENFUSE_CLIENT_KEYS\n              valueFrom: \x7b secretKeyRef: \x7b name: gateway-client-keys, key: client_keys \x7d \x7d\n", "")')" \
 	"sets TOKENFUSE_CLIENT_KEYS 0 time(s)"
 
+TEETH_EDIT_162="$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_IDENTITY_STRICT, value: \"enforce\" \x7d", "\x7b name: TOKENFUSE_IDENTITY_STRICT, value: \"warn\" \x7d")')"
 run_case "metered-doors-require-keys: a gateway's identity map is only warned about" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "\x7b name: TOKENFUSE_IDENTITY_STRICT, value: \"enforce\" \x7d", "\x7b name: TOKENFUSE_IDENTITY_STRICT, value: \"warn\" \x7d")')" \
+	"$TEETH_EDIT_162" \
 	"TOKENFUSE_IDENTITY_STRICT ['warn']"
 
 run_case "metered-doors-require-keys: the console loses Felyx's key" fail \
@@ -2731,64 +3138,76 @@ run_case "metered-doors-require-keys: the console loses Felyx's key" fail \
 	"$(py 'edit("manifests/20-console.yaml", "            - name: GENARYX_COPILOT_FUSE_KEY\n              valueFrom: \x7b secretKeyRef: \x7b name: felyx-client-key, key: client_key, optional: true \x7d \x7d\n", "")')" \
 	"does not read GENARYX_COPILOT_FUSE_KEY from felyx-client-key"
 
+TEETH_EDIT_163="$(py 'edit("lib/identity-mint.sh", "      agents=\"$(gen 40)\" || die \"could not mint the agents\x27 client key\"\n", "      agents=\"$felyx\"\n")')"
 run_case "metered-doors-require-keys: the deploy stops minting the agents' key" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("lib/identity-mint.sh", "      agents=\"$(gen 40)\" || die \"could not mint the agents\x27 client key\"\n", "      agents=\"$felyx\"\n")')" \
+	"$TEETH_EDIT_163" \
 	"an empty cluster was refused by the mint"
 
+TEETH_EDIT_164="$(py 'edit("lib/identity-mint.sh", "      fi\n      ;;\n    *)\n      case \"$have\" in\n", "      fi\n      agents=\"$(gen 40)\"\n      ;;\n    *)\n      case \"$have\" in\n")')"
 run_case "metered-doors-require-keys: a re-run writes a new agents' key" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("lib/identity-mint.sh", "      fi\n      ;;\n    *)\n      case \"$have\" in\n", "      fi\n      agents=\"$(gen 40)\"\n      ;;\n    *)\n      case \"$have\" in\n")')" \
+	"$TEETH_EDIT_164" \
 	"a re-run changed the agents' key file"
 
+TEETH_EDIT_165="$(py 'edit("lib/identity-mint.sh", "\"agents\":[\"agent://%s/agents/*\"]", "\"agents\":[\"agent://%s/*\"]")')"
 run_case "metered-doors-require-keys: the agents' key may speak as Felyx" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("lib/identity-mint.sh", "\"agents\":[\"agent://%s/agents/*\"]", "\"agents\":[\"agent://%s/*\"]")')" \
+	"$TEETH_EDIT_165" \
 	"may speak as Felyx"
 
+TEETH_EDIT_166="$(py 'edit("lib/identity-mint.sh", "  chmod 0600 \"$keyfile\" || die", "  chmod 0644 \"$keyfile\" || die")')"
 run_case "metered-doors-require-keys: the agent key file is readable by others" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("lib/identity-mint.sh", "  chmod 0600 \"$keyfile\" || die", "  chmod 0644 \"$keyfile\" || die")')" \
+	"$TEETH_EDIT_166" \
 	"not 600"
 
+TEETH_EDIT_167="$(py 'edit("lib/identity-mint.sh", "      if [ \"$label\" != minted ]; then\n", "      if [ \"$label\" = never ]; then\n")')"
 run_case "metered-doors-require-keys: the operator's own keys are minted over" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("lib/identity-mint.sh", "      if [ \"$label\" != minted ]; then\n", "      if [ \"$label\" = never ]; then\n")')" \
+	"$TEETH_EDIT_167" \
 	"holding the operator's own keys was refused or written"
 
+TEETH_EDIT_168="$(py 'edit("lib/identity-mint.sh", "          die \"ConfigMap $IDM_CM holds an identity map", "          : \"ConfigMap $IDM_CM holds an identity map")')"
 run_case "metered-doors-require-keys: a map with no keys is accepted" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("lib/identity-mint.sh", "          die \"ConfigMap $IDM_CM holds an identity map", "          : \"ConfigMap $IDM_CM holds an identity map")')" \
+	"$TEETH_EDIT_168" \
 	"a map with no client keys was accepted"
 
+TEETH_EDIT_169="$(py 'edit("lib/identity-mint.sh", "        | k_ \"-n $IDM_NS create -f -\" >/dev/null \\\n        || die \"could not create Secret $IDM_SECRET\"", "        >/dev/null; k_ \"-n $IDM_NS create secret generic $IDM_SECRET --from-literal=$IDM_SECRET_KEY=$felyx:felyx,$agents:agents\" >/dev/null \\\n        || die \"could not create Secret $IDM_SECRET\"")')"
 run_case "metered-doors-require-keys: a minted secret rides the kubectl command line" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("lib/identity-mint.sh", "        | k_ \"-n $IDM_NS create -f -\" >/dev/null \\\n        || die \"could not create Secret $IDM_SECRET\"", "        >/dev/null; k_ \"-n $IDM_NS create secret generic $IDM_SECRET --from-literal=$IDM_SECRET_KEY=$felyx:felyx,$agents:agents\" >/dev/null \\\n        || die \"could not create Secret $IDM_SECRET\"")')" \
+	"$TEETH_EDIT_169" \
 	"on a kubectl command line"
 
+TEETH_EDIT_170="$(py 'edit("lib/identity-mint.sh", "the secret in %s (it is not printed here)\\n\x27 \"$1\"", "%s, the secret in %s\\n\x27 \"$(cat \"$1\")\" \"$1\"")')"
 run_case "metered-doors-require-keys: the closing note prints the agents' key" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("lib/identity-mint.sh", "the secret in %s (it is not printed here)\\n\x27 \"$1\"", "%s, the secret in %s\\n\x27 \"$(cat \"$1\")\" \"$1\"")')" \
+	"$TEETH_EDIT_170" \
 	"appears in what the mint printed"
 
+TEETH_EDIT_171="$(py 'edit("lib/identity-mint.sh", "the secret in %s (it is not printed here)\\n\x27 \"$1\"", "the secret in %s (it is not printed here)\\n\x27 \"the file\"")')"
 run_case "metered-doors-require-keys: the closing note stops naming the key file" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("lib/identity-mint.sh", "the secret in %s (it is not printed here)\\n\x27 \"$1\"", "the secret in %s (it is not printed here)\\n\x27 \"the file\"")')" \
+	"$TEETH_EDIT_171" \
 	"does not name the agents' key file"
 
+TEETH_EDIT_172="$(py 'edit("cloud/aws/deploy-aws.sh", "identity_mint_settle \"$ROOT/agent-key\"\n", "")')"
 run_case "metered-doors-require-keys: a deploy script stops minting" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("cloud/aws/deploy-aws.sh", "identity_mint_settle \"$ROOT/agent-key\"\n", "")')" \
+	"$TEETH_EDIT_172" \
 	"cloud/aws/deploy-aws.sh does not source lib/identity-mint.sh"
 
+TEETH_EDIT_173="$(py 'edit("lib/identity-mint.sh", "\x7b\"key_id\":\"agents\",\"unit\":\"agents\"", "\x7b\"key_id\":\"agent\",\"unit\":\"agents\"")')"
 run_case "metered-doors-require-keys: the minted map binds a key id nobody minted" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("lib/identity-mint.sh", "\x7b\"key_id\":\"agents\",\"unit\":\"agents\"", "\x7b\"key_id\":\"agent\",\"unit\":\"agents\"")')" \
+	"$TEETH_EDIT_173" \
 	"the pinned gateway image refused the pair the mint made"
 
+TEETH_EDIT_174="$(py 'edit("manifests/10-planes.yaml", "          command: [\"/usr/local/bin/tokenfuse\"]\n", "          command: [\"/bin/true\"]\n")')"
 run_case "metered-doors-require-keys: no gateway container left to judge" fail \
 	'./scripts/metered-doors-require-keys.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          command: [\"/usr/local/bin/tokenfuse\"]\n", "          command: [\"/bin/true\"]\n")')" \
+	"$TEETH_EDIT_174" \
 	"measured NOTHING"
 
 run_case "metered-doors-require-keys: the mint block is gone" fail \
@@ -2806,47 +3225,55 @@ run_case "metered-doors-require-keys: a comment in the mint library is reworded"
 	"$(py 'edit("lib/identity-mint.sh", "# What the end of a deploy says about the minted keys", "# What the end of a deploy says of the minted keys")')"
 
 # identity/up.sh on a cluster whose keys a deploy minted, and a run that would leave none.
+TEETH_EDIT_175="$(py 'edit("identity/up.sh", "if [ \"$SECRET_MINTED\" = 1 ] && [ \"$KEYS_GIVEN$MAP_GIVEN\" != 00 ]", "if [ \"$SECRET_MINTED\" = 2 ] && [ \"$KEYS_GIVEN$MAP_GIVEN\" != 00 ]")')"
 run_case "identity-files: a keys file alone takes over minted keys" fail \
 	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "if [ \"$SECRET_MINTED\" = 1 ] && [ \"$KEYS_GIVEN$MAP_GIVEN\" != 00 ]", "if [ \"$SECRET_MINTED\" = 2 ] && [ \"$KEYS_GIVEN$MAP_GIVEN\" != 00 ]")')" \
+	"$TEETH_EDIT_175" \
 	"a keys file alone on a cluster whose keys a deploy minted was accepted"
 
+TEETH_EDIT_176="$(py 'edit("identity/up.sh", "[ -n \"$SPEC\" ] \\\n  || die \"the gateway requires client keys", "[ -n \"$SPEC$MAPF\" ] \\\n  || die \"the gateway requires client keys")')"
 run_case "identity-files: up.sh leaves the gateway no keys" fail \
 	'IDENTITY_SECTIONS=D ./scripts/identity-files-are-checked.sh' \
-	"$(py 'edit("identity/up.sh", "[ -n \"$SPEC\" ] \\\n  || die \"the gateway requires client keys", "[ -n \"$SPEC$MAPF\" ] \\\n  || die \"the gateway requires client keys")')" \
+	"$TEETH_EDIT_176" \
 	"was not refused for that reason"
 
+TEETH_EDIT_177="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_WARDRYX_URL, value: \"http://wardryx:8090\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_URL, value: \"http://typryx-wardryx-proxy:4330\" \x7d")')"
 run_case "typed-mode-is-honest: the broker asks the proxy without the flag" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_WARDRYX_URL, value: \"http://wardryx:8090\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_URL, value: \"http://typryx-wardryx-proxy:4330\" \x7d")')" \
+	"$TEETH_EDIT_177" \
 	"WITHOUT --typed-risk-signal the broker asks"
 
 # ---- broker-blocks-raw-secrets (CLAUDE.md invariant 51): the MCP broker blocks raw secrets and
 # flagged listings and asks wardryx about every tool call, failing closed, in 52, in every typed
 # render and in the image 52 pins.
+TEETH_EDIT_178="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_MCP_DLP, value: \"block\" \x7d", "\x7b name: TOKENFUSE_MCP_DLP, value: \"shadow\" \x7d")')"
 run_case "broker-blocks-raw-secrets: secrets in tool arguments go back to shadow" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_MCP_DLP, value: \"block\" \x7d", "\x7b name: TOKENFUSE_MCP_DLP, value: \"shadow\" \x7d")')" \
+	"$TEETH_EDIT_178" \
 	"TOKENFUSE_MCP_DLP 'shadow', not block"
 
+TEETH_EDIT_179="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - \x7b name: TOKENFUSE_MCP_DLP, value: \"block\" \x7d\n", "")')"
 run_case "broker-blocks-raw-secrets: TOKENFUSE_MCP_DLP goes missing" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - \x7b name: TOKENFUSE_MCP_DLP, value: \"block\" \x7d\n", "")')" \
+	"$TEETH_EDIT_179" \
 	"TOKENFUSE_MCP_DLP None, not block"
 
+TEETH_EDIT_180="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_MCP_SCAN, value: \"block\" \x7d", "\x7b name: TOKENFUSE_MCP_SCAN, value: \"warn\" \x7d")')"
 run_case "broker-blocks-raw-secrets: the tool scan only warns" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_MCP_SCAN, value: \"block\" \x7d", "\x7b name: TOKENFUSE_MCP_SCAN, value: \"warn\" \x7d")')" \
+	"$TEETH_EDIT_180" \
 	"TOKENFUSE_MCP_SCAN 'warn', not block"
 
+TEETH_EDIT_181="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_WARDRYX_MODE, value: \"enforce\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_MODE, value: \"off\" \x7d")')"
 run_case "broker-blocks-raw-secrets: the broker's policy hook is off" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_WARDRYX_MODE, value: \"enforce\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_MODE, value: \"off\" \x7d")')" \
+	"$TEETH_EDIT_181" \
 	"TOKENFUSE_WARDRYX_MODE 'off', not enforce"
 
+TEETH_EDIT_182="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_WARDRYX_FAILMODE, value: \"closed\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_FAILMODE, value: \"open\" \x7d")')"
 run_case "broker-blocks-raw-secrets: the broker fails open" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\x7b name: TOKENFUSE_WARDRYX_FAILMODE, value: \"closed\" \x7d", "\x7b name: TOKENFUSE_WARDRYX_FAILMODE, value: \"open\" \x7d")')" \
+	"$TEETH_EDIT_182" \
 	"TOKENFUSE_WARDRYX_FAILMODE 'open', not closed"
 
 run_case "broker-blocks-raw-secrets: the broker's policy key becomes optional" fail \
@@ -2861,7 +3288,7 @@ run_case "broker-blocks-raw-secrets: the broker cannot reach wardryx" fail \
 
 run_case "broker-blocks-raw-secrets: the broker image cannot be pulled" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.18.0@sha256:7cbaa794670560468b15a7a6a3c37396767435332e8eca3a30af627de29ad6d9\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
 	"could not pull ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag"
 
 run_case "broker-blocks-raw-secrets: no broker left to judge" fail \
@@ -2882,9 +3309,10 @@ run_case "teeth-shards-cover-every-case: a reworded comment is not a fault" pass
 # The gateway takes its provider key as a file it mounts; no other container holds one.
 GATE53=./scripts/no-provider-key-outside-the-gateway.sh
 
+TEETH_EDIT_183="$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_UPSTREAM_KEY_FILE, value: \"/run/upstream/anthropic_key\" }\n", "")')"
 run_case "no-provider-key: the gateway loses its key file variable" fail \
 	"$GATE53" \
-	"$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_UPSTREAM_KEY_FILE, value: \"/run/upstream/anthropic_key\" }\n", "")')" \
+	"$TEETH_EDIT_183" \
 	"no literal TOKENFUSE_UPSTREAM_KEY_FILE"
 
 run_case "no-provider-key: the gateway's key Secret becomes optional" fail \
@@ -2897,14 +3325,16 @@ run_case "no-provider-key: the gateway mounts its key where its variable does no
 	"$(py 'edit("manifests/10-planes.yaml", "- { name: upstream, mountPath: /run/upstream, readOnly: true }", "- { name: upstream, mountPath: /run/elsewhere, readOnly: true }")')" \
 	"non-optional Secret gateway-upstream-key"
 
+TEETH_EDIT_184="$(py 'edit("manifests/20-console.yaml", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n            - name: ANTHROPIC_API_KEY\n              valueFrom: { secretKeyRef: { name: gateway-upstream-key, key: anthropic_key } }\n")')"
 run_case "no-provider-key: the console reads the provider key from a Secret again" fail \
 	"$GATE53" \
-	"$(py 'edit("manifests/20-console.yaml", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n            - name: ANTHROPIC_API_KEY\n              valueFrom: { secretKeyRef: { name: gateway-upstream-key, key: anthropic_key } }\n")')" \
+	"$TEETH_EDIT_184" \
 	"reads the provider Secret gateway-upstream-key"
 
+TEETH_EDIT_185="$(py 'edit("manifests/20-console.yaml", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n            - name: OPENAI_API_KEY\n              valueFrom: { secretKeyRef: { name: stack-keys, key: cloud_admin } }\n")')"
 run_case "no-provider-key: a provider-shaped variable reads a Secret that is not a client key" fail \
 	"$GATE53" \
-	"$(py 'edit("manifests/20-console.yaml", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n", "            - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: \"1\" }\n            - name: OPENAI_API_KEY\n              valueFrom: { secretKeyRef: { name: stack-keys, key: cloud_admin } }\n")')" \
+	"$TEETH_EDIT_185" \
 	"is provider-shaped and reads Secret stack-keys"
 
 run_case "no-provider-key: a container takes costcrew-engine, and no exception covers it any more" fail \
@@ -2924,119 +3354,6 @@ run_case "no-provider-key: no gateway left to judge" fail \
 	"$GATE53" \
 	"$(py 'import os; os.remove("manifests/10-planes.yaml")')" \
 	"measured nothing"
-
-# ---- agent tokens are wired and off by default (CLAUDE.md invariant 54) ----------------
-AGT=./scripts/agent-tokens-are-wired.sh
-
-run_case "agent-tokens: the gateway patch turns the door off" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_AGENT_TOKENS, value: \"accept\"", "TOKENFUSE_AGENT_TOKENS, value: \"off\"")')" \
-	"does not set TOKENFUSE_AGENT_TOKENS to exactly accept once"
-
-run_case "agent-tokens: the gateway door starts with no audience" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"\"")')" \
-	"leaves TOKENFUSE_DELEGATION_AUDIENCE empty"
-
-run_case "agent-tokens: the gateway accepts a wider audience than the one the stack names" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.other.invalid\"")')" \
-	"sets the audience to"
-
-run_case "agent-tokens: the broker's delegation audience is not the gateway's" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-broker-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.other.invalid\"")')" \
-	"does not set the broker's delegation audience"
-
-run_case "agent-tokens: vouchryx allows an audience the doors do not check" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-vouchryx-patch.yaml", "VOUCHRYX_ALLOWED_AUDIENCES, value: \"https://vouchryx.agent-stack.invalid\"", "VOUCHRYX_ALLOWED_AUDIENCES, value: \"https://vouchryx.other.invalid\"")')" \
-	"allows an audience other than"
-
-run_case "agent-tokens: the gateway names the audience in http, not https" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx.agent-stack.invalid\"")')" \
-	"sets the audience to"
-
-run_case "agent-tokens: a stopped agent keeps working while the list is unreadable" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: \"closed\"", "TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: \"open\"")')" \
-	"does not set TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE to closed"
-
-run_case "agent-tokens: the revocation list may be 300 s old" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: \"60\"", "TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: \"300\"")')" \
-	"60 seconds or less"
-
-run_case "agent-tokens: the door is on in the default gateway" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n", "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n            - { name: TOKENFUSE_AGENT_TOKENS, value: \"accept\" }\n")')" \
-	"names TOKENFUSE_AGENT_TOKENS"
-
-run_case "agent-tokens: vouchryx takes its registry as a literal, not from a ConfigMap" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-vouchryx-patch.yaml", "valueFrom: { configMapKeyRef: { name: vouchryx-agents, key: agents } }", "value: \"agent://k2.example/agents/x|agents|acme|sha256:00\"")')" \
-	"does not read VOUCHRYX_AGENTS from a ConfigMap"
-
-run_case "agent-tokens: the example agent keeps the default ServiceAccount token" fail \
-	"$AGT" \
-	"$(py 'edit("agent-tokens/example-agent.yaml", "      automountServiceAccountToken: false\n      securityContext", "      automountServiceAccountToken: true\n      securityContext")')" \
-	"does not turn off the default ServiceAccount token"
-
-run_case "agent-tokens: the example agent's token is for another audience" fail \
-	"$AGT" \
-	"$(py 'edit("agent-tokens/example-agent.yaml", "audience: \"http://vouchryx:4310\"", "audience: \"http://other.example:4310\"")')" \
-	"not vouchryx's issuer"
-
-run_case "agent-tokens: the example agent asks vouchryx for another audience" fail \
-	"$AGT" \
-	"$(py 'edit("agent-tokens/example-agent.yaml", "name: VOUCHRYX_AGENT_RESOURCE, value: \"https://vouchryx.agent-stack.invalid\"", "name: VOUCHRYX_AGENT_RESOURCE, value: \"https://vouchryx.other.invalid\"")')" \
-	"does not name the agent's audience"
-
-run_case "agent-tokens: agent pods may reach the open internet" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-network.yaml", "    - to:\n        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n", "    - to:\n        - ipBlock: { cidr: 0.0.0.0/0 }\n    - to:\n        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n")')" \
-	"opens egress to 0.0.0.0/0"
-
-run_case "agent-tokens: the opt-in applies before it refuses" fail \
-	"$AGT" \
-	"$(py 'edit("agent-tokens/up.sh", "[ -n \"$REGISTRY\" ] || die \"--registry FILE is required. Nothing was applied.\"", "true")')" \
-	"does not refuse before it applies anything"
-
-run_case "agent-tokens: no gateway patch left to judge" fail \
-	"$AGT" \
-	"$(py 'import os; os.remove("manifests/58-agent-tokens-gateway-patch.yaml")')" \
-	"measured nothing"
-
-run_case "agent-tokens: a comment naming the switch in the default gateway is not a fault" pass \
-	"$AGT" \
-	"$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_CACHE, value: \"off\" }\n", "            # TOKENFUSE_AGENT_TOKENS is set by 58-agent-tokens-gateway-patch.yaml, never here.\n            - { name: TOKENFUSE_CACHE, value: \"off\" }\n")')"
-
-# ---- the broker's relayed check has its key while the door is on (CLAUDE.md invariant 54) --
-run_case "agent-tokens: broker key missing while the door is on" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-broker-patch.yaml", "TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE, value: \"/run/taint/key\"", "TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE, value: \"\"")')" \
-	"broker key missing while the door is on"
-
-run_case "agent-tokens: the broker's taint check fails open" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-broker-patch.yaml", "TOKENFUSE_MCP_TAINT_FAILMODE, value: \"closed\"", "TOKENFUSE_MCP_TAINT_FAILMODE, value: \"open\"")')" \
-	"leaves the broker's taint check to fail open"
-
-run_case "agent-tokens: the mint does not give the broker its key" fail \
-	"$AGT" \
-	"$(py 'edit("lib/identity-mint.sh", "\"agents\":[\"agent://%s/*\"]", "\"agents\":[\"agent://%s/x\"]")')" \
-	"does not mint the broker's client key"
-
-run_case "agent-tokens: the broker's key Secret is projected under another name" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-broker-patch.yaml", "client_key, path: key", "client_key, path: other")')" \
-	"is not projected to the file"
-
-run_case "agent-tokens: the broker may reach the open internet" fail \
-	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-broker-network.yaml", "        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n      ports:\n        - { protocol: TCP, port: 4100 }\n    - to:\n        - podSelector: { matchLabels: { app: vouchryx } }", "        - ipBlock: { cidr: 0.0.0.0/0 }\n    - to:\n        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n      ports:\n        - { protocol: TCP, port: 4100 }\n    - to:\n        - podSelector: { matchLabels: { app: vouchryx } }")')" \
-	"opens the broker's egress to 0.0.0.0/0"
 
 # Keyryx on the cluster (wave 2, L2; CLAUDE.md invariants 55 to 57). Every case
 # edits keyryx/manifests/59-keyryx.yaml, the file the three gates read.
@@ -3094,17 +3411,19 @@ run_case "witness-is-separate: the witness Deployment is absent (measured nothin
 run_case "witness-is-separate: a comment in the manifest (must pass)" pass \
 	'./scripts/witness-is-separate.sh' \
 	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "apiVersion: v1\n", "# the witness is read only over the events, and separate in every other way\napiVersion: v1\n")')"
+TEETH_EDIT_186="$(py 'edit("keyryx/manifests/59-keyryx.yaml", "        - podSelector:\n            matchLabels: { keyryx-consumer: \"true\" }\n", "        - {}\n")')"
 run_case "keyryx-reaches-only-consumers: custody admits every pod" fail \
 	'./scripts/keyryx-reaches-only-consumers.sh' \
-	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "        - podSelector:\n            matchLabels: { keyryx-consumer: \"true\" }\n", "        - {}\n")')" \
+	"$TEETH_EDIT_186" \
 	"admits every pod"
 run_case "keyryx-reaches-only-consumers: custody declares an egress rule" fail \
 	'./scripts/keyryx-reaches-only-consumers.sh' \
 	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "  egress: []\n", "  egress:\n    - to: [{ ipBlock: { cidr: 0.0.0.0/0 } }]\n")')" \
 	"has egress rules"
+TEETH_EDIT_187="$(py 'edit("keyryx/manifests/59-keyryx.yaml", "      labels: { app: keyryx-custody, app.kubernetes.io/part-of: agent-stack }\n", "      labels: { app: keyryx-custody, keyryx-consumer: \"true\", app.kubernetes.io/part-of: agent-stack }\n")')"
 run_case "keyryx-reaches-only-consumers: a Keyryx workload carries the consumer label" fail \
 	'./scripts/keyryx-reaches-only-consumers.sh' \
-	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "      labels: { app: keyryx-custody, app.kubernetes.io/part-of: agent-stack }\n", "      labels: { app: keyryx-custody, keyryx-consumer: \"true\", app.kubernetes.io/part-of: agent-stack }\n")')" \
+	"$TEETH_EDIT_187" \
 	"carries the keyryx-consumer label"
 run_case "keyryx-reaches-only-consumers: the policy taken away (measured nothing)" fail \
 	'./scripts/keyryx-reaches-only-consumers.sh' \
@@ -3191,50 +3510,58 @@ run_case "verified-images: a glob wider than one repository's image name" fail \
 	"not a digest-anchored name of one repository"
 run_case "verified-images: a manifest names a TAIPANBOX image with no signer row" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.2.1@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.2.1@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.3.0@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.3.0@sha256:")')" \
 	"has no signer row in BINDINGS"
 run_case "verified-images: the default install stops turning admission on" fail \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("deploy.sh", "bash policy/up.sh --enforce'"'"'", "bash policy/up.sh'"'"'")')" \
 	"does not turn admission on for agent-stack"
+TEETH_EDIT_188="$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-open\nspec:\n  images:\n    - glob: \"*@sha256:*\"\n  authorities:\n    - keyless:\n        url: https://fulcio.sigstore.dev\n        identities:\n          - issuer: https://token.actions.githubusercontent.com\n            subjectRegExp: \".*\"\n# (end of the template: operators add entries above this line)")')"
 run_case "verified-images: an operator entry admits every image (a wildcard name)" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-open\nspec:\n  images:\n    - glob: \"*@sha256:*\"\n  authorities:\n    - keyless:\n        url: https://fulcio.sigstore.dev\n        identities:\n          - issuer: https://token.actions.githubusercontent.com\n            subjectRegExp: \".*\"\n# (end of the template: operators add entries above this line)")')" \
+	"$TEETH_EDIT_188" \
 	"is a wildcard name"
 
+TEETH_EDIT_189="$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/*@sha256:*\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')"
 run_case "verified-images: an operator entry names a wildcard repository" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/*@sha256:*\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')" \
+	"$TEETH_EDIT_189" \
 	"is a wildcard name"
 
+TEETH_EDIT_190="$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/agent:1.0\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')"
 run_case "verified-images: an operator entry names no digest" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/agent:1.0\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')" \
+	"$TEETH_EDIT_190" \
 	"is not digest-pinned"
 
+TEETH_EDIT_191="$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/agent@sha256:*\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')"
 run_case "verified-images: an operator static entry with a digest wildcard" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/agent@sha256:*\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')" \
+	"$TEETH_EDIT_191" \
 	"a static allow needs one exact digest"
 
+TEETH_EDIT_192="$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/agent@sha256:*\"\n  authorities:\n    - keyless:\n        url: https://fulcio.sigstore.dev\n        identities:\n          - issuer: https://token.actions.githubusercontent.com\n            subjectRegExp: \"^https://github[.]com/[^/]+/[^/]+/[.]github/workflows/release[.]yml@refs/tags/v.*$\"\n# (end of the template: operators add entries above this line)")')"
 run_case "verified-images: an operator keyless entry accepts any repository" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/agent@sha256:*\"\n  authorities:\n    - keyless:\n        url: https://fulcio.sigstore.dev\n        identities:\n          - issuer: https://token.actions.githubusercontent.com\n            subjectRegExp: \"^https://github[.]com/[^/]+/[^/]+/[.]github/workflows/release[.]yml@refs/tags/v.*$\"\n# (end of the template: operators add entries above this line)")')" \
+	"$TEETH_EDIT_192" \
 	"accepts the probe identity"
 
+TEETH_EDIT_193="$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/taipanbox/mockryx@sha256:*\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')"
 run_case "verified-images: an operator entry covers a TAIPANBOX image" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/taipanbox/mockryx@sha256:*\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')" \
+	"$TEETH_EDIT_193" \
 	"covers a TAIPANBOX image"
 
+TEETH_EDIT_194="$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  mode: warn\n  images:\n    - glob: \"ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')"
 run_case "verified-images: an operator entry in warn mode" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  mode: warn\n  images:\n    - glob: \"ghcr.io/acme/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  authorities:\n    - static:\n        action: pass\n# (end of the template: operators add entries above this line)")')" \
+	"$TEETH_EDIT_194" \
 	"mode is not enforce"
 
+TEETH_EDIT_195="$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/agent@sha256:*\"\n  authorities:\n    - key:\n        data: |\n          -----BEGIN " + "PRIVATE KEY-----\n          -----END " + "PRIVATE KEY-----\n# (end of the template: operators add entries above this line)")')"
 run_case "verified-images: a private key in the operator entries" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/operator-image-policy.example.yaml", "# (end of the template: operators add entries above this line)", "apiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: operator-x\nspec:\n  images:\n    - glob: \"ghcr.io/acme/agent@sha256:*\"\n  authorities:\n    - key:\n        data: |\n          -----BEGIN " + "PRIVATE KEY-----\n          -----END " + "PRIVATE KEY-----\n# (end of the template: operators add entries above this line)")')" \
+	"$TEETH_EDIT_195" \
 	"private key material"
 
 run_case "verified-images: an operator static entry pinned by digest (must pass)" pass \
@@ -3302,7 +3629,7 @@ run_case "stream-precreate: the init mounts a different volume than the file liv
 	"does not mount the volume journal"
 run_case "stream-precreate: the init image is not pinned by digest" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e", "image: busybox:1.36")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "- name: precreate-streams\n          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e", "- name: precreate-streams\n          image: busybox:1.36")')" \
 	"does not run busybox by digest"
 run_case "stream-precreate: the object the table names is renamed away" fail \
 	'./scripts/stream-files-are-precreated.sh' \
@@ -3317,11 +3644,76 @@ run_case "stream-precreate: a reader's group written as a longer list (must pass
 	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "supplementalGroups: [10001], ", "supplementalGroups: [ 10001, 65532 ], ")')"
 run_case "stream-precreate: a new pod mounts stack-events outside group 10001" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          persistentVolumeClaim: \x7b claimName: stack-events \x7d\n---\napiVersion: v1\n", "          persistentVolumeClaim: \x7b claimName: stack-events \x7d\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: rogue-reader\n  namespace: agent-stack\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: rogue-reader\n  template:\n    metadata:\n      labels:\n        app: rogue-reader\n    spec:\n      securityContext:\n        runAsNonRoot: true\n        runAsUser: 65532\n        runAsGroup: 65532\n      containers:\n        - name: c\n          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e\n          volumeMounts:\n            - name: events\n              mountPath: /var/lib/stack/events\n      volumes:\n        - name: events\n          persistentVolumeClaim:\n            claimName: stack-events\n---\napiVersion: v1\n")')" \
+"$(py 'rogue = """---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rogue-reader
+  namespace: agent-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rogue-reader
+  template:
+    metadata:
+      labels:
+        app: rogue-reader
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+      containers:
+        - name: c
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          volumeMounts:
+            - name: events
+              mountPath: /var/lib/stack/events
+      volumes:
+        - name: events
+          persistentVolumeClaim:
+            claimName: stack-events
+"""
+p = "manifests/52-tokenfuse-mcp-broker.yaml"
+open(p, "w").write(open(p).read() + rogue)')" \
 	"rogue-reader (mounts stack-events): the pod is not in group 10001"
 run_case "stream-precreate: the same new pod with fsGroup 10001 (must pass)" pass \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          persistentVolumeClaim: \x7b claimName: stack-events \x7d\n---\napiVersion: v1\n", "          persistentVolumeClaim: \x7b claimName: stack-events \x7d\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: rogue-reader\n  namespace: agent-stack\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: rogue-reader\n  template:\n    metadata:\n      labels:\n        app: rogue-reader\n    spec:\n      securityContext:\n        runAsNonRoot: true\n        runAsUser: 65532\n        runAsGroup: 65532\n        fsGroup: 10001\n      containers:\n        - name: c\n          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e\n          volumeMounts:\n            - name: events\n              mountPath: /var/lib/stack/events\n      volumes:\n        - name: events\n          persistentVolumeClaim:\n            claimName: stack-events\n---\napiVersion: v1\n")')"
+"$(py 'rogue = """---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rogue-reader
+  namespace: agent-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rogue-reader
+  template:
+    metadata:
+      labels:
+        app: rogue-reader
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 10001
+      containers:
+        - name: c
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          volumeMounts:
+            - name: events
+              mountPath: /var/lib/stack/events
+      volumes:
+        - name: events
+          persistentVolumeClaim:
+            claimName: stack-events
+"""
+p = "manifests/52-tokenfuse-mcp-broker.yaml"
+open(p, "w").write(open(p).read() + rogue)')"
 run_case "stream-precreate: an exception names a pod that no longer mounts the claim" fail \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/49-costcrew.yaml", "claimName: stack-events", "claimName: stack-events-off")')" \
@@ -3335,45 +3727,53 @@ run_case "stream-precreate: a comment naming the init container (must pass)" pas
 	"$(py 'edit("manifests/51-typryx.yaml", "      # Creates the stream file before typryx starts", "      # precreate-streams (invariant 59) creates the stream file before typryx starts")')"
 
 # ---- admission on in every launcher that applies the stack (CLAUDE.md invariant 58) ----
+TEETH_EDIT_196="$(py 'edit("cloud/gcp/deploy-gcp.sh", "k_ \"apply -k /root/stack-k8s/manifests\"\n", "su_ \"$FIRST\" \x27KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh --enforce\x27\nk_ \"apply -k /root/stack-k8s/manifests\"\n")')"
 run_case "verified-images-are-enforced: a cloud launcher turns admission on before its apply" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "k_ \"apply -k /root/stack-k8s/manifests\"\n", "su_ \"$FIRST\" \x27KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh --enforce\x27\nk_ \"apply -k /root/stack-k8s/manifests\"\n")')" \
+	"$TEETH_EDIT_196" \
 	"before it applies the manifests"
 
+TEETH_EDIT_197="$(py 'edit("cloud/aws/deploy-aws.sh", "KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh --enforce\x27 \\\n", "KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh\x27 \\\n")')"
 run_case "verified-images-are-enforced: a cloud launcher has no admission step" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("cloud/aws/deploy-aws.sh", "KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh --enforce\x27 \\\n", "KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh\x27 \\\n")')" \
+	"$TEETH_EDIT_197" \
 	"does not turn admission on"
 
+TEETH_EDIT_198="$(py 'edit("cloud/gcp/deploy-gcp.sh", "tar -cz -C \"$ROOT\" manifests policy | su_ \"$FIRST\" \x27sh -c \"mkdir -p /root/stack-k8s", "tar -cz -C \"$ROOT\" manifests | su_ \"$FIRST\" \x27sh -c \"mkdir -p /root/stack-k8s")')"
 run_case "verified-images-are-enforced: a cloud node receives the manifests without policy/" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "tar -cz -C \"$ROOT\" manifests policy | su_ \"$FIRST\" \x27sh -c \"mkdir -p /root/stack-k8s", "tar -cz -C \"$ROOT\" manifests | su_ \"$FIRST\" \x27sh -c \"mkdir -p /root/stack-k8s")')" \
+	"$TEETH_EDIT_198" \
 	"without policy/"
 
 # ---- no-secret-on-argv (CLAUDE.md invariant 60): a secret never on a command line ----
+TEETH_EDIT_199="$(py 'open("install.sh", "a").write("k_ \"-n agent-stack create secret generic zz --from-literal=password=$PW\" >/dev/null\n")')"
 run_case "no-secret-on-argv: an installer puts a plane credential on argv with --from-literal" fail \
 	'./scripts/no-secret-on-argv.sh' \
-	"$(py 'open("install.sh", "a").write("k_ \"-n agent-stack create secret generic zz --from-literal=password=$PW\" >/dev/null\n")')" \
+	"$TEETH_EDIT_199" \
 	"puts a secret value on argv"
 
+TEETH_EDIT_200="$(py 'open("deploy.sh", "a").write("curl -sf -H \"Authorization: Bearer $CONSOLE_TOKEN\" https://api.github.com/repos/x\n")')"
 run_case "no-secret-on-argv: a bearer header is built from an expansion" fail \
 	'./scripts/no-secret-on-argv.sh' \
-	"$(py 'open("deploy.sh", "a").write("curl -sf -H \"Authorization: Bearer $CONSOLE_TOKEN\" https://api.github.com/repos/x\n")')" \
+	"$TEETH_EDIT_200" \
 	"bearer whose value"
 
+TEETH_EDIT_201="$(py 'open("install.sh", "a").write("      sh_ \"$FIRST\" \"K3S_TOKEN=\x27$K3S_TOKEN_VALUE\x27 sh -s - serv" + "er\"\n")')"
 run_case "no-secret-on-argv: the k3s token is assigned on the ssh command line" fail \
 	'./scripts/no-secret-on-argv.sh' \
-	"$(py 'open("install.sh", "a").write("      sh_ \"$FIRST\" \"K3S_TOKEN=\x27$K3S_TOKEN_VALUE\x27 sh -s - serv" + "er\"\n")')" \
+	"$TEETH_EDIT_201" \
 	"assigned on a command line"
 
+TEETH_EDIT_202="$(py 'open("deploy.sh", "a").write("git clone \"https://x-access-token:$CONSOLE_TOKEN@github.com/TAIPANBOX/genaryx.git\" x\n")')"
 run_case "no-secret-on-argv: a clone URL carries the token" fail \
 	'./scripts/no-secret-on-argv.sh' \
-	"$(py 'open("deploy.sh", "a").write("git clone \"https://x-access-token:$CONSOLE_TOKEN@github.com/TAIPANBOX/genaryx.git\" x\n")')" \
+	"$TEETH_EDIT_202" \
 	"carries a credential"
 
+TEETH_EDIT_203="$(py 'open("deploy.sh", "a").write("bash x.sh --token \"$HCLOUD_TOKEN\"\n")')"
 run_case "no-secret-on-argv: a secret passed as a flag value" fail \
 	'./scripts/no-secret-on-argv.sh' \
-	"$(py 'open("deploy.sh", "a").write("bash x.sh --token \"$HCLOUD_TOKEN\"\n")')" \
+	"$TEETH_EDIT_203" \
 	"flag"
 
 run_case "no-secret-on-argv: a secret_doc argument is not a process argument (must pass)" pass \
@@ -3386,9 +3786,10 @@ run_case "no-secret-on-argv: no subject, measured nothing" fail_env \
 	"measured NOTHING"
 
 # ---- hostkeys-are-verified (CLAUDE.md invariant 61): the host key is verified before the first connection ----
+TEETH_EDIT_204="$(py 'edit("lib/hostkeys.sh", "if [ -n \"$console_fp\" ] && [ \"$console_fp\" = \"$scan_fp\" ]; then", "if true; then")')"
 run_case "hostkeys-are-verified: a mismatched console fingerprint is accepted" fail \
 	'./scripts/hostkeys-are-verified.sh' \
-	"$(py 'edit("lib/hostkeys.sh", "if [ -n \"$console_fp\" ] && [ \"$console_fp\" = \"$scan_fp\" ]; then", "if true; then")')" \
+	"$TEETH_EDIT_204" \
 	"B  mismatch"
 
 run_case "hostkeys-are-verified: a cloud launcher goes back to accept-new" fail \
@@ -3396,14 +3797,16 @@ run_case "hostkeys-are-verified: a cloud launcher goes back to accept-new" fail 
 	"$(py 'edit("cloud/aws/install-aws.sh", "SSH_OPTS=(-o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20)", "SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=20)")')" \
 	"still accepts host keys on first use"
 
+TEETH_EDIT_205="$(py 'edit("install.sh", "if [ -n \"${SSH_KNOWN_HOSTS:-}\" ]; then", "if false; then")')"
 run_case "hostkeys-are-verified: SSH_KNOWN_HOSTS is ignored by install.sh" fail \
 	'./scripts/hostkeys-are-verified.sh' \
-	"$(py 'edit("install.sh", "if [ -n \"${SSH_KNOWN_HOSTS:-}\" ]; then", "if false; then")')" \
+	"$TEETH_EDIT_205" \
 	"G  SSH_KNOWN_HOSTS: first ssh was"
 
+TEETH_EDIT_206="$(py 'edit("cloud/gcp/deploy-gcp.sh", "for n in \"${ALL_NODES[@]}\"; do\n  ssh-keygen -R", "for n in \"${ALL_NODES[@]}\"; do sh_ \"$n\" true; done\nfor n in \"${ALL_NODES[@]}\"; do\n  ssh-keygen -R")')"
 run_case "hostkeys-are-verified: a cloud launcher connects before it reads the keys" fail \
 	'./scripts/hostkeys-are-verified.sh' \
-	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "for n in \"${ALL_NODES[@]}\"; do\n  ssh-keygen -R", "for n in \"${ALL_NODES[@]}\"; do sh_ \"$n\" true; done\nfor n in \"${ALL_NODES[@]}\"; do\n  ssh-keygen -R")')" \
+	"$TEETH_EDIT_206" \
 	"cloud/gcp/deploy-gcp.sh: keys at line"
 
 run_case "hostkeys-are-verified: a comment naming accept-new is not a launcher using it (must pass)" pass \
@@ -3447,14 +3850,16 @@ s = s.replace("\n# ---- 3. the workload", "\n" + W + "\n# ---- 3. the workload",
 open("deploy.sh", "w").write(s)')" \
 	"is written at line"
 
+TEETH_EDIT_207="$(py 'edit("lib/hostkeys.sh", "for name in \"$pub\" \"$priv\"; do", "for name in \"$pub\"; do")')"
 run_case "hostkeys-are-verified: the peer file drops the private names" fail \
 	'./scripts/hostkeys-are-verified.sh' \
-	"$(py 'edit("lib/hostkeys.sh", "for name in \"$pub\" \"$priv\"; do", "for name in \"$pub\"; do")')" \
+	"$TEETH_EDIT_207" \
 	"I  peer file"
 
+TEETH_EDIT_208="$(py 'edit("cloud/aws/deploy-aws.sh", "hostkeys_peer_file \"$PEERS_TMP\"", "true \"$PEERS_TMP\"")')"
 run_case "hostkeys-are-verified: a launcher builds no peer file" fail \
 	'./scripts/hostkeys-are-verified.sh' \
-	"$(py 'edit("cloud/aws/deploy-aws.sh", "hostkeys_peer_file \"$PEERS_TMP\"", "true \"$PEERS_TMP\"")')" \
+	"$TEETH_EDIT_208" \
 	"does not build its peer file"
 
 run_case "hostkeys-are-verified: the option named in a prose note is not a script (must pass)" pass \

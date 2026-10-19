@@ -1,0 +1,41 @@
+== images (from the product manifests): gateway and broker ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434 ; wardryx ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543
+== setup (cluster: kind-tail-netpol, namespace agent-stack)
+   created Secret vouchryx-keys (signing.pem, revoke_key); neither value is printed
+   created ConfigMap vouchryx-agents with one enrolled agent (agent://tails.example/agents/operator); its enrolment key is in /var/folders/t7/wgp6wp5x5c9gn9tjv7ngttzh0000gn/T/tmp.rXFQHptTbK/agent-enrol-key (0600, not printed)
+   created ConfigMap gateway-static-keys with an empty operator list (the stack's own keys are on the list in 10-planes.yaml)
+== vouchryx: manifests/54-delegation.yaml as the default install applies it (no IdP, no trusted issuer)
+== wardryx (product image), its own Postgres, and the stand-in network
+== the stand-ins: provider and MCP upstream; gateway and broker with the product door env
+== port-forwards
+== checks: gateway ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434, broker ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434, wardryx ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543, vouchryx v0.6.0
+== vouchryx: the token service, agents-only (invariants 24 and 54)
+ok   enrolled operator agent asks for its token, resource = the one audience HTTP 200 (want 200)  
+ok   the same agent asks for another audience                     HTTP 400 (want 400)  invalid_target
+ok   a wrong enrolment secret is refused                          HTTP 401 (want 401)  invalid_client
+== gateway: agent tokens are required (invariant 54)
+ok   agent token and its proof, through the gateway               HTTP 200 (want 200)  message
+ok   a token with a stranger's proof                              HTTP 401 (want 401)  the agent token presented with this request was refused
+ok   a token with no proof at all                                 HTTP 401 (want 401)  the agent token presented with this request was refused
+ok   a token beside a static key                                  HTTP 401 (want 401)  the agent token presented with this request was refused
+ok   a header naming another agent beside the token               HTTP 403 (want 403)  agent_id_contradicts_token
+ok   a static key that is on the list (felyx)                     HTTP 200 (want 200)  message
+ok   a static key that is NOT on the list (stranger)              HTTP 401 (want 401)  this gateway requires an agent token: `Authorization: DPoP <token>` wi
+== broker: the same token at the second door (invariant 54)
+ok   agent token and its proof, through the broker: the MCP stub answered HTTP 200 (want 200), body has 'stub answered lookup': True
+     | {"id":7,"jsonrpc":"2.0","result":{"content":[{"text":"stub answered lookup","type":"text"}],"isError":false}}
+   (a stranger's proof at the broker: the body is printed in full too)
+ok   a stranger's proof at the broker                             HTTP 401 (want 401)  the agent token presented with this request was refused
+     | {"error":{"reason":"the agent token presented with this request was refused","retryable":false,"type":"agent_token_refused"}}
+== wardryx: decides from the agent's token, not the enforcement point's word (invariant 63)
+ok   the agent's own token and proof, asserted agent = the token's subject HTTP 200 (want 200)  allowed: no policy targets agent agent://tails.example/agents/operator
+ok   asserted agent contradicts the token (the token says another agent) HTTP 403 (want 403)  agent_contradicts_token
+ok   a proof from another key                                     HTTP 403 (want 403)  agent_token_proof_invalid
+== all checks as expected
+== the refusal reasons vouchryx journalled (the HTTP body carries the code only)
+      1 "reason":"audience_not_allowed"
+== exit 0
+./evidence/require-agent-tokens-kind/run-v1.19.0.sh: line 20: 11178 Terminated: 15          kubectl -n "$NS" port-forward svc/vouchryx 24310:4310 > /dev/null 2>&1
+./evidence/require-agent-tokens-kind/run-v1.19.0.sh: line 20: 11179 Terminated: 15          kubectl -n "$NS" port-forward svc/tokenfuse-gateway 24400:4100 > /dev/null 2>&1
+./evidence/require-agent-tokens-kind/run-v1.19.0.sh: line 20: 11180 Terminated: 15          kubectl -n "$NS" port-forward svc/tokenfuse-mcp-broker 24420:4200 > /dev/null 2>&1
+./evidence/require-agent-tokens-kind/run-v1.19.0.sh: line 20: 11181 Terminated: 15          kubectl -n "$NS" port-forward svc/wardryx 24430:8090 > /dev/null 2>&1
+RUN_EXIT=0

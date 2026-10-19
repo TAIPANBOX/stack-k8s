@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: mcp-stub, namespace: agent-stack, labels: { app: mcp-stub } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mcp-stub } }
+  template:
+    metadata: { labels: { app: mcp-stub } }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: mcp-stub
+          image: python:3.12-alpine
+          command: ["python3", "/stub/server.py"]
+          volumeMounts: [{ name: stub, mountPath: /stub, readOnly: true }]
+      volumes: [{ name: stub, configMap: { name: mcp-stub } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mcp-stub, namespace: agent-stack }
+spec:
+  selector: { app: mcp-stub }
+  ports: [{ name: http, port: 4320, targetPort: 4320 }]

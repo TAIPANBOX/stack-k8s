@@ -5,6 +5,11 @@
 # projected token for an agent token, and the gateway, to call the model with it. Nothing
 # else is added: the default-deny rules in 30-network-policy.yaml still hold for everything
 # this does not name, and DNS is already open to every pod.
+#
+# The last document below is the one other caller of the gateway this file names: the MCP
+# broker's tool-call check (CLAUDE.md invariant 51). It is not an agent pod and carries no
+# agent-token label, so the gateway's Ingress rule above does not admit it. planes-ingress in
+# 30-network-policy.yaml does, but this file must not depend on that one.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -48,5 +53,22 @@ spec:
   ingress:
     - from:
         - podSelector: { matchLabels: { taipanbox.dev/agent-token: "true" } }
+      ports:
+        - { protocol: TCP, port: 4100 }
+---
+# The MCP broker's tool-call check: the broker calls the gateway's /v1/fuse/check-tool-call on
+# port 4100 for every tools/call (the egress half is broker-egress-gateway in 52). The
+# broker is named here by its app label, on the gateway's one port, and nothing else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-ingress-mcp-broker
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-gateway } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
       ports:
         - { protocol: TCP, port: 4100 }
