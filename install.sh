@@ -480,11 +480,27 @@ done
 
 for n in ${AGENT_LIST[@]+"${AGENT_LIST[@]}"}; do
   say "k3s agent: $n ($(priv_of "$n"))"
+  # The name is read BEFORE the pipeline below, never inside its command string:
+  # node_name_of runs its own ssh, and a command substitution in the string runs
+  # while the token and the k3s script are on the pipeline's stdin, so that ssh
+  # ate them and the agent install exited 0 having installed nothing (GOTCHAS 149,
+  # measured on GCP 2026-10-19). scripts/stdin-is-read-once.sh holds it.
+  AGENT_NAME="$(node_name_of "$n")"
+  [ -n "$AGENT_NAME" ] || die "could not read a host name from $n to pin --node-name to"
   put_graceful_shutdown "$n"
   { printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | sh_ "$n" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' K3S_URL='https://$FIRST_PRIV:6443' sh -s - agent \
-      --node-name '$(node_name_of "$n")' \
+      --node-name '$AGENT_NAME' \
       --node-ip '$(priv_of "$n")' \
       --kubelet-arg=provider-id=hcloud://$(sid_of "$n")\""
+  # Wait for the node by the name it was given, and stop loudly if it never
+  # registers: a silent agent that never joined left a two-node cluster that
+  # waited on Longhorn until a person noticed (GOTCHAS 149).
+  joined=0
+  for i in $(seq 1 40); do
+    if k_ "get node $AGENT_NAME -o name" >/dev/null 2>&1; then joined=1; break; fi
+    sleep 5
+  done
+  [ "$joined" = 1 ] || die "k3s agent $n ($AGENT_NAME) did not register with the cluster after 200 s. Nothing on the node said why here; read its journal: journalctl -u k3s-agent"
 done
 
 say "nodes"
