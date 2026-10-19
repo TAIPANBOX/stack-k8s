@@ -40,6 +40,15 @@ Feature: an agent's own token is the door credential in every default install, a
     -> agent-tokens-are-required: the agent-pod network opens the open internet
     -> agent-tokens-are-required: the agent-pod network left out of the default set
 
+  Scenario: the MCP broker reaches the gateway for its tool-call check, on the one port
+    Given the agent-pod network in the default set
+    When the broker's door into the gateway is removed, moved to another port, given to another app, or widened to a whole namespace
+    Then the gate refuses it, because the broker asks the gateway about every tool call and no other caller may reach the gateway that way
+    -> agent-tokens-are-required: the MCP broker's door into the gateway is removed
+    -> agent-tokens-are-required: the broker's door opens another port than the gateway's 4100
+    -> agent-tokens-are-required: the broker's door admits another app, not the broker
+    -> agent-tokens-are-required: the broker's door admits a whole namespace
+
   Scenario: an example agent asks for the one audience and keeps no API token
     Given the example agent pod
     When it keeps the default ServiceAccount token

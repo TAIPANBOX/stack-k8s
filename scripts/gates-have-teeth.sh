@@ -1268,6 +1268,29 @@ run_case "agent-tokens-are-required: the agent-pod network left out of the defau
 	"$(py 'edit("manifests/kustomization.yaml", "  - 58-agent-tokens-network.yaml\n", "")')" \
 	"is not in manifests/kustomization.yaml's resources"
 
+# The broker's own door into the gateway (58's last document): removed, moved to another port, admitted from
+# another app, or widened to the whole namespace. Each one drops the broker's tool-call check or hands it to
+# something else, and the gate must say which.
+run_case "agent-tokens-are-required: the MCP broker's door into the gateway is removed" fail \
+	"$AGT" \
+	"$(py 'p = "manifests/58-agent-tokens-network.yaml"; s = open(p).read(); i = s.index("  name: gateway-ingress-mcp-broker"); open(p, "w").write(s[:s.rindex("\n---", 0, i)] + "\n")')" \
+	"has no gateway-ingress-mcp-broker"
+
+run_case "agent-tokens-are-required: the broker's door opens another port than the gateway's 4100" fail \
+	"$AGT" \
+	"$(py 'p = "manifests/58-agent-tokens-network.yaml"; s = open(p).read(); i = s.index("  name: gateway-ingress-mcp-broker"); open(p, "w").write(s[:i] + s[i:].replace("port: 4100", "port: 4200", 1))')" \
+	"does not open exactly TCP 4100"
+
+run_case "agent-tokens-are-required: the broker's door admits another app, not the broker" fail \
+	"$AGT" \
+	"$(py 'p = "manifests/58-agent-tokens-network.yaml"; s = open(p).read(); i = s.index("  name: gateway-ingress-mcp-broker"); open(p, "w").write(s[:i] + s[i:].replace("app: tokenfuse-mcp-broker", "app: typryx", 1))')" \
+	"does not admit exactly the MCP broker"
+
+run_case "agent-tokens-are-required: the broker's door admits a whole namespace" fail \
+	"$AGT" \
+	"$(py 'p = "manifests/58-agent-tokens-network.yaml"; s = open(p).read(); i = s.index("  name: gateway-ingress-mcp-broker"); open(p, "w").write(s[:i] + s[i:].replace("- podSelector: \x7b matchLabels: \x7b app: tokenfuse-mcp-broker \x7d \x7d", "- namespaceSelector: \x7b \x7d", 1))')" \
+	"does not admit exactly the MCP broker"
+
 run_case "agent-tokens-are-required: the example agent keeps the default ServiceAccount token" fail \
 	"$AGT" \
 	"$(py 'edit("agent-tokens/example-agent.yaml", "      automountServiceAccountToken: false", "      automountServiceAccountToken: true")')" \

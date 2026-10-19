@@ -56,6 +56,23 @@ def check(label, want, got_status, txt):
     print(f"{'ok  ' if ok else 'FAIL'} {label:<60} HTTP {got_status} (want {want})  {reason(txt)}")
 
 
+def show_body(txt):
+    # The broker rows print the whole JSON-RPC body, so a reader sees what the broker answered, not only its status.
+    for line in (txt.splitlines() or [""]):
+        print("     | " + line)
+
+
+def check_stub(label, want, got_status, txt, must):
+    # A tool call through the broker counts only when the MCP upstream's own answer is in the body. HTTP 200 alone
+    # is what a closed refusal (JSON-RPC -32004) also returns, which is how the run hid the broker's second door.
+    global fails
+    ok = got_status == want and must in txt
+    if not ok:
+        fails += 1
+    print(f"{'ok  ' if ok else 'FAIL'} {label:<60} HTTP {got_status} (want {want}), body has {must!r}: {must in txt}")
+    show_body(txt)
+
+
 def token(key, agent_id, secret, resource=AUD):
     body = {"grant_type": "client_credentials"}
     if resource is not None:
@@ -108,11 +125,13 @@ bbody = json.dumps({"jsonrpc": "2.0", "id": 7, "method": "tools/call",
 st, txt = send(BR + "/mcp", body=bbody, timeout=60, headers={"content-type": "application/json", "accept": "application/json, text/event-stream",
                                                  "MCP-Protocol-Version": "2025-06-18", "x-fuse-run-id": "run-broker-" + os.urandom(4).hex(),
                                                  "Authorization": "DPoP " + tok, "DPoP": bproof})
-check("agent token and its proof, through the broker (its tool-call check answers)", 200, st, txt)
+check_stub("agent token and its proof, through the broker: the MCP stub answered", 200, st, txt, "stub answered lookup")
 st, txt = send(BR + "/mcp", body=bbody, timeout=60, headers={"content-type": "application/json", "accept": "application/json, text/event-stream",
                                                  "MCP-Protocol-Version": "2025-06-18", "x-fuse-run-id": "run-broker-" + os.urandom(4).hex(),
                                                  "Authorization": "DPoP " + tok, "DPoP": dpop.proof(other_key, "POST", BR_HTU, ath=b64u_sha(tok))})
+print("   (a stranger's proof at the broker: the body is printed in full too)")
 check("a stranger's proof at the broker", 401, st, txt)
+show_body(txt)
 
 print("== wardryx: decides from the agent's token, not the enforcement point's word (invariant 63)")
 pep = open(os.path.join(W, "wardryx.pep")).read().strip()

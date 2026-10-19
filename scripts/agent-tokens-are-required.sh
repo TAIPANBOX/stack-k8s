@@ -22,7 +22,9 @@
 #   3. vouchryx (manifests/54-delegation.yaml) allows that audience and no other, and issues under
 #      the issuer the doors verify against.
 #   4. the agent-pod network (manifests/58-agent-tokens-network.yaml) is in the default set, lets an
-#      agent pod reach vouchryx's port and the gateway's, and opens nothing else.
+#      agent pod reach vouchryx's port and the gateway's, and opens nothing else. It also names the MCP
+#      broker as the one other caller of the gateway, on its port 4100 only: the broker's tool-call check
+#      is not an agent pod, and this file must hold it without 30-network-policy.yaml's planes-ingress.
 #   5. the example agent (agent-tokens/example-agent.yaml) takes no Kubernetes API token, asks for
 #      the one audience, and projects a workload token for vouchryx's issuer.
 #   6. agent-tokens/up.sh only writes the registry: it refuses before it writes anything, and it
@@ -154,9 +156,37 @@ if NET.split("manifests/")[1] not in kust_resources(kust):
     fail(f"{NET} is not in {KUST}'s resources: an agent pod's network is part of the default install")
 if re.search(r"ipBlock|0\.0\.0\.0/0", live(net)):
     fail(f"{NET} opens an ipBlock or 0.0.0.0/0 egress: agent pods may reach the open internet")
-egress_targets = re.findall(r"app:\s*(\S+?)\s*\}", live(net))
+# The documents of the file, by metadata.name. The broker's door is judged on its own document, below.
+BROKER_DOC = "gateway-ingress-mcp-broker"
+net_docs = {}
+for doc in re.split(r"(?m)^---\s*$", live(net)):
+    nm = re.search(r"(?m)^  name:\s*(\S+)\s*$", doc)
+    if nm:
+        net_docs[nm.group(1)] = doc
+agent_net = "\n".join(d for n, d in net_docs.items() if n != BROKER_DOC)
+egress_targets = re.findall(r"app:\s*(\S+?)\s*\}", agent_net)
 if set(egress_targets) != {"tokenfuse-gateway", "vouchryx"}:
     fail(f"{NET} selects {sorted(set(egress_targets))} as agent-pod peers, not exactly vouchryx and the gateway")
+
+# 4b. the broker's own door into the gateway: its tool-call check (CLAUDE.md invariant 51) is a call from the
+#     MCP broker to the gateway's /v1/fuse/check-tool-call. The gateway's Ingress is restricted by this file
+#     as soon as it is selected here, so the broker must be named here, on the one port it calls, or the call is
+#     dropped and the broker refuses every tool call closed (JSON-RPC -32004; kind run, evidence/require-agent-tokens-kind).
+broker = net_docs.get(BROKER_DOC, "")
+if not broker:
+    fail(f"{NET} has no {BROKER_DOC}: the MCP broker's tool-call check has no door into the gateway unless 30-network-policy.yaml is also applied")
+else:
+    sel = re.search(r"(?ms)^spec:\s*\n\s*podSelector:(.*?)policyTypes", broker)
+    if not sel or not re.search(r"app:\s*tokenfuse-gateway\s*\}", sel.group(1)):
+        fail(f"{NET}: {BROKER_DOC} does not select the gateway (app: tokenfuse-gateway) for Ingress")
+    if not re.search(r'policyTypes:\s*\["Ingress"\]', broker):
+        fail(f"{NET}: {BROKER_DOC} does not declare Ingress in its policyTypes")
+    frm = re.search(r"(?ms)^  ingress:(.*?)ports:", broker)
+    frm_text = frm.group(1) if frm else ""
+    if re.findall(r"app:\s*(\S+?)\s*\}", frm_text) != ["tokenfuse-mcp-broker"] or re.search(r"namespaceSelector|ipBlock", frm_text):
+        fail(f"{NET}: {BROKER_DOC} does not admit exactly the MCP broker (app: tokenfuse-mcp-broker) to the gateway")
+    if re.findall(r"port:\s*(\d+)", broker) != ["4100"] or re.findall(r"protocol:\s*(\w+)", broker) != ["TCP"]:
+        fail(f"{NET}: {BROKER_DOC} does not open exactly TCP 4100, the gateway's port")
 
 # 5. the example agent
 pod = live(ex)[live(ex).find("kind: Deployment"):] if "kind: Deployment" in live(ex) else ""

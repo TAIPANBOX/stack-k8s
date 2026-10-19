@@ -81,6 +81,11 @@ kubectl -n "$NS" apply -f "$EV/stand-in-dns.yaml" -f "$EV/stand-in-network.yaml"
 sed "s#@@WARDRYX_IMAGE@@#$WD_IMAGE#" "$EV/wardryx.yaml" | kubectl -n "$NS" apply -f - >/dev/null || die "wardryx did not apply"
 kubectl -n "$NS" rollout status deployment/policy-db --timeout=240s >/dev/null || die "policy-db did not roll out"
 kubectl -n "$NS" rollout status deployment/wardryx --timeout=240s >/dev/null || die "wardryx did not roll out"
+# wardryx dials policy-db once at start and exits when the store refuses it. Its first start can lose that race
+# (measured on kind, 2026-10-19: connection refused about a second after the store was Ready, before kube-proxy had
+# programmed the Service), and the restart serves. Wait for the start that serves before any check runs.
+for i in $(seq 1 60); do kubectl -n "$NS" logs deploy/wardryx 2>/dev/null | grep -q "serving on" && break; sleep 3; done
+kubectl -n "$NS" logs deploy/wardryx 2>/dev/null | grep -q "serving on" || die "wardryx never reported that it serves"
 
 echo "== the stand-ins: provider and MCP upstream; gateway and broker with the product door env"
 kubectl -n "$NS" apply -f "$EV/upstream.yaml" -f "$EV/mcp-stub.yaml" >/dev/null || die "stand-ins"
