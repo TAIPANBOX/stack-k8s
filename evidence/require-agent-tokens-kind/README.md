@@ -19,7 +19,9 @@ run reads each image from `manifests/10-planes.yaml`, so it cannot drift from th
   door into the gateway (`gateway-ingress-mcp-broker`).
 - The gateway and the broker are STAND-INS (`gateway-door.yaml`, `broker-door.yaml`): their door env is copied from
   `manifests/10-planes.yaml` and `manifests/52-tokenfuse-mcp-broker.yaml`, not applied from them. wardryx is the real
-  image on a stand-in manifest (`wardryx.yaml`) with a throwaway Postgres and an empty policy list.
+  image on a stand-in manifest (`wardryx.yaml`) with a throwaway Postgres and an empty policy list. The store's
+  password, its DSN and wardryx's approval secret come from the Secret `stand-in-policy-db`, which the run generates
+  in its scratch directory, so no password is written in a tracked file.
 - Stand-ins for the provider (`upstream.yaml`), the MCP upstream (`mcp-stub.yaml`) and the egress rules the product
   gives by other means (`stand-in-network.yaml`, `stand-in-dns.yaml`). `manifests/30-network-policy.yaml` is not
   applied, so the broker's admission to the gateway comes from 58 alone.

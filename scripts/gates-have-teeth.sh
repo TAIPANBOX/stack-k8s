@@ -2748,16 +2748,24 @@ run_case "gen-is-bounded: the generator is taken away" fail \
 os.remove("lib/gen.sh")')" \
 	"measured NOTHING"
 
+# Every ask of the generator with a length, in every tracked shell file the gate reads, not a list of the
+# files that asked when this case was written: a new mint library (lib/vouchryx-mint.sh) asked for 40 and
+# left this case TOOTHLESS on the teeth run for branch feat/require-agent-tokens.
 run_case "gen-is-bounded: nothing asks the generator for a length" fail \
 	'./scripts/gen-is-bounded.sh' \
-	"$(py 'for p in ("deploy.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh"):
-    edit(p, "\"$(gen 28)\"", "\"$(gen)\"")
-s = open("typed/mode.sh").read()
-assert "$(gen 40)" in s
-open("typed/mode.sh", "w").write(s.replace("$(gen 40)", "$(gen)"))
-s = open("lib/identity-mint.sh").read()
-assert "$(gen 40)" in s
-open("lib/identity-mint.sh", "w").write(s.replace("$(gen 40)", "$(gen)"))')" \
+	"$(py 'import re, subprocess
+names = subprocess.check_output(["git", "ls-files"]).decode().split("\n")
+kept = ("scripts/gen-is-bounded.sh", "scripts/gates-have-teeth.sh")
+asked = 0
+for n in names:
+    if n in kept or not (n.endswith(".sh") or n.startswith(".githooks/")):
+        continue
+    s = open(n, encoding="utf-8").read()
+    t, k = re.subn(r"\$\(gen [0-9]+\)", "$(gen)", s)
+    asked += k
+    if t != s:
+        open(n, "w", encoding="utf-8").write(t)
+assert asked > 0, "no ask of gen with a length to take away"')" \
 	"there is no length to run the generator for"
 
 # Invariant 42: a typed deploy comes up green on its own. A typed manifest reads a
@@ -3621,7 +3629,7 @@ run_case "stream-precreate: the init mounts a different volume than the file liv
 	"does not mount the volume journal"
 run_case "stream-precreate: the init image is not pinned by digest" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e", "image: busybox:1.36")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "- name: precreate-streams\n          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e", "- name: precreate-streams\n          image: busybox:1.36")')" \
 	"does not run busybox by digest"
 run_case "stream-precreate: the object the table names is renamed away" fail \
 	'./scripts/stream-files-are-precreated.sh' \
@@ -3636,11 +3644,76 @@ run_case "stream-precreate: a reader's group written as a longer list (must pass
 	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "supplementalGroups: [10001], ", "supplementalGroups: [ 10001, 65532 ], ")')"
 run_case "stream-precreate: a new pod mounts stack-events outside group 10001" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          persistentVolumeClaim: \x7b claimName: stack-events \x7d\n---\napiVersion: v1\n", "          persistentVolumeClaim: \x7b claimName: stack-events \x7d\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: rogue-reader\n  namespace: agent-stack\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: rogue-reader\n  template:\n    metadata:\n      labels:\n        app: rogue-reader\n    spec:\n      securityContext:\n        runAsNonRoot: true\n        runAsUser: 65532\n        runAsGroup: 65532\n      containers:\n        - name: c\n          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e\n          volumeMounts:\n            - name: events\n              mountPath: /var/lib/stack/events\n      volumes:\n        - name: events\n          persistentVolumeClaim:\n            claimName: stack-events\n---\napiVersion: v1\n")')" \
+"$(py 'rogue = """---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rogue-reader
+  namespace: agent-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rogue-reader
+  template:
+    metadata:
+      labels:
+        app: rogue-reader
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+      containers:
+        - name: c
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          volumeMounts:
+            - name: events
+              mountPath: /var/lib/stack/events
+      volumes:
+        - name: events
+          persistentVolumeClaim:
+            claimName: stack-events
+"""
+p = "manifests/52-tokenfuse-mcp-broker.yaml"
+open(p, "w").write(open(p).read() + rogue)')" \
 	"rogue-reader (mounts stack-events): the pod is not in group 10001"
 run_case "stream-precreate: the same new pod with fsGroup 10001 (must pass)" pass \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          persistentVolumeClaim: \x7b claimName: stack-events \x7d\n---\napiVersion: v1\n", "          persistentVolumeClaim: \x7b claimName: stack-events \x7d\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: rogue-reader\n  namespace: agent-stack\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: rogue-reader\n  template:\n    metadata:\n      labels:\n        app: rogue-reader\n    spec:\n      securityContext:\n        runAsNonRoot: true\n        runAsUser: 65532\n        runAsGroup: 65532\n        fsGroup: 10001\n      containers:\n        - name: c\n          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e\n          volumeMounts:\n            - name: events\n              mountPath: /var/lib/stack/events\n      volumes:\n        - name: events\n          persistentVolumeClaim:\n            claimName: stack-events\n---\napiVersion: v1\n")')"
+"$(py 'rogue = """---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rogue-reader
+  namespace: agent-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rogue-reader
+  template:
+    metadata:
+      labels:
+        app: rogue-reader
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 10001
+      containers:
+        - name: c
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          volumeMounts:
+            - name: events
+              mountPath: /var/lib/stack/events
+      volumes:
+        - name: events
+          persistentVolumeClaim:
+            claimName: stack-events
+"""
+p = "manifests/52-tokenfuse-mcp-broker.yaml"
+open(p, "w").write(open(p).read() + rogue)')"
 run_case "stream-precreate: an exception names a pod that no longer mounts the claim" fail \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/49-costcrew.yaml", "claimName: stack-events", "claimName: stack-events-off")')" \

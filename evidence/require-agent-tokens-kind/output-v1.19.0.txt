@@ -1,7 +1,7 @@
 == images (from the product manifests): gateway and broker ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434 ; wardryx ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543
 == setup (cluster: kind-tail-netpol, namespace agent-stack)
    created Secret vouchryx-keys (signing.pem, revoke_key); neither value is printed
-   created ConfigMap vouchryx-agents with one enrolled agent (agent://tails.example/agents/operator); its enrolment key is in /var/folders/t7/wgp6wp5x5c9gn9tjv7ngttzh0000gn/T/tmp.00UO10f3W8/agent-enrol-key (0600, not printed)
+   created ConfigMap vouchryx-agents with one enrolled agent (agent://tails.example/agents/operator); its enrolment key is in /var/folders/t7/wgp6wp5x5c9gn9tjv7ngttzh0000gn/T/tmp.rXFQHptTbK/agent-enrol-key (0600, not printed)
    created ConfigMap gateway-static-keys with an empty operator list (the stack's own keys are on the list in 10-planes.yaml)
 == vouchryx: manifests/54-delegation.yaml as the default install applies it (no IdP, no trusted issuer)
 == wardryx (product image), its own Postgres, and the stand-in network
@@ -34,8 +34,8 @@ ok   a proof from another key                                     HTTP 403 (want
 == the refusal reasons vouchryx journalled (the HTTP body carries the code only)
       1 "reason":"audience_not_allowed"
 == exit 0
-./evidence/require-agent-tokens-kind/run-v1.19.0.sh: line 20: 28726 Terminated: 15          kubectl -n "$NS" port-forward svc/vouchryx 24310:4310 > /dev/null 2>&1
-./evidence/require-agent-tokens-kind/run-v1.19.0.sh: line 20: 28727 Terminated: 15          kubectl -n "$NS" port-forward svc/tokenfuse-gateway 24400:4100 > /dev/null 2>&1
-./evidence/require-agent-tokens-kind/run-v1.19.0.sh: line 20: 28728 Terminated: 15          kubectl -n "$NS" port-forward svc/tokenfuse-mcp-broker 24420:4200 > /dev/null 2>&1
-./evidence/require-agent-tokens-kind/run-v1.19.0.sh: line 20: 28729 Terminated: 15          kubectl -n "$NS" port-forward svc/wardryx 24430:8090 > /dev/null 2>&1
+./evidence/require-agent-tokens-kind/run-v1.19.0.sh: line 20: 11178 Terminated: 15          kubectl -n "$NS" port-forward svc/vouchryx 24310:4310 > /dev/null 2>&1
+./evidence/require-agent-tokens-kind/run-v1.19.0.sh: line 20: 11179 Terminated: 15          kubectl -n "$NS" port-forward svc/tokenfuse-gateway 24400:4100 > /dev/null 2>&1
+./evidence/require-agent-tokens-kind/run-v1.19.0.sh: line 20: 11180 Terminated: 15          kubectl -n "$NS" port-forward svc/tokenfuse-mcp-broker 24420:4200 > /dev/null 2>&1
+./evidence/require-agent-tokens-kind/run-v1.19.0.sh: line 20: 11181 Terminated: 15          kubectl -n "$NS" port-forward svc/wardryx 24430:8090 > /dev/null 2>&1
 RUN_EXIT=0

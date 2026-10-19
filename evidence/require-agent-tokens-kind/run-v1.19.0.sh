@@ -55,7 +55,7 @@ die_lib() { die "$*"; }
 vouchryx_mint_settle || die "vouchryx_mint_settle refused"
 static_keys_settle || die "static_keys_settle refused"
 cp "$W/agent-enrol-key" "$W/operator.secret" || die "no enrolment key"
-for k in felyx agents drills costcrew broker broker-caller stranger; do openssl rand -hex 24 > "$W/$k.secret"; done
+for k in felyx agents drills costcrew broker broker-caller stranger policy-db approval; do openssl rand -hex 24 > "$W/$k.secret"; done
 openssl rand -hex 24 > "$W/gateway-admin.secret"; openssl rand -hex 24 > "$W/declassify.secret"
 cp "$W/broker.secret" "$W/wardryx.pep"   # the policy-plane key the gateway and the broker present (invariant 52)
 openssl rand -hex 24 > "$W/wardryx-gw.secret"; cp "$W/wardryx-gw.secret" "$W/wardryx.pep"
@@ -68,6 +68,11 @@ secret_doc kind-stack-keys "gateway_admin=$(sec gateway-admin)" "declassify_key=
 secret_doc gateway-upstream-key "anthropic_key=stand-in-provider-key" | kubectl -n "$NS" create -f - >/dev/null || die "upstream key"
 kubectl -n "$NS" create secret generic broker-taint-key --from-file=client_key=<(printf '%s' "$(sec broker)") >/dev/null || die "broker-taint-key"
 secret_doc tokenfuse-mcp-broker-keys "TOKENFUSE_MCP_KEYS=$(sec broker-caller):broker-caller" | kubectl -n "$NS" create -f - >/dev/null || die "broker keys"
+# The policy store's password, its DSN and wardryx's approval secret (read by wardryx.yaml and policy-db from this one
+# Secret, as the product reads stack-policy-db). Generated here, never written into a tracked file.
+secret_doc stand-in-policy-db "password=$(sec policy-db)" \
+  "dsn=postgres://postgres:$(sec policy-db)@policy-db:5432/wardryx?sslmode=disable" \
+  "approval_secret=$(sec approval)" | kubectl -n "$NS" create -f - >/dev/null || die "stand-in-policy-db"
 kubectl -n "$NS" create configmap upstream-stub --from-file=server.py="$EV/upstream-stub.py" >/dev/null || die "upstream-stub"
 kubectl -n "$NS" create configmap mcp-stub --from-file=server.py="$EV/mcp-stub.py" >/dev/null || die "mcp-stub"
 
