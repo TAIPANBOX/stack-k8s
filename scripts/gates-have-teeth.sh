@@ -641,11 +641,12 @@ run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
 # evidence/identity-kind/run.sh creates stack-keys with every key the manifests read, so
 # it is an (installer, Secret) subject too: the gate judges it and passes it, which is
 # correct. Taking the installers away therefore takes it away too, or the case would
-# measure a Secret creator instead of none.
+# measure a Secret creator instead of none. evidence/agent-tokens-kind/run-v1.18.0.sh creates the
+# stand-in Secrets of its scratch cluster the same way, so it goes with them.
 run_case "secret-keys-agree: no installer left to judge" fail \
 	'./scripts/secret-keys-agree.sh' \
 	"$(py 'import os
-for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh", "delegation/up.sh", "closure/up.sh", "evidence/identity-kind/run.sh", "evidence/identity-kind/mint.sh"):
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh", "delegation/up.sh", "closure/up.sh", "evidence/identity-kind/run.sh", "evidence/agent-tokens-kind/run-v1.18.0.sh", "evidence/identity-kind/mint.sh"):
     os.remove(f)')" \
 	"measured NOTHING"
 
