@@ -356,6 +356,11 @@ jobs:
       - name: every workflow checkout of another repository is a full commit (invariant 68)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/workflow-checkouts-are-pinned.sh
 
+      # Added 2026-10-19. hub/add-site.sh reads the Cloud's version from a name:tag@sha256 reference, the form
+      # the manifests pin. v1.5.3 read the digest as the tag and refused every pinned install.
+      - name: hub/add-site.sh reads a digest-pinned tokenfuse-cloud image
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/hub-add-site-reads-the-pinned-image.sh
+
       # Added 2026-10-14 with invariant 44. A cost report that meets a machine type with no
       # rate exits non-zero and names it, instead of counting it as zero. See GOTCHAS 127.
       - name: a cost report refuses an unknown machine rate (invariant 44)

@@ -3597,6 +3597,23 @@ run_case "verified-images: a reason reworded (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres), an upstream image", "# reason: the policy store (postgres), an upstream image")')"
 
+# hub/add-site.sh reads the Cloud's version from a pinned image reference (name:tag@sha256:<64 hex>).
+run_case "add-site: the reader takes the digest for the tag (the v1.5.3 defect)" fail \
+	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
+	"$(py 'edit("hub/add-site.sh", "REF=\"$\x7bIMAGE%%@*\x7d\"", "REF=\"$\x7bIMAGE\x7d\"")')" \
+	"reference, the form the manifests pin, is not read"
+run_case "add-site: a short digest is accepted" fail \
+	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
+	"$(py 'edit("hub/add-site.sh", "^sha256:[0-9a-f]\x7b64\x7d$", "^sha256:[0-9a-f]\x7b1,64\x7d$")')" \
+	"a short digest is not refused"
+run_case "add-site: a digest with no tag is read as a version" fail \
+	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
+	"$(py 'edit("hub/add-site.sh", "  *) TAG=\"\" ;;", "  *) TAG=\"v0.0.0\" ;;")')" \
+	"a digest with no tag is not refused"
+run_case "add-site: a comment reworded beside the reader (must pass)" pass \
+	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
+	"$(py 'edit("hub/add-site.sh", "# The manifests pin the image as name:tag@sha256", "# The manifests pin the image, as name:tag@sha256")')"
+
 # Workflow checkouts of other repositories are pinned to a full commit (CLAUDE.md invariant 68).
 run_case "workflow-checkouts: a checkout of another repository has no ref" fail \
 	'./scripts/workflow-checkouts-are-pinned.sh' \
