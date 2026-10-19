@@ -646,12 +646,10 @@ spec:
             - { name: WARDRYX_AGENT_TOKEN_JWKS_URL, value: "http://vouchryx:4310/.well-known/jwks.json" }
             - { name: WARDRYX_AGENT_TOKEN_REVOCATION_URL, value: "http://vouchryx:4310/v1/revocations" }
             - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: "http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200" }
-            # The console's approver public keys (CLAUDE.md invariant 67) are NOT wired in v1.6.0. With
-            # WARDRYX_APPROVER_JWKS set, wardryx requires a statement the console signed on every grant and denial,
-            # and the console pinned here (v1.1.48) sends none, so every approval would be refused. TODO(approver-jwks):
-            # v1.6.1 sets WARDRYX_APPROVER_JWKS=/etc/wardryx/approver/approver-jwks.json, mounts the ConfigMap
-            # wardryx-approver-jwks read only at /etc/wardryx/approver (not optional), and pins genaryx-console:v1.6.0
-            # by digest. Never WARDRYX_ALLOW_KEY_APPROVALS.
+            # The console's approver public keys (CLAUDE.md invariant 67). With WARDRYX_APPROVER_JWKS set, wardryx
+            # requires a statement the console signed on every grant and denial, verified against this JWK set. The
+            # console is pinned to genaryx-console:v1.6.0, the first image that sends one. Never WARDRYX_ALLOW_KEY_APPROVALS.
+            - { name: WARDRYX_APPROVER_JWKS, value: "/etc/wardryx/approver/approver-jwks.json" }
           ports: [{ name: http, containerPort: 8090 }]
           # Stop taking traffic before stopping: the endpoint leaves the
           # Service while this sleeps. Without it a rolling update refused 3
@@ -663,6 +661,7 @@ spec:
             # that holds a brokered call with no risk signal (CLAUDE.md invariant 65). wardryx reads every
             # *.yaml in it once, at start.
             - { name: policy, mountPath: /etc/wardryx/policy, readOnly: true }
+            - { name: approver-jwks, mountPath: /etc/wardryx/approver, readOnly: true }
           # /healthz, not /readyz, on purpose. wardryx 1.0.3's /readyz answers 503
           # while its policy store is unreachable, but POST /v1/decide does not use
           # the store and keeps answering. A readiness probe on /readyz would take
@@ -690,6 +689,10 @@ spec:
             sources:
               - configMap: { name: wardryx-policy }
               - configMap: { name: wardryx-typed-hold, optional: true }
+        # The console's approver public keys (CLAUDE.md invariant 67), minted by lib/approver-mint.sh. Not optional:
+        # with WARDRYX_APPROVER_JWKS set, wardryx refuses to start on a file it cannot read, so the mint comes first.
+        - name: approver-jwks
+          configMap: { name: wardryx-approver-jwks }
 ---
 apiVersion: v1
 kind: Service

@@ -353,7 +353,7 @@ else:
 # with nothing noticing. Same fault, same gate, the other file it now reads.
 run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
 	'./scripts/pinned-images.sh' \
-	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.6.0@sha256:b226b16fb3cd58c1ad083cea668e0367e911bc0320c3fe5fa87366251570152b", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
 	"moves: a pod can come back different"
 
 # The default apply set must not publish anything to the world, and must not
@@ -3437,7 +3437,7 @@ run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)"
 # edits one tracked file the gate reads; the gate's own baseline must be green first.
 run_case "verified-images: a TAIPANBOX image carries a tag only" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.6.0@sha256:b226b16fb3cd58c1ad083cea668e0367e911bc0320c3fe5fa87366251570152b", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
 	"image not pinned by digest"
 run_case "verified-images: an upstream image nobody allowed" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -3727,19 +3727,28 @@ run_case "approver: the console's approver Secret becomes optional" fail \
 	"is not the Secret console-approver-key at mode 0440"
 run_case "approver: wardryx sets the JWK set with no mount (a half state)" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n            - { name: WARDRYX_APPROVER_JWKS, value: \"/etc/wardryx/approver/approver-jwks.json\" }\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: approver-jwks, mountPath: /etc/wardryx/approver, readOnly: true }\n", "")')" \
 	"wardryx's approver wiring is half set"
-run_case "approver: wardryx reads the JWK set while the console is still v1.1.48" fail \
+run_case "approver: the JWK set's volume becomes optional (a half state)" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n            - { name: WARDRYX_APPROVER_JWKS, value: \"/etc/wardryx/approver/approver-jwks.json\" }\n"); edit("manifests/10-planes.yaml", "            - { name: policy, mountPath: /etc/wardryx/policy, readOnly: true }\n", "            - { name: policy, mountPath: /etc/wardryx/policy, readOnly: true }\n            - { name: approver-jwks, mountPath: /etc/wardryx/approver, readOnly: true }\n"); edit("manifests/10-planes.yaml", "              - configMap: { name: wardryx-typed-hold, optional: true }\n", "              - configMap: { name: wardryx-typed-hold, optional: true }\n        - name: approver-jwks\n          configMap: { name: wardryx-approver-jwks }\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "configMap: { name: wardryx-approver-jwks }", "configMap: { name: wardryx-approver-jwks, optional: true }")')" \
+	"wardryx's approver wiring is half set"
+run_case "approver: wardryx reads the JWK set from another file" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "value: \"/etc/wardryx/approver/approver-jwks.json\"", "value: \"/etc/wardryx/approver/other.json\"")')" \
+	"but the JWK set is mounted at"
+run_case "approver: the console is left on v1.1.48 while wardryx reads the JWK set" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "genaryx-console:v1.6.0@sha256:b226b16fb3cd58c1ad083cea668e0367e911bc0320c3fe5fa87366251570152b", "genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
 	"every approval would be refused"
-run_case "approver: the pending step is no longer named while wardryx is unwired" fail \
+run_case "approver: a TODO is left in place after the wiring" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "TODO(approver-jwks):", "TODO(approver-jwks-gone):")')" \
-	"names no TODO(approver-jwks)"
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: WARDRYX_APPROVER_JWKS,", "            # TODO(approver-jwks): still pending\n            - { name: WARDRYX_APPROVER_JWKS,")')" \
+	"the TODO is stale"
 run_case "approver: a comment reworded in the wiring (must pass)" pass \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "are NOT wired in v1.6.0.", "are not wired in v1.6.0.")')"
+	"$(py 'edit("manifests/10-planes.yaml", "(CLAUDE.md invariant 67). With WARDRYX_APPROVER_JWKS set", "(CLAUDE.md invariant 67). Once WARDRYX_APPROVER_JWKS is set")')"
+
 run_case "approver: a cloud launcher never mints the approver key" fail \
 	'./scripts/approver-key-is-minted.sh' \
 	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\napprover_mint_settle\n", "\n")')" \

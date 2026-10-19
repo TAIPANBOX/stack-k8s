@@ -31,10 +31,10 @@ Feature: the console's approver key is minted once and wardryx verifies its stat
     Then GENARYX_APPROVER_KEY_FILE names a read-only mount of console-approver-key at mode 0440, not optional
     # -> gates-have-teeth.sh "approver: the console's approver Secret becomes optional"
 
-  Scenario: wardryx reads the public half only once the console can sign it
-    Given wardryx's deployment
+  Scenario: wardryx reads the public half from a read-only mount, only with a console that signs
+    Given wardryx's deployment and the console's image
     When the manifests are read
-    Then in v1.6.0 WARDRYX_APPROVER_JWKS is not set, and in v1.6.1 it names a read-only mount of wardryx-approver-jwks, not optional
+    Then WARDRYX_APPROVER_JWKS names a read-only mount of wardryx-approver-jwks, not optional, and the console is genaryx-console:v1.6.0 by digest
     # -> gates-have-teeth.sh "approver: wardryx sets the JWK set with no mount (a half state)"
 
   Scenario: no deploy turns on the bearer-key override

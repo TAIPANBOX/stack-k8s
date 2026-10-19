@@ -4721,3 +4721,9 @@ Not run on a cluster. Attestation files that v0.1.1 wrote keep mode 0600, becaus
 **Ours, and fixed.** `keyryx/policy.json.tmpl` declared trailryx-root as ES256 from v1.6.0 on. trailryx-node v1.5.0 signs under a P-384 key only, named by its RFC 7638 thumbprint (`docs/releases/v1.5.0.md` in the trailryx repository), so no pin could name a key custody published for trailryx-root. The seal would have refused to start. Found while writing the pin (invariant 73), before any cluster ran it.
 
 Fixed in v1.6.1: trailryx-root is ES384, and `keyryx_pin_trailryx_kid` pins the kid of that key. Not run on a cluster: whether custody mints the ES384 key for an existing install without a rotation of `keyryx-root` is not measured here, and the launcher refuses rather than guesses if the set has no ES384 key.
+
+## 154. The cloud launchers applied the Felyx model patch whenever a provider key was given, so the copilot moved off its configured model without anyone choosing that
+
+**Ours, and fixed.** `--anthropic-key-file` gave the gateway its provider key and then applied `manifests/55-copilot-cloud.yaml`, which sets Felyx's model to `claude-sonnet-5`. The launchers' default model is `claude-haiku-4-5`. A run that gave a key therefore moved the copilot to a larger, metered model it was never asked to use: the flag was about the key, not the model. The step's own comment called it opt-in, which it was not. Found while reviewing the copilot path for 1.6.1.
+
+Fixed in v1.6.1: both cloud launchers keep the configured model and apply nothing to the copilot. `manifests/55-copilot-cloud.yaml` is applied by hand by an operator who has chosen the larger model, and it is metered on that key's account. Not run on a cluster: the model a console reports after a deploy with a key is read from the live Deployment, not measured here.

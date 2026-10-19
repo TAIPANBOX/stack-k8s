@@ -6,8 +6,9 @@
 # thing on top: a larger model than the default Haiku, on the same gateway path,
 # so the console never holds a provider key and the meter sees every call.
 #
-# The deploy scripts apply it when they are given --anthropic-key-file, the one
-# provider key the gateway reads (lib/upstream-key.sh). Applying it by hand:
+# No deploy script applies it. --anthropic-key-file gives the gateway its provider key
+# (lib/upstream-key.sh) and leaves Felyx on the model it is configured with, claude-haiku-4-5,
+# the launchers' default. Felyx moves to this model by hand, once an operator has chosen it:
 #
 #   kubectl -n agent-stack patch deployment genaryx-console \
 #     --patch-file manifests/55-copilot-cloud.yaml

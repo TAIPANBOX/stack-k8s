@@ -26,8 +26,8 @@
 # `--anthropic-key-file <path>` gives the gateway its provider key: the one file the
 # gateway reads, made into the Secret gateway-upstream-key on the node, on stdin, once. The
 # console and the agents never hold a provider key (CLAUDE.md invariant 53). Given with it,
-# the console moves to a larger model (claude-sonnet-5) through the same gateway. It is
-# METERED on that key's account, which is why it is a flag and not a default. `--copilot-key-file`
+# the console keeps its configured model (claude-haiku-4-5) through the same gateway. A larger model is applied by hand (manifests/55-copilot-cloud.yaml); it is
+# METERED on that key's account. `--copilot-key-file`
 # is the same flag under its older name.
 #
 # `--firewall <enforce|shadow|off>` sets the agent firewall's mode on the gateway (TokenFuse
@@ -901,17 +901,13 @@ k_ "-n agent-stack rollout status statefulset/policy-db --timeout=300s" || true
 
 install_alerts
 
-# ---- Felyx on a larger model, if a provider key was handed over ------------
+# ---- Felyx keeps its configured model, if a provider key was handed over ---
 # The provider key itself went to the gateway right after the apply (upstream_key_settle):
-# the gateway holds it, and this console never does. This step is the model switch only.
-# 55-copilot-cloud.yaml names claude-sonnet-5 and holds no key. Opt-in, one flag: without
-# it the console keeps the default model and nothing changes.
+# the gateway holds it, and this console never does. The model is not switched here: Felyx
+# keeps the model the console is configured with (claude-haiku-4-5, the launchers' default).
+# manifests/55-copilot-cloud.yaml, the larger model, is applied by hand if an operator wants it.
 if [ -n "$ANTHROPIC_KEY_FILE" ]; then
-  say "Felyx: a larger model, claude-sonnet-5, through the gateway (METERED on the key's account)"
-  k_ "-n agent-stack patch deployment genaryx-console --patch-file /root/stack-k8s/manifests/55-copilot-cloud.yaml" >/dev/null \
-    || die "could not apply the copilot model patch"
-  k_ "-n agent-stack rollout status deploy/genaryx-console --timeout=240s" >/dev/null 2>&1 || true
-  echo "   Felyx is on claude-sonnet-5, through the gateway; the provider key is the gateway's"
+  echo "   Felyx keeps its configured model (claude-haiku-4-5 by default); the provider key is the gateway's"
 fi
 
 # ---- 4 and 5. proof, not vibes ---------------------------------------------
