@@ -26,6 +26,10 @@
 #      connection is refused too.
 #   C  AWS, no console block: refused at the deadline with the reason named.
 #   D  AWS, the console answers base64: decoded, and A holds.
+#   D2 AWS, every console line carries cloud-init's syslog prefix, as EC2 prints it:
+#      the fingerprints are read, and A holds.
+#   D3 AWS, the matching fingerprint is printed under another program's prefix:
+#      not read, so the node is refused.
 #   E  GCE, the guest attributes carry the keys: written, and a strict connection
 #      succeeds.
 #   F  GCE, no guest attributes: refused at the deadline with the reason named.
@@ -148,6 +152,19 @@ block_for "$K1_FP" | base64 > "$T/console"; printf '%s\n' "$K1_LINE" > "$T/scan"
 : > "$T/kh-d"
 helper hostkeys_aws i-0123 "$IP" "$T/kh-d" >"$T/out-d" 2>&1; rc=$?
 if [ "$rc" = 0 ] && grep -qF "$K1_LINE" "$T/kh-d"; then pass "D  base64 console output is decoded"; else bad "D  base64 console: rc=$rc, $(cat "$T/out-d")"; fi
+block_for "$K1_FP" > "$T/console"
+
+# ---- D2: AWS, cloud-init's syslog prefix on every line (the live EC2 shape) ------------
+block_for "$K1_FP" | sed 's/^/<14>Oct 19 17:25:04 cloud-init: /' > "$T/console"; printf '%s\n' "$K1_LINE" > "$T/scan"
+: > "$T/kh-d2"
+helper hostkeys_aws i-0123 "$IP" "$T/kh-d2" >"$T/out-d2" 2>&1; rc=$?
+if [ "$rc" = 0 ] && grep -qF "$K1_LINE" "$T/kh-d2"; then pass "D2 a console block with cloud-init's syslog prefix is read"; else bad "D2 prefixed console: rc=$rc, $(cat "$T/out-d2")"; fi
+
+# ---- D3: AWS, the fingerprint under another program's prefix -------------------------
+block_for "$K1_FP" | sed 's/^/<14>Oct  9 17:25:04 sshd-forger: /' > "$T/console"
+: > "$T/kh-d3"
+helper hostkeys_aws i-0123 "$IP" "$T/kh-d3" >"$T/out-d3" 2>&1; rc=$?
+if [ "$rc" = 2 ] && [ ! -s "$T/kh-d3" ]; then pass "D3 a fingerprint under another program's prefix is not read, the node is refused"; else bad "D3 foreign prefix: rc=$rc, file=$(wc -c < "$T/kh-d3") bytes, $(cat "$T/out-d3")"; fi
 block_for "$K1_FP" > "$T/console"
 
 # ---- E: GCE, the guest attributes carry the keys --------------------------------------

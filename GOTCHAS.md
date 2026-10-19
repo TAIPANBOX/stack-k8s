@@ -4656,3 +4656,12 @@ The check that keeps this honest is `scripts/static-keys-are-named.sh`, which re
 Fixed: the door is a manifest value now (`10-planes.yaml`, `52-tokenfuse-mcp-broker.yaml`), and the key set is fetched at pod start by an init container from `http://vouchryx:4310/.well-known/jwks.json`, into a memory volume. The fetch is over the Service, admitted by the NetworkPolicy in `54-delegation.yaml` from the gateway and the broker alone, where the port-forward was not. The trust is the same as wardryx's poll of the same URL (invariant 63): the key set is public, and the policy in the cluster decides who may reach it. A key rotation in vouchryx needs the pods restarted, which the key set's own refresh does not do for the gateway.
 
 Sources: `manifests/10-planes.yaml`, `manifests/52-tokenfuse-mcp-broker.yaml`, `manifests/54-delegation.yaml`.
+
+## 145. On EC2 every line of the host key fingerprint block carries cloud-init's syslog prefix, and the console parser read no fingerprint
+
+**Ours, and fixed.** The first live AWS run of the out-of-band host key check (GOTCHAS 139) refused all three nodes of a fresh cluster before connecting to any. Measured 2026-10-19 on 3 x m7i.xlarge in eu-central-1 (Ubuntu, cloud-init): `aws ec2 get-console-output` prints the block as `<14>Oct 19 17:25:04 cloud-init: 256 SHA256:... root@ip-... (ECDSA)`, one syslog prefix per line, BEGIN and END lines included. The parser took the second field of each line as the fingerprint, which on that shape is the month, so it read none and refused every node as a mismatch. A keyscan of the node from outside matched the console's three fingerprints exactly. The refusal was the safe outcome (nothing was connected to, nothing written) and it stopped the deploy.
+
+Fixed: `hostkeys_console_fingerprints` in `lib/hostkeys.sh` removes that prefix only in its exact shape and only when the program is `cloud-init`, then reads a line only when it is exactly `<bits> SHA256:<base64> <comment> (<TYPE>)`. A fingerprint printed under another program's prefix is not read. Matching `SHA256:` anywhere on the line would also have worked on this instance, and was not done: anything that can write to the console could then supply the fingerprint the check trusts.
+
+Gate: `scripts/hostkeys-are-verified.sh` cases D2 (the live shape is read) and D3 (another program's line is not), red first on the old parser (D2 refused, rc 2); two teeth cases in `gates-have-teeth.sh`.
+

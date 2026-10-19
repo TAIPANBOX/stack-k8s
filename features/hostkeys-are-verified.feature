@@ -24,6 +24,18 @@ Feature: a node's host key is verified before the first connection
     Then the installer refuses and says the block was not printed, and connects to nothing
     # -> hostkeys-are-verified.sh case C
 
+  Scenario: the console block as EC2 prints it, with cloud-init's syslog prefix, is read
+    Given a node whose console printed every fingerprint line behind cloud-init's syslog prefix
+    When the installer keyscans the node and the fingerprints are the same
+    Then the keys are written to the per-run known_hosts
+    # -> hostkeys-are-verified.sh case D2
+
+  Scenario: a fingerprint printed by another program is not taken
+    Given a console where the matching fingerprints appear behind another program's syslog prefix
+    When the installer reads the console
+    Then it reads no fingerprint from those lines and refuses the node, writing nothing
+    # -> hostkeys-are-verified.sh case D3
+
   Scenario: GCE keys come from the guest attributes through the API
     Given a GCE instance whose guest agent published its host keys
     When the installer reads the guest attributes
