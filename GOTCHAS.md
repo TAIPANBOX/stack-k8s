@@ -4677,3 +4677,11 @@ Fixed: `enable-guest-attributes = "TRUE"` in the node metadata. Gate: `scripts/h
 
 Fixed: `hostkeys_gcp_lines` also reads an object in the `hostkeys` namespace whose key is a known SSH key type and whose value is base64 only, as `type base64`. The third deploy passed the host key step on all three nodes with nine key lines. Gate: `scripts/hostkeys-are-verified.sh` case E2, red first on the old parser with the live run's own refusal text; one teeth case.
 
+## 148. The EC2 console text ends every line in CRLF, and 1.5.1's parser read no fingerprint again
+
+**Ours, and fixed.** The 1.5.1 deploy on the same three m7i.xlarge nodes refused them again at the host key step, nine seconds in, before connecting to any (2026-10-19). `aws ec2 get-console-output --query Output --output text` returns the console with a carriage return before every newline (702 of them in that capture). After the syslog prefix of GOTCHAS 145 was removed, the last field of each fingerprint line was `(ECDSA)\r`, which the strict line shape does not accept, so again no line was read. The 1.5.1 test fixture had the prefix but not the CRLF, because it was written from the lines as a terminal shows them rather than from the bytes. The refusal was the safe outcome: nothing was connected to.
+
+Fixed: `hostkeys_console_fingerprints` removes every carriage return before anything else. On the captured live console of that instance the function now returns three fingerprints, equal to the keyscan of the node. Gate: `scripts/hostkeys-are-verified.sh` case D4, whose fixture carries the prefix and CRLF ends; one teeth case.
+
+**The lesson kept here.** A fixture for a parser of outside output is built from the captured bytes (`od -c` or a byte count of `\r`), not from what a terminal displays.
+

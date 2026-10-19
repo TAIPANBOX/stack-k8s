@@ -111,7 +111,11 @@ hostkeys_aws_console() { # instance-id
 # program is cloud-init, and a line is read only when what is left is exactly
 # `<bits> SHA256:<base64> <comment> (<TYPE>)`. A line in any other shape is not
 # read, so a fingerprint another program printed to the console is not taken.
+# The console text arrives with CRLF line ends (measured on the same instances,
+# 2026-10-19, GOTCHAS 148): every carriage return is removed first, or the last
+# field of each line ends in \r and no line is read.
 hostkeys_console_fingerprints() {
+  tr -d '\r' |
   sed -E 's/^<[0-9]{1,3}>[A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2} cloud-init: //' |
     awk '$1 ~ /^[0-9]+$/ && $2 ~ /^SHA256:[A-Za-z0-9+\/]+$/ && $NF ~ /^\([A-Z0-9]+\)$/ { print $2 }' |
     sort -u
