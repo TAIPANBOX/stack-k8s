@@ -17,6 +17,7 @@
 #   the policy (ConfigMap keyryx-policy): the keys trailryx-root and wardryx-approval, and the two consumers
 #   keyryx/manifests/59 (custody and witness) and 60 (the consumer egress), applied, custody and witness rolled out
 #   wardryx: keyryx/wardryx-patch.yaml, strategic, after apply, rolled out (its image is the same pin)
+#   trailryx pin: custody's one ES384 key, by its kid, into the stack-wiring ConfigMap (keyryx_pin_trailryx_kid, invariant 73)
 #   record-seal: keyryx/record-seal-patch.yaml, strategic, after apply
 #
 # WHAT keyryx_remove_settle DOES: the same two patches in reverse (wardryx-unpatch.yaml, record-seal-unpatch.yaml).
@@ -118,14 +119,105 @@ keyryx_install_settle() {
   keyryx_apply_policy "$wd" "$td"
   keyryx_apply_objects
   keyryx_patch_wardryx
+  keyryx_pin_trailryx_kid
   keyryx_patch_record_seal
   printf '   Keyryx is on. Custody keyryx-custody:4340, witness keyryx-witness:4341.\n'
 }
 
-# TODO(trailryx-kid): the trailryx pin, TRAILRYX_KEYRYX_KID (trailryx#112), is not released. Until it is,
-# record-seal takes Keyryx's key from the JWKS it fetches on each refresh, unpinned: the residual that the
-# wave-3 trailryx item names. Waiting on the trailryx release tag and digest. When it lands, add the variable
-# to keyryx/record-seal-patch.yaml and to this note's removal.
+# keyryx_probe_jwks NAME: prints custody's public key set for NAME (GET /v1/jwks/NAME, a public route). It runs a
+# one-shot probe pod with the consumer label, the only label custody admits (CLAUDE.md invariant 57), busybox pinned
+# by digest, restricted like every pod here, and removes the pod after it has answered. Its output is the key set,
+# which is public; nothing here prints it.
+keyryx_probe_jwks() {
+  local name="$1" pod="keyryx-jwks-probe" phase out i
+  k_ "-n $KEYRYX_NS delete pod $pod --ignore-not-found --wait=true" >/dev/null 2>&1 || true
+  cat <<EOF | k_ "-n $KEYRYX_NS create -f -" >/dev/null || return 1
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $pod
+  namespace: $KEYRYX_NS
+  labels: { keyryx-consumer: "true", app.kubernetes.io/part-of: agent-stack }
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext: { runAsNonRoot: true, runAsUser: 65534, runAsGroup: 65534, seccompProfile: { type: RuntimeDefault } }
+  containers:
+    - name: probe
+      image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+      command: [wget, -qO-, "http://keyryx-custody.$KEYRYX_NS.svc.cluster.local:4340/v1/jwks/$name"]
+      securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+      resources: { requests: { cpu: 10m, memory: 16Mi }, limits: { memory: 64Mi } }
+EOF
+  phase=""
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    phase="$(k_ "-n $KEYRYX_NS get pod $pod -o jsonpath='{.status.phase}'" 2>/dev/null || true)"
+    case "$phase" in
+      Succeeded|Failed) break ;;
+    esac
+    sleep 2
+  done
+  out=""
+  if [ "$phase" = Succeeded ]; then
+    out="$(k_ "-n $KEYRYX_NS logs $pod" 2>/dev/null || true)"
+  fi
+  k_ "-n $KEYRYX_NS delete pod $pod --ignore-not-found --wait=false" >/dev/null 2>&1 || true
+  [ "$phase" = Succeeded ] || return 1
+  printf '%s' "$out"
+}
+
+# keyryx_pin_trailryx_kid: pins the record seal to the one ES384 (P-384) key custody publishes for trailryx-root,
+# by its RFC 7638 thumbprint, which is the kid custody publishes (CLAUDE.md invariant 73). trailryx-node v1.5.0
+# refuses to start with no pin, and reads only the key the pin names. The kid is the only thing printed about the key.
+#   no ES384 key in the set                          refused, with the reason
+#   a first install, and more than one ES384 key     refused, and the operator names the one to pin
+#   a re-run, and the pin is still in the set        kept, nothing written
+#   a re-run, and the pin is no longer in the set    refused: rotation is named, not implied
+#   KEYRYX_ROTATE_KID=<kid> set                      pinned to that kid, which the set must hold as ES384
+keyryx_pin_trailryx_kid() {
+  local current jwks es384 n kid
+  current="$(k_ "-n $KEYRYX_NS get configmap stack-wiring -o jsonpath='{.data.TRAILRYX_KEYRYX_KID}'" 2>/dev/null || true)"
+  jwks="$(keyryx_probe_jwks trailryx-root)" \
+    || die "could not read custody's trailryx-root key set: the probe pod did not answer"
+  es384="$(printf '%s' "$jwks" | python3 -c '
+import json, re, sys
+try:
+    doc = json.load(sys.stdin)
+except ValueError:
+    sys.exit("custody answered a trailryx-root key set that is not JSON")
+keys = doc.get("keys") if isinstance(doc, dict) else None
+if not isinstance(keys, list):
+    sys.exit("custody answered a trailryx-root key set with no keys array")
+for k in keys:
+    if isinstance(k, dict) and k.get("kty") == "EC" and k.get("crv") == "P-384":
+        kid = k.get("kid") or ""
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", kid):
+            sys.exit("custody publishes a P-384 key whose kid is not a 43-character thumbprint: refusing to pin it")
+        print(kid)
+')" || die "custody's trailryx-root key set cannot be pinned (see the line above)"
+  n="$(printf '%s\n' "$es384" | grep -c . || true)"
+  if [ "${n:-0}" -eq 0 ]; then
+    die "custody's trailryx-root key set has no ES384 key: trailryx-node pins a P-384 key, and keyryx/policy.json.tmpl makes trailryx-root ES384"
+  fi
+  if [ -n "${KEYRYX_ROTATE_KID:-}" ]; then
+    printf '%s\n' "$es384" | grep -Fqx "$KEYRYX_ROTATE_KID" \
+      || die "KEYRYX_ROTATE_KID names no ES384 key in custody's trailryx-root set"
+    kid="$KEYRYX_ROTATE_KID"
+  elif [ -n "$current" ]; then
+    if printf '%s\n' "$es384" | grep -Fqx "$current"; then
+      printf '   trailryx-kid: kept (the record seal stays pinned to %s)\n' "$current"
+      return 0
+    fi
+    die "the pinned TRAILRYX_KEYRYX_KID is not in custody's trailryx-root set; to rotate on purpose, re-run with KEYRYX_ROTATE_KID=<kid of the successor>"
+  else
+    [ "$n" -eq 1 ] || die "custody's trailryx-root set holds more than one ES384 key, and no pin exists yet: name the one to pin with KEYRYX_ROTATE_KID=<kid>"
+    kid="$(printf '%s\n' "$es384" | head -n 1)"
+  fi
+  printf '{"data":{"TRAILRYX_KEYRYX_KID":"%s"}}' "$kid" \
+    | k_ "-n $KEYRYX_NS patch configmap stack-wiring --type merge --patch-file /dev/stdin" >/dev/null \
+    || die "could not write the trailryx pin to stack-wiring"
+  printf '   trailryx-kid: pinned to custody'"'"'s ES384 key %s (the record seal signs under it)\n' "$kid"
+}
 
 # keyryx_remove_settle: the opt-out. The signers come off; custody, the witness and every key stay.
 keyryx_remove_settle() {

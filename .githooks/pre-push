@@ -99,6 +99,8 @@ step "the console approver key is minted once and wardryx verifies with it (inva
 step "Keyryx is installed by default, with --without-keyryx as the opt-out (invariant 69)" "./scripts/keyryx-is-default.sh"
 step "the Keyryx witness reads the record and the record-seal reads attestations through shared volumes (invariant 70)" "./scripts/keyryx-witness-shares-the-record.sh"
 step "the record-seal fails closed: a failed pack ends the run non-zero (invariant 71)" "./scripts/record-seal-fails-closed.sh"
+step "the Keyryx images and the record seal's trailryx-node are the release pins (invariant 72)" "./scripts/keyryx-release-pins.sh"
+step "the record seal is pinned to custody's one ES384 key, kept on a re-run (invariant 73)" "./scripts/keyryx-kid-is-pinned.sh"
 step "the teeth shards cover every case once" "./scripts/teeth-shards-cover-every-case.sh"
 
 echo

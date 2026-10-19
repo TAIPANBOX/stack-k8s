@@ -381,6 +381,14 @@ jobs:
       - name: the record-seal fails closed on a failed pack, and exits zero only when nothing is sealed (invariant 71)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/record-seal-fails-closed.sh
 
+      # Added 2026-10-19 with invariants 72 and 73. The Keyryx images and the record seal's trailryx-node are the
+      # release pins, and the record seal is pinned to custody's one ES384 key. See GOTCHAS 152.
+      - name: the Keyryx images and the record seal's trailryx-node are the release pins (invariant 72)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/keyryx-release-pins.sh
+
+      - name: the record seal is pinned to custody's one ES384 key, kept on a re-run (invariant 73)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/keyryx-kid-is-pinned.sh
+
       # Added 2026-10-14 with invariant 44. A cost report that meets a machine type with no
       # rate exits non-zero and names it, instead of counting it as zero. See GOTCHAS 127.
       - name: a cost report refuses an unknown machine rate (invariant 44)

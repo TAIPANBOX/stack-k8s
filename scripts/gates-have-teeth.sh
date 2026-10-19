@@ -3618,10 +3618,10 @@ run_case "keyryx: the record-seal pod is not labelled a consumer" fail \
 	'./scripts/keyryx-is-default.sh' \
 	"$(py 'edit("keyryx/record-seal-patch.yaml", "keyryx-consumer: \"true\"", "keyryx-consumer: \"false\"")')" \
 	"does not label the pod keyryx-consumer"
-run_case "keyryx: the record-seal is given an attestation directory with no writer" fail \
+run_case "keyryx: the record-seal is not pointed at its attestation directory" fail \
 	'./scripts/keyryx-is-default.sh' \
-	"$(py 'edit("keyryx/record-seal-patch.yaml", "value: /run/keyryx-client/credential\n", "value: /run/keyryx-client/credential\n                - name: TRAILRYX_WITNESS_ATTESTATIONS\n                  value: /var/lib/stack/attest\n")')" \
-	"sets TRAILRYX_WITNESS_ATTESTATIONS, which has no writer"
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "                - name: TRAILRYX_WITNESS_ATTESTATIONS\n                  value: /var/lib/stack/attestations\n", "")')" \
+	"does not point TRAILRYX_WITNESS_ATTESTATIONS at its attestations directory"
 run_case "keyryx: the custody policy grants trailryx nothing" fail \
 	'./scripts/keyryx-is-default.sh' \
 	"$(py 'edit("keyryx/policy.json.tmpl", "\"grants\": \x7b\"trailryx-root\": [\"sign\"]\x7d", "\"grants\": \x7b\x7d")')" \
@@ -3638,17 +3638,71 @@ run_case "keyryx: the opt-out never removes the signers" fail \
 	'./scripts/keyryx-is-default.sh' \
 	"$(py 'edit("deploy.sh", "  keyryx_remove_settle\n", "  true\n")')" \
 	"never calls keyryx_remove_settle"
-run_case "keyryx: the trailryx pin TODO is dropped from the library" fail \
+run_case "keyryx: the library stops pinning the record seal" fail \
 	'./scripts/keyryx-is-default.sh' \
-	"$(py 'edit("lib/keyryx-install.sh", "TODO(trailryx-kid)", "TODO(kid)")')" \
-	"does not name the trailryx pin as a TODO"
+	"$(py 'edit("lib/keyryx-install.sh", "keyryx_pin_trailryx_kid() {", "keyryx_pin_trailryx_kidX() {")')" \
+	"does not pin the record seal"
 run_case "keyryx: the library sets the attestation variable" fail \
 	'./scripts/keyryx-is-default.sh' \
 	"$(py 'edit("lib/keyryx-install.sh", "  keyryx_patch_record_seal\n  printf", "  keyryx_patch_record_seal\n  export TRAILRYX_WITNESS_ATTESTATIONS=/x\n  printf")')" \
-	"sets TRAILRYX_WITNESS_ATTESTATIONS, which keyryx v0.1.1 never writes"
+	"belongs to the record-seal patch"
 run_case "keyryx: a comment reworded in the library (must pass)" pass \
 	'./scripts/keyryx-is-default.sh' \
 	"$(py 'edit("lib/keyryx-install.sh", "# Keyryx, installed by default:", "# Keyryx, on by default:")')"
+
+# The record seal is pinned to custody's one ES384 key, kept on a re-run and re-pinned only on a named rotation (CLAUDE.md invariant 73).
+run_case "keyryx-kid: the custody policy keeps trailryx-root on ES256" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("keyryx/policy.json.tmpl", "\"alg\": \"ES384\"", "\"alg\": \"ES256\"")')" \
+	"does not declare trailryx-root as ES384"
+run_case "keyryx-kid: the pin is taken after the record seal is patched" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "  keyryx_pin_trailryx_kid\n  keyryx_patch_record_seal\n", "  keyryx_patch_record_seal\n  keyryx_pin_trailryx_kid\n")')" \
+	"patches the record seal before it pins the kid"
+run_case "keyryx-kid: the record seal reads the kid as a literal" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "valueFrom: { configMapKeyRef: { name: stack-wiring, key: TRAILRYX_KEYRYX_KID, optional: false } }", "value: KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK")')" \
+	"does not read TRAILRYX_KEYRYX_KID from the stack-wiring ConfigMap"
+run_case "keyryx-kid: the pin is made optional" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "optional: false", "optional: true")')" \
+	"does not read TRAILRYX_KEYRYX_KID from the stack-wiring ConfigMap"
+run_case "keyryx-kid: a re-run re-pins instead of keeping the pin" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "  elif [ -n \"$current\" ]; then", "  elif false; then")')" \
+	"keeps the pin on a re-run when it is still in the set"
+run_case "keyryx-kid: the key set's coordinates are printed" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "  local current jwks es384 n kid\n", "  local current jwks es384 n kid\n  keyryx_probe_jwks trailryx-root >&2\n")')" \
+	"carries a coordinate of the key"
+run_case "keyryx-kid: the probe pod loses its consumer label" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "keyryx-consumer: \"true\", app", "keyryx-consumer: \"false\", app")')" \
+	"the probe pod does not carry"
+run_case "keyryx-kid: a comment reworded in the library (must pass)" pass \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "# keyryx_probe_jwks NAME: prints custody", "# keyryx_probe_jwks NAME: prints the custody")')"
+
+# The Keyryx images and the record seal's trailryx-node are the release pins, by tag and digest (CLAUDE.md invariant 72).
+run_case "keyryx-release-pins: the witness is left on keyryx v0.1.1" fail \
+	'./scripts/keyryx-release-pins.sh' \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("keyryx:v0.1.2@sha256:9b6d"); open(p, "w").write(s[:i] + "keyryx:v0.1.1@sha256:9b6d" + s[i + len("keyryx:v0.1.2@sha256:9b6d"):])')" \
+	"is not the release pin"
+run_case "keyryx-release-pins: the record seal is left on trailryx-node v1.4.0" fail \
+	'./scripts/keyryx-release-pins.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "trailryx-node:v1.5.0@sha256:f152", "trailryx-node:v1.4.0@sha256:f152")')" \
+	"is not the release pin"
+run_case "keyryx-release-pins: one keyryx digest is not the tag's" fail \
+	'./scripts/keyryx-release-pins.sh' \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); s = s.replace("9b6d4e0e8988076e", "9b6d4e0e8988076f", 1); open(p, "w").write(s)')" \
+	"is not the release pin"
+run_case "keyryx-release-pins: the record seal's image is absent (measured nothing)" fail \
+	'./scripts/keyryx-release-pins.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/trailryx-node:", "image: ghcr.io/taipanbox/trailryx-nodx:")')" \
+	"measured NOTHING"
+run_case "keyryx-release-pins: a comment reworded in the Keyryx manifest (must pass)" pass \
+	'./scripts/keyryx-release-pins.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "# Images: keyryx v0.1.0, pinned by the index digest of the tag.", "# Images: keyryx, pinned by the index digest of the tag.")')"
 
 # The console's approver key and wardryx's copy of its public half (CLAUDE.md invariant 67).
 run_case "approver: the mint applies over an existing key" fail \
@@ -3773,14 +3827,18 @@ run_case "witness-records: the record-seal mounts the whole witness state" fail 
 	'./scripts/keyryx-witness-shares-the-record.sh' \
 	"$(py 'edit("keyryx/record-seal-patch.yaml", "                  subPath: data/attestations\n", "")')" \
 	"without the subPath data/attestations"
-run_case "witness-records: the record-seal reads attestations it cannot read (mode 0600)" fail \
+run_case "witness-records: the record-seal is not pointed at the attestations" fail \
 	'./scripts/keyryx-witness-shares-the-record.sh' \
-	"$(py 'edit("keyryx/record-seal-patch.yaml", "                - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE\n", "                - name: TRAILRYX_WITNESS_ATTESTATIONS\n                  value: /var/lib/stack/attestations\n                - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE\n")')" \
-	"sets TRAILRYX_WITNESS_ATTESTATIONS while"
-run_case "witness-records: the attestation blocker is dropped from the patch" fail \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "                - name: TRAILRYX_WITNESS_ATTESTATIONS\n                  value: /var/lib/stack/attestations\n", "")')" \
+	"does not point TRAILRYX_WITNESS_ATTESTATIONS at its read-only attestations directory"
+run_case "witness-records: the witness runs outside the record plane's group" fail \
 	'./scripts/keyryx-witness-shares-the-record.sh' \
-	"$(py 'edit("keyryx/record-seal-patch.yaml", "TODO(keyryx-attest-mode)", "TODO(attest)")')" \
-	"does not name the attestation-mode blocker"
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "runAsUser: 20100\n        runAsGroup: 10001\n        fsGroup: 10001", "runAsUser: 20100\n        runAsGroup: 20100\n        fsGroup: 10001")')" \
+	"does not run as group 10001"
+run_case "witness-records: the witness init runs outside the record plane's group" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "runAsUser: 20100\n            runAsGroup: 10001", "runAsUser: 20100\n            runAsGroup: 20100")')" \
+	"root-key-copy init does not run as group 10001"
 run_case "witness-records: the opt-out keeps the pod affinity" fail \
 	'./scripts/keyryx-witness-shares-the-record.sh' \
 	"$(py 'edit("keyryx/record-seal-unpatch.yaml", "affinity: null", "affinity: {}")')" \

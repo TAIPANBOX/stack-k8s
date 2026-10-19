@@ -103,7 +103,7 @@ spec:
               mountPath: /run/keyryx
       containers:
         - name: keyryx
-          image: ghcr.io/taipanbox/keyryx:v0.1.1@sha256:a9f88c44b62545555baffa19e3ace4b9c699c69c3a4aadbae28089aa2b29eb51
+          image: ghcr.io/taipanbox/keyryx:v0.1.2@sha256:9b6d4e0e8988076e90843d9d1625e50a7f248f6be531e144a6950ff9233f7683
           args: [custody]
           env:
             - name: KEYRYX_DATA
@@ -174,7 +174,7 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 20100
-        runAsGroup: 20100
+        runAsGroup: 10001
         fsGroup: 10001
         seccompProfile: { type: RuntimeDefault }
       initContainers:
@@ -191,7 +191,7 @@ spec:
           securityContext:
             runAsNonRoot: true
             runAsUser: 20100
-            runAsGroup: 20100
+            runAsGroup: 10001
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: [ALL] }
@@ -205,7 +205,7 @@ spec:
               mountPath: /run/keyryx
       containers:
         - name: keyryx-witness
-          image: ghcr.io/taipanbox/keyryx:v0.1.1@sha256:a9f88c44b62545555baffa19e3ace4b9c699c69c3a4aadbae28089aa2b29eb51
+          image: ghcr.io/taipanbox/keyryx:v0.1.2@sha256:9b6d4e0e8988076e90843d9d1625e50a7f248f6be531e144a6950ff9233f7683
           args: [witness]
           env:
             - name: KEYRYX_WITNESS_DATA
@@ -220,7 +220,7 @@ spec:
               value: 0.0.0.0:4341
             # The record the witness countersigns: tenant|directory, the tenant trailryx-node seals as by default
             # (acme) and the directory it seals into, read-only (CLAUDE.md invariant 70). The witness writes its
-            # attestation for each sealed root under KEYRYX_WITNESS_DATA/attestations (keyryx v0.1.1).
+            # attestation for each sealed root under KEYRYX_WITNESS_DATA/attestations (keyryx v0.1.2).
             - name: KEYRYX_WITNESS_RECORDS
               value: "acme|/var/lib/stack/records"
           ports:

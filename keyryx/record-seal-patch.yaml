@@ -8,13 +8,12 @@
 # the witness, which runs on that node. The witness state is mounted through subPath data/attestations only, so the
 # record-seal never sees the witness key, which sits in the same claim's data directory.
 #
-# TODO(keyryx-attest-mode): TRAILRYX_WITNESS_ATTESTATIONS is NOT set. keyryx v0.1.1 writes each attestation with
-# os.CreateTemp (mode 0600, owned by the witness's uid 20100), and the record-seal runs as uid 10001, so it cannot read
-# the files. Setting the variable now would make `trailryx-node read --pack` fail on every run, and the job would then
-# end non-zero and say why (CLAUDE.md invariant 71), so the attempt would be loud, not silent. Set it when keyryx writes
-# the attestations readable by group 10001 (a release of keyryx). Until then the subPath mount below is wired and reads nothing.
+# TRAILRYX_WITNESS_ATTESTATIONS points at the read-only attestations mount. keyryx v0.1.2 writes each attestation 0640
+# and its directories 0750, and the witness runs as group 10001, so the record-seal (uid 10001) reads the files and
+# nothing else of the witness's state (CLAUDE.md invariant 70).
 #
-# TRAILRYX_KEYRYX_KID, the pin of Keyryx's key, is NOT here either: trailryx#112 is not released (TODO in the library).
+# TRAILRYX_KEYRYX_KID is read from the stack-wiring ConfigMap, which lib/keyryx-install.sh fills with custody's kid
+# before this patch is applied (CLAUDE.md invariant 73). It is not optional: a seal with no pin refuses to start.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -44,6 +43,10 @@ spec:
                   value: http://keyryx-custody.agent-stack.svc.cluster.local:4340
                 - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE
                   value: /run/keyryx-client/credential
+                - name: TRAILRYX_KEYRYX_KID
+                  valueFrom: { configMapKeyRef: { name: stack-wiring, key: TRAILRYX_KEYRYX_KID, optional: false } }
+                - name: TRAILRYX_WITNESS_ATTESTATIONS
+                  value: /var/lib/stack/attestations
               volumeMounts:
                 - name: keyryx-client
                   mountPath: /run/keyryx-client

@@ -4707,3 +4707,17 @@ Not run on a cluster. The gate and its teeth show the manifest creates the file;
 Fixed in `manifests/40-routines-and-secrets.yaml`: the command keeps trailryx-node's output and status. Only the line trailryx-node prints for an empty ledger exits 0, and that run does not verify. Any other failure exits with trailryx-node's own status and prints its reason. The gate `scripts/record-seal-fails-closed.sh` runs the script under stand-in binaries, and five cases in `scripts/gates-have-teeth.sh` cover it. On the unfixed manifest the gate failed on a failed pack that exited 0.
 
 Not run on a cluster. The empty-case line is trailryx-node v1.4.0's wording, read from its tag, not from the image. A later release that changes the wording makes the job fail loudly until the gate and the manifest carry the new line.
+
+## 152. The record seal could not read the witness's attestations: keyryx wrote them 0600 under the witness's uid, so the attestation read stayed withheld
+
+**Ours, and fixed.** keyryx v0.1.1 wrote each attestation with `os.CreateTemp`, which is mode 0600, owned by the witness's uid 20100. The record-seal runs as uid 10001, so `trailryx-node read --pack` could not open the file. The variable `TRAILRYX_WITNESS_ATTESTATIONS` could not be set without every pack failing, so the read was left out and the wiring stayed half done. Found while wiring the witness (invariant 70).
+
+Fixed in v1.6.1: keyryx v0.1.2 writes attestations 0640 in 0750 directories, and the witness and its root-key-copy init run as group 10001, the record plane's group. The record-seal reads only the attestations directory, read only, through `TRAILRYX_WITNESS_ATTESTATIONS`. The gate `scripts/keyryx-witness-shares-the-record.sh` holds the group, the mount and the variable, and its teeth cases cover each.
+
+Not run on a cluster. Attestation files that v0.1.1 wrote keep mode 0600, because the witness does not rewrite earlier roots; keyryx's v0.1.2 notes give the one-time `chmod` the witness's account must run for them. Whether a pack that meets such a root reports it as unattested is not measured here.
+
+## 153. The Keyryx policy declared trailryx-root as ES256, which trailryx-node cannot pin: its key is P-384
+
+**Ours, and fixed.** `keyryx/policy.json.tmpl` declared trailryx-root as ES256 from v1.6.0 on. trailryx-node v1.5.0 signs under a P-384 key only, named by its RFC 7638 thumbprint (`docs/releases/v1.5.0.md` in the trailryx repository), so no pin could name a key custody published for trailryx-root. The seal would have refused to start. Found while writing the pin (invariant 73), before any cluster ran it.
+
+Fixed in v1.6.1: trailryx-root is ES384, and `keyryx_pin_trailryx_kid` pins the kid of that key. Not run on a cluster: whether custody mints the ES384 key for an existing install without a rotation of `keyryx-root` is not measured here, and the launcher refuses rather than guesses if the set has no ES384 key.

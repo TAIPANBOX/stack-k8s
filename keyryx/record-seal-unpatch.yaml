@@ -24,6 +24,10 @@ spec:
                   $patch: delete
                 - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE
                   $patch: delete
+                - name: TRAILRYX_KEYRYX_KID
+                  $patch: delete
+                - name: TRAILRYX_WITNESS_ATTESTATIONS
+                  $patch: delete
               volumeMounts:
                 - name: witness-attestations
                   $patch: delete

@@ -975,7 +975,7 @@ kubectl -n agent-stack delete configmap gateway-identity-map
 
 ## Keyryx on the cluster (opt-in)
 
-Keyryx (`ghcr.io/taipanbox/keyryx:v0.1.1`) is the key custody service and the
+Keyryx (`ghcr.io/taipanbox/keyryx:v0.1.2`) is the key custody service and the
 independent witness of the record. Off by default: `kubectl apply -k manifests/`
 never applies it. `keyryx/up.sh` turns it on, `keyryx/down.sh` turns it off and
 keeps every key and claim.
