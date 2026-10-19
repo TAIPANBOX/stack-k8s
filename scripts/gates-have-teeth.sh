@@ -2987,6 +2987,11 @@ run_case "agent-tokens: the example agent's token is for another audience" fail 
 	"$(py 'edit("agent-tokens/example-agent.yaml", "audience: \"http://vouchryx:4310\"", "audience: \"http://other.example:4310\"")')" \
 	"not vouchryx's issuer"
 
+run_case "agent-tokens: the example agent asks vouchryx for another audience" fail \
+	"$AGT" \
+	"$(py 'edit("agent-tokens/example-agent.yaml", "name: VOUCHRYX_AGENT_RESOURCE, value: \"https://vouchryx.agent-stack.invalid\"", "name: VOUCHRYX_AGENT_RESOURCE, value: \"https://vouchryx.other.invalid\"")')" \
+	"does not name the agent's audience"
+
 run_case "agent-tokens: agent pods may reach the open internet" fail \
 	"$AGT" \
 	"$(py 'edit("manifests/58-agent-tokens-network.yaml", "    - to:\n        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n", "    - to:\n        - ipBlock: { cidr: 0.0.0.0/0 }\n    - to:\n        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n")')" \

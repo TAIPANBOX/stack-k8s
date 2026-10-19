@@ -155,6 +155,9 @@ if ex:
     aud = re.search(r'audience:\s*"([^"]*)"', ex)
     if not aud or aud.group(1) != ISSUER:
         fail(f"{EX} projects a token whose audience is not vouchryx's issuer {ISSUER}")
+    res = re.search(r'name:\s*VOUCHRYX_AGENT_RESOURCE,\s*value:\s*"([^"]*)"', ex)
+    if not res or res.group(1) != AUDIENCE:
+        fail(f"{EX} does not name the agent's audience {AUDIENCE} in VOUCHRYX_AGENT_RESOURCE: the agent asks vouchryx for that resource (RFC 8707), and a request that names none is refused")
     exp = re.search(r'expirationSeconds:\s*(\d+)', ex)
     if not exp or int(exp.group(1)) > 600:
         fail(f"{EX} projects a token that lives longer than 600 seconds")

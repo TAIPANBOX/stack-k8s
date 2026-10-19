@@ -30,6 +30,12 @@ spec:
       containers:
         - name: agent
           image: ghcr.io/taipanbox/agent-example:replace-with-a-pinned-tag
+          env:
+            # The audience this agent asks vouchryx for, sent as RFC 8707 `resource=` in its token request
+            # (CLAUDE.md invariant 54, GOTCHAS 137). It is the one audience vouchryx allows for an agent token.
+            # A request that names no resource is refused `audience_not_allowed`: vouchryx does not fall back
+            # to its own issuer. The projected token below is the workload credential, not this audience.
+            - { name: VOUCHRYX_AGENT_RESOURCE, value: "https://vouchryx.agent-stack.invalid" }
           securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
           volumeMounts:
             - { name: vouchryx-token, mountPath: /var/run/agent, readOnly: true }

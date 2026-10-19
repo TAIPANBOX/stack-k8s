@@ -5,6 +5,33 @@ The scripts here drove the REAL images on a local kind cluster (kindest/node 1.3
 for everything else. The product manifests were applied to the same objects with
 `agent-tokens/up.sh` and `agent-tokens/down.sh`, which turned the door off and on again.
 
+## The v1.1.49 pin set, measured 2026-10-19
+
+`run-v1.18.0.sh` is the run for the pin set of stack-k8s v1.1.49 (PR #188): tokenfuse v1.18.0 at the gateway
+and the broker, vouchryx v0.6.0 applied from `manifests/54-delegation.yaml` itself, and the agent-token door
+switched on by `agent-tokens/up.sh` from the repository. The audience is `https://vouchryx.agent-stack.invalid`
+(CLAUDE.md invariant 54, GOTCHAS 137). Its output is `output-v1.18.0.txt`, beside this README. Run it with
+`KUBECONFIG` at a kind cluster; it creates and removes its own namespace and scratch files.
+
+- admitted: an enrolled agent asks with RFC 8707 `resource=https://vouchryx.agent-stack.invalid` and gets a
+  token whose `aud` is that audience, `iss` is vouchryx's issuer, 200.
+- refused: a request that names no resource gets 400 `invalid_target` from vouchryx; the reason in its event
+  journal is `audience_not_allowed`. The HTTP body carries the code only.
+- admitted at the gateway door (200) and at the broker door (200, the stub's answer): the same token.
+- stopped: a ban is refused at the gateway in 6.15, 9.68 and 9.35 s over three trials (one 12 s poll).
+
+What changed from the run below: the scripts ask for the new audience, the gateway and broker bases are the
+v1.18.0 images without the door (`gateway-base-v1.18.0.yaml`, `broker-base-v1.18.0.yaml`), the gateway may reach
+the stand-in provider (`stand-in-gateway-upstream.yaml`: 54's `gateway-egress-vouchryx` policy is an Egress policy,
+so without it the gateway cannot reach its upstream, and this kind enforces NetworkPolicy), and the local ports
+are 24310, 24400 and 24420, because 14310 is published by another container on the machine that ran this.
+The run below is the pre-pin-move measurement (vouchryx v0.4.0, tokenfuse v1.16.0, the `http://vouchryx:4310`
+audience) and was not re-run.
+
+Not covered by the v1.1.49 run: the workload path (`e2e2.py` still names kind-k2e2e and the old audience),
+`failclosed.py` and `ban_trials.py` (they keep the old port), a real k3s issuer, and NetworkPolicy beyond
+what kind enforces.
+
 Files: `vouchryx.yaml`, `gateway.yaml`, `upstream.yaml` and `upstream-stub.py` are the stand-in
 Deployments (env names and values mirror 54-delegation*.yaml and 58-agent-tokens-*.yaml, but
 they are not the product manifests); `dpop.py` makes ES256 DPoP proofs with openssl and the

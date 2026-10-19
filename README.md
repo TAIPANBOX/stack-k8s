@@ -897,7 +897,9 @@ where the credential is `sha256:<digest of an enrolment key>` or
 `workload:<the cluster's issuer>#system:serviceaccount:agent-stack:<ServiceAccount>`. A pod
 that is one of these agents is labelled `taipanbox.dev/agent-token: "true"` and mounts a
 projected token for `http://vouchryx:4310` (see `agent-tokens/example-agent.yaml`). It holds no
-Kubernetes API token and no secret.
+Kubernetes API token and no secret. To get an agent token, the agent asks vouchryx for
+`resource=https://vouchryx.agent-stack.invalid` (RFC 8707; the example carries it as `VOUCHRYX_AGENT_RESOURCE`).
+A request that names no resource is refused `audience_not_allowed`: vouchryx does not fall back to its own issuer.
 
 Turning it on sets the gateway's audience to `https://vouchryx.agent-stack.invalid`, the same
 identifier the broker's door and vouchryx's allowed audiences name, so delegated calls minted for
