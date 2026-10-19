@@ -88,6 +88,15 @@ spec:
       tolerations:
         - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+      # Creates both files vouchryx appends to before it starts, as its own uid (CLAUDE.md
+      # invariant 59, GOTCHAS 135). An existing file is left as it is. Mode 0640, group 10001: the
+      # events file is for the bus readers, and the revocation list is owned by this uid either way.
+      initContainers:
+        - name: precreate-streams
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "for f in /var/lib/stack/events/vouchryx.ndjson /var/lib/stack/delegation/revocations.ndjson; do if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; done; ls -ln /var/lib/stack/events /var/lib/stack/delegation"]
+          volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }, { name: delegation-state, mountPath: /var/lib/stack/delegation }]
       containers:
         - name: vouchryx
           image: ghcr.io/taipanbox/vouchryx:v0.4.0@sha256:b650f01aeac9baa89f60ca86f71f589fc7c7c7d25d3237793814a186eb8f5cea

@@ -536,6 +536,16 @@ spec:
       tolerations:
         - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+      # Creates the stream file before wardryx starts, as wardryx's own uid. agent-stack-go v2
+      # refuses to create a missing stream in a directory another uid owns, and the volume root is
+      # root's, so without this it exits at start (CLAUDE.md invariant 59, GOTCHAS 135). An existing
+      # file is left as it is. Mode 0640, group 10001, the group the bus readers share.
+      initContainers:
+        - name: precreate-streams
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "f=/var/lib/stack/events/wardryx.ndjson; if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; ls -ln /var/lib/stack/events"]
+          volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
       containers:
         - name: wardryx
           image: ghcr.io/taipanbox/wardryx:v2.1.0@sha256:9e6a9a9e38f12089499d64c09e23fb5022ac2f1858aefa81187b1df260a87869
@@ -631,7 +641,9 @@ spec:
       # usable by a compromised container for discovery and SelfSubjectReview,
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
-      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      # supplementalGroups 10001: the bus files the writers create are group 10001, so this reader
+      # needs that group to read them (CLAUDE.md invariant 59).
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, supplementalGroups: [10001], seccompProfile: { type: RuntimeDefault } }
       # Leave a dead node in 30 s, not the default 300 s. One replica, no
       # ReadWriteOnce claim, so nothing ties this pod to the node it is on;
       # the default toleration alone kept the gateway refused for 360 s after

@@ -224,7 +224,7 @@ run_case() {
 	# turns "it did not fail at all" into "it failed for the wrong reason",
 	# which sends the reader to look at prose when the gate is toothless.
 	if [ "$expect" = fail ] && [ "$rc" -ne 0 ] && [ -n "$needle" ] &&
-		! printf '%s' "$out" | grep -qF -- "$needle"; then
+		! grep -qF -- "$needle" <<<"$out"; then
 		printf 'WRONG REASON  %s\n              it failed, but not saying: %s\n' "$name" "$needle"
 		failures=$((failures + 1))
 		return
@@ -3157,6 +3157,62 @@ run_case "verified-images: a comment naming an unpinned image (must pass)" pass 
 run_case "verified-images: a reason reworded (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres), an upstream image", "# reason: the policy store (postgres), an upstream image")')"
+
+# Stream files are precreated (CLAUDE.md invariant 59, GOTCHAS 135). A writer that refuses to start
+# on a root-owned volume is the failure; each case below takes one property the gate judges away.
+run_case "stream-precreate: wardryx loses its init container" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "- name: precreate-streams", "- name: precreate-streams-off")')" \
+	"Deployment wardryx -> /var/lib/stack/events/wardryx.ndjson: no precreate-streams"
+run_case "stream-precreate: the init runs as root" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false", "runAsUser: 0, runAsGroup: 10001, allowPrivilegeEscalation: false")')" \
+	"the init container runs as root"
+run_case "stream-precreate: the init runs as another uid than the writer" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "runAsUser: 10002, runAsGroup: 10001, allowPrivilegeEscalation: false", "runAsUser: 10003, runAsGroup: 10001, allowPrivilegeEscalation: false")')" \
+	"does not run as the writer's uid 10002"
+run_case "stream-precreate: the file is created in the wrong group" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false", "runAsUser: 65532, runAsGroup: 65532, allowPrivilegeEscalation: false")')" \
+	"does not create the file in group 10001"
+run_case "stream-precreate: the file is left group- and world-readable" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/47-scopyx.yaml", "umask 027; : >", "umask 022; : >")')" \
+	"does not set the file to 0640"
+run_case "stream-precreate: the init creates a file the writer does not append to" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/51-typryx.yaml", "f=/var/lib/stack/events/typryx.ndjson;", "f=/var/lib/stack/events/typryx-x.ndjson;")')" \
+	"does not create /var/lib/stack/events/typryx.ndjson"
+run_case "stream-precreate: the revocation list is not among the files created" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/54-delegation.yaml", "for f in /var/lib/stack/events/vouchryx.ndjson /var/lib/stack/delegation/revocations.ndjson; do", "for f in /var/lib/stack/events/vouchryx.ndjson; do")')" \
+	"does not create /var/lib/stack/delegation/revocations.ndjson"
+# Assigned before use: bash 3.2 (the shell a Mac ships) drops the text between the braces when an
+# edit with `{ ... }` sits inside "$(...)", and the teeth run then reported this case BROKEN.
+journal_edit=$(py 'edit("manifests/48-scopyx-browser.yaml", "[{ name: journal, mountPath: /var/lib/scopyx }]", "[{ name: tmp, mountPath: /var/lib/scopyx }]")')
+run_case "stream-precreate: the init mounts a different volume than the file lives on" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$journal_edit" \
+	"does not mount the volume journal"
+run_case "stream-precreate: the init image is not pinned by digest" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e", "image: busybox:1.36")')" \
+	"does not run busybox by digest"
+run_case "stream-precreate: the object the table names is renamed away" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "  name: costcrew-crew\n", "  name: costcrew-crew-renamed\n")')" \
+	"the object is absent, so this writer is measured NOTHING"
+run_case "stream-precreate: a reader drops its group" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "supplementalGroups: [10001], ", "")')" \
+	"idryx (reader): the pod is not in group 10001"
+run_case "stream-precreate: a reader's group written as a longer list (must pass)" pass \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "supplementalGroups: [10001], ", "supplementalGroups: [ 10001, 65532 ], ")')"
+run_case "stream-precreate: a comment naming the init container (must pass)" pass \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/51-typryx.yaml", "      # Creates the stream file before typryx starts", "      # precreate-streams (invariant 59) creates the stream file before typryx starts")')"
 
 # A listing is not a run. Stop before the verdict, which would count cases this
 # listing did not take.

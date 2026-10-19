@@ -82,7 +82,9 @@ spec:
       # usable by a compromised container for discovery and SelfSubjectReview,
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
-      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      # supplementalGroups 10001: it reads the bus files, which the writers create in group 10001
+      # (CLAUDE.md invariant 59).
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, supplementalGroups: [10001], seccompProfile: { type: RuntimeDefault } }
       # Leave a dead node in 30 s, not the default 300 s. CLAUDE.md invariants 21
       # and 22: one replica, so the default would charge five minutes of outage
       # after the node is marked NotReady.

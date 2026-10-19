@@ -37,6 +37,9 @@ jobs:
       - name: every image is pinned by digest, and the admission policy is held to invariant 58
         run: ./scripts/verified-images-are-enforced.sh
 
+      - name: every stream file is created by its writer before it starts (invariant 59)
+        run: ./scripts/stream-files-are-precreated.sh
+
       - name: node names are pinned by the install, not by a boot
         run: ./scripts/node-name-is-pinned.sh
 

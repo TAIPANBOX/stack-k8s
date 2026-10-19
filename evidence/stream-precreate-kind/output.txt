@@ -1,0 +1,22 @@
+===== unfixed (ev-unfixed) =====
+seeded: one stream, second line's prev_hash is all zeros
+wardryx: Failed (exit 1)
+  wardryx: open events writer: event: open /var/lib/stack/events/wardryx.ndjson: event: /var/lib/stack/events/wardryx.ndjson does not exist and its directory is not owned by this process, so it is not created here
+agent-conform: phase Failed exit 2
+  agent-conform watch-dir: cannot open output: event: open /var/lib/stack/events/agent-conform.ndjson: event: /var/lib/stack/events/agent-conform.ndjson does not exist and its directory is not owned by this process, so it is not created here
+  FAIL tokenfuse.ndjson:2: chain break (prev_hash_mismatch), 1 break(s) in all; alert pending
+stack-events after both runs:
+  -rw-r--r--    1 10001    10001          542 Oct 19 04:10 tokenfuse.ndjson
+===== fixed (ev-fixed) =====
+seeded: one stream, second line's prev_hash is all zeros
+wardryx: Ready
+wardryx init (precreate-streams) log:
+  -rw-r-----    1 65532    10001            0 Oct 19 04:11 wardryx.ndjson
+agent-conform: phase Failed exit 1
+  FAIL tokenfuse.ndjson:2: chain break (prev_hash_mismatch), 1 break(s) in all; alert pending
+  agent-conform watch-dir: 3 stream(s), 1 new alert(s) written (1 chain_broken), 0 new checkpoint refusal(s)
+stack-events after both runs:
+  -rw-r-----    1 10002    10001          530 Oct 19 04:11 agent-conform.ndjson
+  -rw-r--r--    1 10002    10002          196 Oct 19 04:11 agent-conform.state.json
+  -rw-r--r--    1 10001    10001          542 Oct 19 04:11 tokenfuse.ndjson
+  -rw-r-----    1 65532    10001            0 Oct 19 04:11 wardryx.ndjson
