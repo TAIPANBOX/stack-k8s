@@ -292,6 +292,7 @@ fi
 . "$ROOT/lib/gen.sh" || die "no lib/gen.sh in $ROOT"
 . "$ROOT/lib/policy-store.sh" || die "no lib/policy-store.sh in $ROOT"
 . "$ROOT/lib/identity-mint.sh" || die "no lib/identity-mint.sh in $ROOT"
+. "$ROOT/lib/approver-mint.sh" || die "no lib/approver-mint.sh in $ROOT"
 . "$ROOT/lib/upstream-key.sh" || die "no lib/upstream-key.sh in $ROOT"
 
 # ---- the typed data mode, refused BEFORE anything is installed ---------------
@@ -756,6 +757,8 @@ say "client keys: the gateway answers no caller without one"
 vouchryx_mint_settle
 static_keys_settle
 identity_mint_settle "$ROOT/agent-key"
+# The console's approver key and wardryx's public copy (CLAUDE.md invariant 67), minted once, after the apply.
+approver_mint_settle
 
 # The run-budget ceiling, set AFTER the kustomization for the reason the trust domain is:
 # 10-planes.yaml declares TOKENFUSE_MAX_RUN_BUDGET_USD (5.00), and `apply -k` puts the

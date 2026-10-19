@@ -121,6 +121,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/costcrew-ceiling-is-set.sh # invariant 66
 ./scripts/workflow-checkouts-are-pinned.sh # invariant 68
 ./scripts/hub-add-site-reads-the-pinned-image.sh # hub/add-site.sh reads a pinned image reference
+./scripts/approver-key-is-minted.sh # invariant 67
 ./scripts/cost-live-refuses-unknown-rates.sh # invariant 44; GOTCHAS 127
 ./scripts/cluster-dns-has-a-budget.sh # invariant 45; GOTCHAS 128
 ./scripts/run-budget-ceiling-is-set.sh # invariant 28 (its flag half is deploy-flags-agree.sh)
@@ -1230,6 +1231,12 @@ an absent invariant.
 66. **The CostCrew run ceiling is a figure a person chose, validated before anything is installed and written after the last apply; the crew CronJob is suspended until an operator resumes it.** `@decided 2026-10-19` (paraphrased): the crew spends on an account outside the cluster, so its schedule is off by default and no deploy turns it on, and every run has a ceiling somebody chose. `@claude 2026-10-19`: `budget/costcrew-ceiling.sh` is the one copy of the validation (dollars, at most two decimals, above zero, the crew's own money grammar); the three launchers parse `--costcrew-ceiling`, validate it before the install, and write `COSTCREW_CEILING` to stack-wiring after the last `apply -k`; the crew reads the key without `optional`, so a pod with no figure does not start. The crew CronJob is `suspend: true` and is a manual job in components.json. The 2026-09-03 entry that un-suspended it stays as history, and the 2026-10-19 entry supersedes it.
 
     *(gate: `scripts/costcrew-ceiling-is-set.sh`, in both callers; `scripts/deploy-flags-agree.sh` holds the ordering of the flag, and `scripts/manifest-is-true.sh` holds the suspension. Nine teeth cases in `scripts/gates-have-teeth.sh`, among them a three-decimal figure accepted, zero accepted, a launcher that never writes the figure, the crew reading the key optionally, and the crew resumed; one pass case. Not covered: a live crew run under a ceiling, the first run of a resumed CronJob, and the console's own cadence ceiling, which is the other half of the guard.)*
+
+67. **An approval names the person who gave it: the console signs the statement, wardryx verifies it, and no bearer key decides a hold unless the operator switches that on.** `@decided 2026-10-19` (paraphrased, from the approval finding of the 2026-10-17 review). `@claude 2026-10-19`: `lib/approver-mint.sh` makes the console's P-256 key (PKCS#8) and wardryx's public JWK set once, creates both on stdin, never rewrites them, and refuses a half pair. The console reads the key from a read-only mount at mode 0440 (`GENARYX_APPROVER_KEY_FILE`), and wardryx reads the JWK set from a non-optional mount (`WARDRYX_APPROVER_JWKS`). wardryx runs v2.4.0, pinned by digest. `WARDRYX_ALLOW_KEY_APPROVALS` is set nowhere.
+
+    **Breakage, named:** until the console image built after genaryx#132 is pinned, the console sends no statement, so every grant and denial it makes is refused by wardryx (403 `approver_statement_required`) and the hold stays pending. The console pin stays at v1.1.46 for this release.
+
+    *(gate: `scripts/approver-key-is-minted.sh`, in both callers. Its static half reads the library, the three deploy paths, both manifests and every live file for the override; its behavioural half runs the mint against a stub kubectl over three starting states. Eleven teeth cases in `scripts/gates-have-teeth.sh`, among them an apply over the key, a SEC1 key, a non-P-256 curve, an optional console Secret, an optional JWK set, a cloud launcher that never mints, the override set, wardryx pinned before the statements, and a mint that rewrites a kept pair; one pass case. Scenarios: `features/the-approver-key-is-minted-once.feature`. Not covered: that wardryx v2.4.0's signature verifies (cosign is not installed here and installs are not allowed; the legacy `.sig` tag is present); that a live approval through the console is refused without a statement and granted with one; and that tokenfuse sends a fresh DPoP proof per decide, which v2.4.0 now requires.)*
 
 ## Decisions that have no gate yet
 

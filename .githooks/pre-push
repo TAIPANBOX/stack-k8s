@@ -95,6 +95,7 @@ step "the risk hold follows --typed-risk-signal (invariant 65)" "./scripts/risk-
 step "the CostCrew ceiling is validated and written after apply (invariant 66)" "./scripts/costcrew-ceiling-is-set.sh"
 step "every workflow checkout of another repository is a full commit (invariant 68)" "./scripts/workflow-checkouts-are-pinned.sh"
 step "hub/add-site.sh reads a digest-pinned tokenfuse-cloud image" "./scripts/hub-add-site-reads-the-pinned-image.sh"
+step "the console approver key is minted once and wardryx verifies with it (invariant 67)" "./scripts/approver-key-is-minted.sh"
 step "the teeth shards cover every case once" "./scripts/teeth-shards-cover-every-case.sh"
 
 echo

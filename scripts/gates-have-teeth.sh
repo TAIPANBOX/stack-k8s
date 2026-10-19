@@ -2926,8 +2926,8 @@ run_case "wardryx-key-is-pep: the migration writes the key on the command line" 
 
 run_case "wardryx-key-is-pep: a pin moves back to the old wardryx" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.3.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
-	"does not pin wardryx v2.3.0"
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.4.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
+	"does not pin wardryx v2.4.0"
 
 run_case "wardryx-key-is-pep: a reworded comment is not a fault" pass \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
@@ -3522,7 +3522,7 @@ run_case "verified-images: a policy's glob moved onto another repository's image
 	"covered by two policies"
 run_case "verified-images: a manifest names a TAIPANBOX image with no signer row" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.3.0@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.3.0@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.4.0@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.4.0@sha256:")')" \
 	"has no signer row in BINDINGS"
 run_case "verified-images: the default install stops turning admission on" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -3596,6 +3596,51 @@ run_case "verified-images: up.sh no longer applies the operator copy" fail \
 run_case "verified-images: a reason reworded (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres), an upstream image", "# reason: the policy store (postgres), an upstream image")')"
+
+# The console's approver key and wardryx's copy of its public half (CLAUDE.md invariant 67).
+run_case "approver: the mint applies over an existing key" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("lib/approver-mint.sh", "k_ \"-n $APPROVER_NS create -f -\"", "k_ \"-n $APPROVER_NS apply -f -\"")')" \
+	"runs \`apply\` on the approver objects"
+run_case "approver: the key is written as SEC1, not PKCS#8" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("lib/approver-mint.sh", "pkcs8 -topk8 -nocrypt -out", "ec -out")')" \
+	"does not write the key as unencrypted PKCS#8"
+run_case "approver: the curve is not P-256" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("lib/approver-mint.sh", "ecparam -name prime256v1", "ecparam -name secp384r1")')" \
+	"does not make a P-256 key"
+run_case "approver: the console reads the key from another path" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "value: \"/run/approver/approver.pem\"", "value: \"/run/other/approver.pem\"")')" \
+	"GENARYX_APPROVER_KEY_FILE is"
+run_case "approver: the console's approver Secret becomes optional" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "secret: \x7b secretName: console-approver-key, defaultMode: 0440 \x7d", "secret: \x7b secretName: console-approver-key, defaultMode: 0440, optional: true \x7d")')" \
+	"is not the Secret console-approver-key at mode 0440"
+run_case "approver: wardryx's JWK set becomes optional" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "configMap: \x7b name: wardryx-approver-jwks \x7d", "configMap: \x7b name: wardryx-approver-jwks, optional: true \x7d")')" \
+	"or it is optional"
+run_case "approver: a cloud launcher never mints the approver key" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\napprover_mint_settle\n", "\n")')" \
+	"never calls approver_mint_settle"
+run_case "approver: WARDRYX_ALLOW_KEY_APPROVALS is set on wardryx" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "value: \"/etc/wardryx/approver/approver-jwks.json\" \x7d\n", "value: \"/etc/wardryx/approver/approver-jwks.json\" \x7d\n            - \x7b name: WARDRYX_ALLOW_KEY_APPROVALS, value: \"1\" \x7d\n")')" \
+	"sets WARDRYX_ALLOW_KEY_APPROVALS"
+run_case "approver: wardryx is pinned before the approver statements" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.4.0@sha256:", "wardryx:v2.3.0@sha256:")')" \
+	"before the approver statements"
+run_case "approver: the mint rewrites a kept pair" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("lib/approver-mint.sh", "if [ \"$secret_there\" = yes ] && [ \"$cm_there\" = yes ]; then", "if false; then")')" \
+	"was not kept"
+run_case "approver: a comment reworded in the mint library (must pass)" pass \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("lib/approver-mint.sh", "# The console'"'"'s approver key, and wardryx'"'"'s copy", "# The console'"'"'s approver key, and the copy wardryx keeps")')"
 
 # hub/add-site.sh reads the Cloud's version from a pinned image reference (name:tag@sha256:<64 hex>).
 run_case "add-site: the reader takes the digest for the tag (the v1.5.3 defect)" fail \

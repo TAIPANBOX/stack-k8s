@@ -108,8 +108,8 @@ grep -q "printf '%s' \"\$WARDRYX_KEYS\" | awk" hub/add-site.sh \
   || fail "hub/add-site.sh migrates wardryx_keys with an awk that does not read stdin"
 
 # ---- D. the pins the key moves with -------------------------------------------------
-grep -q 'image: ghcr.io/taipanbox/wardryx:v2.3.0' manifests/10-planes.yaml \
-  || fail "manifests/10-planes.yaml does not pin wardryx v2.3.0"
+grep -q 'image: ghcr.io/taipanbox/wardryx:v2.4.0' manifests/10-planes.yaml \
+  || fail "manifests/10-planes.yaml does not pin wardryx v2.4.0"
 for old in 'wardryx:v1.5.0' 'wardryx:v2.0.0' 'tokenfuse:v1.14.0' 'tokenfuse:v1.15.0' 'costcrew:v0.6.0' 'vouchryx:v0.2.0' 'vouchryx:v0.3.0'; do
   if git grep -q -- "$old" -- manifests; then
     fail "manifests still name $old: $(git grep -n -- "$old" -- manifests | head -n 1 | cut -c1-120)"

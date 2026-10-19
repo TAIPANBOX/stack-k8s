@@ -135,11 +135,15 @@ spec:
             # switch. tunnel/up.sh issues the first device itself for exactly
             # this reason, before an operator can ever reach the browser.
             - { name: GENARYX_WEB_REQUIRE_PASSKEY, value: "1" }
+            # The approver key (CLAUDE.md invariant 67): the console signs the statement that names the person who
+            # approved a hold or a denial. A file, mounted from the Secret console-approver-key, never a variable.
+            - { name: GENARYX_APPROVER_KEY_FILE, value: "/run/approver/approver.pem" }
           ports: [{ name: http, containerPort: 7420 }]
           volumeMounts:
             - { name: state, mountPath: /var/lib/stack }
             - { name: events, mountPath: /var/lib/stack/events }
             - { name: environment, mountPath: /etc/genaryx/taipan/environments, readOnly: true }
+            - { name: approver, mountPath: /run/approver, readOnly: true }
           readinessProbe:
             httpGet: { path: /healthz, port: http }
             initialDelaySeconds: 3
@@ -178,6 +182,11 @@ spec:
                   name: stack-keys
                   optional: true
                   items: [{ key: k8s.keys.json, path: k8s.keys.json }]
+        # The approver key (CLAUDE.md invariant 67), minted once by lib/approver-mint.sh. Mode 0440 and the
+        # pod's fsGroup 10001 let the stack user read it (invariant 32). Not optional: the console cannot sign
+        # an approver statement without it, so a console with no key waits for the mint instead of starting blind.
+        - name: approver
+          secret: { secretName: console-approver-key, defaultMode: 0440 }
 ---
 apiVersion: v1
 kind: Service

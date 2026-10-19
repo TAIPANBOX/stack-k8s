@@ -361,6 +361,11 @@ jobs:
       - name: hub/add-site.sh reads a digest-pinned tokenfuse-cloud image
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/hub-add-site-reads-the-pinned-image.sh
 
+      # Added 2026-10-19 with invariant 67. The console's approver key is minted once; wardryx verifies
+      # the console's statements with its public half, and no bearer key decides a hold. See CLAUDE.md invariant 67.
+      - name: the console approver key is minted once and wardryx verifies with it (invariant 67)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/approver-key-is-minted.sh
+
       # Added 2026-10-14 with invariant 44. A cost report that meets a machine type with no
       # rate exits non-zero and names it, instead of counting it as zero. See GOTCHAS 127.
       - name: a cost report refuses an unknown machine rate (invariant 44)
