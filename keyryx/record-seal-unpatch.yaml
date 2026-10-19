@@ -1,0 +1,25 @@
+# Reverses keyryx/record-seal-patch.yaml (CLAUDE.md invariant 69): the signer, its custody URL and credential
+# file come off, and the consumer label with them. The credential volume stays, unused, because a strategic
+# patch can remove it but the mount is harmless without the signer; keyryx/down.sh and the opt-out say so.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: record-seal
+  namespace: agent-stack
+spec:
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            keyryx-consumer: null
+        spec:
+          containers:
+            - name: trailryx
+              env:
+                - name: TRAILRYX_SIGNER
+                  $patch: delete
+                - name: TRAILRYX_KEYRYX_URL
+                  $patch: delete
+                - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE
+                  $patch: delete

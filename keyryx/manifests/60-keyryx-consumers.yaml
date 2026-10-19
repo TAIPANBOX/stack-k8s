@@ -1,0 +1,20 @@
+# Egress from the pods that reach custody: wardryx (its approval signer) and the record-seal (its record
+# signer). Both carry the label keyryx-consumer: "true", which is also what custody's ingress admits
+# (59-keyryx.yaml). Applied by lib/keyryx-install.sh with the other Keyryx objects (CLAUDE.md invariant 69).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keyryx-consumer-egress
+  namespace: agent-stack
+spec:
+  podSelector:
+    matchLabels:
+      keyryx-consumer: "true"
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: keyryx-custody
+      ports:
+        - { protocol: TCP, port: 4340 }

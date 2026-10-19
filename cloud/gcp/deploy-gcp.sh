@@ -159,6 +159,8 @@ TRUST_DOMAIN="${TRUST_DOMAIN:-}"
 RUN_BUDGET_CEILING="${RUN_BUDGET_CEILING:-}"
 # The CostCrew run ceiling, COSTCREW_CEILING in stack-wiring (CLAUDE.md invariant 66). No default ships.
 COSTCREW_CEILING_ARG="${COSTCREW_CEILING_ARG:-}"
+# Keyryx is part of every install (CLAUDE.md invariant 69). 0 turns its wiring off: the weaker setting.
+KEYRYX_INSTALL="${KEYRYX_INSTALL:-1}"
 # The agent firewall's mode on the gateway (TokenFuse invariants 25 to 27 and 93, CLAUDE.md
 # invariant 37). Empty leaves 10-planes.yaml's enforce. Set, it is checked by firewall/mode.sh
 # before anything is installed and applied AFTER the kustomization, the only position where it
@@ -207,6 +209,7 @@ while [ $# -gt 0 ]; do
     --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --run-budget-ceiling) RUN_BUDGET_CEILING="$2"; shift 2 ;;
     --costcrew-ceiling)   COSTCREW_CEILING_ARG="$2"; shift 2 ;;
+    --without-keyryx)     KEYRYX_INSTALL=0; shift ;;
     --firewall) FIREWALL_MODE="$2"; shift 2 ;;
     --pii-mode) PII_MODE="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
@@ -370,6 +373,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 . "$ROOT/lib/policy-store.sh" || die "no lib/policy-store.sh in $ROOT"
 . "$ROOT/lib/identity-mint.sh" || die "no lib/identity-mint.sh in $ROOT"
 . "$ROOT/lib/approver-mint.sh" || die "no lib/approver-mint.sh in $ROOT"
+. "$ROOT/lib/keyryx-install.sh" || die "no lib/keyryx-install.sh in $ROOT"
 . "$ROOT/lib/upstream-key.sh" || die "no lib/upstream-key.sh in $ROOT"
 
 # ---- the typed data mode, refused BEFORE anything is installed ---------------
@@ -772,6 +776,12 @@ static_keys_settle
 identity_mint_settle "$ROOT/agent-key"
 # The console's approver key and wardryx's public copy (CLAUDE.md invariant 67), minted once, after the apply.
 approver_mint_settle
+# Keyryx (CLAUDE.md invariant 69): on by default. --without-keyryx removes its wiring, which is the weaker setting.
+if [ "$KEYRYX_INSTALL" = 1 ]; then
+  keyryx_install_settle
+else
+  keyryx_remove_settle
+fi
 
 # The run-budget ceiling, set AFTER the kustomization for the reason the trust domain is:
 # 10-planes.yaml declares TOKENFUSE_MAX_RUN_BUDGET_USD (5.00), and `apply -k` puts the

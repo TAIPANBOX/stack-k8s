@@ -122,6 +122,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/workflow-checkouts-are-pinned.sh # invariant 68
 ./scripts/hub-add-site-reads-the-pinned-image.sh # hub/add-site.sh reads a pinned image reference
 ./scripts/approver-key-is-minted.sh # invariant 67
+./scripts/keyryx-is-default.sh # invariant 69
 ./scripts/cost-live-refuses-unknown-rates.sh # invariant 44; GOTCHAS 127
 ./scripts/cluster-dns-has-a-budget.sh # invariant 45; GOTCHAS 128
 ./scripts/run-budget-ceiling-is-set.sh # invariant 28 (its flag half is deploy-flags-agree.sh)
@@ -1237,6 +1238,12 @@ an absent invariant.
     **Breakage, named:** until the console image built after genaryx#132 is pinned, the console sends no statement, so every grant and denial it makes is refused by wardryx (403 `approver_statement_required`) and the hold stays pending. The console pin stays at v1.1.46 for this release.
 
     *(gate: `scripts/approver-key-is-minted.sh`, in both callers. Its static half reads the library, the three deploy paths, both manifests and every live file for the override; its behavioural half runs the mint against a stub kubectl over three starting states. Eleven teeth cases in `scripts/gates-have-teeth.sh`, among them an apply over the key, a SEC1 key, a non-P-256 curve, an optional console Secret, an optional JWK set, a cloud launcher that never mints, the override set, wardryx pinned before the statements, and a mint that rewrites a kept pair; one pass case. Scenarios: `features/the-approver-key-is-minted-once.feature`. Not covered: that wardryx v2.4.0's signature verifies (cosign is not installed here and installs are not allowed; the legacy `.sig` tag is present); that a live approval through the console is refused without a statement and granted with one; and that tokenfuse sends a fresh DPoP proof per decide, which v2.4.0 now requires.)*
+
+69. **Keyryx is installed by default in every launcher: custody holds the record's signing key, the witness reads the record, wardryx signs its approvals through custody, and the record-seal signs each root through custody. `--without-keyryx` removes that wiring, which is the weaker setting.** `@decided 2026-10-19` (paraphrased, the widening of the hybrid architecture): custody and the witness are part of every install, not an opt-in. `@claude 2026-10-19`: `lib/keyryx-install.sh` mints the two root keys and the two consumer bearers once, applies the policy (keys `trailryx-root` and `wardryx-approval`; consumers `wardryx` and `trailryx-node`, each by digest) and `keyryx/manifests/59` and `60`, patches wardryx and the record-seal after the last apply, and rolls them out. The wardryx patches pin the manifest's wardryx image, so a patch never rolls wardryx back. The record-seal sets `TRAILRYX_SIGNER=keyryx`, the custody URL and the consumer credential file. It does not set `TRAILRYX_WITNESS_ATTESTATIONS`, because keyryx v0.1.1 writes no attestation. The witness reads the shared stream directory through `KEYRYX_WITNESS_EVENTS`, the name keyryx's source reads.
+
+    **TODO(trailryx-kid):** the trailryx pin, `TRAILRYX_KEYRYX_KID` (trailryx#112), is not released. Until it is, record-seal takes Keyryx's key from the JWKS it fetches, unpinned.
+
+    *(gate: `scripts/keyryx-is-default.sh`, in both callers; eleven teeth cases and one pass case in `scripts/gates-have-teeth.sh`. Not covered: a Keyryx install on a live cluster, the record-seal's first signed seal, the CNI's enforcement of the consumer egress, and wardryx v2.4.0 running with the Keyryx approval signer, which its release notes do not cover.)*
 
 ## Decisions that have no gate yet
 

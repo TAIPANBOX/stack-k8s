@@ -1,0 +1,41 @@
+# The record-seal CronJob signs each sealed root through Keyryx (CLAUDE.md invariant 69). Applied by
+# lib/keyryx-install.sh with `kubectl patch --type strategic`, after `apply -k`: a patch leaves the
+# last-applied annotation alone, so the default manifests/40-routines-and-secrets.yaml stays what the
+# default install applies (invariant 24's mechanism). keyryx_remove_settle reverses the signer and the label.
+#
+# TRAILRYX_KEYRYX_KID, the pin of Keyryx's key, is NOT here: trailryx#112 is not released (TODO in the library).
+# TRAILRYX_WITNESS_ATTESTATIONS is not here either: keyryx v0.1.1 writes no attestation for it to file.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: record-seal
+  namespace: agent-stack
+spec:
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            keyryx-consumer: "true"
+        spec:
+          containers:
+            - name: trailryx
+              env:
+                - name: TRAILRYX_SIGNER
+                  value: keyryx
+                - name: TRAILRYX_KEYRYX_URL
+                  value: http://keyryx-custody.agent-stack.svc.cluster.local:4340
+                - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE
+                  value: /run/keyryx-client/credential
+              volumeMounts:
+                - name: keyryx-client
+                  mountPath: /run/keyryx-client
+                  readOnly: true
+          volumes:
+            - name: keyryx-client
+              secret:
+                secretName: keyryx-trailryx-client
+                defaultMode: 0440
+                items:
+                  - key: credential
+                    path: credential

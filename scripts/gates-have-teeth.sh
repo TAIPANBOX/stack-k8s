@@ -3597,6 +3597,59 @@ run_case "verified-images: a reason reworded (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres), an upstream image", "# reason: the policy store (postgres), an upstream image")')"
 
+# Keyryx is installed by default in every launcher, with --without-keyryx as the weaker opt-out (CLAUDE.md invariant 69).
+run_case "keyryx: Keyryx is off by default in deploy.sh" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("deploy.sh", "KEYRYX_INSTALL=\"$\x7bKEYRYX_INSTALL:-1\x7d\"", "KEYRYX_INSTALL=\"$\x7bKEYRYX_INSTALL:-0\x7d\"")')" \
+	"deploy.sh does not default KEYRYX_INSTALL to 1"
+run_case "keyryx: the opt-out flag is not parsed by the GCP launcher" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "    --without-keyryx)     KEYRYX_INSTALL=0; shift ;;\n", "")')" \
+	"does not parse --without-keyryx"
+run_case "keyryx: the install runs before the apply in deploy.sh" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("deploy.sh", ". \"$ROOT/lib/keyryx-install.sh\" || die \"no lib/keyryx-install.sh in $ROOT\"\n", ". \"$ROOT/lib/keyryx-install.sh\" || die \"no lib/keyryx-install.sh in $ROOT\"\nkeyryx_install_settle\n")')" \
+	"installs Keyryx before its last apply -k"
+run_case "keyryx: the record-seal stops signing through keyryx" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "value: keyryx\n", "value: keyrx\n")')" \
+	"does not set TRAILRYX_SIGNER=keyryx"
+run_case "keyryx: the record-seal pod is not labelled a consumer" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "keyryx-consumer: \"true\"", "keyryx-consumer: \"false\"")')" \
+	"does not label the pod keyryx-consumer"
+run_case "keyryx: the record-seal is given an attestation directory with no writer" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "value: /run/keyryx-client/credential\n", "value: /run/keyryx-client/credential\n                - name: TRAILRYX_WITNESS_ATTESTATIONS\n                  value: /var/lib/stack/attest\n")')" \
+	"sets TRAILRYX_WITNESS_ATTESTATIONS, which has no writer"
+run_case "keyryx: the custody policy grants trailryx nothing" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("keyryx/policy.json.tmpl", "\"grants\": \x7b\"trailryx-root\": [\"sign\"]\x7d", "\"grants\": \x7b\x7d")')" \
+	"does not grant trailryx-node the sign operation"
+run_case "keyryx: the wardryx patch rolls wardryx back to v2.3.0" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("keyryx/wardryx-patch.yaml", "ghcr.io/taipanbox/wardryx:v2.4.0@sha256:8a110dec235fd81c3907ed769d2c31a8e095767fbae4fa29316631eff5228e97", "ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543")')" \
+	"would roll wardryx back"
+run_case "keyryx: the witness is pointed at no stream directory" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "KEYRYX_WITNESS_EVENTS", "KEYRYX_WITNESS_EVENTSX")')" \
+	"does not point the witness at the shared stream directory"
+run_case "keyryx: the opt-out never removes the signers" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("deploy.sh", "  keyryx_remove_settle\n", "  true\n")')" \
+	"never calls keyryx_remove_settle"
+run_case "keyryx: the trailryx pin TODO is dropped from the library" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "TODO(trailryx-kid)", "TODO(kid)")')" \
+	"does not name the trailryx pin as a TODO"
+run_case "keyryx: the library sets the attestation variable" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "  keyryx_patch_record_seal\n  printf", "  keyryx_patch_record_seal\n  export TRAILRYX_WITNESS_ATTESTATIONS=/x\n  printf")')" \
+	"sets TRAILRYX_WITNESS_ATTESTATIONS, which keyryx v0.1.1 never writes"
+run_case "keyryx: a comment reworded in the library (must pass)" pass \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "# Keyryx, installed by default:", "# Keyryx, on by default:")')"
+
 # The console's approver key and wardryx's copy of its public half (CLAUDE.md invariant 67).
 run_case "approver: the mint applies over an existing key" fail \
 	'./scripts/approver-key-is-minted.sh' \
