@@ -12,7 +12,8 @@
 #      validates it with budget/costcrew-ceiling.sh BEFORE the first install step, and writes COSTCREW_CEILING
 #      to stack-wiring AFTER its last `apply -k`, inside a guard on the value.
 #   3. manifests/49-costcrew.yaml reads COSTCREW_CEILING from stack-wiring WITHOUT `optional`, so a crew pod
-#      with no ceiling does not start, and sets the CronJob suspended (its schedule is an operator's act).
+#      with no ceiling does not start, and runs the CronJob on its schedule (suspend: false, the 2026-09-03
+#      decision; cadence bounds it at run time).
 #
 # The flag's ordering against the kustomization is held by scripts/deploy-flags-agree.sh (a row in its table).
 #
@@ -79,13 +80,27 @@ else
   if ! printf '%s\n' "$live" | grep -qE 'configMapKeyRef: \{ name: stack-wiring, key: COSTCREW_CEILING \}'; then
     bad "$M49 does not read COSTCREW_CEILING from stack-wiring, or reads it optionally (no default ships; the pod must not start without a figure)"
   fi
-  if ! printf '%s\n' "$live" | grep -qE '^[[:space:]]*suspend:[[:space:]]*true[[:space:]]*$'; then
-    bad "$M49 does not set the CronJob suspended (item 7 of the 2026-10-19 wave; see components.json manual_jobs)"
+  # The crew runs on its schedule (the 2026-09-03 decision); the cadence switch and the ceiling bound it.
+  if ! printf '%s\n' "$live" | grep -qE '^[[:space:]]*suspend:[[:space:]]*false[[:space:]]*$'; then
+    bad "$M49 does not run the crew on its schedule: the CronJob must set suspend: false (the 2026-09-03 decision)"
   fi
 fi
+
+# The text the launchers, the README and CLAUDE.md print about the crew must agree with the manifest. A line
+# saying the crew ships, stays or is suspended is stale while the manifest runs it.
+for f in cloud/gcp/deploy-gcp.sh cloud/aws/deploy-aws.sh README.md CLAUDE.md; do
+  if [ ! -f "$f" ]; then
+    bad "$f is absent: its CostCrew text is measured NOTHING"
+    continue
+  fi
+  stale=$(grep -n -i -E '(ships|stays|is|are) (\*\*)?suspended(\*\*)?' "$f" || true)
+  if [ -n "$stale" ]; then
+    bad "$f says the crew is suspended, but manifests/49-costcrew.yaml runs it on its schedule: $(printf '%s' "$stale" | head -1 | cut -c1-120)"
+  fi
+done
 
 if [ "$fail" -gt 0 ]; then
   printf '%d problem(s). See CLAUDE.md invariant 66.\n' "$fail"
   exit 1
 fi
-echo "OK: the CostCrew ceiling is validated before anything is installed in all three launchers, written after the last apply -k, and read by the crew without a default; the crew CronJob is suspended."
+echo "OK: the CostCrew ceiling is validated before anything is installed in all three launchers, written after the last apply -k, and read by the crew without a default; the crew CronJob runs on its schedule."

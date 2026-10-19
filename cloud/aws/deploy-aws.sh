@@ -51,9 +51,8 @@
 # `--with-finops` additionally builds and applies CostCrew, the finops plane:
 # the bill, worked by a crew of agents. It is off by default because it is a
 # whole plane somebody may not want, not because it is dangerous. The half of
-# it that CAN spend on a model account ships suspended, so this flag applies a
-# console and starts no meter; see manifests/49-costcrew.yaml for how to run
-# the crew deliberately afterwards.
+# it that CAN spend on a model account runs on its schedule, bounded by
+# --costcrew-ceiling and the console's cadence switch; see manifests/49-costcrew.yaml.
 #
 # `--with-typed` additionally applies typryx, the typed-answer plane: it answers a
 # typed question (a choice, a score, a yes or no) with a probability, and
@@ -125,8 +124,9 @@ esac
 ALERT_CONSOLE_DEFAULT="http://localhost:17420"
 ALERT_CONSOLE_URL="${ALERT_CONSOLE_URL:-}"
 # The finops plane, off by default. It is a whole plane somebody may simply not
-# want, and the half of it that can spend money ships suspended, so the flag
-# carries the plane and never the spending. See manifests/49-costcrew.yaml.
+# want, and the half of it that can spend money runs only once cadence is on and a
+# ceiling is set (--costcrew-ceiling), so the flag carries the plane and the spending
+# stays off until then. See manifests/49-costcrew.yaml.
 WITH_FINOPS="${WITH_FINOPS:-0}"
 # The typed-answer plane, off by default: a whole plane somebody may simply
 # not want. Unlike WITH_FINOPS nothing behind it can spend money.
@@ -792,10 +792,10 @@ fi
 
 # The finops plane, applied from its own file for the same reason heraldyx and
 # scopyx are: it is not in the kustomization, so it arrives only when somebody
-# asked for it. Its crew CronJob ships suspended, so this applies a plane and
-# starts no spending.
+# asked for it. Its crew CronJob runs on its schedule, and each run does nothing until
+# cadence is on, so this applies a plane and starts no spending.
 if [ "$WITH_FINOPS" = 1 ]; then
-  say "finops: applying the CostCrew plane (its crew stays suspended)"
+  say "finops: applying the CostCrew plane (its crew runs on its schedule, bounded by --costcrew-ceiling)"
   k_ "apply -f /root/stack-k8s/manifests/49-costcrew.yaml"
 fi
 

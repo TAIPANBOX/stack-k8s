@@ -222,15 +222,15 @@ spec:
 #   kubectl -n agent-stack exec deploy/costcrew -- \
 #     costcrew -data /var/lib/costcrew -set-password ops:<a real password>
 ---
-# The crew CronJob ships SUSPENDED (`@decided 2026-10-19`, paraphrased). It spends on an account
-# outside the cluster, so the default is that it does not fire at all. Turning the schedule on is an
-# operator's act: `kubectl -n agent-stack patch cronjob costcrew-crew -p '{"spec":{"suspend":false}}'`.
-# A deploy that applies this file sets suspend back to true, so the schedule is never on by accident.
-# The console's cadence switch stays the inner guard once the schedule is on: `-due` refuses anything
-# but cadence-due work, and refuses it with exit 2 unless a person has switched cadence ON at the
-# console's own /cadence page (a settings row, `cadence.enabled`, default OFF). Firing is not spending,
-# and `-due` is what stands between the two. Components.json holds this as a manual job (invariant 13).
-# A hand-run job (below) goes through the same two switches.
+# The crew, running for real, daily. Not suspended: it fires on the schedule
+# below every day. Firing is not spending, and `-due` is what stands between
+# the two: the runner refuses anything but cadence-due work, and refuses it
+# with exit 2 unless a person has switched cadence ON for real, at the
+# console's own /cadence page (a settings row, `cadence.enabled`, default
+# OFF). A run that fires while that switch is off exits 2, "nothing to do,
+# by design", not a failure, and creates nothing: no draft, no spend, nothing
+# for a person to clean up. Until somebody visits /cadence and turns it on,
+# this CronJob is a clock ticking against a closed door.
 #
 # Once cadence is on, the ceiling is the SMALLER of two numbers: the
 # `-ceiling` this manifest passes below and the console's own
@@ -268,10 +268,10 @@ metadata:
   name: costcrew-crew
   namespace: agent-stack
 spec:
-  suspend: true
+  suspend: false
   # 5:57, spaced away from the four governance routines (3:17, 3:57, 4:42,
-  # 5:27) so this and the seal never collide. Suspended: the time it names
-  # fires nothing until an operator resumes the job (see the comment above).
+  # 5:27) so this and the seal never collide. The time this fires spends
+  # nothing by itself: cadence, set at /cadence, is what decides that.
   schedule: "57 5 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3

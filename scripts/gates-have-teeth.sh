@@ -3684,7 +3684,7 @@ run_case "workflow-checkouts: a comment reworded in the workflow (must pass)" pa
 	'./scripts/workflow-checkouts-are-pinned.sh' \
 	"$(py 'edit(".github/workflows/console-image.yml", "# The commits this image is built from, in one place", "# The commits this image is built from, pinned in one place")')"
 
-# The CostCrew run ceiling and the crew's suspension (CLAUDE.md invariant 66). No default ships, the
+# The CostCrew run ceiling and the crew's schedule (CLAUDE.md invariant 66). No default ships, the
 # figure is validated before anything is installed, and the crew CronJob is suspended until an operator resumes it.
 run_case "costcrew-ceiling: the validator accepts three decimals" fail \
 	'./scripts/costcrew-ceiling-is-set.sh' \
@@ -3706,14 +3706,18 @@ run_case "costcrew-ceiling: the crew reads the ceiling optionally" fail \
 	'./scripts/costcrew-ceiling-is-set.sh' \
 	"$(py 'edit("manifests/49-costcrew.yaml", "configMapKeyRef: \x7b name: stack-wiring, key: COSTCREW_CEILING \x7d", "configMapKeyRef: \x7b name: stack-wiring, key: COSTCREW_CEILING, optional: true \x7d")')" \
 	"or reads it optionally"
-run_case "costcrew-ceiling: the crew CronJob is resumed" fail \
+run_case "costcrew-ceiling: the crew CronJob is suspended" fail \
 	'./scripts/costcrew-ceiling-is-set.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "  suspend: true\n", "  suspend: false\n")')" \
-	"does not set the CronJob suspended"
-run_case "costcrew-ceiling: the crew CronJob is resumed while components.json calls it manual" fail \
-	'./scripts/manifest-is-true.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "  suspend: true\n", "  suspend: false\n")')" \
-	"does not set \`suspend: true\`"
+	"$(py 'edit("manifests/49-costcrew.yaml", "  suspend: false\n", "  suspend: true\n")')" \
+	"does not run the crew on its schedule"
+run_case "costcrew-ceiling: a launcher says the crew ships suspended" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "runs on its schedule, bounded by", "ships suspended, bounded by")')" \
+	"says the crew is suspended"
+run_case "costcrew-ceiling: the README says the crew is suspended" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("README.md", "runs every day at 05:57", "is suspended and runs every day at 05:57")')" \
+	"README.md says the crew is suspended"
 run_case "costcrew-ceiling: deploy.sh stops parsing the flag" fail \
 	'./scripts/deploy-flags-agree.sh' \
 	"$(py 'edit("deploy.sh", "    --costcrew-ceiling)   COSTCREW_CEILING_ARG=\"$2\"; shift 2 ;;\n", "")')" \
