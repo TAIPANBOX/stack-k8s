@@ -3802,6 +3802,11 @@ run_case "hostkeys-are-verified: any program's prefix is removed" fail \
 	"$(py 'edit("lib/hostkeys.sh", "[0-9]{2}:[0-9]{2}:[0-9]{2} cloud-init: //", "[0-9]{2}:[0-9]{2}:[0-9]{2} [a-z-]+: //")')" \
 	"D3 foreign prefix"
 
+run_case "hostkeys-are-verified: the gcloud json shape is not read" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("lib/hostkeys.sh", "        if node.get(\"namespace\") == \"hostkeys\" and", "        if False and")')" \
+	"E2 gcloud json shape"
+
 run_case "hostkeys-are-verified: GCE nodes without guest attributes" fail \
 	'./scripts/hostkeys-are-verified.sh' \
 	"$(py 'edit("cloud/gcp/main.tf", "    enable-guest-attributes = \"TRUE\"\n", "")')" \

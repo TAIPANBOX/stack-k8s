@@ -36,8 +36,18 @@ hostkeys_gcp_lines() {
   python3 -c '
 import json, re, sys
 KEY = re.compile(r"^(ssh-ed25519|ssh-rsa|ssh-dss|ecdsa-sha2-nistp(256|384|521))\s+([A-Za-z0-9+/=]+)")
+KEYTYPE = re.compile(r"^(ssh-ed25519|ssh-rsa|ssh-dss|ecdsa-sha2-nistp(256|384|521))$")
+B64 = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
 def walk(node):
     if isinstance(node, dict):
+        # What gcloud --format=json prints for each attribute (measured live 2026-10-19,
+        # GOTCHAS 147): {"namespace": "hostkeys", "key": "<type>", "value": "<base64>"}.
+        # The type is the key and the base64 the value, so neither is a full key line.
+        k, v = node.get("key"), node.get("value")
+        if node.get("namespace") == "hostkeys" and isinstance(k, str) and isinstance(v, str):
+            if KEYTYPE.match(k) and B64.match(v.strip()):
+                yield f"{k} {v.strip()}"
+                return
         for v in node.values():
             yield from walk(v)
     elif isinstance(node, list):

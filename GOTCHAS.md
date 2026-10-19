@@ -4671,3 +4671,9 @@ Gate: `scripts/hostkeys-are-verified.sh` cases D2 (the live shape is read) and D
 
 Fixed: `enable-guest-attributes = "TRUE"` in the node metadata. Gate: `scripts/hostkeys-are-verified.sh` case N, which counts the instance resources in `cloud/gcp/main.tf` and requires the key on each; one teeth case.
 
+## 147. gcloud prints each guest attribute as an object whose key is the key type, and the GCE parser looked only for whole key lines
+
+**Ours, and fixed.** With guest attributes on (GOTCHAS 146), the second live GCP deploy of 2026-10-19 still refused all three nodes with "no SSH host keys in the guest attributes", although `get-guest-attributes --query-path=hostkeys/` now listed three keys per node. `gcloud ... --format=json` prints a list of objects `{"namespace": "hostkeys", "key": "ssh-ed25519", "value": "<base64>"}`: the type is the key and the base64 is the value. The parser was written from the documented API shape and matched only strings that are a whole `type base64` line, so it found none. The refusal was the safe outcome: nothing was connected to.
+
+Fixed: `hostkeys_gcp_lines` also reads an object in the `hostkeys` namespace whose key is a known SSH key type and whose value is base64 only, as `type base64`. The third deploy passed the host key step on all three nodes with nine key lines. Gate: `scripts/hostkeys-are-verified.sh` case E2, red first on the old parser with the live run's own refusal text; one teeth case.
+

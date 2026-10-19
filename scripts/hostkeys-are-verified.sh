@@ -32,6 +32,8 @@
 #      not read, so the node is refused.
 #   E  GCE, the guest attributes carry the keys: written, and a strict connection
 #      succeeds.
+#   E2 GCE, the attributes in the shape gcloud --format=json prints them (the type as
+#      the key, the base64 as the value): written.
 #   F  GCE, no guest attributes: refused at the deadline with the reason named.
 #   G  install.sh: with SSH_KNOWN_HOSTS its first ssh is strict against that file;
 #      without it, accept-new, and the accepted key is printed with how to pin it.
@@ -176,6 +178,12 @@ helper hostkeys_populate_gcp "$T/kh-e" "$IP" >"$T/out-e" 2>&1; rc=$?
 if [ "$rc" = 0 ] && grep -qF "$K1_LINE" "$T/kh-e"; then pass "E  GCE guest-attribute keys are written"; else bad "E  GCE keys: rc=$rc, $(cat "$T/out-e")"; fi
 printf '%s\n' "$K1_LINE" > "$T/present"
 strict_ssh "$T/kh-e" >/dev/null 2>&1 && pass "E  a strict connection to that node succeeds" || bad "E  a strict connection to the GCE node was refused"
+
+# ---- E2: GCE, the gcloud --format=json shape (type as key, base64 as value) ------------
+printf '%s\n' '[{"key":"'"$(cut -d' ' -f1 "$T/keys/k1.pub")"'","namespace":"hostkeys","value":"'"$(cut -d' ' -f2 "$T/keys/k1.pub")"'"}]' > "$T/guest"
+: > "$T/kh-e2"
+helper hostkeys_populate_gcp "$T/kh-e2" "$IP" >"$T/out-e2" 2>&1; rc=$?
+if [ "$rc" = 0 ] && grep -qF "$K1_LINE" "$T/kh-e2"; then pass "E2 GCE keys in the gcloud json shape are written"; else bad "E2 gcloud json shape: rc=$rc, $(cat "$T/out-e2")"; fi
 
 # ---- F: GCE, no guest attributes ------------------------------------------------------
 printf '{}\n' > "$T/guest"; : > "$T/kh-f"; start=$(date +%s)

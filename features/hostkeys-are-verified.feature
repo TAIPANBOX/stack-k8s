@@ -42,6 +42,12 @@ Feature: a node's host key is verified before the first connection
     Then that node has guest attributes turned on, so its guest agent publishes the host keys
     # -> hostkeys-are-verified.sh case N
 
+  Scenario: GCE keys in the shape gcloud prints them are read
+    Given guest attributes listed as objects whose key is the key type and whose value is the base64
+    When the installer reads them
+    Then each node's keys are written as type and base64
+    # -> hostkeys-are-verified.sh case E2
+
   Scenario: GCE keys come from the guest attributes through the API
     Given a GCE instance whose guest agent published its host keys
     When the installer reads the guest attributes
