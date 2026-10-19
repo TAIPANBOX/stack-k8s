@@ -179,7 +179,16 @@ spec:
       # against the key set vouchryx serves, so the gateway fetches that set before it starts, into a memory
       # volume, and waits if vouchryx is not up yet. Public material, one connection, admitted by the
       # NetworkPolicy in 54-delegation.yaml from this pod alone. The same key set is what wardryx polls (invariant 63).
+      #
+      # precreate-streams (CLAUDE.md invariant 59, GOTCHAS 150): idryx loads tokenfuse.ndjson at start, and the
+      # gateway creates that file only on its first call. Made here, by the gateway's own uid, mode 0640 in the
+      # bus group, so idryx starts and reads an empty stream on a quiet cluster. Only when absent.
       initContainers:
+        - name: precreate-streams
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "f=/var/lib/stack/events/tokenfuse.ndjson; if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; ls -ln /var/lib/stack/events"]
+          volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
         - name: fetch-vouchryx-jwks
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
           securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }

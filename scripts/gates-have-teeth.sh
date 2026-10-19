@@ -3587,10 +3587,33 @@ run_case "verified-images: a reason reworded (must pass)" pass \
 
 # Stream files are precreated (CLAUDE.md invariant 59, GOTCHAS 135). A writer that refuses to start
 # on a root-owned volume is the failure; each case below takes one property the gate judges away.
+#
+# 10-planes.yaml now holds two precreate-streams inits (wardryx and the tokenfuse gateway, GOTCHAS 150),
+# so the cases that edit one of them find it by the file its command creates, not by the first match.
 run_case "stream-precreate: wardryx loses its init container" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "- name: precreate-streams", "- name: precreate-streams-off")')" \
+	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/wardryx.ndjson"); j = s.rindex("- name: precreate-streams", 0, i); open("manifests/10-planes.yaml", "w").write(s[:j] + "- name: precreate-streams-off" + s[j + len("- name: precreate-streams"):])')" \
 	"Deployment wardryx -> /var/lib/stack/events/wardryx.ndjson: no precreate-streams"
+run_case "stream-precreate: tokenfuse-gateway loses its init container" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/tokenfuse.ndjson"); j = s.rindex("- name: precreate-streams", 0, i); open("manifests/10-planes.yaml", "w").write(s[:j] + "- name: precreate-streams-off" + s[j + len("- name: precreate-streams"):])')" \
+	"Deployment tokenfuse-gateway -> /var/lib/stack/events/tokenfuse.ndjson: no precreate-streams"
+run_case "stream-precreate: the gateway's init creates a file idryx does not load" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "f=/var/lib/stack/events/tokenfuse.ndjson;", "f=/var/lib/stack/events/tokenfuse-x.ndjson;")')" \
+	"does not create /var/lib/stack/events/tokenfuse.ndjson"
+run_case "stream-precreate: the gateway's init runs as root" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/tokenfuse.ndjson"); j = s.rindex("runAsUser: 10001", 0, i); open("manifests/10-planes.yaml", "w").write(s[:j] + "runAsUser: 0" + s[j + len("runAsUser: 10001"):])')" \
+	"the init container runs as root"
+run_case "stream-precreate: the gateway's init creates the file in another group" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/tokenfuse.ndjson"); j = s.rindex("runAsGroup: 10001", 0, i); open("manifests/10-planes.yaml", "w").write(s[:j] + "runAsGroup: 65532" + s[j + len("runAsGroup: 10001"):])')" \
+	"does not create the file in group 10001"
+run_case "stream-precreate: the gateway's init leaves the file group-readable (umask 022)" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/tokenfuse.ndjson"); j = s.index("umask 027", i); open("manifests/10-planes.yaml", "w").write(s[:j] + "umask 022" + s[j + len("umask 027"):])')" \
+	"does not set the file to 0640"
 run_case "stream-precreate: heraldyx loses the init that creates its journal" fail \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/45-heraldyx.yaml", "- name: precreate-streams", "- name: precreate-streams-off")')" \
@@ -3629,7 +3652,7 @@ run_case "stream-precreate: the init mounts a different volume than the file liv
 	"does not mount the volume journal"
 run_case "stream-precreate: the init image is not pinned by digest" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "- name: precreate-streams\n          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e", "- name: precreate-streams\n          image: busybox:1.36")')" \
+	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/wardryx.ndjson"); j = s.rindex("image: busybox@sha256:", 0, i); k = s.index("\n", j); open("manifests/10-planes.yaml", "w").write(s[:j] + "image: busybox:1.36" + s[k:])')" \
 	"does not run busybox by digest"
 run_case "stream-precreate: the object the table names is renamed away" fail \
 	'./scripts/stream-files-are-precreated.sh' \

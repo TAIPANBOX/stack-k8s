@@ -56,6 +56,11 @@ WRITERS = [
     ("54-delegation.yaml", "Deployment", "vouchryx", "/var/lib/stack/delegation/revocations.ndjson", 65532, 10001, "delegation-state"),
     ("49-costcrew.yaml", "Deployment", "costcrew", "/var/lib/stack/events/costcrew.ndjson", 65532, 10001, "events"),
     ("49-costcrew.yaml", "CronJob", "costcrew-crew", "/var/lib/stack/events/costcrew.ndjson", 65532, 10001, "events"),
+    # The gateway is the Rust tokenfuse binary, not a Go writer, but the same failure applies: idryx
+    # loads tokenfuse.ndjson at start (`--load tokenfuse:...`), and the file only appears on the
+    # first call through the gateway. With no traffic yet, idryx exits on "no such file" and
+    # restarts (GOTCHAS 150). The gateway runs as the same uid it creates the file as, 10001.
+    ("10-planes.yaml", "Deployment", "tokenfuse-gateway", "/var/lib/stack/events/tokenfuse.ndjson", 10001, 10001, "events"),
     # heraldyx opens its own dispatch journal on its state volume with the same writer, so a fresh
     # volume (no file yet, root-owned directory) cannot open its journal without this, and runs
     # on with no record of what it sent (GOTCHAS 136).

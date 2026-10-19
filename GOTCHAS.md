@@ -4691,3 +4691,11 @@ Fixed: `hostkeys_console_fingerprints` removes every carriage return before anyt
 
 Fixed in the three installers: the name is read into `AGENT_NAME` before the pipeline, and each agent is waited for by that name, with a stop after 200 s that says it did not register. Gate: `scripts/stdin-is-read-once.sh`, red first on the unfixed tree with six problems; five teeth cases.
 
+
+## 150. idryx loads tokenfuse.ndjson at start, but the gateway creates that file only on its first call, so idryx restarted until traffic arrived
+
+**Ours, and fixed.** On the GCP live run of 2026-10-19, idryx restarted three times with `read tokenfuse.ndjson: no such file` while the rest of the stack came up. idryx's Deployment starts with `--load tokenfuse:/var/lib/stack/events/tokenfuse.ndjson`, and the gateway (tokenfuse, a Rust binary) creates its event stream when it writes the first event, not when it starts. On a cluster with no call through the gateway yet, the file does not exist, idryx exits, and the pod restarts. Invariant 59 precreates the streams of the Go writers, and this writer is not one of them, so nothing made the file.
+
+Fixed in the gateway pod: an init container `precreate-streams`, busybox pinned by digest, runs as the gateway's own uid 10001 and creates `tokenfuse.ndjson` only when it is absent, with `umask 027`. The file is therefore 0640 in group 10001, the gateway's own fsGroup, and idryx's read path is unchanged. The gate `scripts/stream-files-are-precreated.sh` has a row for the gateway, and `scripts/gates-have-teeth.sh` has five cases for it: the init removed, the wrong file, a root uid, a wrong group and a wider umask.
+
+Not run on a cluster. The gate and its teeth show the manifest creates the file; that idryx now starts on a fresh volume with no traffic is what the next live run has to show.
