@@ -3609,7 +3609,7 @@ run_case "workflow-checkouts: a checkout reads a branch" fail \
 run_case "workflow-checkouts: a pinned commit is shortened" fail \
 	'./scripts/workflow-checkouts-are-pinned.sh' \
 	"$(py 'edit(".github/workflows/console-image.yml", "QRYX_REF: e2e776d648aa28ffa9971bb21bc828335c86a89c", "QRYX_REF: e2e776d648aa28ff")')" \
-	"is not a full 40-hex commit"
+	"not a full 40-hex commit"
 run_case "workflow-checkouts: a sixth repository is checked out with no ref" fail \
 	'./scripts/workflow-checkouts-are-pinned.sh' \
 	"$(py 'p = ".github/workflows/console-image.yml"; s = open(p).read(); open(p, "w").write(s + "\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          repository: TAIPANBOX/newtool\n          path: newtool\n")')" \
