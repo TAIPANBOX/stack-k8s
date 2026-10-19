@@ -126,9 +126,10 @@ else
     openssl ecparam -genkey -name prime256v1 -noout -out "$TMP/signing.pem" 2>/dev/null
   ) || die "could not mint the EC P-256 signing key"
   REVOKE_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-  k create secret generic vouchryx-keys \
-    --from-file="signing.pem=$TMP/signing.pem" \
-    --from-literal="revoke_key=$REVOKE_KEY" >/dev/null
+  # on stdin as a manifest (CLAUDE.md invariant 60): neither value is on a command line
+  . "$ROOT/lib/secret-doc.sh"
+  secret_doc vouchryx-keys "signing.pem=@$TMP/signing.pem" "revoke_key=$REVOKE_KEY" \
+    | k create -f - >/dev/null
   rm -rf "$TMP"
   trap - EXIT
   echo "   created secret vouchryx-keys (signing.pem, revoke_key). Neither value is printed above."

@@ -148,7 +148,8 @@ for p in installers:
     server_call = re.compile(r"sh -s - " + "serv" + r"er\b")
     if not [n for n, l in lines.items() if server_call.search(l)]:
         problems.append(f"{p}: no k3s server install invocation, so the first node's shutdown file cannot be checked")
-    installs = [(n, l) for n, l in lines.items() if re.search(r'(?:sh_|su_) ("\$FIRST"|"\$n") "INSTALL_K3S_VERSION=', l)]
+    installs = [(n, l) for n, l in lines.items()
+                if re.search(r'(?:sh_|su_) ("\$FIRST"|"\$n") "(INSTALL_K3S_VERSION=|sh -c \\"IFS= read -r K3S_TOKEN)', l)]
     if not installs:
         problems.append(f"{p}: no k3s install invocation found, so this cannot tell where the file has to be written")
         continue
@@ -158,7 +159,9 @@ for p in installers:
         if not any(re.match(r"\s*put_graceful_shutdown " + re.escape(node) + r"\s*$", x) for x in prev):
             problems.append(f"{p}:{n}: installs k3s on {node} without writing the graceful-shutdown files onto it just above")
         body, k = [l], n
-        while "get.k3s.io" not in lines.get(k, "") and k < n + 30:
+        # the invocation ends at the installer's line (old spelling) or at the closing
+        # quote of its command string (the stdin spelling, which opens with the pipeline)
+        while not ("< <(curl" in lines.get(k, "") or lines.get(k, "").rstrip().endswith('"')) and k < n + 30:
             k += 1
             body.append(lines.get(k, ""))
         if any(re.search(r"--kubelet-arg=config-dir\b", x) for x in body):

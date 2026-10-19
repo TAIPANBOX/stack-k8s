@@ -57,8 +57,9 @@ retain() { # run id -> makes one call the stub abandons
 
 bus_types() { docker run --rm -v closuree2e_events:/e:ro busybox:1.36 cat /e/tokenfuse.ndjson 2>/dev/null | jq -r --arg t "$1" 'select(.type == $t) | "\(.run_id) \(.agent_id) \(.severity)"'; }
 bus_count() { bus_types "$1" | grep -c . || true; }
-gw_retained() { curl -fsS -m10 -H "authorization: Bearer $GATEWAY_ADMIN" "$GW/v1/retained"; }
-gw_runs() { curl -fsS -m10 -H "authorization: Bearer $GATEWAY_ADMIN" "$GW/v1/runs"; }
+# The bearer goes to curl on stdin (CLAUDE.md invariant 60), never on its command line.
+gw_retained() { printf 'header = "authorization: Bearer %s"\n' "$GATEWAY_ADMIN" | curl -fsS -m10 --config - "$GW/v1/retained"; }
+gw_runs() { printf 'header = "authorization: Bearer %s"\n' "$GATEWAY_ADMIN" | curl -fsS -m10 --config - "$GW/v1/runs"; }
 absent() { gw_retained | jq -e --arg r "$1" 'type == "array" and all(.[]; .run_id != $r)' >/dev/null; }
 entry_for() { gw_retained | jq -c --arg r "$1" '[.[] | select(.run_id == $r)][0] // empty'; }
 spent_of() { gw_runs | jq -r --arg r "$1" '.[] | select(.run_id == $r) | .spent_usd'; }
@@ -132,7 +133,7 @@ R2=$(cmd money_close_retained "$(close_args "$E" observed 4321 'e2e invoice line
 echo "      second close answered: $(echo "$R2" | tail -n1) $(echo "$R2" | head -n1 | cut -c1-200)"
 check "A: a second close is not a second charge (spent still 0.004321)" test "$(spent_of e2e-obs)" = "0.004321"
 sleep 5
-CS=$(curl -fsS -m10 -H "authorization: Bearer $CLOUD_ADMIN" "$CLOUD/v1/runs" | jq -r '.[] | select(.run_id == "e2e-obs") | .spent_microusd')
+CS=$(printf 'header = "authorization: Bearer %s"\n' "$CLOUD_ADMIN" | curl -fsS -m10 --config - "$CLOUD/v1/runs" | jq -r '.[] | select(.run_id == "e2e-obs") | .spent_microusd')
 check "A: the control plane holds the observed spend once (got $CS)" test "$CS" = "4321"
 
 # ---- C: a no-charge closure --------------------------------------------------
@@ -192,7 +193,8 @@ CJ=$(dc exec -T console sh -c 'cat /var/lib/stack/events/console.ndjson 2>/dev/n
 N=$(printf '%s\n' "$CJ" | grep -c 'close_retained' || true)
 echo "      console journal lines mentioning close_retained: $N"
 check "record: every close attempt is journaled by the console (>= 4)" test "$N" -ge 4
-LEAK=$(dc exec -T console sh -c "grep -rl '$CLOSURE_SECRET' /var/lib/stack 2>/dev/null | head -3")
+# the value comes in on stdin, read by the container's shell; it is in no argv
+LEAK=$(printf '%s\n' "$CLOSURE_SECRET" | dc exec -T console sh -c 'read -r S; grep -rl -F "$S" /var/lib/stack 2>/dev/null | head -3')
 check "record: the secret appears in no console file" test -z "$LEAK"
 
 # ---- the mail: heraldyx reads the same bus once ------------------------------

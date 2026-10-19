@@ -343,16 +343,30 @@ for f, n, img in refs:
 kust = read("manifests/kustomization.yaml") if os.path.exists("manifests/kustomization.yaml") else ""
 if re.search(r"policy/", kust):
     bad.append("the default apply set names policy/, so the admission policy would be on by default in the manifests")
-deploy_lines = [l for _, l in live_lines(read("deploy.sh"))]
-apply_at = next((i for i, l in enumerate(deploy_lines) if re.search(r"apply -k /root/stack-k8s/manifests", l)), None)
-enforce_at = next((i for i, l in enumerate(deploy_lines)
-                   if re.search(r"policy/up\.sh\s+--enforce", l)), None)
-if enforce_at is None:
-    bad.append("deploy.sh does not turn admission on for agent-stack (policy/up.sh --enforce), so the default install is not admitted")
-elif apply_at is None:
-    bad.append("deploy.sh has no apply of the manifests, so its admission step has nothing to follow")
-elif enforce_at < apply_at:
-    bad.append("deploy.sh turns admission on before it applies the manifests, when the namespace does not exist yet")
+# Every launcher that applies the stack's manifests turns admission on after the apply, on
+# the same node and with the same tool: deploy.sh (the Hetzner path, run on the node by sh_),
+# and the two cloud launchers, which run it through su_ on their first node (invariant 58).
+LAUNCHERS = ["deploy.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh"]
+for launcher in LAUNCHERS:
+    if not os.path.exists(launcher):
+        bad.append(f"{launcher} is missing, so its admission step cannot be checked")
+        continue
+    launcher_lines = [l for _, l in live_lines(read(launcher))]
+    apply_at = next((i for i, l in enumerate(launcher_lines) if re.search(r"apply -k /root/stack-k8s/manifests", l)), None)
+    enforce_at = next((i for i, l in enumerate(launcher_lines)
+                       if re.search(r"policy/up\.sh\s+--enforce", l)), None)
+    if enforce_at is None:
+        bad.append(f"{launcher} does not turn admission on for agent-stack (policy/up.sh --enforce), so its install is not admitted")
+    elif apply_at is None:
+        bad.append(f"{launcher} has no apply of the manifests, so its admission step has nothing to follow")
+    elif enforce_at < apply_at:
+        bad.append(f"{launcher} turns admission on before it applies the manifests, when the namespace does not exist yet")
+    # the node must hold policy/ for policy/up.sh to run there: the tar that ships the
+    # manifests to the node ships policy/ too
+    if launcher != "deploy.sh" and enforce_at is not None:
+        ships = [l for l in launcher_lines if re.search(r"tar -cz -C \"\$ROOT\" manifests", l)]
+        if not any(re.search(r"manifests policy\b", l) for l in ships):
+            bad.append(f"{launcher} ships manifests to the node without policy/, so policy/up.sh has nothing to run there")
 
 # 8. Operator entries: the template is tracked, and the operator's copy is not (it is gitignored, and this gate
 #    reads it when it exists). Each live ClusterImagePolicy in either follows the operator rules, and none covers a

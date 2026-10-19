@@ -5,7 +5,8 @@ the stack's namespace admits an image only when its signature verifies for its o
 (Kubernetes v1.37.0) with policy-controller v0.15.1 for stack-k8s v1.2.0: every digest the manifests pin is admitted,
 an unsigned image and a bundle-only signature are refused, and a TAIPANBOX image signed only by another repository's
 identity is refused. Run: `evidence/verified-images-kind/admission-v120.sh`, output beside it. The cloud deploy
-scripts (`cloud/gcp/deploy-gcp.sh`, `cloud/aws/deploy-aws.sh`) do not turn it on yet (see "Not covered").
+scripts (`cloud/gcp/deploy-gcp.sh`, `cloud/aws/deploy-aws.sh`) run `policy/up.sh --enforce` on their first node after
+the apply, the same step `deploy.sh` runs, so all three default installs are admitted (invariant 58).
 
 ## What is here
 
@@ -122,9 +123,10 @@ labelled before that refuses every pod create in it.
 ## Not covered
 
 - **Keyless and key operator entries on a cluster.** The gate checks their rules; the kind run measured the `static` form only.
-- **The cloud deploy scripts.** `cloud/gcp/deploy-gcp.sh` and `cloud/aws/deploy-aws.sh` apply the manifests but do not
-  run `policy/up.sh --enforce` yet. A cloud cluster is therefore not admitted until that is wired in, and the Hetzner
-  path (`deploy.sh`) is the only default install that turns it on.
+- **The cloud deploy scripts, on a real cloud.** `cloud/gcp/deploy-gcp.sh` and `cloud/aws/deploy-aws.sh` run
+  `policy/up.sh --enforce` after the apply (the step is in both, the gate holds the order). Not run on a cloud node:
+  the step's first run on a GCP or AWS k3s node is the one to check, and a cluster deployed by an older release of
+  those scripts is not admitted until `policy/up.sh --enforce` is run on it by hand.
 - **Egress.** Keyless verification needs Fulcio's roots and Rekor, reached through Sigstore's TUF repository. The
   decision is to fail closed: an image whose signature cannot be fetched or verified is refused. Measured with egress
   open only. A cluster that cannot reach Sigstore refuses every new pod in the namespace. An air-gapped deployment

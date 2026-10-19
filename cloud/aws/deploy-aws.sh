@@ -351,10 +351,20 @@ ALL_NODES=("${SERVER_LIST[@]}" ${AGENT_LIST[@]+"${AGENT_LIST[@]}"})
 FIRST="${SERVER_LIST[0]}"
 BUILDER="${ALL_NODES[${#ALL_NODES[@]}-1]}"
 
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes)
+# Replaced below, once the host keys are checked (CLAUDE.md invariant 61).
+SSH_OPTS=(-o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20)
 [ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
 sh_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "${@:2}"; }
 su_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "sudo ${*:2}"; }
+# The IMDSv2 session token is a bearer for the instance metadata, which includes
+# the instance profile's credentials: it is read by curl from stdin, not put on
+# a command line (CLAUDE.md invariant 60).
+imds() {
+  su_ "$1" "sh -c 'T=\$(curl -sf -X PUT \"http://169.254.169.254/latest/api/token\" \
+      -H \"X-aws-ec2-metadata-token-ttl-seconds: 60\" --max-time 5) || exit 1
+    printf \"header = \\\"X-aws-ec2-metadata-token: %s\\\"\\n\" \"\$T\" \
+      | curl -sf --config - --max-time 5 \"http://169.254.169.254/latest/meta-data/$2\"'"
+}
 k_()  { su_ "$FIRST" "/usr/local/bin/k3s kubectl $*"; }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
@@ -418,6 +428,17 @@ say "using this checkout: $ROOT"
 for n in "${ALL_NODES[@]}"; do
   ssh-keygen -R "$n" >/dev/null 2>&1 || true
 done
+
+# CLAUDE.md invariant 61: the host keys come from the EC2 console API, before the first
+# connection, and every connection from here is strict against that file.
+# accept-new is not used: it would accept whatever the first connection offered.
+. ""$ROOT"/lib/hostkeys.sh"
+KNOWN_HOSTS_RUN="$(mktemp "${TMPDIR:-/tmp}/stack-k8s-known-hosts.XXXXXX")" || die "could not create a known_hosts file"
+hostkeys_populate_aws "$KNOWN_HOSTS_RUN" "${ALL_NODES[@]}" \
+  || die "could not verify the SSH host keys of every node, so no node was connected to. The line above says which one and why."
+SSH_OPTS=(-o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$KNOWN_HOSTS_RUN" -o ConnectTimeout=20 -o BatchMode=yes)
+[ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
+echo "   $(wc -l < "$KNOWN_HOSTS_RUN" | tr -d ' ') host key line(s) for ${#ALL_NODES[@]} node(s), in $KNOWN_HOSTS_RUN"
 
 # Asked before anything is created or built, so a missing answer costs ten
 # seconds rather than the fifteen minutes of installing that follow.
@@ -528,15 +549,15 @@ else
   #
   # So the clone is unconditional now. CONSOLE_TOKEN survives for the one case
   # it is still good for: building from a private fork of your own.
-  if [ -n "$CONSOLE_TOKEN" ]; then
-    CONSOLE_AUTH="x-access-token:$CONSOLE_TOKEN@"
-  else
-    CONSOLE_AUTH=""
-  fi
+  # The token reaches git through its environment and a credential helper, and
+  # the URL stays bare: a URL is an argument of git and of ps (CLAUDE.md
+  # invariant 60). An empty token is an anonymous clone, which is what a public
+  # repository needs; git calls the helper only when the server asks for a login.
   say "fetching the console source here, so any token stays on this machine"
   TMP="$(mktemp -d)"
-  if git -c credential.helper= clone -q --depth 1 \
-       "https://${CONSOLE_AUTH}github.com/TAIPANBOX/genaryx.git" \
+  if CONSOLE_TOKEN="$CONSOLE_TOKEN" git -c credential.helper= \
+       -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$CONSOLE_TOKEN"; }; f' \
+       clone -q --depth 1 https://github.com/TAIPANBOX/genaryx.git \
        "$TMP/genaryx-a360" 2>/dev/null; then
     git -C "$TMP/genaryx-a360" remote set-url origin https://github.com/TAIPANBOX/genaryx.git
     BUILT_FROM="$(git -C "$TMP/genaryx-a360" rev-parse --short HEAD)"
@@ -600,13 +621,28 @@ else
   [ -n "$DIST_PUB" ] || die "could not prepare the distribution key on the builder"
 
   PRIVS=""
+  PEER_PAIRS=()
   for n in "${ALL_NODES[@]}"; do
     [ "$n" = "$BUILDER" ] && continue
-    p="$(su_ "$n" 'sh -c "T=\$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H \"X-aws-ec2-metadata-token-ttl-seconds: 60\" --max-time 5); curl -sf -H \"X-aws-ec2-metadata-token: \$T\" --max-time 5 http://169.254.169.254/latest/meta-data/local-ipv4"')"
+    p="$(imds "$n" local-ipv4)"
     [ -n "$p" ] || die "could not read the private address of $n"
     PRIVS="$PRIVS $p"
+    PEER_PAIRS+=("$n" "$p")
     sh_ "$n" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qF '$DIST_PUB' ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '$DIST_PUB' >> ~/.ssh/authorized_keys"
   done
+
+  # The builder reaches each peer at its PRIVATE address and checks the key it finds there
+  # against the key this script verified before its first connection (CLAUDE.md invariant 61).
+  # The peer file names every node by its public and its private address, with the same
+  # verified key, and it is written over the verified connection before the builder's first
+  # ssh to a peer. A node the builder cannot be checked against is refused here, not later.
+  . "$ROOT/lib/hostkeys.sh"
+  PEERS_TMP="$(mktemp "${TMPDIR:-/tmp}/stack-k8s-peers.XXXXXX")" || die "could not create the peer file"
+  hostkeys_peer_file "$PEERS_TMP" "$KNOWN_HOSTS_RUN" ${PEER_PAIRS[@]+"${PEER_PAIRS[@]}"} \
+    || die "could not build the builder's peer file from the verified keys: nothing was distributed"
+  su_ "$BUILDER" 'sh -c "umask 077; mkdir -p /root/.ssh && cat > /root/.ssh/stack-known-hosts && chmod 0600 /root/.ssh/stack-known-hosts"' < "$PEERS_TMP" \
+    || die "could not write /root/.ssh/stack-known-hosts on the builder: nothing was distributed"
+  rm -f "$PEERS_TMP"
 
   # Only what was actually built here goes over the private network. The
   # pulled ones are the kubelet's business and never touch this path, which
@@ -619,7 +655,7 @@ else
   su_ "$BUILDER" "sh -c \"for img in $IMAGES; do
       docker save \\\$img | k3s ctr images import - >/dev/null 2>&1 && echo '   '\\\$img' -> builder' || echo '   '\\\$img' -> builder FAILED'
       for p in $PRIVS; do
-        docker save \\\$img | ssh -i /root/.ssh/stack-distribute -o BatchMode=yes -o StrictHostKeyChecking=no $SSH_USER@\\\$p 'sudo k3s ctr images import -' >/dev/null 2>&1 \
+        docker save \\\$img | ssh -i /root/.ssh/stack-distribute -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/stack-known-hosts $SSH_USER@\\\$p 'sudo k3s ctr images import -' >/dev/null 2>&1 \
           && echo '   '\\\$img' -> '\\\$p || echo '   '\\\$img' -> '\\\$p' FAILED'
       done
     done\""
@@ -665,8 +701,16 @@ fi
 # ---- 3. the workload --------------------------------------------------------
 say "step 3/5: the workload"
 policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 129: refuse before anything is applied
-tar -cz -C "$ROOT" manifests | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
+tar -cz -C "$ROOT" manifests policy | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
 k_ "apply -k /root/stack-k8s/manifests"
+
+# Admission (CLAUDE.md invariant 58), the step deploy.sh runs after its apply: from here on
+# the stack's namespace admits an image only when its signature verifies for its own
+# repository. The controller and its webhook go in first, then the policies, then the
+# namespace label; policy/up.sh does that order, run on the node with k3s's kubectl.
+say "admission: the stack's namespace admits only images signed by their own repository"
+su_ "$FIRST" 'KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/policy/up.sh --enforce' \
+  || die "admission did not come up: the controller's webhook must answer before the namespace is labelled (policy/README.md)"
 
 # The gateway's provider key (CLAUDE.md invariant 53): the gateway's pod waits for this Secret,
 # so it is made here, right after the apply and before any rollout is waited on.
@@ -840,7 +884,7 @@ CONSOLE_ADDR=""
 if [ -n "$CONSOLE_NODE" ]; then
   CONSOLE_PRIV="$(k_ "get node $CONSOLE_NODE -o jsonpath='{.status.addresses[?(@.type==\"InternalIP\")].address}'" 2>/dev/null || true)"
   for n in "${ALL_NODES[@]}"; do
-    p="$(su_ "$n" 'sh -c "T=\$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H \"X-aws-ec2-metadata-token-ttl-seconds: 60\" --max-time 5); curl -sf -H \"X-aws-ec2-metadata-token: \$T\" --max-time 5 http://169.254.169.254/latest/meta-data/local-ipv4"' 2>/dev/null || true)"
+    p="$(imds "$n" local-ipv4 2>/dev/null || true)"
     [ -n "$p" ] && [ "$p" = "$CONSOLE_PRIV" ] && { CONSOLE_ADDR="$n"; break; }
   done
   [ -n "$CONSOLE_ADDR" ] || CONSOLE_ADDR="$CONSOLE_PRIV"

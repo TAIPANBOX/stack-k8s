@@ -33,6 +33,7 @@ trap cleanup EXIT
 
 # ---- the operator's files: throwaway secrets, made here, never printed -------------
 rnd() { head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/secret-doc.sh"
 K1="kind-$(rnd)"; K2="kind-$(rnd)"; K3="kind-$(rnd)"
 printf '%s:treasury-bots\n%s:research-bots\n' "$K1" "$K2" >"$work/keys.txt"
 printf '%s:treasury-bots\n%s:research-bots\n%s:treasury-bots\n' "$K1" "$K2" "$K3" >"$work/keys3.txt"
@@ -85,11 +86,10 @@ PY
 kubectl apply -f "$work/stack.yaml" >/dev/null || { echo "FAIL  kubectl apply of the gateway manifests"; exit 1; }
 # Every key the manifests read from stack-keys (invariant 17 holds this script to
 # that too), throwaway values; the gateway reads four of them.
-kubectl -n "$NS" create secret generic stack-keys \
-  --from-literal=cloud_keys="$(rnd):org" --from-literal=cloud_admin="$(rnd)" \
-  --from-literal=wardryx_keys="$(rnd):org:admin" --from-literal=wardryx_admin="$(rnd)" \
-  --from-literal=wardryx_gateway="$(rnd)" --from-literal=gateway_admin="$(rnd)" \
-  --from-literal=declassify_key="$(rnd)" >/dev/null || { echo "FAIL  stack-keys"; exit 1; }
+secret_doc stack-keys cloud_keys="$(rnd):org" cloud_admin="$(rnd)" \
+  wardryx_keys="$(rnd):org:admin" wardryx_admin="$(rnd)" \
+  wardryx_gateway="$(rnd)" gateway_admin="$(rnd)" \
+  declassify_key="$(rnd)" | kubectl -n "$NS" create -f - >/dev/null || { echo "FAIL  stack-keys"; exit 1; }
 kubectl -n "$NS" apply -f - >/dev/null <<'YAML'
 apiVersion: apps/v1
 kind: Deployment

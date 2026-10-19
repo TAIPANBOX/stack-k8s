@@ -613,7 +613,7 @@ for f in ("deploy.sh", "cloud/aws/deploy-aws.sh", "cloud/gcp/deploy-gcp.sh"):
 # and reported TOOTHLESS here while the gate itself was fine.
 run_case "secret-keys-agree: an installer stops creating a key the manifests read" fail \
 	'./scripts/secret-keys-agree.sh' \
-	"$(py 'edit("install.sh", " \\\n      --from-literal=gateway_admin=\x27$GATEWAY_ADMIN_SECRET\x27\"", "\"")')" \
+	"$(py 'edit("install.sh", "      gateway_admin=\"$GATEWAY_ADMIN_SECRET\" \\\n", "")')" \
 	"does not create key gateway_admin"
 
 run_case "secret-keys-agree: a manifest starts reading a key no installer writes" fail \
@@ -636,7 +636,7 @@ for f in glob.glob("manifests/*.yaml"):
 
 run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
 	'./scripts/secret-keys-agree.sh' \
-	"$(py 'edit("install.sh", "      --from-literal=cloud_admin=\x27$CLOUD_SECRET\x27 \\\n", "      --from-literal=cloud_admin=\x27$CLOUD_SECRET\x27 \\\n      --from-literal=spare=\x27$CLOUD_SECRET\x27 \\\n")')"
+	"$(py 'edit("install.sh", "      cloud_admin=\"$CLOUD_SECRET\" \\\n", "      cloud_admin=\"$CLOUD_SECRET\" \\\n      spare=\"$CLOUD_SECRET\" \\\n")')"
 
 # evidence/identity-kind/run.sh creates stack-keys with every key the manifests read, so
 # it is an (installer, Secret) subject too: the gate judges it and passes it, which is
@@ -678,13 +678,13 @@ run_case "k3s-token-is-reused: a comment mentioning the install is not an instal
 # the anchor down to the joining-server line and the misplaced read passed.
 run_case "k3s-token-is-reused: a wrapped first-server install hides a read placed after it" fail \
 	'./scripts/k3s-token-is-reused.sh' \
-	"$(py 'edit("cloud/aws/install-aws.sh", "  K3S_TOKEN_VALUE=\"$(su_ \"$FIRST\" \"sh -c", "  K3S_TOKEN_VALUE_HELD=\"$(su_ \"$FIRST\" \"sh -c")
-s = open("cloud/aws/install-aws.sh").read()
-i = s.index("K3S_TOKEN=\x27$K3S_TOKEN_VALUE\x27 sh -s - serv" + "er \\")
-s = s[:i] + "K3S_TOKEN=\x27$K3S_TOKEN_VALUE\x27 \\\n    sh -s - serv" + "er \\" + s[i + len("K3S_TOKEN=\x27$K3S_TOKEN_VALUE\x27 sh -s - serv" + "er \\"):]
-j = s.index("# ---- 3. the other servers")
-s = s[:j] + "K3S_TOKEN_VALUE=\"$(su_ \"$FIRST\" \x27cat /var/lib/rancher/k3s/server/token\x27)\"\n" + s[j:]
-open("cloud/aws/install-aws.sh", "w").write(s)')" \
+	"$(py 'p = "cloud/aws/install-aws.sh"
+s = open(p).read()
+start = s.index("  K3S_TOKEN_VALUE=\"$(su_ \"$FIRST\" \"sh -c ")
+end = s.index("\n", s.index("|| die \"could not read the cluster token", start)) + 1
+stmt = s[start:end]
+s = s[:start] + s[end:] + "\n" + stmt
+open(p, "w").write(s)')" \
 	"AFTER its first server install"
 
 # The silent mutant: the read over the login helper instead of the sudo one.
@@ -796,7 +796,7 @@ run_case "declassify-is-keyed: the gateway reads some other key of the Secret" f
 # both ends of the ssh, and the audit found --from-literal values on ssh argv.
 run_case "declassify-is-keyed: an installer passes the key with --from-literal" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("install.sh", "      --from-file=declassify_key=/dev/stdin \\\n", "      --from-literal=declassify_key=\x27$DECLASSIFY_SECRET\x27 \\\n")')" \
+	"$(py 'edit("install.sh", "      declassify_key=\"$DECLASSIFY_SECRET\" \\\n", "      declassify_key=\"$DECLASSIFY_SECRET\" \\\n      --from-literal=declassify_key=\x27$DECLASSIFY_SECRET\x27 \\\n")')" \
 	"puts declassify_key on a command line with --from-literal"
 
 run_case "declassify-is-keyed: an installer migrates the key with patch -p" fail \
@@ -806,7 +806,7 @@ run_case "declassify-is-keyed: an installer migrates the key with patch -p" fail
 
 run_case "declassify-is-keyed: an installer creates the Secret without piping the key in" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("cloud/aws/install-aws.sh", "  printf \x27%s\x27 \"$DECLASSIFY_SECRET\" | k_ \"-n agent-stack create secret generic " "stack-keys", "  k_ \"-n agent-stack create secret generic " "stack-keys")')" \
+	"$(py 'edit("install.sh", "      declassify_key=\"$DECLASSIFY_SECRET\" \\\n    | k_ \"-n agent-stack create -f -\" >/dev/null", "      declassify_key=\"$DECLASSIFY_SECRET\" \\\n    k_ \"-n agent-stack create -f -\" >/dev/null")')" \
 	"never creates declassify_key from stdin"
 
 run_case "declassify-is-keyed: an installer never gives an existing Secret the key" fail \
@@ -843,7 +843,7 @@ run_case "declassify-is-keyed: a comment beside the key is reworded" pass \
 
 run_case "declassify-is-keyed: another key of the Secret still rides --from-literal" pass \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("install.sh", "      --from-literal=cloud_admin=\x27$CLOUD_SECRET\x27 \\\n", "      --from-literal=cloud_admin=\x27$CLOUD_SECRET\x27 \\\n      --from-literal=spare=\x27$CLOUD_SECRET\x27 \\\n")')"
+	"$(py 'edit("install.sh", "      cloud_admin=\"$CLOUD_SECRET\" \\\n", "      cloud_admin=\"$CLOUD_SECRET\" \\\n      --from-literal=spare=\x27$CLOUD_SECRET\x27 \\\n")')"
 
 # A one-replica plane that keeps the default 300 s toleration sits on a dead
 # node for five minutes after it is marked NotReady: 360 s of a refused gateway
@@ -1175,8 +1175,8 @@ run_case "closure-off-by-default: the console unpatch leaves the volume" fail \
 
 run_case "closure-off-by-default: up.sh creates the Secret from a file" fail \
 	'./scripts/closure-off-by-default.sh' \
-	"$(py 'edit("closure/up.sh", "--from-literal=\"secret=$CLOSURE_SECRET\"", "--from-file=\"secret=$CLOSURE_SECRET\"")')" \
-	"--from-file"
+	"$(py 'edit("closure/up.sh", "secret_doc closure-keys \"secret=$CLOSURE_SECRET\"", "secret_doc closure-keys \"secret=@$CLOSURE_SECRET\"")')" \
+	"creates closure-keys from a file"
 
 run_case "closure-off-by-default: up.sh mints a new secret on every run" fail \
 	'./scripts/closure-off-by-default.sh' \
@@ -3333,6 +3333,133 @@ run_case "stream-precreate: an exception that now has the group is stale" fail \
 run_case "stream-precreate: a comment naming the init container (must pass)" pass \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/51-typryx.yaml", "      # Creates the stream file before typryx starts", "      # precreate-streams (invariant 59) creates the stream file before typryx starts")')"
+
+# ---- admission on in every launcher that applies the stack (CLAUDE.md invariant 58) ----
+run_case "verified-images-are-enforced: a cloud launcher turns admission on before its apply" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "k_ \"apply -k /root/stack-k8s/manifests\"\n", "su_ \"$FIRST\" \x27KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh --enforce\x27\nk_ \"apply -k /root/stack-k8s/manifests\"\n")')" \
+	"before it applies the manifests"
+
+run_case "verified-images-are-enforced: a cloud launcher has no admission step" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh --enforce\x27 \\\n", "KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh\x27 \\\n")')" \
+	"does not turn admission on"
+
+run_case "verified-images-are-enforced: a cloud node receives the manifests without policy/" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "tar -cz -C \"$ROOT\" manifests policy | su_ \"$FIRST\" \x27sh -c \"mkdir -p /root/stack-k8s", "tar -cz -C \"$ROOT\" manifests | su_ \"$FIRST\" \x27sh -c \"mkdir -p /root/stack-k8s")')" \
+	"without policy/"
+
+# ---- no-secret-on-argv (CLAUDE.md invariant 60): a secret never on a command line ----
+run_case "no-secret-on-argv: an installer puts a plane credential on argv with --from-literal" fail \
+	'./scripts/no-secret-on-argv.sh' \
+	"$(py 'open("install.sh", "a").write("k_ \"-n agent-stack create secret generic zz --from-literal=password=$PW\" >/dev/null\n")')" \
+	"puts a secret value on argv"
+
+run_case "no-secret-on-argv: a bearer header is built from an expansion" fail \
+	'./scripts/no-secret-on-argv.sh' \
+	"$(py 'open("deploy.sh", "a").write("curl -sf -H \"Authorization: Bearer $CONSOLE_TOKEN\" https://api.github.com/repos/x\n")')" \
+	"bearer whose value"
+
+run_case "no-secret-on-argv: the k3s token is assigned on the ssh command line" fail \
+	'./scripts/no-secret-on-argv.sh' \
+	"$(py 'open("install.sh", "a").write("      sh_ \"$FIRST\" \"K3S_TOKEN=\x27$K3S_TOKEN_VALUE\x27 sh -s - serv" + "er\"\n")')" \
+	"assigned on a command line"
+
+run_case "no-secret-on-argv: a clone URL carries the token" fail \
+	'./scripts/no-secret-on-argv.sh' \
+	"$(py 'open("deploy.sh", "a").write("git clone \"https://x-access-token:$CONSOLE_TOKEN@github.com/TAIPANBOX/genaryx.git\" x\n")')" \
+	"carries a credential"
+
+run_case "no-secret-on-argv: a secret passed as a flag value" fail \
+	'./scripts/no-secret-on-argv.sh' \
+	"$(py 'open("deploy.sh", "a").write("bash x.sh --token \"$HCLOUD_TOKEN\"\n")')" \
+	"flag"
+
+run_case "no-secret-on-argv: a secret_doc argument is not a process argument (must pass)" pass \
+	'./scripts/no-secret-on-argv.sh' \
+	"$(py 'open("install.sh", "a").write("secret_doc zz password=\"$PW\" dsn=\"postgres://u:$PW@h/x\" | k_ \"-n agent-stack create -f -\" >/dev/null\n")')"
+
+run_case "no-secret-on-argv: no subject, measured nothing" fail_env \
+	'd="$(mktemp -d)" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$d" init -q && mkdir "$d/scripts" && cp scripts/no-secret-on-argv.sh "$d/scripts/" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE "$d/scripts/no-secret-on-argv.sh"' \
+	"$(py 'pass')" \
+	"measured NOTHING"
+
+# ---- hostkeys-are-verified (CLAUDE.md invariant 61): the host key is verified before the first connection ----
+run_case "hostkeys-are-verified: a mismatched console fingerprint is accepted" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("lib/hostkeys.sh", "if [ -n \"$console_fp\" ] && [ \"$console_fp\" = \"$scan_fp\" ]; then", "if true; then")')" \
+	"B  mismatch"
+
+run_case "hostkeys-are-verified: a cloud launcher goes back to accept-new" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "SSH_OPTS=(-o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20)", "SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=20)")')" \
+	"still accepts host keys on first use"
+
+run_case "hostkeys-are-verified: SSH_KNOWN_HOSTS is ignored by install.sh" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("install.sh", "if [ -n \"${SSH_KNOWN_HOSTS:-}\" ]; then", "if false; then")')" \
+	"G  SSH_KNOWN_HOSTS: first ssh was"
+
+run_case "hostkeys-are-verified: a cloud launcher connects before it reads the keys" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "for n in \"${ALL_NODES[@]}\"; do\n  ssh-keygen -R", "for n in \"${ALL_NODES[@]}\"; do sh_ \"$n\" true; done\nfor n in \"${ALL_NODES[@]}\"; do\n  ssh-keygen -R")')" \
+	"cloud/gcp/deploy-gcp.sh: keys at line"
+
+run_case "hostkeys-are-verified: a comment naming accept-new is not a launcher using it (must pass)" pass \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'open("cloud/aws/install-aws.sh", "a").write("# accept-new is not used here (a comment, not a launcher setting)\n")')"
+
+run_case "hostkeys-are-verified: no cloud installer left, measured nothing" fail_env \
+	'd="$(mktemp -d)" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$d" init -q && mkdir -p "$d/scripts" "$d/lib" && cp scripts/hostkeys-are-verified.sh "$d/scripts/" && cp lib/hostkeys.sh "$d/lib/" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE "$d/scripts/hostkeys-are-verified.sh"' \
+	"$(py 'pass')" \
+	"measured NOTHING"
+
+# ---- node-to-node: the peer file, and no tracked script that disables host key checking (invariant 61, part 4) ----
+run_case "hostkeys-are-verified: a node-to-node ssh goes back to host key checking off" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "-o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/stack-known-hosts $SSH_USER@", "-o StrictHostKeyChecking=" + "no $SSH_USER@")')" \
+	"still disable host key checking"
+
+run_case "hostkeys-are-verified: a helper names the forbidden option in a comment" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'open("lib/hostkeys.sh", "a").write("# note: StrictHostKeyChecking=" + "no is what the peer file replaced\n")')" \
+	"still disable host key checking"
+
+run_case "hostkeys-are-verified: the Hetzner distribution is strict against no file" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("deploy.sh", "StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/stack-known-hosts root@\\$p", "StrictHostKeyChecking=yes root@\\$p")')" \
+	"is not strict against"
+
+run_case "hostkeys-are-verified: the distribution is strict against no file (GCP)" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/stack-known-hosts $SSH_USER@", "StrictHostKeyChecking=yes $SSH_USER@")')" \
+	"is not strict against"
+
+run_case "hostkeys-are-verified: the peer file is written after the first node-to-node ssh" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'import re
+s = open("deploy.sh").read()
+W = "  sh_ \"$BUILDER\" \x27umask 077; mkdir -p /root/.ssh && cat > /root/.ssh/stack-known-hosts && chmod 0600 /root/.ssh/stack-known-hosts\x27 < \"$PEERS_TMP\" \\\n    || die \"could not write /root/.ssh/stack-known-hosts on the builder: nothing was distributed\"\n"
+assert s.count(W) == 1
+s = s.replace(W, "", 1)
+s = s.replace("\n# ---- 3. the workload", "\n" + W + "\n# ---- 3. the workload", 1)
+open("deploy.sh", "w").write(s)')" \
+	"is written at line"
+
+run_case "hostkeys-are-verified: the peer file drops the private names" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("lib/hostkeys.sh", "for name in \"$pub\" \"$priv\"; do", "for name in \"$pub\"; do")')" \
+	"I  peer file"
+
+run_case "hostkeys-are-verified: a launcher builds no peer file" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "hostkeys_peer_file \"$PEERS_TMP\"", "true \"$PEERS_TMP\"")')" \
+	"does not build its peer file"
+
+run_case "hostkeys-are-verified: the option named in a prose note is not a script (must pass)" pass \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'open("GOTCHAS.md", "a").write("\nNote: StrictHostKeyChecking=" + "no was the old setting of the image distribution.\n")')"
 
 # A listing is not a run. Stop before the verdict, which would count cases this
 # listing did not take.

@@ -1,0 +1,96 @@
+signed, pinned image under test: ghcr.io/taipanbox/tokenfuse:v1.18.0@sha256:7cbaa794670560468b15a7a6a3c37396767435332e8eca3a30af627de29ad6d9
+probe image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+API server endpoint: 172.18.0.2:6443
+
+== 0. does this CNI enforce NetworkPolicy? (a deny-all egress must stop a probe reaching the API server)
+  before any policy: the API server is reachable from the probe
+  with deny-all egress: the API server is unreachable from the probe
+  RESULT: this CNI enforces NetworkPolicy egress; the cut below is a real cut.
+
+== 1. the default install's admission: policy/up.sh --enforce (controller, webhook, policies, namespace)
+  namespace/cosign-system created
+  customresourcedefinition.apiextensions.k8s.io/clusterimagepolicies.policy.sigstore.dev created
+  customresourcedefinition.apiextensions.k8s.io/trustroots.policy.sigstore.dev created
+  serviceaccount/webhook created
+  role.rbac.authorization.k8s.io/policy-controller-namespace-rbac created
+  clusterrole.rbac.authorization.k8s.io/policy-controller-rbac created
+  rolebinding.rbac.authorization.k8s.io/policy-controller-webhook created
+  clusterrolebinding.rbac.authorization.k8s.io/policy-controller-webhook created
+  configmap/config-image-policies created
+  configmap/config-leader-election created
+  configmap/config-logging created
+  configmap/config-observability created
+  configmap/config-policy-controller created
+  configmap/config-sigstore-keys created
+  secret/webhook-certs created
+  service/webhook created
+  mutatingwebhookconfiguration.admissionregistration.k8s.io/defaulting.clusterimagepolicy.sigstore.dev created
+  mutatingwebhookconfiguration.admissionregistration.k8s.io/policy.sigstore.dev created
+  validatingwebhookconfiguration.admissionregistration.k8s.io/policy.sigstore.dev created
+  validatingwebhookconfiguration.admissionregistration.k8s.io/validating.clusterimagepolicy.sigstore.dev created
+  deployment.apps/webhook created
+  Waiting for deployment "webhook" rollout to finish: 0 of 1 updated replicas are available...
+  deployment "webhook" successfully rolled out
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-tokenfuse created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-wardryx created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-idryx created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-heraldyx created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-vouchryx created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-scopyx created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-typryx created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-costcrew created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-qryx created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-trailryx created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-mockryx created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-keyryx created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-agent-stack-go created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-console created
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-tunnel created
+  clusterimagepolicy.policy.sigstore.dev/upstream-pinned created
+  namespace/agent-stack labeled
+  agent-stack is opted in: an image under ghcr.io/taipanbox/ must carry a signature the controller can
+  verify, and an upstream image must be pinned by digest and listed in policy/image-policy.yaml.
+  deployment "webhook" successfully rolled out
+  running controller image: ghcr.io/sigstore/policy-controller/policy-controller:v0.15.1@sha256:0492bb264fb1d9bdc8e3f343ef542cc85b7dd7c7fd8d9524b453c2bd31a1d128
+
+== 2. baseline, Sigstore reachable: a NEW pod with the signed pinned image
+  pod/sig-before created
+
+== 3. cut the policy controller's egress: DNS and the API server only
+  probe in cosign-system cannot reach ghcr.io (the cut holds for that namespace)
+  probe in cosign-system reaches tuf-repo-cdn.sigstore.dev: the cut did NOT take
+
+== 4a. Sigstore unreachable, controller NOT restarted: a NEW pod with the signed pinned image
+  the controller pod that verified the baseline: webhook-7f85c5fb7b-pk4z5
+  pod/sig-during-cut created
+  verdict (a): ADMITTED
+
+== 4b. Sigstore unreachable, controller RESTARTED: a NEW pod with the signed pinned image
+  deployment.apps/webhook restarted
+  Waiting for deployment "webhook" rollout to finish: 1 old replicas are pending termination...
+  Waiting for deployment "webhook" rollout to finish: 1 old replicas are pending termination...
+  deployment "webhook" successfully rolled out
+  pod/webhook-7f85c5fb7b-pk4z5 condition met
+  the only controller pod now: webhook-78988f56cd-9sddh (the baseline pod is gone)
+  Error from server (InternalError): error when creating "STDIN": Internal error occurred: failed calling webhook "policy.sigstore.dev": failed to call webhook: Post "https://webhook.cosign-system.svc:443/validations?timeout=25s": context deadline exceeded
+  verdict (b): REFUSED
+
+== 4c. control: a signed digest this controller has never verified (tokenfuse-control-plane)
+  Error from server (InternalError): error when creating "STDIN": Internal error occurred: failed calling webhook "policy.sigstore.dev": failed to call webhook: Post "https://webhook.cosign-system.svc:443/validations?timeout=25s": context deadline exceeded
+  verdict (c): REFUSED
+
+== 4d. control: an UNSIGNED TAIPANBOX image (the mockryx digest run.sh uses for its unsigned probe)
+  Error from server (InternalError): error when creating "STDIN": Internal error occurred: failed calling webhook "policy.sigstore.dev": failed to call webhook: Post "https://webhook.cosign-system.svc:443/validations?timeout=25s": context deadline exceeded
+  verdict (d): REFUSED
+
+== 5. the controller's own account of the signature fetches it could not make (the cut's effect)
+     1 failed validSignatures for authority authority-0 with fulcio for ghcr.io/taipanbox/mockryx@sha256:758d31650f43b283762da81c8543e3c5dea000d7360a9fb4df8f408f1503c5c7: Get \
+     1 failed validSignatures for authority authority-0 with fulcio for ghcr.io/taipanbox/tokenfuse-control-plane@sha256:c6160a8eed3d83d9caf42b426e82444cfe48a14027cb90ad4338340587a9d372: Get \
+     1 failed validSignatures for authority authority-0 with fulcio for ghcr.io/taipanbox/tokenfuse@sha256:7cbaa794670560468b15a7a6a3c37396767435332e8eca3a30af627de29ad6d9: Get \
+
+== 6. cleanup of the pods this run created (the cut and the controller stay until the cluster goes)
+  summary: baseline, reachable: ADMITTED. During the cut, the running controller: (a) ADMITTED.
+  After a restart, a controller with no verification in memory: (b) REFUSED. Control, fresh signed digest: (c) REFUSED. Control, unsigned: (d) REFUSED.
+EXIT=0

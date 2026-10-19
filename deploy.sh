@@ -254,7 +254,17 @@ FIRST="${SERVER_LIST[0]}"
 # building where the images are needed saves shipping them over the internet.
 BUILDER="${ALL_NODES[${#ALL_NODES[@]}-1]}"
 
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes)
+# CLAUDE.md invariant 61. SSH_KNOWN_HOSTS=<file> pins the operator's own host
+# keys: every connection is then strict, and a node whose key is not in that file
+# is refused. Without it the first connection to each node is accepted (accept-new,
+# as before), and the keys accepted are printed with the way to pin them below.
+if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then
+  [ -s "$SSH_KNOWN_HOSTS" ] || { echo "SSH_KNOWN_HOSTS=$SSH_KNOWN_HOSTS is not a readable, non-empty file of host keys" >&2; exit 1; }
+  SSH_OPTS=(-o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$SSH_KNOWN_HOSTS" -o ConnectTimeout=20 -o BatchMode=yes)
+else
+  SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes)
+  ACCEPT_FIRST_USE=1
+fi
 [ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
 sh_() { ssh "${SSH_OPTS[@]}" "root@$1" "${@:2}"; }
 k_()  { sh_ "$FIRST" "/usr/local/bin/k3s kubectl $*"; }
@@ -267,8 +277,9 @@ if [ -n "$HERE" ] && [ -d "$HERE/manifests" ]; then
 else
   ROOT="$(mktemp -d)"
   say "fetching stack-k8s@$REF into $ROOT"
-  auth=(); [ -n "$CONSOLE_TOKEN" ] && auth=(-H "Authorization: Bearer $CONSOLE_TOKEN")
-  curl -fsSL "${auth[@]}" "$REPO_TARBALL/$REF" | tar -xz -C "$ROOT" --strip-components=1 \
+  # The bearer reaches curl on stdin (--config -), never on its command line (CLAUDE.md invariant 60).
+  { [ -z "$CONSOLE_TOKEN" ] || printf 'header = "Authorization: Bearer %s"\n' "$CONSOLE_TOKEN"; } \
+    | curl -fsSL --config - "$REPO_TARBALL/$REF" | tar -xz -C "$ROOT" --strip-components=1 \
     || die "could not fetch the repo; check the network, or clone it and run ./deploy.sh"
 fi
 [ -d "$ROOT/manifests" ] || die "no manifests/ in $ROOT"
@@ -516,9 +527,11 @@ else
   # `./kubeconfig.yaml` relative to the CURRENT directory, and this script never
   # cd's into $ROOT, so run from anywhere else the file lands in one place and
   # step 6 below looks in another. Naming it makes the two agree.
-  KUBECONFIG_OUT="$ROOT/kubeconfig.yaml" \
+  # The Hetzner token goes in the environment, not on install.sh's command line
+  # (CLAUDE.md invariant 60): install.sh reads HCLOUD_TOKEN from it.
+  KUBECONFIG_OUT="$ROOT/kubeconfig.yaml" HCLOUD_TOKEN="$HCLOUD_TOKEN" \
   bash "$ROOT/install.sh" --servers "$SERVERS" ${AGENTS:+--agents "$AGENTS"} \
-    ${SSH_KEY:+--ssh-key "$SSH_KEY"} ${HCLOUD_TOKEN:+--token "$HCLOUD_TOKEN"}
+    ${SSH_KEY:+--ssh-key "$SSH_KEY"}
 fi
 
 # ---- 2. sources and images --------------------------------------------------
@@ -561,23 +574,34 @@ else
   # given (a private fork). An empty CONSOLE_TOKEN must not produce
   # `https://x-access-token:@github.com/...`, which git treats as an empty
   # credential and fails on rather than falling back to anonymous.
-  if [ -n "$CONSOLE_TOKEN" ]; then CONSOLE_AUTH="x-access-token:$CONSOLE_TOKEN@"; else CONSOLE_AUTH=""; fi
+  # The console token goes to the builder on stdin: the first two lines are the
+  # token and the ref, read by the builder's shell, and the clone script follows on
+  # the same stream. The token is in no URL and on no command line (CLAUDE.md
+  # invariant 60); git gets it through its environment and a credential helper.
+  # An empty token is an anonymous clone, which a public repository needs.
   if true; then
     # `--branch` on both paths, and a hard reset rather than a pull on the
     # second: `git pull --ff-only` on a checkout sitting on a DIFFERENT branch
     # fails, gets swallowed by `|| true`, and the build then quietly produces
     # the previous branch's console while reporting success.
-    if sh_ "$BUILDER" "cd /root/src && \
-       if [ -d genaryx-a360/.git ]; then \
-         git -C genaryx-a360 remote set-url origin https://${CONSOLE_AUTH}github.com/TAIPANBOX/genaryx.git && \
-         git -C genaryx-a360 fetch -q --depth 1 origin '$CONSOLE_REF' && \
-         git -C genaryx-a360 checkout -q -B '$CONSOLE_REF' FETCH_HEAD; \
-       else \
-         rm -rf genaryx-a360 && \
-         git clone -q --depth 1 --branch '$CONSOLE_REF' https://${CONSOLE_AUTH}github.com/TAIPANBOX/genaryx.git genaryx-a360; \
-       fi && \
-       git -C genaryx-a360 remote set-url origin https://github.com/TAIPANBOX/genaryx.git && \
-       echo \"   genaryx (console) ok, at \$(git -C genaryx-a360 rev-parse --short HEAD) on $CONSOLE_REF\""; then
+    if { printf '%s\n%s\n' "$CONSOLE_TOKEN" "$CONSOLE_REF"; cat <<'REMOTE'
+cd /root/src || exit 1
+console_git() {
+  if [ -n "$CT" ]; then
+    git -c credential.helper= -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$CT"; }; f' "$@"
+  else
+    git "$@"
+  fi
+}
+if [ -d genaryx-a360/.git ]; then
+  console_git -C genaryx-a360 fetch -q --depth 1 origin "$REF" || exit 1
+  git -C genaryx-a360 checkout -q -B "$REF" FETCH_HEAD || exit 1
+else
+  rm -rf genaryx-a360 && console_git clone -q --depth 1 --branch "$REF" https://github.com/TAIPANBOX/genaryx.git genaryx-a360 || exit 1
+fi
+echo "   genaryx (console) ok, at $(git -C genaryx-a360 rev-parse --short HEAD) on $REF"
+REMOTE
+       } | sh_ "$BUILDER" 'IFS= read -r CT; IFS= read -r REF; export CT REF; sh -s'; then
       WITH_CONSOLE=1
     else
       echo "   could not clone the console with that token: continuing WITHOUT it"
@@ -626,13 +650,30 @@ else
   IMAGES="stack/tokenfuse:dev stack/wg:dev stack/caddy:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
   PRIVS=""
+  PEER_PAIRS=()
   for n in "${ALL_NODES[@]}"; do
-    PRIVS="$PRIVS $(sh_ "$n" "curl -sf --max-time 5 http://169.254.169.254/hetzner/v1/metadata/private-networks | awk '/^- ip:/ {print \$3; exit}'")"
+    p="$(sh_ "$n" "curl -sf --max-time 5 http://169.254.169.254/hetzner/v1/metadata/private-networks | awk '/^- ip:/ {print \$3; exit}'")"
+    PRIVS="$PRIVS $p"
+    PEER_PAIRS+=("$n" "$p")
   done
+  # The builder reaches each peer at its PRIVATE address and checks the key it finds there
+  # against the key this launcher verified before its first connection (CLAUDE.md invariant 61).
+  # The peer file names every node by its public and its private address, with the same
+  # verified key, and it is written over the verified connection before the builder's first
+  # ssh to a peer. SSH_KNOWN_HOSTS (when set) is the operator's pin; otherwise the keys accept-new
+  # recorded in the operator's known_hosts.
+  . "$ROOT/lib/hostkeys.sh"
+  PEERS_TMP="$(mktemp "${TMPDIR:-/tmp}/stack-k8s-peers.XXXXXX")" || die "could not create the peer file"
+  if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then PEER_SRC="$SSH_KNOWN_HOSTS"; else PEER_SRC="$HOME/.ssh/known_hosts"; fi
+  hostkeys_peer_file "$PEERS_TMP" "$PEER_SRC" "${PEER_PAIRS[@]}" \
+    || die "could not build the builder's peer file from the verified keys: nothing was distributed"
+  sh_ "$BUILDER" 'umask 077; mkdir -p /root/.ssh && cat > /root/.ssh/stack-known-hosts && chmod 0600 /root/.ssh/stack-known-hosts' < "$PEERS_TMP" \
+    || die "could not write /root/.ssh/stack-known-hosts on the builder: nothing was distributed"
+  rm -f "$PEERS_TMP"
   sh_ "$BUILDER" "for img in $IMAGES; do
       docker save \$img | k3s ctr images import - >/dev/null 2>&1 && echo \"   \$img -> this node\" || echo \"   \$img -> this node FAILED\"
       for p in $PRIVS; do
-        docker save \$img | ssh -o BatchMode=yes -o StrictHostKeyChecking=no root@\$p 'k3s ctr images import -' >/dev/null 2>&1 \
+        docker save \$img | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/stack-known-hosts root@\$p 'k3s ctr images import -' >/dev/null 2>&1 \
           && echo \"   \$img -> \$p\" || true
       done
     done" || echo "   (import over the private network needs node-to-node ssh; see the note at the end)"

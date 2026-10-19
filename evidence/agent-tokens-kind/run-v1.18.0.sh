@@ -36,11 +36,13 @@ ENROL="$(openssl rand -hex 24)"; printf '%s' "$ENROL" > enrol.secret
 GW="$(openssl rand -hex 24)"; printf '%s' "$GW" > gw-client.secret
 BRK="$(openssl rand -hex 24)"; printf '%s' "$BRK" > broker.secret
 DIGEST="$(printf '%s' "$ENROL" | shasum -a 256 | cut -d' ' -f1)"
-kubectl -n "$NS" create secret generic vouchryx-keys --from-file=signing.pem=signing.pem --from-literal=revoke_key="$REVOKE" >/dev/null
-kubectl -n "$NS" create secret generic gateway-client-keys --from-literal=client_keys="$GW:gateway-caller,$BRK:broker" >/dev/null
+# Secrets go on stdin as manifests (CLAUDE.md invariant 60): no value on a command line.
+. "$(cd "$EV/../.." && pwd)/lib/secret-doc.sh"
+secret_doc vouchryx-keys "signing.pem=@signing.pem" "revoke_key=$REVOKE" | kubectl -n "$NS" create -f - >/dev/null
+secret_doc gateway-client-keys "client_keys=$GW:gateway-caller,$BRK:broker" | kubectl -n "$NS" create -f - >/dev/null
 kubectl -n "$NS" create secret generic broker-taint-key --from-file=client_key=broker.secret >/dev/null
-kubectl -n "$NS" create secret generic gateway-upstream-key --from-literal=anthropic_key=stand-in-provider-key >/dev/null
-kubectl -n "$NS" create secret generic tokenfuse-mcp-broker-keys --from-literal=TOKENFUSE_MCP_KEYS="$BRK:broker-caller" >/dev/null
+secret_doc gateway-upstream-key "anthropic_key=stand-in-provider-key" | kubectl -n "$NS" create -f - >/dev/null
+secret_doc tokenfuse-mcp-broker-keys "TOKENFUSE_MCP_KEYS=$BRK:broker-caller" | kubectl -n "$NS" create -f - >/dev/null
 kubectl get --raw /openid/v1/jwks > jwks.json || die "no cluster JWKS"
 kubectl -n "$NS" create configmap vouchryx-trusted-issuers \
 	--from-literal=trusted_issuers="https://idp.stand-in.invalid|http://vouchryx:4310|/etc/vouchryx/trusted/idp.jwks.json" \

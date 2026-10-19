@@ -57,10 +57,13 @@ for p in installers:
         if not re.search(SERVER_CMD, l):
             continue
         servers += 1
+        # The invocation ends at the installer's own line (`< <(curl ... get.k3s.io)`, the
+        # old spelling) or at the closing quote of the command string (the stdin
+        # spelling, where get.k3s.io opens the pipeline on the first line instead).
         block = []
         for k in range(idx, min(idx + 30, len(lines))):
             block.append(lines[k][1])
-            if "get.k3s.io" in lines[k][1]:
+            if "< <(curl" in lines[k][1] or lines[k][1].rstrip().endswith('"'):
                 break
         if not any(FLAG.search(x) for x in block):
             problems.append(f"{p}:{n}: starts a k3s server without --secrets-encryption, so its Secrets sit in etcd as plaintext (GOTCHAS 18)")
