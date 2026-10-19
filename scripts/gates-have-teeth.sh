@@ -3794,7 +3794,7 @@ run_case "hostkeys-are-verified: a mismatched console fingerprint is accepted" f
 
 run_case "hostkeys-are-verified: cloud-init's syslog prefix is no longer removed" fail \
 	'./scripts/hostkeys-are-verified.sh' \
-	"$(py 'edit("lib/hostkeys.sh", "  sed -E \x27s/^<[0-9]{1,3}>", "  sed -E \x27s/^<NEVER>")')" \
+	"$(py 'edit("lib/hostkeys.sh", "[0-9]{1,3}>[A-Z][a-z]{2} ", "[0-9]{1,3}>NEVER[A-Z][a-z]{2} ")')" \
 	"D2 prefixed console"
 
 run_case "hostkeys-are-verified: any program's prefix is removed" fail \
