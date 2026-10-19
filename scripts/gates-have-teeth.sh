@@ -3131,11 +3131,11 @@ run_case "verified-images: the keyless policy turns to warn" fail \
 run_case "verified-images: the subject expression accepts any repository" fail \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "subjectRegExp: '"'"'", "subjectRegExp: '"'"'.*|")')" \
-	"accepts a foreign or non-release identity"
+	"accepts the identity of another repository"
 run_case "verified-images: the subject expression accepts a fork's release" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/image-policy.yaml", "TAIPANBOX/(?:[A-Za-z0-9._-]+/", "(?:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/")')" \
-	"accepts a foreign or non-release identity"
+	"$(py 'edit("policy/image-policy.yaml", "TAIPANBOX/tokenfuse/", "[A-Za-z0-9._-]+/tokenfuse/")')" \
+	"accepts a fork's release"
 run_case "verified-images: the issuer is widened" fail \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "issuer: https://token.actions.githubusercontent.com", "issuer: https://accounts.google.com")')" \
@@ -3146,11 +3146,11 @@ run_case "verified-images: a static allow has no reason" fail \
 	"without a reason line above it"
 run_case "verified-images: up.sh opts the namespace in before the webhook answers" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/up.sh", "kubectl -n cosign-system rollout status deployment/webhook --timeout=300s\n", "")')" \
+	"$(py 'edit("policy/up.sh", "$KUBECTL -n cosign-system rollout status deployment/webhook --timeout=300s\n", "")')" \
 	"does not wait for the webhook"
 run_case "verified-images: up.sh no longer opts agent-stack in" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/up.sh", "kubectl label namespace agent-stack policy.sigstore.dev/include=true --overwrite\n", "")')" \
+	"$(py 'edit("policy/up.sh", "$KUBECTL label namespace agent-stack policy.sigstore.dev/include=true --overwrite\n", "")')" \
 	"does not label agent-stack"
 run_case "verified-images: the controller changes without a new pin" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -3170,11 +3170,33 @@ run_case "verified-images: the default apply set names policy" fail \
 	"names policy/"
 run_case "verified-images: the keyless policy is absent (measured nothing)" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/image-policy.yaml", "kind: ClusterImagePolicy\nmetadata:\n  name: taipanbox-signed\n", "kind: ConfigMap\nmetadata:\n  name: taipanbox-signed\n")')" \
+	"$(py 'edit("policy/image-policy.yaml", "kind: ClusterImagePolicy\nmetadata:\n  name: taipanbox-tokenfuse\n", "kind: ConfigMap\nmetadata:\n  name: taipanbox-tokenfuse\n")')" \
 	"measured NOTHING"
 run_case "verified-images: a comment naming an unpinned image (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/up.sh", "kubectl get namespace agent-stack >/dev/null\n", "kubectl get namespace agent-stack >/dev/null\n# image: ghcr.io/taipanbox/wardryx:v2.2.1 is named here in prose, not as a reference\n")')"
+	"$(py 'edit("policy/up.sh", "$KUBECTL get namespace agent-stack >/dev/null\n", "$KUBECTL get namespace agent-stack >/dev/null\n# image: ghcr.io/taipanbox/wardryx:v2.2.1 is named here in prose, not as a reference\n")')"
+# One policy per repository (invariant 58). The first version named one identity for every image, so a
+# signature by one repository's workflow admitted another repository's image name.
+run_case "verified-images: a policy admits another repository's identity" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/image-policy.yaml", "TAIPANBOX/wardryx/", "TAIPANBOX/(?:wardryx|tokenfuse)/")')" \
+	"accepts the identity of another repository"
+run_case "verified-images: a policy's subject accepts a branch as well as a version tag" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/image-policy.yaml", "@refs/tags/v[0-9][A-Za-z0-9._+-]*$", "@refs/(?:tags/v[0-9]|heads/main)[A-Za-z0-9._+-]*$")')" \
+	"accepts a branch of tokenfuse"
+run_case "verified-images: a glob wider than one repository's image name" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/image-policy.yaml", "ghcr.io/taipanbox/wardryx@sha256:*", "ghcr.io/taipanbox/**")')" \
+	"not a digest-anchored name of one repository"
+run_case "verified-images: a manifest names a TAIPANBOX image with no signer row" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.2.1@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.2.1@sha256:")')" \
+	"has no signer row in BINDINGS"
+run_case "verified-images: the default install stops turning admission on" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("deploy.sh", "bash policy/up.sh --enforce'"'"'", "bash policy/up.sh'"'"'")')" \
+	"does not turn admission on for agent-stack"
 run_case "verified-images: a reason reworded (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres), an upstream image", "# reason: the policy store (postgres), an upstream image")')"
@@ -3232,10 +3254,25 @@ run_case "stream-precreate: the object the table names is renamed away" fail \
 run_case "stream-precreate: a reader drops its group" fail \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "supplementalGroups: [10001], ", "")')" \
-	"idryx (reader): the pod is not in group 10001"
+	"idryx (mounts stack-events): the pod is not in group 10001"
 run_case "stream-precreate: a reader's group written as a longer list (must pass)" pass \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "supplementalGroups: [10001], ", "supplementalGroups: [ 10001, 65532 ], ")')"
+run_case "stream-precreate: a new pod mounts stack-events outside group 10001" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          persistentVolumeClaim: \x7b claimName: stack-events \x7d\n---\napiVersion: v1\n", "          persistentVolumeClaim: \x7b claimName: stack-events \x7d\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: rogue-reader\n  namespace: agent-stack\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: rogue-reader\n  template:\n    metadata:\n      labels:\n        app: rogue-reader\n    spec:\n      securityContext:\n        runAsNonRoot: true\n        runAsUser: 65532\n        runAsGroup: 65532\n      containers:\n        - name: c\n          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e\n          volumeMounts:\n            - name: events\n              mountPath: /var/lib/stack/events\n      volumes:\n        - name: events\n          persistentVolumeClaim:\n            claimName: stack-events\n---\napiVersion: v1\n")')" \
+	"rogue-reader (mounts stack-events): the pod is not in group 10001"
+run_case "stream-precreate: the same new pod with fsGroup 10001 (must pass)" pass \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          persistentVolumeClaim: \x7b claimName: stack-events \x7d\n---\napiVersion: v1\n", "          persistentVolumeClaim: \x7b claimName: stack-events \x7d\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: rogue-reader\n  namespace: agent-stack\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: rogue-reader\n  template:\n    metadata:\n      labels:\n        app: rogue-reader\n    spec:\n      securityContext:\n        runAsNonRoot: true\n        runAsUser: 65532\n        runAsGroup: 65532\n        fsGroup: 10001\n      containers:\n        - name: c\n          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e\n          volumeMounts:\n            - name: events\n              mountPath: /var/lib/stack/events\n      volumes:\n        - name: events\n          persistentVolumeClaim:\n            claimName: stack-events\n---\napiVersion: v1\n")')"
+run_case "stream-precreate: an exception names a pod that no longer mounts the claim" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "claimName: stack-events", "claimName: stack-events-off")')" \
+	"the EXCEPTIONS entry matches no pod that mounts stack-events"
+run_case "stream-precreate: an exception that now has the group is stale" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/54-delegation.yaml", "fsGroup: 65532, seccompProfile", "fsGroup: 10001, seccompProfile")')" \
+	"now in group 10001, so its EXCEPTIONS entry is stale"
 run_case "stream-precreate: a comment naming the init container (must pass)" pass \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/51-typryx.yaml", "      # Creates the stream file before typryx starts", "      # precreate-streams (invariant 59) creates the stream file before typryx starts")')"

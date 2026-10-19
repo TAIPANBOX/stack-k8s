@@ -20,7 +20,14 @@
 #      precreate-streams that runs busybox by digest, as the writer's uid and never as root, in the
 #      group named in the table, mounts the volume the file lives on, and creates the exact path
 #      (umask 027 or chmod 0640). The writer's pod runs as the uid the table names.
-#   2. Every reader in READERS: its pod is in group 10001, the group the bus files are created in.
+#   2. Every pod that mounts the stack-events claim is in group 10001, the group the bus files are
+#      created in. The pods are FOUND, not listed: every tracked YAML document that is a pod-bearing
+#      object (Deployment, StatefulSet, DaemonSet, Job, CronJob, Pod) with a volume whose
+#      persistentVolumeClaim names stack-events. A pod that mounts it without the group fails, unless
+#      it is in EXCEPTIONS with the reason it does not need the group. An exception that now complies,
+#      or that matches no pod, fails too: the list never outlives the pod it describes. A pod counts
+#      as in the group when the pod-level securityContext has fsGroup 10001, supplementalGroups with
+#      10001, or runAsGroup 10001; a container-level runAsGroup is not counted (named limit).
 #
 # Not a writer here: keyryx-witness. Its alerts file sits in a directory its own uid created in
 # root-key-copy, so openAppend's ownership test passes without a precreate, and nothing on the bus
@@ -34,6 +41,7 @@ cd "$(dirname "$0")/.."
 python3 - <<'PY'
 import os
 import re
+import subprocess
 import sys
 
 # file, kind, object name, the file the writer appends to, the uid it appends as,
@@ -56,12 +64,53 @@ WRITERS = [
     ("48-scopyx-browser.yaml", "Deployment", "scopyx", "/var/lib/scopyx/events.ndjson", 65532, 65532, "journal"),
 ]
 
-# file, kind, object name: readers of the bus files, which must be in group 10001
-READERS = [
-    ("10-planes.yaml", "Deployment", "idryx"),
-    ("40-routines-and-secrets.yaml", "CronJob", "identity-sweep"),
-    ("45-heraldyx.yaml", "Deployment", "heraldyx"),
-]
+# Pods that mount the stack-events claim WITHOUT group 10001, each with the reason it does not need it.
+# Keyed by repository-relative file, kind and object name. Every entry must still mount the claim and
+# still lack the group, or the gate says so.
+EXCEPTIONS = {
+    ("manifests/49-costcrew.yaml", "Deployment", "costcrew"):
+        "writes only its own precreated stream (costcrew.ndjson, owned by its uid 65532 at 0640); its "
+        "manifest names no bus reader, and the group would add read access to every plane's stream. Not "
+        "checked against its code. Revisit if it reads the bus.",
+    ("manifests/49-costcrew.yaml", "CronJob", "costcrew-crew"):
+        "the scheduled run of costcrew: writes only its own precreated stream, as its own uid 65532 at "
+        "0640; its manifest names no bus reader. Same reason as the Deployment above.",
+    ("manifests/54-delegation.yaml", "Deployment", "vouchryx"):
+        "writes only its own precreated stream (vouchryx.ndjson, owned by its uid 65532 at 0640); its "
+        "revocations live on its own volume and its manifest names no bus reader.",
+}
+
+
+def discovered_mounters():
+    """Pod-bearing objects in every tracked YAML document that mount the stack-events claim, found by
+    what they are: a volume whose persistentVolumeClaim names the claim, in a non-comment line."""
+    files = subprocess.run(["git", "ls-files", "*.yaml", "*.yml"], capture_output=True, text=True).stdout.split()
+    found = []
+    for f in files:
+        if f.startswith(("evidence/", "docs/", "features/", ".github/")):
+            continue
+        try:
+            text = open(f).read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for d in re.split(r"\n---\s*\n", text):
+            live = "\n".join(l for l in d.split("\n") if not l.lstrip().startswith("#"))
+            if not re.search(r"claimName:\s*stack-events(?![\w.-])", live):
+                continue
+            kind = re.search(r"^kind:\s*(\S+)\s*$", live, re.M)
+            if not kind or kind.group(1) not in ("Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob", "Pod"):
+                continue
+            name = re.search(r"^  name:\s*(\S+)\s*$", live, re.M)
+            found.append((f, kind.group(1), name.group(1) if name else "?", live))
+    return found
+
+
+def in_group_10001(doc):
+    ind = containers_indent(doc)
+    sc = block(doc, "securityContext", ind) if ind is not None else None
+    if not sc:
+        return False
+    return bool(re.search(r"\bfsGroup:\s*10001\b|supplementalGroups:\s*\[[^\]]*\b10001\b|\brunAsGroup:\s*10001\b", sc))
 
 bad = []
 docs_cache = {}
@@ -175,16 +224,28 @@ for path, kind, name, target, uid, gid, vol in WRITERS:
     elif int(m.group(1)) != uid:
         bad.append(f"{label}: the writer runs as {m.group(1)}, but the table says {uid}")
 
-for path, kind, name in READERS:
-    doc = find(path, kind, name)
-    label = f"{path}: {kind} {name} (reader)"
-    if doc is None:
-        bad.append(f"{label}: the object is absent, so this reader is measured NOTHING")
+mounters = discovered_mounters()
+if not mounters:
+    bad.append("no pod mounts stack-events in any tracked YAML, so this gate measured NOTHING about the readers")
+found_keys = set()
+for path, kind, name, doc in mounters:
+    key = (path, kind, name)
+    found_keys.add(key)
+    label = f"{path}: {kind} {name} (mounts stack-events)"
+    compliant = in_group_10001(doc)
+    if key in EXCEPTIONS:
+        if compliant:
+            bad.append(f"{label}: now in group 10001, so its EXCEPTIONS entry is stale; remove it")
         continue
-    ind = containers_indent(doc)
-    sc = block(doc, "securityContext", ind) if ind is not None else None
-    if not sc or not re.search(r"supplementalGroups:\s*\[[^\]]*\b10001\b|fsGroup:\s*10001\b", sc):
-        bad.append(f"{label}: the pod is not in group 10001, so it cannot read the bus files created in it")
+    if not compliant:
+        bad.append(f"{label}: the pod is not in group 10001, so it cannot read the bus files created in it; "
+                   "add fsGroup or supplementalGroups 10001, or name it in EXCEPTIONS with its reason")
+for key in EXCEPTIONS:
+    if key not in found_keys:
+        bad.append(f"{key[0]}: {key[1]} {key[2]}: the EXCEPTIONS entry matches no pod that mounts stack-events; remove it")
+for path, kind, name, target, uid, gid, vol in WRITERS:
+    if vol == "events" and (f"manifests/{path}", kind, name) not in found_keys:
+        bad.append(f"{path}: {kind} {name}: writes stack-events but the discovery does not find it mounting the claim")
 
 if bad:
     for b in bad:
@@ -193,5 +254,6 @@ if bad:
     sys.exit(1)
 
 print(f"OK: {len(WRITERS)} writer entries create their stream file before they start, as their own uid, "
-      f"in the right group; {len(READERS)} reader(s) are in group 10001.")
+      f"in the right group; {len(found_keys)} pod(s) mount stack-events, {len(found_keys) - len(EXCEPTIONS)} "
+      f"of them in group 10001 and {len(EXCEPTIONS)} named exception(s).")
 PY

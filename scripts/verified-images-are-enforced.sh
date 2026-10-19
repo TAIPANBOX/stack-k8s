@@ -1,37 +1,41 @@
 #!/usr/bin/env bash
-# Enforces invariant 58 of CLAUDE.md: the opt-in admission policy admits only
-# images whose signature verifies, every image the stack names is pinned by
-# digest, and the one thing the policy trusts without a signature is listed,
-# with a reason, next to the digest it trusts.
+# Enforces invariant 58 of CLAUDE.md: the admission policy admits an image only when a signature
+# verifies that its OWN repository's workflow made, every image the stack names is pinned by digest,
+# and the one thing the policy trusts without a signature is listed, with a reason, next to the
+# digest it trusts. The default install turns the policy on for the stack's namespace.
 #
 # WHY
 #
-# A launcher that pins by tag and pulls whatever the registry serves today runs
-# a different image after every re-push of that tag, and nothing on the cluster
-# says so. Every TAIPANBOX release is signed keyless by its own release workflow
-# (the signature and the build provenance sit on the registry next to the image),
-# but no launcher checks that before it runs an image. The approved method is the
-# Sigstore policy-controller, with a ClusterImagePolicy that names the expected
-# signer, installed by policy/up.sh and switched on per namespace.
+# A launcher that pins by tag and pulls whatever the registry serves today runs a different image
+# after every re-push of that tag, and nothing on the cluster says so. Every TAIPANBOX release is
+# signed keyless by its own release workflow, but no launcher checks that before it runs an image.
+# The Sigstore policy-controller checks it, given a ClusterImagePolicy that names the expected signer.
+#
+# The first version named ONE identity for every TAIPANBOX image: the release workflow of any
+# TAIPANBOX repository. A signature made by one repository's workflow then admitted another
+# repository's image name. So there is one policy per repository, and each names only that
+# repository's workflow (or stack-k8s's console-image.yml or tunnel-images.yml).
 #
 # WHAT THIS CHECKS
 #
-#   1. policy/PIN records the controller release, its source commit, the one image
-#      it runs by digest, and the sha256 of the rendered manifest; the manifest on
-#      disk is that file, byte for byte, and names that image and no other.
-#   2. policy/image-policy.yaml has a keyless ClusterImagePolicy for
-#      ghcr.io/taipanbox/** in enforce mode, whose issuer is GitHub Actions and
-#      whose subject accepts the release workflow on a version tag of a TAIPANBOX
-#      repository and nothing else. Its subject expression is run against the
-#      identities measured on the registry, and against identities it must refuse.
-#   3. Every static (unsigned) allow is pinned by digest and carries a reason, and
-#      the digests in the manifests are the digests the static allows name.
-#   4. policy/up.sh installs the controller, waits for its webhook, applies the
-#      policies and only then opts the stack's namespace in.
-#   5. Every image reference in a tracked YAML or shell file is pinned by digest.
-#      A TAIPANBOX image is covered by the glob; an upstream image must be one of
-#      the static allows; the rest of the exceptions are listed below with reasons.
-#   6. The default apply set (manifests/kustomization.yaml) does not name policy/.
+#   1. policy/PIN records the controller release, its source commit, the one image it runs by digest,
+#      and the sha256 of the rendered manifest; the manifest on disk is that file, byte for byte.
+#   2. Every ClusterImagePolicy whose glob is under ghcr.io/taipanbox/: enforce mode, GitHub Actions
+#      issuer, one keyless authority with one identity, digest-anchored globs of one image name each,
+#      and a subject expression equal to the expected one for that image's repository and workflow. Its
+#      own release on a version tag must match it; every OTHER binding's identity must not.
+#   3. Every image name the tracked manifests and scripts reference under ghcr.io/taipanbox/ has a row
+#      in BINDINGS, and exactly one policy covers it. A name with no row, or with no policy, is refused
+#      by the controller (no-match-policy: deny) and is a finding here, not a silent gap.
+#   4. Every static (unsigned) allow is pinned by digest and carries a reason, and the digests in the
+#      manifests are the digests the static allows name.
+#   5. policy/up.sh installs the controller, waits for its webhook, applies the policies and only then
+#      opts the stack's namespace in.
+#   6. Every image reference in a tracked YAML or shell file is pinned by digest. A TAIPANBOX image is
+#      covered by check 3; an upstream image must be one of the static allows; the rest of the
+#      exceptions are listed below with reasons.
+#   7. The default apply set (manifests/kustomization.yaml) does not name policy/, and deploy.sh turns
+#      admission on for the stack's namespace after its apply (the default install).
 #
 # A subject that is absent is "measured NOTHING", never a pass.
 set -uo pipefail
@@ -47,7 +51,7 @@ import sys
 
 NOTHING = "verified-images-are-enforced: {} is absent, so this gate measured NOTHING"
 
-for needed in ("policy/PIN", "policy/policy-controller.yaml", "policy/image-policy.yaml", "policy/up.sh"):
+for needed in ("policy/PIN", "policy/policy-controller.yaml", "policy/image-policy.yaml", "policy/up.sh", "deploy.sh"):
     if not os.path.exists(needed):
         print(NOTHING.format(needed))
         sys.exit(1)
@@ -73,6 +77,45 @@ def value(text, key):
     return m.group(1) if m else None
 
 
+# The image name -> (repository, workflow file) that signs it. A row here is a decision: which
+# repository's release is the signer of that image. Every TAIPANBOX image the tracked files name must
+# have a row (check 3), so a new image cannot ride into the policy without its signer being written down.
+BINDINGS = {
+    "tokenfuse": ("tokenfuse", "release.yml"),
+    "tokenfuse-control-plane": ("tokenfuse", "release.yml"),
+    "wardryx": ("wardryx", "release.yml"),
+    "idryx": ("idryx", "release.yml"),
+    "heraldyx": ("heraldyx", "release.yml"),
+    "vouchryx": ("vouchryx", "release.yml"),
+    "scopyx": ("scopyx", "release.yml"),
+    "typryx": ("typryx", "release.yml"),
+    "costcrew": ("costcrew", "release.yml"),
+    "qryx": ("qryx", "release.yml"),
+    "trailryx-node": ("trailryx", "release.yml"),
+    "mockryx": ("mockryx", "release.yml"),
+    "keyryx": ("keyryx", "release.yml"),
+    "agent-conform": ("agent-stack-go", "release.yml"),
+    "genaryx-console": ("stack-k8s", "console-image.yml"),
+    "stack-caddy": ("stack-k8s", "tunnel-images.yml"),
+    "stack-wg": ("stack-k8s", "tunnel-images.yml"),
+}
+REPO_RE = re.compile(r"^[A-Za-z0-9-]+$")
+for img, (repo, wf) in BINDINGS.items():
+    assert REPO_RE.match(repo) and wf.endswith(".yml"), (img, repo, wf)
+
+ISSUER = "https://token.actions.githubusercontent.com"
+
+
+def subject_for(repo, wf):
+    # the repository and workflow names are plain (no regex metacharacters but the dot in the file name)
+    return ("^https://github\\.com/TAIPANBOX/" + repo + "/\\.github/workflows/"
+            + wf.replace(".", "\\.") + "@refs/tags/v[0-9][A-Za-z0-9._+-]*$")
+
+
+def identity_of(repo, wf, tag):
+    return f"https://github.com/TAIPANBOX/{repo}/.github/workflows/{wf}@refs/tags/{tag}"
+
+
 # 1. The controller is the one recorded in policy/PIN, byte for byte.
 pin = read("policy/PIN")
 controller = read("policy/policy-controller.yaml")
@@ -96,66 +139,88 @@ for img in images_in_controller:
     elif want_image and img != want_image:
         bad.append(f"the controller runs {img}, but policy/PIN records {want_image}")
 
-# 2. The keyless policy: enforce, the TAIPANBOX glob, GitHub Actions, release workflow on a version tag.
+# 2. The policies. Documents are split on the YAML separator; a ClusterImagePolicy is a document with that kind.
 ip = read("policy/image-policy.yaml")
 docs = [d for d in re.split(r"\n---\s*\n", ip) if re.search(r"^kind:\s*ClusterImagePolicy\s*$", d, re.M)]
-by_name = {}
+taipanbox_policies = {}   # policy name -> doc
+static_docs = []
 for d in docs:
     m = re.search(r"^  name:\s*(\S+)\s*$", d, re.M)
-    if m:
-        by_name[m.group(1)] = d
-signed = by_name.get("taipanbox-signed")
-if signed is None:
-    bad.append("policy/image-policy.yaml has no ClusterImagePolicy named taipanbox-signed, so this gate measured NOTHING about the signer")
-    signed = ""
-
-GLOB = "ghcr.io/taipanbox/**"
-ISSUER = "https://token.actions.githubusercontent.com"
-SUBJECT_RE = r"^https://github\.com/TAIPANBOX/(?:[A-Za-z0-9._-]+/\.github/workflows/release\.yml|stack-k8s/\.github/workflows/(?:console-image|tunnel-images)\.yml)@refs/tags/v[0-9][A-Za-z0-9._+-]*$"
-
-if signed:
-    if not re.search(rf"glob:\s*['\"]?{re.escape(GLOB)}['\"]?\s*$", signed, re.M):
-        bad.append(f"taipanbox-signed does not match {GLOB}")
-    if not re.search(rf"issuer:\s*['\"]?{re.escape(ISSUER)}['\"]?\s*$", signed, re.M):
-        bad.append(f"taipanbox-signed issuer is not {ISSUER}")
-    if not re.search(r"^\s*mode:\s*enforce\s*$", signed, re.M):
-        bad.append("taipanbox-signed mode is not enforce (a warn policy admits the unsigned image)")
-    m = re.search(r"subjectRegExp:\s*['\"]?(.+?)['\"]?\s*$", signed, re.M)
-    if not m:
-        bad.append("taipanbox-signed names no subjectRegExp")
+    pname = m.group(1) if m else "(unnamed)"
+    if re.search(r"glob:\s*['\"]?ghcr\.io/taipanbox/", d):
+        taipanbox_policies[pname] = d
     else:
-        expr = m.group(1)
-        try:
-            rx = re.compile(expr)
-        except re.error as e:
-            rx = None
-            bad.append(f"taipanbox-signed subjectRegExp does not compile: {e}")
-        if rx is not None:
-            must = [
-                "https://github.com/TAIPANBOX/wardryx/.github/workflows/release.yml@refs/tags/v2.1.0",
-                "https://github.com/TAIPANBOX/tokenfuse/.github/workflows/release.yml@refs/tags/v1.16.0",
-                "https://github.com/TAIPANBOX/stack-k8s/.github/workflows/console-image.yml@refs/tags/v1.1.47",
-                "https://github.com/TAIPANBOX/stack-k8s/.github/workflows/tunnel-images.yml@refs/tags/v1.1.47",
-                "https://github.com/TAIPANBOX/agent-stack-go/.github/workflows/release.yml@refs/tags/v1.1.0",
-                "https://github.com/TAIPANBOX/trailryx/.github/workflows/release.yml@refs/tags/v1.2.1",
-            ]
-            refuse = [
-                "https://github.com/evil-fork/wardryx/.github/workflows/release.yml@refs/tags/v2.1.0",
-                "https://github.com/TAIPANBOX/wardryx/.github/workflows/ci.yml@refs/heads/main",
-                "https://github.com/TAIPANBOX/wardryx/.github/workflows/release.yml@refs/heads/main",
-                "https://github.com/TAIPANBOX/stack-k8s/.github/workflows/ci.yml@refs/tags/v1.1.47",
-                "https://github.com/evil-fork/stack-k8s/.github/workflows/console-image.yml@refs/tags/v1.1.47",
-                "https://github.com/TAIPANBOX/wardryx/.github/workflows/release.yml@refs/tags/v2.1.0/../../x",
-                "https://github.com/TAIPANBOX/wardryx/.github/workflows/release.yml@refs/tags/v2.1.0\nextra",
-            ]
-            for s in must:
-                if not rx.fullmatch(s):
-                    bad.append(f"taipanbox-signed subjectRegExp refuses a release of TAIPANBOX: {s}")
-            for s in refuse:
-                if rx.fullmatch(s):
-                    bad.append(f"taipanbox-signed subjectRegExp accepts a foreign or non-release identity: {s}")
-        if expr != SUBJECT_RE:
-            bad.append("taipanbox-signed subjectRegExp is not the release-workflow expression recorded in this gate")
+        static_docs.append(d)
+
+if not taipanbox_policies:
+    bad.append("policy/image-policy.yaml has no ClusterImagePolicy under ghcr.io/taipanbox/, so this gate measured NOTHING about the signers")
+
+GLOB_RE = re.compile(r"^ghcr\.io/taipanbox/([a-z0-9-]+)@sha256:\*$")
+cover = {}   # image name -> policy name
+for pname, d in taipanbox_policies.items():
+    if not re.search(r"^\s*mode:\s*enforce\s*$", d, re.M):
+        bad.append(f"{pname}: mode is not enforce (a warn policy admits the unsigned image)")
+    if not re.search(rf"issuer:\s*['\"]?{re.escape(ISSUER)}['\"]?\s*$", d, re.M):
+        bad.append(f"{pname}: issuer is not {ISSUER}")
+    globs = re.findall(r"^\s*-\s*glob:\s*['\"]?([^'\"\s]+)['\"]?\s*$", d, re.M)
+    if not globs:
+        bad.append(f"{pname}: names no glob, so it covers no image")
+    names = []
+    for g in globs:
+        m = GLOB_RE.match(g)
+        if not m:
+            bad.append(f"{pname}: glob {g} is not a digest-anchored name of one repository "
+                       "(ghcr.io/taipanbox/<name>@sha256:*); a wider glob would cover another repository's images")
+            continue
+        names.append(m.group(1))
+        if m.group(1) in cover:
+            bad.append(f"ghcr.io/taipanbox/{m.group(1)} is covered by two policies ({cover[m.group(1)]} and {pname})")
+        cover[m.group(1)] = pname
+    subjects = re.findall(r"subjectRegExp:\s*['\"]?(.+?)['\"]?\s*$", d, re.M)
+    if len(subjects) != 1:
+        bad.append(f"{pname}: names {len(subjects)} subjectRegExp, expected exactly one")
+        continue
+    expr = subjects[0]
+    repos = {BINDINGS[n][0] for n in names if n in BINDINGS}
+    wfs = {BINDINGS[n][1] for n in names if n in BINDINGS}
+    if len(repos) != 1 or len(wfs) != 1:
+        bad.append(f"{pname}: its globs name images of {len(repos)} repositories and {len(wfs)} workflows, expected one of each")
+        continue
+    repo, wf = repos.pop(), wfs.pop()
+    try:
+        rx = re.compile(expr)
+    except re.error as e:
+        bad.append(f"{pname}: subjectRegExp does not compile: {e}")
+        continue
+    if expr != subject_for(repo, wf):
+        bad.append(f"{pname}: subjectRegExp is not the identity of {repo}'s {wf} on a version tag")
+    if not rx.fullmatch(identity_of(repo, wf, "v2.2.1")):
+        bad.append(f"{pname}: subjectRegExp refuses its own repository's release of {repo}")
+    # every other binding's identity is refused: an image is admitted only on its own repository's signature
+    for orepo, owf in set(BINDINGS.values()):
+        if (orepo, owf) == (repo, wf):
+            continue
+        if rx.fullmatch(identity_of(orepo, owf, "v1.0.0")):
+            bad.append(f"{pname}: subjectRegExp accepts the identity of another repository ({orepo}'s {owf}); "
+                       f"an image of {repo} would be admitted on {orepo}'s signature")
+    if rx.fullmatch(f"https://github.com/TAIPANBOX/{repo}/.github/workflows/{wf}@refs/heads/main"):
+        bad.append(f"{pname}: subjectRegExp accepts a branch of {repo}, not only a version tag")
+    if rx.fullmatch(f"https://github.com/evil-fork/{repo}/.github/workflows/{wf}@refs/tags/v1.0.0"):
+        bad.append(f"{pname}: subjectRegExp accepts a fork's release (evil-fork/{repo})")
+    if rx.fullmatch(identity_of(repo, wf, "v1.0.0") + "\nextra"):
+        bad.append(f"{pname}: subjectRegExp accepts a value with a trailing line")
+
+# Coverage: every name the stack knows is covered by exactly one policy, and every covered name is known.
+for n in BINDINGS:
+    if n not in cover:
+        bad.append(f"ghcr.io/taipanbox/{n} is covered by no ClusterImagePolicy: refused by default, and this gate measured NOTHING about its signer")
+for n in cover:
+    if n not in BINDINGS:
+        bad.append(f"ghcr.io/taipanbox/{n} has a policy but no row in BINDINGS in scripts/verified-images-are-enforced.sh")
+
+# 4. Static allows: digest pinned, with a reason, and the same digests as the manifests name.
+static_digests = {}
+
 
 def norm(ref):
     """The name the admission controller matches a glob against: no tag, no digest, and Docker Hub's
@@ -172,9 +237,6 @@ def norm(ref):
     return base
 
 
-# 3. Static allows: digest pinned, with a reason, and the same digests as the manifests name.
-static_docs = [d for d in docs if d is not signed]
-static_digests = {}
 for d in static_docs:
     if re.search(r"^\s*(-\s*)?static:", d, re.M) is None:
         continue
@@ -185,7 +247,6 @@ for d in static_docs:
         name = norm(glob)
         digest = glob.split("@", 1)[1] if "@" in glob else ""
         static_digests[name] = digest
-        # the reason is a comment line immediately above the glob
         lines = d.splitlines()
         idx = next((i for i, l in enumerate(lines) if glob in l), None)
         above = lines[idx - 1] if idx else ""
@@ -194,18 +255,20 @@ for d in static_docs:
 if not static_digests:
     bad.append("policy/image-policy.yaml names no static allow, so the upstream images have no trust decision")
 
-# 4. up.sh: controller, wait for its webhook, policies, then the namespace label.
+# 5. up.sh: controller, wait for its webhook, policies, then the namespace label. Commands are read
+#    as `kubectl ...` or as `$KUBECTL ...` (deploy.sh runs the script on the first node with k3s's kubectl).
 up = read("policy/up.sh")
+KC = r"(?:kubectl|\$KUBECTL)"
 steps = []
 for n, line in live_lines(up):
-    if re.search(r"kubectl\s+apply\b.*policy-controller\.yaml", line):
+    if re.search(rf"{KC}\s+apply\b.*policy-controller\.yaml", line):
         steps.append(("apply-controller", n))
-    if re.search(r"kubectl\s+(-n\s+\S+\s+)?rollout\s+status\b.*webhook", line) or \
-       re.search(r"kubectl\s+wait\b.*webhook", line):
+    if re.search(rf"{KC}\s+(-n\s+\S+\s+)?rollout\s+status\b.*webhook", line) or \
+       re.search(rf"{KC}\s+wait\b.*webhook", line):
         steps.append(("wait-webhook", n))
-    if re.search(r"kubectl\s+apply\b.*image-policy\.yaml", line):
+    if re.search(rf"{KC}\s+apply\b.*image-policy\.yaml", line):
         steps.append(("apply-policies", n))
-    if re.search(r"kubectl\s+label\s+(--overwrite\s+)?namespace\s+agent-stack\s+policy\.sigstore\.dev/include=\"?true\"?", line):
+    if re.search(rf"{KC}\s+label\s+(--overwrite\s+)?namespace\s+agent-stack\s+policy\.sigstore\.dev/include=\"?true\"?", line):
         steps.append(("label", n))
 order = [s for s, _ in steps]
 for need in ("apply-controller", "wait-webhook", "apply-policies", "label"):
@@ -221,8 +284,8 @@ if all(s in order for s in ("apply-controller", "wait-webhook", "apply-policies"
     if not (pos["apply-controller"] < pos["wait-webhook"] < pos["apply-policies"] < pos["label"]):
         bad.append("policy/up.sh runs its steps out of order: the controller, then its webhook, then the policies, then the namespace")
 
-# 5. Every image reference in a tracked file is pinned by digest, and every
-#    unsigned one is on the list below with a reason.
+# 6. Every image reference in a tracked file is pinned by digest, and every unsigned one is on the
+#    list below with a reason.
 ALLOW_UNPINNED = {
     # placeholder pod template for the agent-token example; the operator replaces it before apply
     ("agent-tokens/example-agent.yaml", "ghcr.io/taipanbox/agent-example:replace-with-a-pinned-tag"):
@@ -241,7 +304,7 @@ files = subprocess.run(["git", "ls-files", "*.yaml", "*.yml", "*.sh"], capture_o
 skip_prefixes = ("evidence/", "docs/", "features/", "policy/PIN", "policy/policy-controller.yaml", ".github/")
 refs = []
 for f in files:
-    # the controller's own image is judged against policy/PIN in section 1, not here
+    # the controller's own image is judged against policy/PIN in check 1, not here
     if f.startswith(skip_prefixes) or f == "scripts/gates-have-teeth.sh":
         continue
     try:
@@ -256,7 +319,6 @@ for f in files:
 if not refs:
     bad.append("no image reference found in any tracked YAML or shell file, so this gate measured NOTHING")
 
-checked_upstream = {}
 for f, n, img in refs:
     if "@sha256:" not in img:
         if (f, img) in ALLOW_UNPINNED:
@@ -265,25 +327,37 @@ for f, n, img in refs:
         continue
     name = img.split("@", 1)[0]
     if name.startswith("ghcr.io/taipanbox/"):
-        if not name.startswith("ghcr.io/taipanbox/"):
-            bad.append(f"{f}:{n} {img} is not under {GLOB}")
+        short = name[len("ghcr.io/taipanbox/"):].split(":", 1)[0]
+        if short not in BINDINGS:
+            bad.append(f"{f}:{n} {img}: the TAIPANBOX image {short} has no signer row in BINDINGS, "
+                       "so no policy can admit it")
         continue
     if static_digests.get(norm(name)) == img.split("@", 1)[1]:
-        checked_upstream[norm(name)] = True
         continue
     bad.append(f"{f}:{n} {img} is neither a TAIPANBOX image nor on the static allow list in policy/image-policy.yaml")
 
-# 6. The default apply set does not name policy/.
+# 7. The default apply set does not name policy/, and deploy.sh turns admission on after its apply.
 kust = read("manifests/kustomization.yaml") if os.path.exists("manifests/kustomization.yaml") else ""
 if re.search(r"policy/", kust):
-    bad.append("the default apply set names policy/, so the admission policy would be on by default")
+    bad.append("the default apply set names policy/, so the admission policy would be on by default in the manifests")
+deploy_lines = [l for _, l in live_lines(read("deploy.sh"))]
+apply_at = next((i for i, l in enumerate(deploy_lines) if re.search(r"apply -k /root/stack-k8s/manifests", l)), None)
+enforce_at = next((i for i, l in enumerate(deploy_lines)
+                   if re.search(r"policy/up\.sh\s+--enforce", l)), None)
+if enforce_at is None:
+    bad.append("deploy.sh does not turn admission on for agent-stack (policy/up.sh --enforce), so the default install is not admitted")
+elif apply_at is None:
+    bad.append("deploy.sh has no apply of the manifests, so its admission step has nothing to follow")
+elif enforce_at < apply_at:
+    bad.append("deploy.sh turns admission on before it applies the manifests, when the namespace does not exist yet")
 
 if bad:
     for b in bad:
         print("FAIL " + b)
     sys.exit(1)
 
-print(f"OK: {len(refs)} image reference(s) pinned by digest; every TAIPANBOX image falls under "
-      f"{GLOB} with the release-workflow identity; {len(static_digests)} static allow(s) carry a reason; "
-      "policy/up.sh waits for the webhook before it opts the namespace in.")
+print(f"OK: {len(refs)} image reference(s) pinned by digest; {len(taipanbox_policies)} policies, one per repository, "
+      f"cover {len(cover)} TAIPANBOX image names with the workflow of their own repository; {len(static_digests)} static "
+      "allow(s) carry a reason; policy/up.sh waits for the webhook before it opts the namespace in; deploy.sh opts "
+      "agent-stack in after its apply.")
 PY

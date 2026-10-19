@@ -1,0 +1,17 @@
+# identity per repository, cosign v3.1.3, measured 2026-10-19 by evidence/verified-images-kind/identity-per-repo.sh
+idryx                    idryx            release.yml          rc=0 Verification for ghcr.io/taipanbox/idryx@sha256:d92eb2e794d15484053b6b0b6dbfdc14314fb9b899c4caf4b2634ce6b6fc0213 --
+tokenfuse                tokenfuse        release.yml          rc=0 Verification for ghcr.io/taipanbox/tokenfuse@sha256:7cbaa794670560468b15a7a6a3c37396767435332e8eca3a30af627de29ad6d9 --
+wardryx                  wardryx          release.yml          rc=0 Verification for ghcr.io/taipanbox/wardryx@sha256:67718da5ef5551767156ef0ea893765f448c484fcbb5dcce5923a0ca83b8c309 --
+genaryx-console          stack-k8s        console-image.yml    rc=0 Verification for ghcr.io/taipanbox/genaryx-console@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd
+agent-conform            agent-stack-go   release.yml          rc=0 Verification for ghcr.io/taipanbox/agent-conform@sha256:445608e976247b94f4c3877541fdd4ae3f2aa623b18365ee7215a99f75b85e4c
+tokenfuse-control-plane  tokenfuse        release.yml          rc=0 Verification for ghcr.io/taipanbox/tokenfuse-control-plane@sha256:c6160a8eed3d83d9caf42b426e82444cfe48a14027cb90ad433834
+qryx                     qryx             release.yml          rc=0 Verification for ghcr.io/taipanbox/qryx@sha256:819ac02d7017c60f9787d80a175d6742ba661067d470e9e508092f0d9bb37ebb --
+typryx                   typryx           release.yml          rc=0 Verification for ghcr.io/taipanbox/typryx@sha256:c9278289b3722d3e89fd90f4834666c295ee0c83b4b014c0df160500f2b57a20 --
+heraldyx                 heraldyx         release.yml          rc=0 Verification for ghcr.io/taipanbox/heraldyx@sha256:8b4b60f61d0778e473d3a88df1bd63ea5eeb67428754fa341cf23051766b40b5 --
+costcrew                 costcrew         release.yml          rc=0 Verification for ghcr.io/taipanbox/costcrew@sha256:4f7883951aac2a0b723e5b0d7b36cf4005c8b94e4a6335ed051c14370a37b9b7 --
+vouchryx                 vouchryx         release.yml          rc=0 Verification for ghcr.io/taipanbox/vouchryx@sha256:4a2b6b31be44b5391974785bdfca597a88bcc5ddd834d50830bd6b9537e9ab3d --
+trailryx-node            trailryx         release.yml          rc=0 Verification for ghcr.io/taipanbox/trailryx-node@sha256:ab305ac6a65444e08090b56d6f666498b56d560f7351c96a8a84137ece9e6d37
+keyryx                   keyryx           release.yml          rc=0 Verification for ghcr.io/taipanbox/keyryx@sha256:a9f88c44b62545555baffa19e3ace4b9c699c69c3a4aadbae28089aa2b29eb51 --
+mockryx                  mockryx          release.yml          rc=0 Verification for ghcr.io/taipanbox/mockryx@sha256:2c07b4d9723466611a083b9d64ba6b642faac8e669a29066e00103a5de96363c --
+scopyx                   scopyx           release.yml          rc=0 Verification for ghcr.io/taipanbox/scopyx@sha256:f39bfa548e43d461667fc371f5738f9f34f6e58bd297702c8f49d4f667c7789d --
+scopyx                   scopyx           release.yml          rc=0 Verification for ghcr.io/taipanbox/scopyx@sha256:b9aa4ba69f57cb079bdebe2add99f14ebca3cdd7499e223a50e7abed88ac4bce --
