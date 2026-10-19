@@ -1197,7 +1197,8 @@ an absent invariant.
     file is the second. `@claude 2026-10-18`: the NetworkPolicies
     `keyryx-custody-ingress` and `keyryx-witness-ingress` in `59-keyryx.yaml` admit
     labelled pods only and declare `egress: []`; the label is set only on the
-    wardryx pod by `keyryx/wardryx-patch.yaml`. `@measured 2026-10-18`, kind
+    wardryx pod by `keyryx/wardryx-patch.yaml` and, from 2026-10-19 (invariant 69), on the record-seal pod by
+    `keyryx/record-seal-patch.yaml`, the second consumer the same rule admits. `@measured 2026-10-18`, kind
     v1.37.0 (kindnet), `evidence/keyryx-kind/run.sh` step 6: a pod with no label
     reached neither role, a `keyryx-consumer` pod reached custody (200) and not the
     witness, a `keyryx-witness-client` pod reached the witness and not custody, so

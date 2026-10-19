@@ -20,8 +20,9 @@
 #   2. keyryx-witness-ingress admits only pods labelled keyryx-witness-client:
 #      "true", on port 4341;
 #   3. both policies declare Egress with no rule (egress: []);
-#   4. the keyryx-consumer label is set only on the pod templates of the consumers
-#      named in keyryx/wardryx-patch.yaml, never in the Keyryx manifests.
+#   4. the keyryx-consumer label is set only on the pod templates of the consumers named in
+#      keyryx/wardryx-patch.yaml (wardryx) and keyryx/record-seal-patch.yaml (the record-seal, CLAUDE.md
+#      invariant 69), never in the Keyryx manifests.
 #
 # A subject that is absent is "measured NOTHING", never a pass.
 set -uo pipefail
@@ -78,8 +79,8 @@ for f in sorted(glob.glob("keyryx/**/*.yaml", recursive=True)):
     if re.search(r"keyryx-consumer:\s*\"?true\"?", t) and "NetworkPolicy" not in t:
         labelled.add(f)
 for f in sorted(labelled):
-    if f != "keyryx/wardryx-patch.yaml":
-        bad.append(f"{f} sets the keyryx-consumer label; only the wardryx patch may")
+    if f not in ("keyryx/wardryx-patch.yaml", "keyryx/record-seal-patch.yaml"):
+        bad.append(f"{f} sets the keyryx-consumer label; only the wardryx and record-seal patches may")
 for d in docs:
     live = re.sub(r"(?m)^\s*#.*$", "", d)
     if "NetworkPolicy" in live:

@@ -47,12 +47,12 @@ keyryx_bearer_digest() {
   local name="$1" cred
   if [ -n "$(k_ "-n $KEYRYX_NS get secret $name --ignore-not-found -o name")" ]; then
     cred="$(k_ "-n $KEYRYX_NS get secret $name -o jsonpath='{.data.credential}'" | base64 --decode)" \
-      || die "could not read the bearer $name"
+      || die "could not read the consumer credential $name"
     printf '   %s: kept (already exists)\n' "$name" >&2
   else
     cred="$(keyryx_random_hex)"
     printf '%s' "$cred" | k_ "-n $KEYRYX_NS create secret generic $name --from-file=credential=/dev/stdin" >/dev/null \
-      || die "could not mint the bearer $name"
+      || die "could not mint the consumer credential $name"
     printf '   %s: minted\n' "$name" >&2
   fi
   printf '%s' "$cred" | openssl dgst -sha256 -r | cut -d' ' -f1
