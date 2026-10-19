@@ -3334,6 +3334,22 @@ run_case "stream-precreate: a comment naming the init container (must pass)" pas
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/51-typryx.yaml", "      # Creates the stream file before typryx starts", "      # precreate-streams (invariant 59) creates the stream file before typryx starts")')"
 
+# ---- admission on in every launcher that applies the stack (CLAUDE.md invariant 58) ----
+run_case "verified-images-are-enforced: a cloud launcher turns admission on before its apply" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "k_ \"apply -k /root/stack-k8s/manifests\"\n", "su_ \"$FIRST\" \x27KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh --enforce\x27\nk_ \"apply -k /root/stack-k8s/manifests\"\n")')" \
+	"before it applies the manifests"
+
+run_case "verified-images-are-enforced: a cloud launcher has no admission step" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh --enforce\x27 \\\n", "KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh\x27 \\\n")')" \
+	"does not turn admission on"
+
+run_case "verified-images-are-enforced: a cloud node receives the manifests without policy/" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "tar -cz -C \"$ROOT\" manifests policy | su_ \"$FIRST\" \x27sh -c \"mkdir -p /root/stack-k8s", "tar -cz -C \"$ROOT\" manifests | su_ \"$FIRST\" \x27sh -c \"mkdir -p /root/stack-k8s")')" \
+	"without policy/"
+
 # ---- no-secret-on-argv (CLAUDE.md invariant 60): a secret never on a command line ----
 run_case "no-secret-on-argv: an installer puts a plane credential on argv with --from-literal" fail \
 	'./scripts/no-secret-on-argv.sh' \

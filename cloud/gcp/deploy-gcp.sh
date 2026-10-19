@@ -684,8 +684,16 @@ TUNNEL_PORT="${TUNNEL_PORT:-17420}"
 # ---- 3. the workload --------------------------------------------------------
 say "step 3/5: the workload"
 policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 129: refuse before anything is applied
-tar -cz -C "$ROOT" manifests | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
+tar -cz -C "$ROOT" manifests policy | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
 k_ "apply -k /root/stack-k8s/manifests"
+
+# Admission (CLAUDE.md invariant 58), the step deploy.sh runs after its apply: from here on
+# the stack's namespace admits an image only when its signature verifies for its own
+# repository. The controller and its webhook go in first, then the policies, then the
+# namespace label; policy/up.sh does that order, run on the node with k3s's kubectl.
+say "admission: the stack's namespace admits only images signed by their own repository"
+su_ "$FIRST" 'KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/policy/up.sh --enforce' \
+  || die "admission did not come up: the controller's webhook must answer before the namespace is labelled (policy/README.md)"
 
 # The gateway's provider key (CLAUDE.md invariant 53): the gateway's pod waits for this Secret,
 # so it is made here, right after the apply and before any rollout is waited on.

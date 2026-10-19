@@ -4600,6 +4600,7 @@ Also measured through the webhook: a pod image written `name:tag@sha256:digest`,
 
 **What it does not cover.** The table is hand-kept, and the gate checks it only one way: a name the manifests use must have a row, and a row must have a policy that names it. A new repository that signs under a workflow other than `release.yml` is refused until its row says so, which is the intent but is not a discovery of the signer from the registry.
 
+
 ## 139. The launchers accepted a node's host key on its first connection, and the cloud scripts forgot the old keys without checking the new ones
 
 **Ours, and fixed.** Every launcher connected with `StrictHostKeyChecking=accept-new`: the key a node offered on the first connection became its key for good, and a recycled address could hand a new machine to a host the operator never pinned (finding F-029 of the 2026-10-17 review). GOTCHAS 68 is the opposite trap, the old keys left in `known_hosts`, and the cloud installers answered it with `ssh-keygen -R`, which forgets a key and verifies nothing. Both were true at once: the scripts forgot the old machines and then trusted the new ones on sight.
@@ -4619,3 +4620,13 @@ Fixed: each secret is the first line of stdin, or a manifest on stdin. `lib/secr
 **What it does not cover.** The gate reads text and proves no line puts a value on argv; it does not see what a process writes to its environment or its log. The `StrictHostKeyChecking=no` of GOTCHAS 139 is not an argv question and is not closed here.
 
 Gate: `scripts/no-secret-on-argv.sh` (invariant 60). Red first on the unfixed tree: the gate found the sites listed above before any of them was changed.
+
+## 141. A pod with a signed, pinned image is admitted while the policy controller that already verified it keeps running with Sigstore cut off, and a fresh controller refuses it
+
+**Upstream.** Measured on kind v1.37.0 with policy-controller v0.15.1 (`evidence/verified-images-kind/sigstore-unreachable-output.txt`, produced by `evidence/verified-images-kind/sigstore-unreachable.sh`). Egress from the controller's namespace was cut with a NetworkPolicy that allows DNS and the API server only, and step 0 of the script shows that this CNI enforces that policy. A new pod with the signed TAIPANBOX image was admitted, from the controller pod that had verified the same digest before the cut. Once that controller was restarted, the same image was refused, with a webhook timeout (`failed calling webhook ... context deadline exceeded`), and so were a signed digest the controller had not verified before and an unsigned TAIPANBOX image. The controller's log names the cause: `failed validSignatures for authority authority-0 with fulcio for ghcr.io/...: Get ...`, the signature fetch that the cut blocks.
+
+The reading is that the running controller holds its verification results in memory, so a digest it has already verified needs no network until the process restarts. This is inferred from the four outcomes; the cache, its key and its lifetime were not read from the controller's source, and the lifetime was not measured.
+
+Fail closed still holds for a fresh controller, and for every digest that was not verified before the cut. A cut that begins while a controller is running leaves the verified digests admitted for as long as that process lives, which is the window the admission step should be judged on. Nothing was changed for this, as asked.
+
+**What it does not cover.** The Sigstore outage was simulated by cutting the controller's egress in one namespace, not by an outage of Sigstore. The cut was checked by a probe in that namespace: in the recorded run ghcr.io was unreachable and the controller's signature fetches failed, but tuf-repo-cdn.sigstore.dev answered the probe. An earlier run of the same script had refused that host, and the difference was not investigated; so the cut is established for the registry, not for every Sigstore host. The cut's effect on pods in other namespaces, and on a controller whose pods are rescheduled rather than restarted, was not measured. The run is on kind, not on a k3s node.
