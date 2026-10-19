@@ -139,6 +139,14 @@ spec:
       tolerations:
         - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+      # Creates the journal file before scopyx starts, as its own uid (CLAUDE.md invariant 59,
+      # GOTCHAS 135). An existing file is left as it is. Its readers are its own process only.
+      initContainers:
+        - name: precreate-streams
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "f=/var/lib/scopyx/events.ndjson; if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; ls -ln /var/lib/scopyx"]
+          volumeMounts: [{ name: journal, mountPath: /var/lib/scopyx }]
       containers:
         - name: scopyx
           # The `-chromium` variant, pinned like everything else. The plain tag

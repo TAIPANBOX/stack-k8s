@@ -1,0 +1,54 @@
+== 1. the signatures, checked with cosign v2.4.0 (the pinned image)
+  stack-wg sha256:b4a8d7716abc16d0be0dd4499e1e6d19ce9c558c67158a157d6b7829a52e3d2a: cosign exit 0 (verified claims: 1)
+  stack-caddy sha256:9d34959511379ca45c37e93fe320d1e0fa2fe4412e7954e6e7b4a333e448d0b4: cosign exit 0 (verified claims: 1)
+  genaryx-console sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07: cosign exit 0 (verified claims: 1)
+  genaryx-console-v1147 sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739: cosign exit 10 (no signatures found
+verified claims: 0)
+== 2. the controller that runs (policy/PIN) and the one the cluster reports
+  pin: release: v0.15.1
+  pin: commit: cc75baab1d34d3bae47bde7bd934bf79e5ca3afc
+  pin: image: ghcr.io/sigstore/policy-controller/policy-controller:v0.15.1@sha256:0492bb264fb1d9bdc8e3f343ef542cc85b7dd7c7fd8d9524b453c2bd31a1d128
+== 3. policy/up.sh (no --enforce)
+  namespace/cosign-system created
+  customresourcedefinition.apiextensions.k8s.io/clusterimagepolicies.policy.sigstore.dev created
+  customresourcedefinition.apiextensions.k8s.io/trustroots.policy.sigstore.dev created
+  serviceaccount/webhook created
+  role.rbac.authorization.k8s.io/policy-controller-namespace-rbac created
+  clusterrole.rbac.authorization.k8s.io/policy-controller-rbac created
+  rolebinding.rbac.authorization.k8s.io/policy-controller-webhook created
+  clusterrolebinding.rbac.authorization.k8s.io/policy-controller-webhook created
+  configmap/config-image-policies created
+  configmap/config-leader-election created
+  configmap/config-logging created
+  configmap/config-observability created
+  configmap/config-policy-controller created
+  configmap/config-sigstore-keys created
+  secret/webhook-certs created
+  service/webhook created
+  mutatingwebhookconfiguration.admissionregistration.k8s.io/defaulting.clusterimagepolicy.sigstore.dev created
+  mutatingwebhookconfiguration.admissionregistration.k8s.io/policy.sigstore.dev created
+  validatingwebhookconfiguration.admissionregistration.k8s.io/policy.sigstore.dev created
+  validatingwebhookconfiguration.admissionregistration.k8s.io/validating.clusterimagepolicy.sigstore.dev created
+  deployment.apps/webhook created
+  Waiting for deployment "webhook" rollout to finish: 0 of 1 updated replicas are available...
+  deployment "webhook" successfully rolled out
+  clusterimagepolicy.policy.sigstore.dev/taipanbox-signed created
+  clusterimagepolicy.policy.sigstore.dev/upstream-pinned created
+  installed: the controller and the policies. agent-stack is NOT opted in, so nothing is refused.
+  policy/up.sh --enforce opts it in; read policy/README.md first (the signatures are not yet found).
+  running: ghcr.io/sigstore/policy-controller/policy-controller:v0.15.1@sha256:0492bb264fb1d9bdc8e3f343ef542cc85b7dd7c7fd8d9524b453c2bd31a1d128
+== 4. test namespace adm-v1148 labelled policy.sigstore.dev/include=true
+== 5. one pod per image, by digest
+  ADMITTED stack-wg sha256:b4a8d7716abc16d0be0dd4499e1e6d19ce9c558c67158a157d6b7829a52e3d2a: pod/admit-stack-wg created
+  ADMITTED stack-caddy sha256:9d34959511379ca45c37e93fe320d1e0fa2fe4412e7954e6e7b4a333e448d0b4: pod/admit-stack-caddy created
+  ADMITTED genaryx-console sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07: pod/admit-genaryx-console created
+  REFUSED  genaryx-console-v1147 sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739: Error from server (BadRequest): error when creating "STDIN": admission webhook "policy.sigstore.dev" denied the request: validation failed: failed policy: taipanbox-signed: spec.containers[0].image
+ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739 signature keyless validation failed for authority authority-0 for ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739: no signatures found
+== 6. the admitted pods after 20 s (admission is the claim; the container exit is not)
+  NAME                    READY   STATUS    RESTARTS   AGE
+  admit-genaryx-console   1/1     Running   0          21s
+  admit-stack-caddy       0/1     Error     0          21s
+  admit-stack-wg          0/1     Error     0          22s
+== 7. teardown
+  policy/down.sh exit 0
+  done
