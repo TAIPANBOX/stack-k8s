@@ -351,6 +351,11 @@ jobs:
       - name: the CostCrew ceiling is validated and written after apply (invariant 66)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/costcrew-ceiling-is-set.sh
 
+      # Added 2026-10-19 with invariant 68. A workflow checks out another repository at a full commit, never a
+      # branch or no ref. See CLAUDE.md invariant 68.
+      - name: every workflow checkout of another repository is a full commit (invariant 68)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/workflow-checkouts-are-pinned.sh
+
       # Added 2026-10-14 with invariant 44. A cost report that meets a machine type with no
       # rate exits non-zero and names it, instead of counting it as zero. See GOTCHAS 127.
       - name: a cost report refuses an unknown machine rate (invariant 44)

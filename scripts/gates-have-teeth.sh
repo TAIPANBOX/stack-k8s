@@ -3597,6 +3597,31 @@ run_case "verified-images: a reason reworded (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres), an upstream image", "# reason: the policy store (postgres), an upstream image")')"
 
+# Workflow checkouts of other repositories are pinned to a full commit (CLAUDE.md invariant 68).
+run_case "workflow-checkouts: a checkout of another repository has no ref" fail \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "          ref: $\x7b\x7b env.QRYX_REF \x7d\x7d\n", "")')" \
+	"checkout of TAIPANBOX/qryx has no ref:"
+run_case "workflow-checkouts: a checkout reads a branch" fail \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "ref: $\x7b\x7b env.GENARYX_REF \x7d\x7d", "ref: main")')" \
+	"is not a full 40-hex commit"
+run_case "workflow-checkouts: a pinned commit is shortened" fail \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "QRYX_REF: e2e776d648aa28ffa9971bb21bc828335c86a89c", "QRYX_REF: e2e776d648aa28ff")')" \
+	"is not a full 40-hex commit"
+run_case "workflow-checkouts: a sixth repository is checked out with no ref" fail \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'p = ".github/workflows/console-image.yml"; s = open(p).read(); open(p, "w").write(s + "\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          repository: TAIPANBOX/newtool\n          path: newtool\n")')" \
+	"checkout of TAIPANBOX/newtool has no ref:"
+run_case "workflow-checkouts: the env block that holds the commits is taken away" fail \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "env:\n  QRYX_REF:", "env_:\n  QRYX_REF:")')" \
+	"does not set"
+run_case "workflow-checkouts: a comment reworded in the workflow (must pass)" pass \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "# The commits this image is built from, in one place", "# The commits this image is built from, pinned in one place")')"
+
 # The CostCrew run ceiling and the crew's suspension (CLAUDE.md invariant 66). No default ships, the
 # figure is validated before anything is installed, and the crew CronJob is suspended until an operator resumes it.
 run_case "costcrew-ceiling: the validator accepts three decimals" fail \

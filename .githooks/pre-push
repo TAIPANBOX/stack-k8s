@@ -93,6 +93,7 @@ step "every cloud host key is verified before the first connection" "./scripts/h
 step "a stdin-fed remote command reads its stdin once" "./scripts/stdin-is-read-once.sh"
 step "the risk hold follows --typed-risk-signal (invariant 65)" "./scripts/risk-hold-follows-the-flag.sh"
 step "the CostCrew ceiling is validated and written after apply (invariant 66)" "./scripts/costcrew-ceiling-is-set.sh"
+step "every workflow checkout of another repository is a full commit (invariant 68)" "./scripts/workflow-checkouts-are-pinned.sh"
 step "the teeth shards cover every case once" "./scripts/teeth-shards-cover-every-case.sh"
 
 echo
