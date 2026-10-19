@@ -1,0 +1,27 @@
+===== pins-noinit
+NAME                       READY   STATUS    RESTARTS   AGE   IP            NODE                          NOMINATED NODE   READINESS GATES
+heraldyx-747bfbb64-wdbgr   1/1     Running   0          61s   10.244.0.13   pins-heraldyx-control-plane   <none>           <none>
+restarts=0
+--- journal record lines in the log:
+1
+--- last log lines:
+2026/10/19 06:30:46 passports: 0 owner(s) known from /var/lib/stack/passports
+2026/10/19 06:30:46 watching 0 file(s) under 1 path(s), floor high, dedup 10m0s, ceiling 20/hour
+2026/10/19 06:30:46 no event log exists yet under /var/lib/stack/events: this process will keep looking, and until one appears there is nothing to notify about
+2026/10/19 06:30:46 notifications are OFF: no recipients and no mail transport are configured (HERALDYX_TO, HERALDYX_SMTP_HOST). This process will watch and stay healthy, and send nothing.
+--- the init container (ls -ln of the journal volume), if this variant has one:
+(no init container in this variant)
+===== pins-init
+NAME                       READY   STATUS    RESTARTS   AGE   IP            NODE                          NOMINATED NODE   READINESS GATES
+heraldyx-dbc575f74-s7f4b   1/1     Running   0          60s   10.244.0.14   pins-heraldyx-control-plane   <none>           <none>
+restarts=0
+--- journal record lines in the log:
+0
+--- last log lines:
+2026/10/19 06:30:47 passports: 0 owner(s) known from /var/lib/stack/passports
+2026/10/19 06:30:47 watching 0 file(s) under 1 path(s), floor high, dedup 10m0s, ceiling 20/hour
+2026/10/19 06:30:47 no event log exists yet under /var/lib/stack/events: this process will keep looking, and until one appears there is nothing to notify about
+2026/10/19 06:30:47 notifications are OFF: no recipients and no mail transport are configured (HERALDYX_TO, HERALDYX_SMTP_HOST). This process will watch and stay healthy, and send nothing.
+--- the init container (ls -ln of the journal volume), if this variant has one:
+total 0
+-rw-r-----    1 65532    65532            0 Oct 19 06:30 sent.ndjson

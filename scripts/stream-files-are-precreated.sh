@@ -49,7 +49,8 @@ WRITERS = [
     ("49-costcrew.yaml", "Deployment", "costcrew", "/var/lib/stack/events/costcrew.ndjson", 65532, 10001, "events"),
     ("49-costcrew.yaml", "CronJob", "costcrew-crew", "/var/lib/stack/events/costcrew.ndjson", 65532, 10001, "events"),
     # heraldyx opens its own dispatch journal on its state volume with the same writer, so a fresh
-    # volume (no file yet, root-owned directory) refuses to start without this (GOTCHAS 136).
+    # volume (no file yet, root-owned directory) cannot open its journal without this, and runs
+    # on with no record of what it sent (GOTCHAS 136).
     ("45-heraldyx.yaml", "Deployment", "heraldyx", "/var/lib/stack/heraldyx/sent.ndjson", 65532, 65532, "state"),
     ("47-scopyx.yaml", "Deployment", "scopyx", "/var/lib/scopyx/events.ndjson", 65532, 65532, "journal"),
     ("48-scopyx-browser.yaml", "Deployment", "scopyx", "/var/lib/scopyx/events.ndjson", 65532, 65532, "journal"),

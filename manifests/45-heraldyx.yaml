@@ -94,7 +94,8 @@ spec:
       # Creates the dispatch journal before heraldyx starts, as its own uid (CLAUDE.md invariant 59,
       # GOTCHAS 136). heraldyx opens sent.ndjson with agent-stack-go v2's event writer, which creates a
       # missing file only in a directory its own process owns; the root of the state volume belongs to
-      # root, so without this the notifier refuses to start on a fresh volume. An existing file is
+      # root, so without this the notifier logs that it cannot open the journal and sends mail with no
+      # record of it (measured, GOTCHAS 136). An existing file is
       # left as it is, so an upgraded box keeps its journal.
       initContainers:
         - name: precreate-streams

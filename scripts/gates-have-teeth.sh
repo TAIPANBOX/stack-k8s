@@ -2937,10 +2937,10 @@ run_case "agent-tokens: the gateway door starts with no audience" fail \
 	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"\"")')" \
 	"leaves TOKENFUSE_DELEGATION_AUDIENCE empty"
 
-run_case "agent-tokens: the gateway accepts a wider audience than vouchryx's issuer" fail \
+run_case "agent-tokens: the gateway accepts a wider audience than the one the stack names" fail \
 	"$AGT" \
 	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.other.invalid\"")')" \
-	"not vouchryx's issuer"
+	"sets the audience to"
 
 run_case "agent-tokens: the broker's delegation audience is not the gateway's" fail \
 	"$AGT" \
