@@ -55,7 +55,7 @@ spec:
           # 2026-09-02 on v0.4.3, the published
           # image carries /usr/local/bin/tokenfuse-cloud exactly as the local
           # build did.
-          image: ghcr.io/taipanbox/tokenfuse-control-plane:v1.16.0
+          image: ghcr.io/taipanbox/tokenfuse-control-plane:v1.16.0@sha256:0554bd17eb7b515554be8d8f8c80bc62273f80e3203001688eaccc507144c447
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse-cloud"]
           env:
@@ -183,7 +183,7 @@ spec:
           # called `tokenfuse`. Measured 2026-09-01 on v0.4.1 and 2026-09-02 on
           # v0.4.3 by listing /usr/local/bin
           # in the published image, which is the only way to know.
-          image: ghcr.io/taipanbox/tokenfuse:v1.16.0
+          image: ghcr.io/taipanbox/tokenfuse:v1.16.0@sha256:a119ce03a6bc0b3c9eacb755707397bf6b20c75c8d1838f0eeeb0bf4f0c8354c
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse"]
           env:
@@ -427,7 +427,7 @@ spec:
           # one thing worth checking before swapping a distroless-looking image
           # in underneath it: measured 2026-09-01 on v0.4.1 and 2026-09-02 on
           # v0.4.3, the published image has one (/usr/bin/dash).
-          image: ghcr.io/taipanbox/tokenfuse:v1.16.0
+          image: ghcr.io/taipanbox/tokenfuse:v1.16.0@sha256:a119ce03a6bc0b3c9eacb755707397bf6b20c75c8d1838f0eeeb0bf4f0c8354c
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
@@ -538,7 +538,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v2.1.0
+          image: ghcr.io/taipanbox/wardryx:v2.1.0@sha256:9e6a9a9e38f12089499d64c09e23fb5022ac2f1858aefa81187b1df260a87869
           imagePullPolicy: IfNotPresent
           # Single-dash flags, exactly as up.sh calls it.
           args:
@@ -641,7 +641,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: idryx
-          image: ghcr.io/taipanbox/idryx:v1.2.1
+          image: ghcr.io/taipanbox/idryx:v1.2.1@sha256:8d8ffbf7f3fcb58f1c96603b677feb24b87fe08a1397fba4403de8c7d4e0fb17
           imagePullPolicy: IfNotPresent
           # Double-dash flags here, and :8081 because idryx's own default 8080
           # collides with the cloud plane. Both quirks are up.sh's, kept so the

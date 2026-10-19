@@ -3017,12 +3017,6 @@ run_case "agent-tokens: the broker may reach the open internet" fail \
 	"$(py 'edit("manifests/58-agent-tokens-broker-network.yaml", "        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n      ports:\n        - { protocol: TCP, port: 4100 }\n    - to:\n        - podSelector: { matchLabels: { app: vouchryx } }", "        - ipBlock: { cidr: 0.0.0.0/0 }\n    - to:\n        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n      ports:\n        - { protocol: TCP, port: 4100 }\n    - to:\n        - podSelector: { matchLabels: { app: vouchryx } }")')" \
 	"opens the broker's egress to 0.0.0.0/0"
 
-# A listing is not a run. Stop before the verdict, which would count cases this
-# listing did not take.
-if [ "${TEETH_LIST:-}" = 1 ]; then
-	exit 0
-fi
-
 # Keyryx on the cluster (wave 2, L2; CLAUDE.md invariants 55 to 57). Every case
 # edits keyryx/manifests/59-keyryx.yaml, the file the three gates read.
 run_case "keyryx-root-is-not-in-env: a root key read through a secretKeyRef" fail \
@@ -3098,6 +3092,77 @@ run_case "keyryx-reaches-only-consumers: the policy taken away (measured nothing
 run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)" pass \
 	'./scripts/keyryx-reaches-only-consumers.sh' \
 	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "apiVersion: v1\n", "# keyryx-consumer is a label on consumers, set by keyryx/wardryx-patch.yaml.\napiVersion: v1\n")')"
+
+# Verified images (invariant 58, policy/ and scripts/verified-images-are-enforced.sh). Every case
+# edits one tracked file the gate reads; the gate's own baseline must be green first.
+run_case "verified-images: a TAIPANBOX image carries a tag only" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.1.46@sha256:54218cfb989f7499da3a92d52d917ef8bc67b938d1b54070ba63e88fdf164bdd", "image: ghcr.io/taipanbox/genaryx-console:v1.1.46")')" \
+	"image not pinned by digest"
+run_case "verified-images: an upstream image nobody allowed" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("manifests/15-policy-store.yaml", "image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea", "image: alpine:3.20@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea")')" \
+	"neither a TAIPANBOX image nor on the static allow list"
+run_case "verified-images: the keyless policy turns to warn" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/image-policy.yaml", "  mode: enforce\n", "  mode: warn\n")')" \
+	"mode is not enforce"
+run_case "verified-images: the subject expression accepts any repository" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/image-policy.yaml", "subjectRegExp: '"'"'", "subjectRegExp: '"'"'.*|")')" \
+	"accepts a foreign or non-release identity"
+run_case "verified-images: the subject expression accepts a fork's release" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/image-policy.yaml", "TAIPANBOX/[A-Za-z0-9._-]+/", "[A-Za-z0-9._-]+/")')" \
+	"accepts a foreign or non-release identity"
+run_case "verified-images: the issuer is widened" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/image-policy.yaml", "issuer: https://token.actions.githubusercontent.com", "issuer: https://accounts.google.com")')" \
+	"issuer is not https://token.actions.githubusercontent.com"
+run_case "verified-images: a static allow has no reason" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres)", "# note: the policy-db (postgres)")')" \
+	"without a reason line above it"
+run_case "verified-images: up.sh opts the namespace in before the webhook answers" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/up.sh", "kubectl -n cosign-system rollout status deployment/webhook --timeout=300s\n", "")')" \
+	"does not wait for the webhook"
+run_case "verified-images: up.sh no longer opts agent-stack in" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/up.sh", "kubectl label namespace agent-stack policy.sigstore.dev/include=true --overwrite\n", "")')" \
+	"does not label agent-stack"
+run_case "verified-images: the controller changes without a new pin" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/policy-controller.yaml", "  no-match-policy: deny\n", "  no-match-policy: deny\n  # edited\n")')" \
+	"not the rendered release pinned in policy/PIN"
+run_case "verified-images: the controller names an unrendered ko reference" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/policy-controller.yaml", "image: ghcr.io/sigstore/policy-controller/policy-controller:v0.15.1@sha256:0492bb264fb1d9bdc8e3f343ef542cc85b7dd7c7fd8d9524b453c2bd31a1d128", "image: ko://github.com/sigstore/policy-controller/cmd/webhook")')" \
+	"unrendered ko:// image"
+run_case "verified-images: the controller runs an image that is not pinned by digest" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/policy-controller.yaml", "image: ghcr.io/sigstore/policy-controller/policy-controller:v0.15.1@sha256:0492bb264fb1d9bdc8e3f343ef542cc85b7dd7c7fd8d9524b453c2bd31a1d128", "image: ghcr.io/sigstore/policy-controller/policy-controller:v0.15.1")')" \
+	"the controller image is not pinned by digest"
+run_case "verified-images: the default apply set names policy" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("manifests/kustomization.yaml", "resources:\n", "resources:\n  - ../policy/policy-controller.yaml\n")')" \
+	"names policy/"
+run_case "verified-images: the keyless policy is absent (measured nothing)" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/image-policy.yaml", "kind: ClusterImagePolicy\nmetadata:\n  name: taipanbox-signed\n", "kind: ConfigMap\nmetadata:\n  name: taipanbox-signed\n")')" \
+	"measured NOTHING"
+run_case "verified-images: a comment naming an unpinned image (must pass)" pass \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/up.sh", "kubectl get namespace agent-stack >/dev/null\n", "kubectl get namespace agent-stack >/dev/null\n# image: ghcr.io/taipanbox/wardryx:v2.1.0 is named here in prose, not as a reference\n")')"
+run_case "verified-images: a reason reworded (must pass)" pass \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres), an upstream image", "# reason: the policy store (postgres), an upstream image")')"
+
+# A listing is not a run. Stop before the verdict, which would count cases this
+# listing did not take.
+if [ "${TEETH_LIST:-}" = 1 ]; then
+	exit 0
+fi
 
 # A shard that owns no case has measured nothing, and CI must not show it green.
 if [ -n "$shard_i" ] && [ "$ran" -eq 0 ]; then

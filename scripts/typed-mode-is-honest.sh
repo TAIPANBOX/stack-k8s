@@ -701,7 +701,8 @@ for path in subprocess.run(["git", "ls-files"], capture_output=True, text=True).
     for lineno, line in enumerate(text.splitlines(), 1):
         # Only a TAGGED reference is a pin; a bare image name in prose is not.
         for mm in re.finditer(r"ghcr\.io/taipanbox/typryx:([^\s\"'`,)]+)", line):
-            refs.append((path, lineno, mm.group(1)))
+            # the tag, without a digest pin after it (tag@sha256:... is pinned by digest, invariant 58)
+            refs.append((path, lineno, mm.group(1).split("@", 1)[0]))
 if not refs:
     print("FAIL: no reference to ghcr.io/taipanbox/typryx in any tracked file, so this measured nothing "
           "about the typryx pin.")
@@ -718,11 +719,11 @@ for t in tags:
           "`wardryx-proxy` subcommand starts to exist (and v0.3.0 is where TYPRYX_TRAINING_DIR does); "
           "an older image refuses the subcommand, or ignores the variable and writes nothing")
 for label, args in every.items():
-    img = re.findall(r"image: (ghcr\.io/taipanbox/typryx:\S+)", run("render", *args).stdout)
+    img = [x.split("@", 1)[0] for x in re.findall(r"image: (ghcr\.io/taipanbox/typryx:\S+)", run("render", *args).stdout)]
     check("12 one typryx tag", len(img) == 1 and (not tags or img[0].endswith(":" + tags[0])),
           f"{label}: the render's typryx image is {img}")
 for label, args in risk_variants.items():
-    img = re.findall(r"image: (ghcr\.io/taipanbox/typryx:\S+)", run("render", *args).stdout)
+    img = [x.split("@", 1)[0] for x in re.findall(r"image: (ghcr\.io/taipanbox/typryx:\S+)", run("render", *args).stdout)]
     check("12 one typryx tag", len(img) == 2 and len(set(img)) == 1 and (not tags or img[0].endswith(":" + tags[0])),
           f"{label}: typryx and its proxy should both run the one pinned tag, the render names {img}")
 

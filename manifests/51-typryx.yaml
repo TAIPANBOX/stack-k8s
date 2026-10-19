@@ -225,7 +225,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: typryx
-          image: ghcr.io/taipanbox/typryx:v0.4.1
+          image: ghcr.io/taipanbox/typryx:v0.4.1@sha256:c49bceb2003e6486a6d2c82b34a7c7cc3834933b9c6108e8074fefa35b926502
           imagePullPolicy: IfNotPresent
           # ENTRYPOINT defaults to `serve`; TYPRYX_ADDR and TYPRYX_TEMPLATES
           # are baked into the image (0.0.0.0:4320, the three example

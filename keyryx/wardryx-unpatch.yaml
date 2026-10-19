@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v2.1.0
+          image: ghcr.io/taipanbox/wardryx:v2.1.0@sha256:9e6a9a9e38f12089499d64c09e23fb5022ac2f1858aefa81187b1df260a87869
           env:
             - name: WARDRYX_APPROVAL_SIGNER
               $patch: delete
