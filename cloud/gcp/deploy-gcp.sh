@@ -157,6 +157,8 @@ TRUST_DOMAIN="${TRUST_DOMAIN:-}"
 # Set, it is checked by budget/ceiling.sh before anything is installed and applied AFTER
 # the kustomization, the only position where it sticks (the same rule as the trust domain).
 RUN_BUDGET_CEILING="${RUN_BUDGET_CEILING:-}"
+# The CostCrew run ceiling, COSTCREW_CEILING in stack-wiring (CLAUDE.md invariant 66). No default ships.
+COSTCREW_CEILING_ARG="${COSTCREW_CEILING_ARG:-}"
 # The agent firewall's mode on the gateway (TokenFuse invariants 25 to 27 and 93, CLAUDE.md
 # invariant 37). Empty leaves 10-planes.yaml's enforce. Set, it is checked by firewall/mode.sh
 # before anything is installed and applied AFTER the kustomization, the only position where it
@@ -204,6 +206,7 @@ while [ $# -gt 0 ]; do
     --typed-risk-signal)    TYPED_RISK_SIGNAL=1; shift ;;
     --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --run-budget-ceiling) RUN_BUDGET_CEILING="$2"; shift 2 ;;
+    --costcrew-ceiling)   COSTCREW_CEILING_ARG="$2"; shift 2 ;;
     --firewall) FIREWALL_MODE="$2"; shift 2 ;;
     --pii-mode) PII_MODE="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
@@ -393,6 +396,12 @@ TYPED_EFFECTIVE="$("$ROOT/typed/mode.sh" mode ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"
 if [ -n "$RUN_BUDGET_CEILING" ]; then
   "$ROOT/budget/ceiling.sh" check "$RUN_BUDGET_CEILING" \
     || die "the run-budget ceiling was refused, so nothing has been installed yet."
+fi
+
+# ---- the CostCrew run ceiling, refused BEFORE anything is installed (CLAUDE.md invariant 66) -----
+if [ -n "$COSTCREW_CEILING_ARG" ]; then
+  "$ROOT/budget/costcrew-ceiling.sh" check "$COSTCREW_CEILING_ARG" \
+    || die "the CostCrew ceiling was refused, so nothing has been installed yet."
 fi
 
 # ---- the agent firewall's mode, refused BEFORE anything is installed -------------
@@ -772,6 +781,14 @@ if [ -n "$RUN_BUDGET_CEILING" ]; then
   say "run-budget ceiling: $RUN_BUDGET_CEILING USD per run (set after apply, which is what makes it stick)"
   k_ "-n agent-stack set env deploy/tokenfuse-gateway -c gateway TOKENFUSE_MAX_RUN_BUDGET_USD=$RUN_BUDGET_CEILING" >/dev/null \
     || die "could not set the run-budget ceiling on the gateway"
+fi
+
+# The CostCrew run ceiling, written to stack-wiring AFTER the kustomization (CLAUDE.md invariant 66). The
+# crew CronJob reads the key when a job starts. Empty leaves the key as the operator last set it.
+if [ -n "$COSTCREW_CEILING_ARG" ]; then
+  say "CostCrew ceiling: $COSTCREW_CEILING_ARG USD per crew run (written after apply, which is what makes it stick)"
+  k_ "-n agent-stack patch configmap stack-wiring --type merge -p '{\"data\":{\"COSTCREW_CEILING\":\"$COSTCREW_CEILING_ARG\"}}'" >/dev/null \
+    || die "could not set COSTCREW_CEILING in stack-wiring"
 fi
 
 # The agent firewall's mode, set AFTER the kustomization for the reason the run-budget ceiling

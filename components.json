@@ -58,14 +58,15 @@
         ],
         "schedules_routines": {
           "agent-conform": "agent-conform",
-          "costcrew-crew": "costcrew-run",
           "crypto-trend": "qryx-trend",
           "drills": "mockryx-drill",
           "identity-sweep": "idryx-detect",
           "quality-drift": "verdryx-drift",
           "record-seal": "trailryx-seal"
         },
-        "manual_jobs": {},
+        "manual_jobs": {
+          "costcrew-crew": "@decided 2026-10-19 (paraphrased): the crew CronJob ships suspended. It is a Job template the operator runs by hand, or turns on by patching suspend to false; the console's cadence switch stays the inner guard, and no deploy turns it on."
+        },
         "persistent_claims": [
           "cloud-state",
           "console-state",

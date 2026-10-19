@@ -118,6 +118,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/typed-mode-is-honest.sh # invariants 26 and 29; needs kubeconform on PATH
 ./scripts/typed-door-is-minted.sh # invariant 42; GOTCHAS 126; needs kubeconform on PATH
 ./scripts/risk-hold-follows-the-flag.sh # invariant 65
+./scripts/costcrew-ceiling-is-set.sh # invariant 66
 ./scripts/cost-live-refuses-unknown-rates.sh # invariant 44; GOTCHAS 127
 ./scripts/cluster-dns-has-a-budget.sh # invariant 45; GOTCHAS 128
 ./scripts/run-budget-ceiling-is-set.sh # invariant 28 (its flag half is deploy-flags-agree.sh)

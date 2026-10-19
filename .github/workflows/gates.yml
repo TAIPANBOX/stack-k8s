@@ -346,6 +346,11 @@ jobs:
       - name: the risk hold follows --typed-risk-signal (invariant 65)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/risk-hold-follows-the-flag.sh
 
+      # Added 2026-10-19 with invariant 66. The CostCrew run ceiling is validated before any install and written
+      # after the last apply, and the crew CronJob is suspended. See CLAUDE.md invariant 66.
+      - name: the CostCrew ceiling is validated and written after apply (invariant 66)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/costcrew-ceiling-is-set.sh
+
       # Added 2026-10-14 with invariant 44. A cost report that meets a machine type with no
       # rate exits non-zero and names it, instead of counting it as zero. See GOTCHAS 127.
       - name: a cost report refuses an unknown machine rate (invariant 44)

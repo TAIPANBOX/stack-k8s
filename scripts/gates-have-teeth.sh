@@ -3597,6 +3597,44 @@ run_case "verified-images: a reason reworded (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres), an upstream image", "# reason: the policy store (postgres), an upstream image")')"
 
+# The CostCrew run ceiling and the crew's suspension (CLAUDE.md invariant 66). No default ships, the
+# figure is validated before anything is installed, and the crew CronJob is suspended until an operator resumes it.
+run_case "costcrew-ceiling: the validator accepts three decimals" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("budget/costcrew-ceiling.sh", "(\\.[0-9]\x7b1,2\x7d)?$", "(\\.[0-9]\x7b1,6\x7d)?$")')" \
+	"accepts 1.234"
+run_case "costcrew-ceiling: zero is accepted" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("budget/costcrew-ceiling.sh", "  \"\") refuse", "  \"zz\") refuse")')" \
+	"accepts '0'"
+run_case "costcrew-ceiling: the GCP launcher does not validate the figure" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/budget/costcrew-ceiling.sh\" check", "\"$ROOT/budget/costcrew-ceilingx.sh\" check")')" \
+	"does not validate the CostCrew ceiling"
+run_case "costcrew-ceiling: the AWS launcher never writes the ceiling" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "patch configmap stack-wiring --type merge", "patch configmapx stack-wiring --type merge")')" \
+	"never writes COSTCREW_CEILING"
+run_case "costcrew-ceiling: the crew reads the ceiling optionally" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "configMapKeyRef: \x7b name: stack-wiring, key: COSTCREW_CEILING \x7d", "configMapKeyRef: \x7b name: stack-wiring, key: COSTCREW_CEILING, optional: true \x7d")')" \
+	"or reads it optionally"
+run_case "costcrew-ceiling: the crew CronJob is resumed" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "  suspend: true\n", "  suspend: false\n")')" \
+	"does not set the CronJob suspended"
+run_case "costcrew-ceiling: the crew CronJob is resumed while components.json calls it manual" fail \
+	'./scripts/manifest-is-true.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "  suspend: true\n", "  suspend: false\n")')" \
+	"does not set \`suspend: true\`"
+run_case "costcrew-ceiling: deploy.sh stops parsing the flag" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'edit("deploy.sh", "    --costcrew-ceiling)   COSTCREW_CEILING_ARG=\"$2\"; shift 2 ;;\n", "")')" \
+	"does not parse --costcrew-ceiling"
+run_case "costcrew-ceiling: a comment reworded in the validator (must pass)" pass \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("budget/costcrew-ceiling.sh", "# The ONE copy of the validation:", "# The one copy of the validation:")')"
+
 # The risk hold (CLAUDE.md invariant 65): with --typed-risk-signal wardryx holds a call with no signal, and
 # only with the flag. Each case takes one property away; the braces in the py bodies are \x7b and \x7d.
 run_case "risk-hold: the policy volume drops the optional hold source" fail \
