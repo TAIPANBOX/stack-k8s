@@ -3508,6 +3508,18 @@ run_case "verified-images: a glob wider than one repository's image name" fail \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "ghcr.io/taipanbox/wardryx@sha256:*", "ghcr.io/taipanbox/**")')" \
 	"not a digest-anchored name of one repository"
+# A cross-signed image: wardryx's image admitted on the signature of tokenfuse's release workflow. The
+# policy must name its own repository's signer, so the gate refuses the policy that names another one.
+run_case "verified-images: wardryx's image admitted on tokenfuse's signer (cross-signed)" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 's = open("policy/image-policy.yaml").read(); i = s.index("name: taipanbox-wardryx"); j = s.index("TAIPANBOX/wardryx/", i); open("policy/image-policy.yaml", "w").write(s[:j] + "TAIPANBOX/tokenfuse/" + s[j + len("TAIPANBOX/wardryx/"):])')" \
+	"is not the identity of wardryx"
+# A moved glob: wardryx's policy re-pointed at idryx's image name. Two policies then cover one name, and
+# wardryx's name is covered by none, so the gate refuses the move rather than admitting on the wrong signer.
+run_case "verified-images: a policy's glob moved onto another repository's image name" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 's = open("policy/image-policy.yaml").read(); i = s.index("name: taipanbox-wardryx"); j = s.index("ghcr.io/taipanbox/wardryx@sha256:*", i); open("policy/image-policy.yaml", "w").write(s[:j] + "ghcr.io/taipanbox/idryx@sha256:*" + s[j + len("ghcr.io/taipanbox/wardryx@sha256:*"):])')" \
+	"covered by two policies"
 run_case "verified-images: a manifest names a TAIPANBOX image with no signer row" fail \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.3.0@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.3.0@sha256:")')" \
