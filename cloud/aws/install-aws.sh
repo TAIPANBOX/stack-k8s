@@ -74,7 +74,8 @@ case "${#SERVER_LIST[@]}" in
   *) echo "warning: ${#SERVER_LIST[@]} servers. etcd wants an ODD number (1, 3 or 5) or it cannot hold quorum." ;;
 esac
 
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes)
+# Replaced below, once the host keys are checked (CLAUDE.md invariant 61).
+SSH_OPTS=(-o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20)
 [ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/secret-doc.sh"
 sh_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "${@:2}"; }
@@ -127,6 +128,17 @@ say "forgetting host keys for addresses this cloud may have recycled"
 for n in "${ALL_NODES[@]}"; do
   ssh-keygen -R "$n" >/dev/null 2>&1 || true
 done
+
+# CLAUDE.md invariant 61: the host keys come from the EC2 console API, before the first
+# connection, and every connection from here is strict against that file.
+# accept-new is not used: it would accept whatever the first connection offered.
+. ""$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"/lib/hostkeys.sh"
+KNOWN_HOSTS_RUN="$(mktemp "${TMPDIR:-/tmp}/stack-k8s-known-hosts.XXXXXX")" || die "could not create a known_hosts file"
+hostkeys_populate_aws "$KNOWN_HOSTS_RUN" "${ALL_NODES[@]}" \
+  || die "could not verify the SSH host keys of every node, so no node was connected to. The line above says which one and why."
+SSH_OPTS=(-o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$KNOWN_HOSTS_RUN" -o ConnectTimeout=20 -o BatchMode=yes)
+[ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
+echo "   $(wc -l < "$KNOWN_HOSTS_RUN" | tr -d ' ') host key line(s) for ${#ALL_NODES[@]} node(s), in $KNOWN_HOSTS_RUN"
 
 # Three facts per node, kept in parallel INDEXED arrays rather than one
 # associative array. `declare -A` needs bash 4, and macOS still ships bash

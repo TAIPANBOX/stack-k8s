@@ -3369,6 +3369,36 @@ run_case "no-secret-on-argv: no subject, measured nothing" fail_env \
 	"$(py 'pass')" \
 	"measured NOTHING"
 
+# ---- hostkeys-are-verified (CLAUDE.md invariant 61): the host key is verified before the first connection ----
+run_case "hostkeys-are-verified: a mismatched console fingerprint is accepted" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("lib/hostkeys.sh", "if [ -n \"$console_fp\" ] && [ \"$console_fp\" = \"$scan_fp\" ]; then", "if true; then")')" \
+	"B  mismatch"
+
+run_case "hostkeys-are-verified: a cloud launcher goes back to accept-new" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "SSH_OPTS=(-o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20)", "SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=20)")')" \
+	"still accepts host keys on first use"
+
+run_case "hostkeys-are-verified: SSH_KNOWN_HOSTS is ignored by install.sh" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("install.sh", "if [ -n \"${SSH_KNOWN_HOSTS:-}\" ]; then", "if false; then")')" \
+	"G  SSH_KNOWN_HOSTS: first ssh was"
+
+run_case "hostkeys-are-verified: a cloud launcher connects before it reads the keys" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "for n in \"${ALL_NODES[@]}\"; do\n  ssh-keygen -R", "for n in \"${ALL_NODES[@]}\"; do sh_ \"$n\" true; done\nfor n in \"${ALL_NODES[@]}\"; do\n  ssh-keygen -R")')" \
+	"cloud/gcp/deploy-gcp.sh: keys at line"
+
+run_case "hostkeys-are-verified: a comment naming accept-new is not a launcher using it (must pass)" pass \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'open("cloud/aws/install-aws.sh", "a").write("# accept-new is not used here (a comment, not a launcher setting)\n")')"
+
+run_case "hostkeys-are-verified: no cloud installer left, measured nothing" fail_env \
+	'd="$(mktemp -d)" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$d" init -q && mkdir -p "$d/scripts" "$d/lib" && cp scripts/hostkeys-are-verified.sh "$d/scripts/" && cp lib/hostkeys.sh "$d/lib/" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE "$d/scripts/hostkeys-are-verified.sh"' \
+	"$(py 'pass')" \
+	"measured NOTHING"
+
 # A listing is not a run. Stop before the verdict, which would count cases this
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then

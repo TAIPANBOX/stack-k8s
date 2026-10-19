@@ -352,7 +352,8 @@ ALL_NODES=("${SERVER_LIST[@]}" ${AGENT_LIST[@]+"${AGENT_LIST[@]}"})
 FIRST="${SERVER_LIST[0]}"
 BUILDER="${ALL_NODES[${#ALL_NODES[@]}-1]}"
 
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes)
+# Replaced below, once the host keys are known (CLAUDE.md invariant 61).
+SSH_OPTS=(-o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20)
 [ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
 sh_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "${@:2}"; }
 su_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "sudo ${*:2}"; }
@@ -421,6 +422,17 @@ say "using this checkout: $ROOT"
 for n in "${ALL_NODES[@]}"; do
   ssh-keygen -R "$n" >/dev/null 2>&1 || true
 done
+
+# CLAUDE.md invariant 61: the host keys come from the GCE guest attribute API, before the first
+# connection, and every connection from here is strict against that file.
+# accept-new is not used: it would accept whatever the first connection offered.
+. ""$ROOT"/lib/hostkeys.sh"
+KNOWN_HOSTS_RUN="$(mktemp "${TMPDIR:-/tmp}/stack-k8s-known-hosts.XXXXXX")" || die "could not create a known_hosts file"
+hostkeys_populate_gcp "$KNOWN_HOSTS_RUN" "${ALL_NODES[@]}" \
+  || die "could not verify the SSH host keys of every node, so no node was connected to. The line above says which one and why."
+SSH_OPTS=(-o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$KNOWN_HOSTS_RUN" -o ConnectTimeout=20 -o BatchMode=yes)
+[ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
+echo "   $(wc -l < "$KNOWN_HOSTS_RUN" | tr -d ' ') host key line(s) for ${#ALL_NODES[@]} node(s), in $KNOWN_HOSTS_RUN"
 
 # Asked before anything is created or built.
 ask_alerts

@@ -47,7 +47,12 @@ kc()   { $KUBECTL -n "$NS" "$@"; }
 # stdout as the answer, so the probe on the node prints its answer on lines that start
 # with SECCHK:, and only those lines are read here. A probe that prints nothing is
 # "could not look", the same as an unreachable node (GOTCHAS 131).
-SECCHK_SSH="-q -o LogLevel=ERROR -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10"
+# SSH_KNOWN_HOSTS pins the nodes' keys (CLAUDE.md invariant 61); without it the
+# first connection is accepted, as install.sh does, and said so there.
+SECCHK_HOSTKEY=accept-new
+SECCHK_KNOWN=""
+if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then SECCHK_HOSTKEY=yes; SECCHK_KNOWN="$SSH_KNOWN_HOSTS"; fi
+SECCHK_SSH="-q -o LogLevel=ERROR -o StrictHostKeyChecking=${SECCHK_HOSTKEY:-accept-new} ${SECCHK_KNOWN:+-o UserKnownHostsFile=$SECCHK_KNOWN} -o BatchMode=yes -o ConnectTimeout=10"
 node_probe() {  # host command -> the SECCHK: lines the command printed on that host
   local host="$1" cmd="$2"
   # shellcheck disable=SC2086

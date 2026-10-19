@@ -65,13 +65,39 @@ case "${#SERVER_LIST[@]}" in
 esac
 
 . "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/secret-doc.sh"
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes)
+# CLAUDE.md invariant 61. SSH_KNOWN_HOSTS=<file> pins the operator's own host
+# keys: every connection is then strict, and a node whose key is not in that file
+# is refused. Without it the first connection to each node is accepted (accept-new,
+# as before), and the keys accepted are printed with the way to pin them below.
+if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then
+  [ -s "$SSH_KNOWN_HOSTS" ] || { echo "SSH_KNOWN_HOSTS=$SSH_KNOWN_HOSTS is not a readable, non-empty file of host keys" >&2; exit 1; }
+  SSH_OPTS=(-o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$SSH_KNOWN_HOSTS" -o ConnectTimeout=20 -o BatchMode=yes)
+else
+  SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes)
+  ACCEPT_FIRST_USE=1
+fi
 [ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
 sh_() { ssh "${SSH_OPTS[@]}" "root@$1" "${@:2}"; }
 k_()  { sh_ "$FIRST" "/usr/local/bin/k3s kubectl $*"; }
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 die() { EXPLAINED=1; printf '\n!! %s\n' "$*" >&2; exit 1; }
 EXPLAINED=0
+
+# First use: say which keys were accepted, so the operator can pin them. A node
+# that does not answer yet is said so, not fatal here: the steps below own that.
+if [ "${ACCEPT_FIRST_USE:-0}" = 1 ]; then
+  say "host keys: accepted on first use (set SSH_KNOWN_HOSTS to pin them)"
+  for n in "${ALL_NODES[@]}"; do
+    if sh_ "$n" true >/dev/null 2>&1; then
+      echo "   $n accepted:"
+      ssh-keygen -F "$n" -l 2>/dev/null | grep -v '^#' | sed 's/^/     /'
+    else
+      echo "   $n did not answer ssh yet; its key is printed when it does"
+    fi
+  done
+  echo "   To pin these keys: ssh-keyscan -t ed25519,ecdsa,rsa <node> > pinned_hosts (one line per node,"
+  echo "   and run this script with SSH_KNOWN_HOSTS=pinned_hosts). From then on a changed key is refused."
+fi
 
 # A cluster install that ends mid-sentence looks like one that finished. Under
 # `set -e` that is the default behaviour, so name the line and the code every

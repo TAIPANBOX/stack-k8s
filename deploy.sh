@@ -254,7 +254,17 @@ FIRST="${SERVER_LIST[0]}"
 # building where the images are needed saves shipping them over the internet.
 BUILDER="${ALL_NODES[${#ALL_NODES[@]}-1]}"
 
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes)
+# CLAUDE.md invariant 61. SSH_KNOWN_HOSTS=<file> pins the operator's own host
+# keys: every connection is then strict, and a node whose key is not in that file
+# is refused. Without it the first connection to each node is accepted (accept-new,
+# as before), and the keys accepted are printed with the way to pin them below.
+if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then
+  [ -s "$SSH_KNOWN_HOSTS" ] || { echo "SSH_KNOWN_HOSTS=$SSH_KNOWN_HOSTS is not a readable, non-empty file of host keys" >&2; exit 1; }
+  SSH_OPTS=(-o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$SSH_KNOWN_HOSTS" -o ConnectTimeout=20 -o BatchMode=yes)
+else
+  SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes)
+  ACCEPT_FIRST_USE=1
+fi
 [ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
 sh_() { ssh "${SSH_OPTS[@]}" "root@$1" "${@:2}"; }
 k_()  { sh_ "$FIRST" "/usr/local/bin/k3s kubectl $*"; }
