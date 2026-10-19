@@ -3748,7 +3748,7 @@ run_case "witness-records: the record-seal reads attestations it cannot read (mo
 run_case "witness-records: the attestation blocker is dropped from the patch" fail \
 	'./scripts/keyryx-witness-shares-the-record.sh' \
 	"$(py 'edit("keyryx/record-seal-patch.yaml", "TODO(keyryx-attest-mode)", "TODO(attest)")')" \
-	"named as TODO(keyryx-attest-mode)"
+	"does not name the attestation-mode blocker"
 run_case "witness-records: the opt-out keeps the pod affinity" fail \
 	'./scripts/keyryx-witness-shares-the-record.sh' \
 	"$(py 'edit("keyryx/record-seal-unpatch.yaml", "affinity: null", "affinity: {}")')" \
@@ -3759,7 +3759,7 @@ run_case "witness-records: the record-seal passes its own tenant" fail \
 	"passes --tenant"
 run_case "witness-records: a comment reworded in the record-seal patch (must pass)" pass \
 	'./scripts/keyryx-witness-shares-the-record.sh' \
-	"$(py 'edit("keyryx/record-seal-patch.yaml", "# Applied by lib/keyryx-install.sh", "# Applied by the library lib/keyryx-install.sh")')"
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "Applied by lib/keyryx-install.sh with `kubectl patch", "Applied by the library lib/keyryx-install.sh with `kubectl patch")')"
 
 # Workflow checkouts of other repositories are pinned to a full commit (CLAUDE.md invariant 68).
 run_case "workflow-checkouts: a checkout of another repository has no ref" fail \
