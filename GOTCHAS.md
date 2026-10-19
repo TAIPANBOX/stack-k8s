@@ -4630,3 +4630,29 @@ The reading is that the running controller holds its verification results in mem
 Fail closed still holds for a fresh controller, and for every digest that was not verified before the cut. A cut that begins while a controller is running leaves the verified digests admitted for as long as that process lives, which is the window the admission step should be judged on. Nothing was changed for this, as asked.
 
 **What it does not cover.** The Sigstore outage was simulated by cutting the controller's egress in one namespace, not by an outage of Sigstore. The cut was checked by a probe in that namespace: in the recorded run ghcr.io was unreachable and the controller's signature fetches failed, but tuf-repo-cdn.sigstore.dev answered the probe. An earlier run of the same script had refused that host, and the difference was not investigated; so the cut is established for the registry, not for every Sigstore host. The cut's effect on pods in other namespaces, and on a controller whose pods are rescheduled rather than restarted, was not measured. The run is on kind, not on a k3s node.
+
+## 142. vouchryx refuses to start with no upstream issuer and no enrolled agent, so a default install that drops the IdP starts nothing
+
+**Ours, meeting a platform fact.** vouchryx's config requires `VOUCHRYX_TRUSTED_ISSUERS` unless `VOUCHRYX_AGENTS` enrols at least one agent (vouchryx v0.6.0, `internal/config/config.go`). Until 2026-10-19 this launcher kept vouchryx out of the default install, and `54-delegation.yaml` required the trusted-issuers ConfigMap, so no default install could issue an agent token at all. Making the plane default without an IdP would have crashed it at start with that message.
+
+Fixed: the default install enrols one agent, the operator's own, at deploy time. `lib/vouchryx-mint.sh` writes the registry ConfigMap `vouchryx-agents` (one line, the digest of the enrolment key, written to `agent-enrol-key` with mode 0600), and the trusted-issuers ConfigMap and the workload issuers become optional. The registry is required, because it is the thing that makes vouchryx start.
+
+Two traps for the next change. A registry that `agent-tokens/up.sh` writes replaces the whole ConfigMap, so an operator who enrols a second agent must include the first. And the enrolment key is a secret on the deploy machine: it is never in a manifest, and the gitignore names it.
+
+`scripts/vouchryx-runs-agents-only.sh` checks the default apply set, that the IdP inputs stay optional, and that the deploy mints the keys and the registry. Teeth in `scripts/gates-have-teeth.sh`.
+
+## 143. A static key that worked before the door required agent tokens stops at the gateway, with a 401 that names no list
+
+**The stack's own contract.** With `TOKENFUSE_AGENT_TOKENS=require`, tokenfuse admits a static client key only when its key id is named in `TOKENFUSE_AGENT_TOKENS_STATIC_KEYS` (tokenfuse v1.19.0, invariant 138). A caller holding a valid key that is not on the list is refused `401 agent_token_required`, and the body does not say which list or why. The list is the decision: a key left off it is a client that now needs an agent token.
+
+Set on this launcher: `felyx`, `agents`, `drills`, `costcrew` and `broker` on the gateway, and `broker-caller` on the broker, each with its reason beside it in `manifests/10-planes.yaml` and `manifests/52-tokenfuse-mcp-broker.yaml`. The operator's own additions go in the ConfigMap `gateway-static-keys`, read at start, so they take effect on a rollout of the gateway. The gateway refuses to start if a listed id is not in its client keys (tokenfuse v1.19.0 Upgrade item 6), and the broker refuses the same way against `TOKENFUSE_MCP_KEYS`, which is why `agents` is not on the broker's list.
+
+The check that keeps this honest is `scripts/static-keys-are-named.sh`, which refuses a list id the stack does not mint and a listed id without a reason.
+
+## 144. A kubectl patch on the gateway's key set could not be reverted by apply, and the JWKS now comes from an init container instead
+
+**Ours.** Before this release the gateway's delegation door was added by `kubectl patch --patch-file` (GOTCHAS 113 and invariant 24), so `apply -k` did not remove it and a rollback needed its own unpatch file. The agent-token door had the same shape, with a key set fetched by `delegation/up.sh` through a port-forward and written to a ConfigMap.
+
+Fixed: the door is a manifest value now (`10-planes.yaml`, `52-tokenfuse-mcp-broker.yaml`), and the key set is fetched at pod start by an init container from `http://vouchryx:4310/.well-known/jwks.json`, into a memory volume. The fetch is over the Service, admitted by the NetworkPolicy in `54-delegation.yaml` from the gateway and the broker alone, where the port-forward was not. The trust is the same as wardryx's poll of the same URL (invariant 63): the key set is public, and the policy in the cluster decides who may reach it. A key rotation in vouchryx needs the pods restarted, which the key set's own refresh does not do for the gateway.
+
+Sources: `manifests/10-planes.yaml`, `manifests/52-tokenfuse-mcp-broker.yaml`, `manifests/54-delegation.yaml`.

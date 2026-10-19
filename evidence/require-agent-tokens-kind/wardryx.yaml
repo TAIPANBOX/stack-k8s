@@ -1,0 +1,76 @@
+# Stand-in policy plane for the measured run: the product image (manifests/10-planes.yaml, filled in by the run),
+# its agent-token settings copied from that manifest, and a throwaway Postgres (manifests/15-policy-store.yaml is
+# not applied here: it needs the stack-policy storage class). Policy: an empty list (wardryx reads a YAML list of
+# policies), so the decisions the run measures are the agent-token checks, not a policy's verdict.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: wardryx-policy-stand-in, namespace: agent-stack }
+data:
+  policy.yaml: "[]\n"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: policy-db, namespace: agent-stack, labels: { app: policy-db } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: policy-db } }
+  template:
+    metadata: { labels: { app: policy-db } }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - { name: POSTGRES_PASSWORD, value: "stand-in-only" }
+            - { name: POSTGRES_DB, value: "wardryx" }
+          ports: [{ name: pg, containerPort: 5432 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: policy-db, namespace: agent-stack }
+spec:
+  selector: { app: policy-db }
+  ports: [{ name: pg, port: 5432, targetPort: pg }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: wardryx, namespace: agent-stack, labels: { app: wardryx, plane: policy } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: wardryx } }
+  template:
+    metadata: { labels: { app: wardryx, plane: policy } }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: wardryx
+          image: @@WARDRYX_IMAGE@@
+          imagePullPolicy: IfNotPresent
+          args: ["serve", "-addr", "0.0.0.0:8090", "-policy", "/etc/wardryx/policy.yaml"]
+          env:
+            - { name: WARDRYX_KEYS, valueFrom: { secretKeyRef: { name: kind-stack-keys, key: wardryx_keys } } }
+            - { name: WARDRYX_DB, value: "postgres://postgres:stand-in-only@policy-db:5432/wardryx?sslmode=disable" }
+            - { name: WARDRYX_APPROVAL_SECRET, value: "stand-in-approval-secret-0123456789abcdef" }
+            - { name: WARDRYX_AGENT_TOKEN_ISSUER, value: "http://vouchryx:4310" }
+            - { name: WARDRYX_AGENT_TOKEN_AUDIENCES, value: "https://vouchryx.agent-stack.invalid" }
+            - { name: WARDRYX_AGENT_TOKEN_JWKS_URL, value: "http://vouchryx:4310/.well-known/jwks.json" }
+            - { name: WARDRYX_AGENT_TOKEN_REVOCATION_URL, value: "http://vouchryx:4310/v1/revocations" }
+            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: "http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200" }
+          ports: [{ name: http, containerPort: 8090 }]
+          volumeMounts:
+            - { name: policy, mountPath: /etc/wardryx, readOnly: true }
+            - { name: events, mountPath: /var/lib/stack/events }
+      volumes:
+        - name: policy
+          configMap: { name: wardryx-policy-stand-in }
+        - name: events
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata: { name: wardryx, namespace: agent-stack }
+spec:
+  selector: { app: wardryx }
+  ports: [{ name: http, port: 8090, targetPort: http }]

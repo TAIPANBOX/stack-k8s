@@ -1,0 +1,78 @@
+# Stand-in MCP broker for the measured run. Image filled in by run-v1.19.0.sh from manifests/52-tokenfuse-mcp-broker.yaml.
+# Door env copied from that manifest (the broker container); the typed-answer upstream is replaced by the MCP stub
+# (mcp-stub.yaml), and the broker's own key comes from the Secret broker-taint-key, as the product mounts it.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: tokenfuse-mcp-broker, namespace: agent-stack, labels: { app: tokenfuse-mcp-broker, plane: money } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  template:
+    metadata: { labels: { app: tokenfuse-mcp-broker, plane: money } }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      initContainers:
+        - name: fetch-vouchryx-jwks
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until wget -q -T 5 -O /jwks/jwks.json http://vouchryx:4310/.well-known/jwks.json && grep -q keys /jwks/jwks.json; do i=$((i+1)); [ $i -gt 150 ] && exit 1; sleep 2; done"]
+          volumeMounts: [{ name: vouchryx-jwks, mountPath: /jwks }]
+      containers:
+        - name: broker
+          image: @@TOKENFUSE_IMAGE@@
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/tokenfuse"]
+          args: ["mcp-broker"]
+          env:
+            - { name: TOKENFUSE_MCP_ADDR, value: "0.0.0.0:4200" }
+            - { name: TOKENFUSE_MCP_UPSTREAM, value: "http://mcp-stub:4320/mcp" }
+            - { name: TOKENFUSE_MCP_UPSTREAMS, value: "typryx=http://mcp-stub:4320/mcp" }
+            - name: TOKENFUSE_MCP_KEYS
+              valueFrom: { secretKeyRef: { name: tokenfuse-mcp-broker-keys, key: TOKENFUSE_MCP_KEYS } }
+            - { name: TOKENFUSE_MCP_DLP, value: "block" }
+            - { name: TOKENFUSE_MCP_SCAN, value: "block" }
+            - { name: TOKENFUSE_MCP_DLP_PII, value: "shadow" }
+            - { name: TOKENFUSE_PROFILE, value: "governed" }
+            - { name: TOKENFUSE_AGENT_TOKENS, value: "require" }
+            - { name: TOKENFUSE_MCP_AGENT_TOKENS_STATIC_KEYS, value: "broker-caller" }
+            - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
+            - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "https://vouchryx.agent-stack.invalid" }
+            - { name: TOKENFUSE_DELEGATION_URL, value: "http://tokenfuse-mcp-broker:4200" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS, value: "http://vouchryx:4310/v1/revocations" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, value: "12000" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: "closed" }
+            - { name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: "60" }
+            - { name: TOKENFUSE_MCP_TAINT_GATEWAY, value: "http://tokenfuse-gateway:4100" }
+            - { name: TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE, value: "/run/taint/key" }
+            - { name: TOKENFUSE_MCP_TAINT_FAILMODE, value: "closed" }
+            - { name: TOKENFUSE_WARDRYX_MODE, value: "enforce" }
+            - { name: TOKENFUSE_WARDRYX_URL, value: "http://wardryx:8090" }
+            - name: TOKENFUSE_WARDRYX_KEY
+              valueFrom: { secretKeyRef: { name: kind-stack-keys, key: wardryx_gateway } }
+            - { name: TOKENFUSE_WARDRYX_FAILMODE, value: "closed" }
+            # manifests/52 sets 1000 ms here without the risk signal. Run 4 of run-v1.19.0.sh used 1000 ms: the broker
+            # refused the tool call closed (-32004, failmode=Closed) while the door accepted the token. Run 5 uses 7000 ms,
+            # the figure manifests/52 uses with the risk signal on, to show whether the wait was the cause.
+            - { name: TOKENFUSE_MCP_WARDRYX_TIMEOUT_MS, value: "7000" }
+          ports: [{ name: mcp, containerPort: 4200 }]
+          volumeMounts:
+            - { name: vouchryx-jwks, mountPath: /etc/tokenfuse/delegation, readOnly: true }
+            - { name: taint-key, mountPath: /run/taint, readOnly: true }
+            - { name: tmp, mountPath: /tmp/tf }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+      volumes:
+        - name: vouchryx-jwks
+          emptyDir: { medium: Memory, sizeLimit: 1Mi }
+        - name: taint-key
+          secret: { secretName: broker-taint-key, defaultMode: 0440, items: [{ key: client_key, path: key }] }
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata: { name: tokenfuse-mcp-broker, namespace: agent-stack }
+spec:
+  selector: { app: tokenfuse-mcp-broker }
+  ports: [{ name: mcp, port: 4200, targetPort: mcp }]

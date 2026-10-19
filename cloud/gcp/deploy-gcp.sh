@@ -751,6 +751,14 @@ fi
 # minted keys are never rewritten and the operator's own are left alone. Every document
 # goes to the cluster on stdin. Then the gateway and the console roll onto what they read.
 say "client keys: the gateway answers no caller without one"
+# vouchryx runs agents-only in every default install (CLAUDE.md invariants 24 and 54): its keys and its
+# first enrolled agent are minted here, once, and the static-key list the gateway reads is created empty
+# when absent (invariant 62). Both after the trust-domain patch, which the registry line needs.
+. "$ROOT/lib/secret-doc.sh" || die "no lib/secret-doc.sh in $ROOT"
+. "$ROOT/lib/vouchryx-mint.sh" || die "no lib/vouchryx-mint.sh in $ROOT"
+. "$ROOT/lib/static-keys.sh" || die "no lib/static-keys.sh in $ROOT"
+vouchryx_mint_settle
+static_keys_settle
 identity_mint_settle "$ROOT/agent-key"
 
 # The run-budget ceiling, set AFTER the kustomization for the reason the trust domain is:

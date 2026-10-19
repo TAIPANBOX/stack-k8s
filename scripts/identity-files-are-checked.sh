@@ -594,7 +594,9 @@ if want C && [ "$docker_ok" = 1 ]; then
     --client-keys-file keys.txt --identity-map-file map.json >"$scratch/c.1" 2>&1 &
   c_ok "a secret holding :~:, keys and its map" "1 client key(s) and an identity map" \
     --client-keys-file keys-tilde.txt --identity-map-file map-tilde.json >"$scratch/c.2" 2>&1 &
-  c_ok "a map of units and prefixes alone, with no keys" "0 client key(s) and an identity map" \
+  # tokenfuse v1.19.0 (Upgrade item 2, invariant 137): a gateway bound beyond loopback with nothing authenticating its
+  # callers refuses to start, so a map alone is refused by the image, not passed. The stack never starts a keyless gateway.
+  c_refused "a map of units and prefixes alone, with no keys" "nothing authenticates the callers of this gateway" \
     --identity-map-file map-prefixes.json >"$scratch/c.3" 2>&1 &
   c_refused "a map that binds a key id no client key carries" "research-bots that no client key carries" \
     --client-keys-file keys-treasury-only.txt --identity-map-file map.json >"$scratch/c.4" 2>&1 &
@@ -604,7 +606,7 @@ if want C && [ "$docker_ok" = 1 ]; then
     --client-keys-file keys.txt --identity-map-file map-empty-object.json >"$scratch/c.6" 2>&1 &
   c_refused "a map naming a unit it does not declare" "not declared in units[]" \
     --client-keys-file keys.txt --identity-map-file map-unknown-unit.json >"$scratch/c.7" 2>&1 &
-  c_refused "a map with key bindings and no client keys at all" "that no client key carries" \
+  c_refused "a map with key bindings and no client keys at all" "nothing authenticates the callers of this gateway" \
     --identity-map-file map.json >"$scratch/c.8" 2>&1 &
   # The image BUILD_FROM_SOURCE builds has no ENTRYPOINT (images/tokenfuse.Dockerfile),
   # so the check has to give the command the manifest gives the gateway.

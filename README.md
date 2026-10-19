@@ -89,7 +89,7 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | Deployment + PVC + Service | `51-typryx.yaml`, the typed-answer plane: a typed question answered with a probability, scored later against what actually happened. **Not in the default apply**: a whole plane somebody may simply not want. Backend is `stub` (free, no outbound call) unless a launcher is given `--typed-mode` (see "Typed answers: choose where your data goes"). Refuses to start without a credential, the same as scopyx. Its journal is on the shared `stack-events` bus | |
 | Deployment + Service + NetworkPolicy x4 | `52-tokenfuse-mcp-broker.yaml`, tokenfuse's own MCP credential broker fronting typryx. **Not in the default apply, applied by the same `--with-typed` flag as 51-typryx.yaml, right after it**. Free, reaches nowhere but typryx itself. Refuses to start without its own credential | |
 | Deployment + Service + NetworkPolicy x4 | `56-typryx-wardryx-proxy.yaml`, typryx's `wardryx-proxy`: between the MCP broker and wardryx, it adds the risk class of a pending tool call to the decision request, so a `hold_if_signal` policy can hold the call for a person. **Not in the default apply, rendered only by `--typed-risk-signal`** (off by default, refused when the typed mode is off). No claim, no journal, no ledger: it keeps no state. See "A typed risk signal" below | 4330 |
-| Deployment + Service + PVC + NetworkPolicy x3 | `54-delegation.yaml`, vouchryx, the delegation-token service. **Not in the default apply, applied by `delegation/up.sh`**, which also refuses before applying anything unless a trusted upstream issuer, audience and JWKS file are given. Reachable only from the gateway and the console. See "The delegation plane" below | |
+| Deployment + Service + PVC + NetworkPolicy x4 | `54-delegation.yaml`, vouchryx, the agent-token service. **In the default apply**, agents-only: no identity provider, its keys and its first enrolled agent minted at deploy time (`lib/vouchryx-mint.sh`). Reachable from the gateway, the broker, wardryx and the console, and from agent pods. See "The delegation plane" below | |
 | Patch (Deployment) | `55-copilot-cloud.yaml`: moves the console's copilot, Felyx, to a larger model (`claude-sonnet-5`). A model switch only: Felyx already reaches Anthropic through this stack's own gateway (by its Service name, under `agent://<trust domain>/genaryx/felyx`, metered and policy-checked like any agent) with its own client key, and the gateway holds the provider key (see "The provider key" below). **Not in the default apply**: the deploy scripts apply it when they are given `--anthropic-key-file`, and every conversation is METERED on that key's account. See its own header before applying | |
 | Namespace labels + NetworkPolicy x2 | `60-harden-neighbours.yaml`: Pod Security `restricted` plus default-deny ingress and egress for the cluster's `default` namespace, i.e. hardening for a namespace this stack does not own (`security-tests.sh` check 12 reports on the gap this closes). **Not in the default apply**: it changes a namespace that belongs to whoever runs the cluster, and it WILL stop anything already running in `default`. Read its header before applying | |
 
@@ -161,8 +161,8 @@ tunnel/         the operator's way in: WireGuard, TLS, and the console behind
 hub/            a second site's way IN: up.sh, add-site.sh, down.sh for
                 manifests/53-hub-entry.yaml, the hub's one metered public
                 entry. See "A second site" below
-delegation/     the delegation plane's opt-in: up.sh, down.sh for
-                manifests/54-delegation.yaml (vouchryx). See "The delegation
+delegation/     the opt-in identity provider: up.sh, down.sh for the upstream
+                issuer (vouchryx itself is in the default install). See "The delegation
                 plane" below
 identity/       up.sh: the gateway's client keys and identity map, from files,
                 checked by the gateway image before the cluster is written;
@@ -758,71 +758,31 @@ manifest, so neither measured it through the entry.
 
 ## The delegation plane
 
-`on_behalf_of` normally travels as a claim the caller wrote: nothing here
-verifies it, and a wardryx policy carrying `deny_if_chain_unproven` or
-`require_root_principal` refuses only callers honest enough to say they did
-not prove it (GOTCHAS.md entry 105). `@decided 2026-09-27`: the launchers
-offer vouchryx as an opt-in delegation plane, off by default, so a gateway can
-verify a proved delegation chain instead of trusting a claimed one.
+vouchryx is in the default install and runs agents-only. It issues the agent tokens that the gateway,
+the MCP broker and wardryx verify (see "Agent tokens" below), and it needs no identity provider to do
+that. The deploy mints its signing key and its revoke key into the `vouchryx-keys` Secret, and it enrols
+the operator's own agent, once, through `lib/vouchryx-mint.sh`. Both are kept on every later run.
 
-```bash
+Trusting an upstream identity provider is a separate, opt-in step, and it names its inputs in advance:
+
+```sh
 ./delegation/up.sh --issuer https://idp.example.com \
                     --audience http://vouchryx:4310 \
-                    --jwks-file /path/to/your-idp-jwks.json
+                    --jwks-file /path/to/idp-jwks.json
 ```
 
-All three flags are required, and checked BEFORE anything is applied to the
-cluster (CLAUDE.md invariant 24): there is no defensible default trusted
-issuer, the same reason `TRAILRYX_TRUST_DOMAIN` ships as a placeholder rather
-than a guess. `--issuer` and `--audience` are your own IdP's `iss` and the
-`aud` it puts on the subject/actor tokens it issues for use with this
-vouchryx instance; `--jwks-file` is that IdP's public JWKS.
+All three flags are required and are checked before anything is applied. The script writes the trusted
+issuer into the ConfigMap `vouchryx-trusted-issuers` and rolls vouchryx to read it. It also patches the
+console's revoke command. `./delegation/down.sh` withdraws the trusted issuer and the console's wiring. It
+keeps vouchryx, and the agents keep their tokens.
 
-The script mints vouchryx's signing key and its revoke key once, into the
-`vouchryx-keys` Secret, and reuses both on every later run rather than
-rotating them (a rotation revokes nothing, it only orphans a revocation
-recorded under the old key). It then fetches vouchryx's OWN served JWKS from
-`/.well-known/jwks.json`, once the pod is Ready, and hands that to the
-gateway, never the operator's own upstream JWKS: a JWKS minted any other way
-does not carry the RFC 7638 thumbprint vouchryx actually signs with, and every
-token is refused `BadToken` (measured on this exact cluster shape, 2026-09-27).
-Both the gateway and the console then learn about vouchryx through a
-`kubectl patch --patch-file`, the same shape `55-copilot-cloud.yaml` already
-uses, never through a manifest kustomize applies:
+The revocation store lives on its own volume (`vouchryx-state`), so a revocation survives a pod restart.
+A revocation is one call to vouchryx's `/v1/revoke`, with the bearer in the `revoke_key` of the
+`vouchryx-keys` Secret. The Secret is read there, and never printed by these scripts.
 
-```bash
-./delegation/down.sh                  # keeps vouchryx-keys and the trusted
-                                       # issuer, so ./delegation/up.sh with
-                                       # the same flags reuses them
-./delegation/down.sh --delete-secrets # also removes them
-```
-
-`down.sh` reverses each `kubectl patch --patch-file` with its own
-`$patch: delete` counterpart, rather than by re-applying the kustomization:
-`kubectl patch` never touches the `last-applied-configuration` annotation
-`kubectl apply`'s three-way diff reads, so `kubectl apply -k manifests/` does
-not remove what a patch added (measured 2026-09-27; it also reverted an
-unrelated operator setting, `TRAILRYX_TRUST_DOMAIN`, back to its placeholder
-in the process, CLAUDE.md invariant 14's own trap).
-
-**Reachable only from the gateway and the console.** `manifests/54-delegation.yaml`
-is a ClusterIP Service plus a NetworkPolicy admitting port 4310 from nothing
-else, the same lab shape measured on forge 2026-09-27 (only money-plane pods
-reach 4310). Revoking a subject and confirming the refusal:
-
-```bash
-REVOKE_KEY=$(kubectl -n agent-stack get secret vouchryx-keys -o jsonpath='{.data.revoke_key}' | base64 -d)
-kubectl -n agent-stack port-forward svc/vouchryx 14310:4310 &
-curl -X POST http://127.0.0.1:14310/v1/revoke \
-  -H "Authorization: Bearer $REVOKE_KEY" \
-  -d '{"subject":"agent://acme.example/example","actor":"you","reason":"testing"}'
-```
-
-or from the console's own `delegation_revoke` command (admin-only,
-passkey-gated), wired to `GENARYX_VOUCHRYX_URL` and
-`GENARYX_VOUCHRYX_REVOKE_KEY_FILE` by the same patch that enables it. A
-revocation is persisted on its own volume (`vouchryx-state`), so it survives a
-vouchryx pod restart.
+**Reachable from the gateway, the MCP broker, wardryx, the console and the agent pods only.** The
+NetworkPolicies in `manifests/54-delegation.yaml` and `manifests/58-agent-tokens-network.yaml` admit port
+4310 from those and nothing else.
 
 ## Closing a retained reservation
 
@@ -880,36 +840,45 @@ No named exception remains. The scheduled CostCrew run (the CronJob `costcrew-cr
 `49-costcrew.yaml`, which is opt-in) presents its own client key, `costcrew-client-key`, and holds no
 provider key. CLAUDE.md invariant 53 holds the rule and the gate that checks it.
 
-## Agent tokens (opt-in)
+## Agent tokens
 
-An agent can hold its own short-lived credential instead of a shared client key.
-It is off by default, and it needs the delegation plane (`delegation/up.sh`), because
-the gateway checks an agent's token with the same vouchryx and the same revocation list.
+An agent holds its own short-lived token, bound to a proof key, and the doors check it. The gateway and
+the MCP broker require it in the default install (`TOKENFUSE_AGENT_TOKENS=require`), and a static client
+key is admitted only from a named list. wardryx checks the token and its proof itself and answers 403
+when the agent it is asked about is not the token's subject (CLAUDE.md invariants 54, 62 and 63).
 
-```bash
+Enrol more agents, or add an agent pod, with the registry tool. It writes the registry and rolls vouchryx,
+and it switches nothing:
+
+```sh
 ./agent-tokens/up.sh --registry agents.txt --check-only   # what it would check
-./agent-tokens/up.sh --registry agents.txt                # turn it on
-./agent-tokens/down.sh                                    # turn it off again
+./agent-tokens/up.sh --registry agents.txt                # write the registry
 ```
 
-`agents.txt` has one line per agent, `agent://<trust domain>/<path>|<unit>|<org>|<credential>`,
-where the credential is `sha256:<digest of an enrolment key>` or
-`workload:<the cluster's issuer>#system:serviceaccount:agent-stack:<ServiceAccount>`. A pod
-that is one of these agents is labelled `taipanbox.dev/agent-token: "true"` and mounts a
-projected token for `http://vouchryx:4310` (see `agent-tokens/example-agent.yaml`). It holds no
-Kubernetes API token and no secret. To get an agent token, the agent asks vouchryx for
-`resource=https://vouchryx.agent-stack.invalid` (RFC 8707; the example carries it as `VOUCHRYX_AGENT_RESOURCE`).
-A request that names no resource is refused `audience_not_allowed`: vouchryx does not fall back to its own issuer.
+The file replaces the whole registry, so it must hold every agent, the operator's own included
+(`agent://<td>/agents/operator|agents|stack|sha256:<digest>`, the digest of the key in `agent-enrol-key`,
+which the deploy wrote to this machine with mode 0600).
 
-**Admission.** With admission on (the default install turns it on for `agent-stack`, see `policy/README.md`), an agent pod's image is refused until it is listed. Before you turn the agents on, copy `policy/operator-image-policy.example.yaml` to `policy/operator-image-policy.yaml` and list each agent image there, by digest, or with the identity or key that signs it. `policy/README.md` has the templates and the rules.
+An agent pod gets its token the way `agent-tokens/example-agent.yaml` shows: a projected service-account
+token for `http://vouchryx:4310`, no Kubernetes API token, and a label, `taipanbox.dev/agent-token=true`,
+which opens the two egress rules it needs (vouchryx and the gateway). It asks vouchryx for
+`resource=https://vouchryx.agent-stack.invalid` (RFC 8707). A request that names no resource, or another
+one, is refused, and vouchryx does not fall back to its own issuer.
 
-Turning it on sets the gateway's audience to `https://vouchryx.agent-stack.invalid`, the same
-identifier the broker's door and vouchryx's allowed audiences name, so delegated calls minted for
-any other audience are refused from then on. It is an identifier, not an address, and nothing serves
-it (tokenfuse v1.17.0 needs an https URL there; GOTCHAS.md entry 137). A stop is one call to vouchryx with `ban: true`,
-and the gateway refuses the agent within one poll (12 s). The measured run is in
-`evidence/agent-tokens-kind/`. Not yet: the broker's own key, and `require` (refusing static
-keys), which is a later, dated decision. CLAUDE.md invariant 54 holds the rule.
+A stop is one call: `POST /v1/revoke` on vouchryx with `ban:true`. The gateway and the broker poll the
+revocation list every 12 s and refuse a list older than 60 s, so a stopped agent is refused at every door
+within one poll while vouchryx answers.
+
+**Static keys still admitted, by name.** The gateway's list is `felyx,agents,drills,costcrew,broker`, each with
+its reason in `manifests/10-planes.yaml`. `agents` is the operator's own key as it stood before this release, so
+an upgrade keeps it working; move each client to an agent token and take it off the list. The operator's
+additions go in the ConfigMap `gateway-static-keys` (key `operator_key_ids`, a comma list that begins with a
+comma), and the gateway reads them at start:
+
+```sh
+kubectl -n agent-stack patch configmap gateway-static-keys --type merge -p '{"data":{"operator_key_ids":",claude-code"}}'
+kubectl -n agent-stack rollout restart deployment/tokenfuse-gateway
+```
 
 ## Client keys and the identity map
 

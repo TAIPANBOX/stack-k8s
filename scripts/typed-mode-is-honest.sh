@@ -189,7 +189,9 @@ check("4 jev key is a file, never a value", "kind: ConfigMap" not in code,
       "a ConfigMap is rendered; a key never belongs in one")
 for em in re.finditer(r"\{\s*name:\s*(\w*KEY\w*)\s*,\s*value:", code):
     check("4 jev key is a file, never a value",
-          em.group(1).endswith("_KEY_FILE") or em.group(1) == "TYPRYX_ACCEPT_KEY_IN_META",
+          em.group(1).endswith("_KEY_FILE") or em.group(1) == "TYPRYX_ACCEPT_KEY_IN_META"
+          # tokenfuse's lists of client key ids (CLAUDE.md invariant 62): names, never a key value.
+          or em.group(1).endswith("_AGENT_TOKENS_STATIC_KEYS"),
           f"{em.group(1)} is an environment value; a key is a file path, never a value")
 mm = re.search(r"secretName:\s*([\w.-]+)", code)
 sn = re.search(r"(?m)^  name: ([\w.-]+)$", sec)

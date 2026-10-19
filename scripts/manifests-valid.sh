@@ -80,16 +80,9 @@ if grep -qE '^apiVersion:' manifests/55-copilot-cloud.yaml 2>/dev/null; then
 	exit 1
 fi
 
-# manifests/54-delegation-gateway-patch.yaml and
 # manifests/54-delegation-console-patch.yaml: the same shape as
 # 55-copilot-cloud.yaml above, `kubectl patch --patch-file` bodies applied by
 # delegation/up.sh, and checked the same way.
-if grep -qE '^apiVersion:' manifests/54-delegation-gateway-patch.yaml 2>/dev/null; then
-	echo "FAIL: manifests/54-delegation-gateway-patch.yaml is skipped as a patch body"
-	echo "      but now carries apiVersion, which makes it a manifest this gate must"
-	echo "      check. Take it off the FRAGMENTS list in this script."
-	exit 1
-fi
 if grep -qE '^apiVersion:' manifests/54-delegation-console-patch.yaml 2>/dev/null; then
 	echo "FAIL: manifests/54-delegation-console-patch.yaml is skipped as a patch body"
 	echo "      but now carries apiVersion, which makes it a manifest this gate must"
@@ -97,16 +90,9 @@ if grep -qE '^apiVersion:' manifests/54-delegation-console-patch.yaml 2>/dev/nul
 	exit 1
 fi
 
-# manifests/54-delegation-gateway-unpatch.yaml and
 # manifests/54-delegation-console-unpatch.yaml: the same shape again, the
 # `kubectl patch --patch-file` bodies delegation/down.sh uses to reverse the
 # two patches above (`$patch: delete` directives, no apiVersion).
-if grep -qE '^apiVersion:' manifests/54-delegation-gateway-unpatch.yaml 2>/dev/null; then
-	echo "FAIL: manifests/54-delegation-gateway-unpatch.yaml is skipped as a patch body"
-	echo "      but now carries apiVersion, which makes it a manifest this gate must"
-	echo "      check. Take it off the FRAGMENTS list in this script."
-	exit 1
-fi
 if grep -qE '^apiVersion:' manifests/54-delegation-console-unpatch.yaml 2>/dev/null; then
 	echo "FAIL: manifests/54-delegation-console-unpatch.yaml is skipped as a patch body"
 	echo "      but now carries apiVersion, which makes it a manifest this gate must"
@@ -146,16 +132,8 @@ fi
 FRAGMENTS=(
 	"tunnel/console-patch.yaml"
 	"manifests/55-copilot-cloud.yaml"
-	"manifests/54-delegation-gateway-patch.yaml"
 	"manifests/54-delegation-console-patch.yaml"
-	"manifests/54-delegation-gateway-unpatch.yaml"
 	"manifests/54-delegation-console-unpatch.yaml"
-	"manifests/58-agent-tokens-gateway-patch.yaml"
-	"manifests/58-agent-tokens-gateway-unpatch.yaml"
-	"manifests/58-agent-tokens-vouchryx-patch.yaml"
-	"manifests/58-agent-tokens-vouchryx-unpatch.yaml"
-	"manifests/58-agent-tokens-broker-patch.yaml"
-	"manifests/58-agent-tokens-broker-unpatch.yaml"
 	"manifests/57-closure-gateway-patch.yaml"
 	"manifests/57-closure-console-patch.yaml"
 	"manifests/57-closure-gateway-unpatch.yaml"

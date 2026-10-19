@@ -1,0 +1,52 @@
+# The stand-in egress rules for this run. The product's 30-network-policy.yaml is not applied here (no default
+# deny, no Longhorn). Each rule below is the one the run needs and the product gives the same edge another way:
+#   gateway -> upstream   the provider stand-in (the product gives the gateway an internet egress rule)
+#   gateway -> wardryx    the policy plane (the product's gateway-egress-internet, planes 8090)
+#   broker  -> gateway    the tool-call check (manifests/52-tokenfuse-mcp-broker.yaml broker-egress-gateway)
+#   broker  -> mcp-stub   the MCP upstream stand-in
+#   wardryx -> policy-db  the policy store (the product's wardryx-egress-store)
+# 54-delegation.yaml and 58-agent-tokens-network.yaml are applied as the product has them.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: gateway-egress-stand-ins, namespace: agent-stack }
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-gateway } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: upstream } }
+      ports: [{ protocol: TCP, port: 18080 }]
+    - to:
+        - podSelector: { matchLabels: { app: wardryx } }
+      ports: [{ protocol: TCP, port: 8090 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: broker-egress-stand-ins, namespace: agent-stack }
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: tokenfuse-gateway } }
+      ports: [{ protocol: TCP, port: 4100 }]
+    - to:
+        - podSelector: { matchLabels: { app: wardryx } }
+      ports: [{ protocol: TCP, port: 8090 }]
+    - to:
+        - podSelector: { matchLabels: { app: mcp-stub } }
+      ports: [{ protocol: TCP, port: 4320 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: wardryx-egress-store, namespace: agent-stack }
+spec:
+  podSelector: { matchLabels: { app: wardryx } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: policy-db } }
+      ports: [{ protocol: TCP, port: 5432 }]
+    - to:
+        - podSelector: { matchLabels: { app: vouchryx } }
+      ports: [{ protocol: TCP, port: 4310 }]
