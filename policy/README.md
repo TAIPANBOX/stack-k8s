@@ -1,10 +1,10 @@
 # Admission policy for the stack's namespace (opt-in, invariant 58)
 
-**Status: blocked for enforcement.** Measured 2026-10-19 on kind (Kubernetes v1.37.0) with
-policy-controller v0.15.1: once agent-stack is opted in, the controller refuses every TAIPANBOX image
-the manifests name, signed or not. The cause is a signature format the controller does not read; see
-"Why it is blocked" below. Until that is resolved,
-`policy/up.sh --enforce` must not be run on a cluster that serves the stack.
+**Status: opt-in, and it admits no TAIPANBOX image today.** Measured 2026-10-19 on kind (Kubernetes v1.37.0)
+with policy-controller v0.15.1: once agent-stack is opted in, the controller refuses every TAIPANBOX image
+the manifests name, signed or not, because none of them has a signature in the format the controller reads.
+Do not run `policy/up.sh --enforce` on a cluster that serves the stack until the section "What it admits
+today" shows the images you run.
 
 ## What is here
 
@@ -22,26 +22,51 @@ No manifest names this directory, so `kubectl apply -k manifests/` does not turn
 
 Root cause, measured 2026-10-19 (commands and outputs in `evidence/verified-images-kind/signing-format.txt`):
 
-- The release workflows sign every image with `cosign-release: v3.1.3` and `cosign sign --yes "ghcr.io/taipanbox/<name>@<digest>"`. Eleven image-signing jobs do this (tokenfuse, wardryx, vouchryx, keyryx, costcrew, idryx, heraldyx, scopyx, typryx, trailryx, qryx, agent-stack-go). cosign v3 writes each signature as an OCI referrer, stored at the fallback tag `sha256-<digest>` (an index of sigstore bundles). It writes no `sha256-<digest>.sig` tag, with either value of `--registry-referrers-mode` (tested on a local registry).
-- policy-controller v0.15.1, the newest release, reads the legacy `.sig` tag for image signatures. Its `signatureFormat: bundle` option fails with `bundle support for image signatures is not yet implemented` (kind, 2026-10-19).
-- cosign v2.4.0 and v2.6.5 write the `.sig` tag, and the controller reads it. A keyless signature in that form, made by a third party, was found and verified on the same kind cluster.
-- The signed digests are the index digests the manifests pin. `cosign verify` with v3.1.3 passes for `wardryx:v2.2.0`, `tokenfuse:v1.16.0` and `tokenfuse:v1.17.0`, so the signatures are real and they are not missing.
+- The release workflows sign every image with cosign v3.1.3, `cosign sign --yes "ghcr.io/taipanbox/<name>@<digest>"`:
+  twelve TAIPANBOX repositories (tokenfuse, wardryx, vouchryx, keyryx, costcrew,
+  idryx, heraldyx, scopyx, typryx, trailryx, qryx, agent-stack-go), and stack-k8s's `console-image.yml` and
+  `tunnel-images.yml`. cosign v3 writes each signature as a bundle at the OCI fallback tag `sha256-<digest>`,
+  with no `sha256-<digest>.sig` tag.
+- policy-controller v0.15.1, the newest release, reads only the legacy `.sig` tag for image signatures. Its
+  `signatureFormat: bundle` option fails with `bundle support for image signatures is not yet implemented`.
+- cosign v2.4.0, v2.6.5, and cosign v3.1.3 with `--new-bundle-format=false --use-signing-config=false` write the
+  `.sig` tag. The controller reads it: a key-signed image with the legacy flags was admitted on kind.
+- The signed digests are the index digests the manifests pin, and `cosign verify` with v3.1.3 passes on them.
 
-What would unblock it, either one:
+## The decision
 
-1. Sign with cosign v2 (v2.6.5 is the newest v2 release). That is the `cosign-release:` line of each image job above, in each of the eleven repositories. Images already released stay on the v3 format and need a re-sign from their tags.
-2. A policy-controller release that verifies bundle image signatures. None exists yet: v0.15.1 (2026-03-26) is the newest release, and the `unstable` image of main refused the policy with `secret "" not found` (not investigated further).
+`@decided 2026-10-19` (paraphrased): image signatures are written in the legacy format, so the admission
+policy can read them, and the bundle format stays until the controller reads it. The flags are deprecated in
+cosign v3 but still accepted; source and read date are in the evidence file.
 
-Until one of them holds, `policy/up.sh` installs and does not opt anything in.
+- stack-k8s: `console-image.yml` and `tunnel-images.yml` sign with the two flags, with a comment to remove
+  them when the controller reads bundles (upstream PR sigstore/policy-controller#1968).
+- The twelve TAIPANBOX repositories listed above: the same two flags on their image sign lines. Each one is a change in its own repository; it is not made here.
+- Images already released keep the bundle format. They become admissible only after a signing run with the
+  flags, from their release tag: the next release, or a re-sign run.
 
-## The unsigned images the manifests still name
+Until those land, the policy is not turned on for a running stack.
 
-- `ghcr.io/taipanbox/mockryx:v0.2.1` (the drills CronJob, suspended). Its repository is not in this one;
-  no signature was found on the registry. It is refused once the namespace is opted in, unless it is signed.
+## What it admits today
 
-`genaryx-console` is pinned at v1.1.47, signed by stack-k8s's `console-image.yml` (identity covered above).
-`stack-caddy` and `stack-wg` (v1.1.47, signed by `tunnel-images.yml`) are not named by any manifest; the tunnel
-builds them locally as `stack/*:dev` (see "Not covered").
+Measured 2026-10-19 with a `.sig` probe on every pinned TAIPANBOX digest in the manifests: none has a `.sig`
+tag. So:
+
+- **TAIPANBOX images: none.** That includes `genaryx-console` v1.1.47, `stack-caddy` and `stack-wg` v1.1.47,
+  and every other pinned version. Each is refused once the namespace is opted in, until it is signed in the
+  legacy format.
+- **Upstream images: three**, admitted by digest only (postgres, caddy, busybox, the table below).
+- **`mockryx` v0.2.1** (suspended drills CronJob): unsigned, refused.
+
+Opt-in `policy/up.sh` installs the controller and the policies, and admits nothing new until
+`policy/up.sh --enforce` is run.
+
+## Images the manifests name, and their signing
+
+- `genaryx-console` v1.1.47, signed by stack-k8s's `console-image.yml`, in the bundle format: no `.sig` tag.
+- `mockryx` v0.2.1, from its own repository (not this one): no signature found on the registry.
+- `stack-caddy` and `stack-wg` v1.1.47 are not named by any manifest; the tunnel builds them locally as
+  `stack/*:dev` (see "Not covered").
 
 ## Upstream images, and why each is trusted
 
