@@ -112,6 +112,14 @@ SMTP_HOST="${SMTP_HOST:-}"
 SMTP_FROM="${SMTP_FROM:-}"
 SMTP_USER="${SMTP_USER:-}"
 SMTP_PASS=""
+# Mail transport security for the notifier (heraldyx 0.8.0): unset is starttls, the default.
+# Set it in your environment to pass it into the heraldyx-mail Secret (below): starttls, implicit
+# (port 465) or plain (a loopback relay only). Checked here, before anything is installed.
+HERALDYX_SMTP_TLS="${HERALDYX_SMTP_TLS:-}"
+case "$HERALDYX_SMTP_TLS" in
+  ""|starttls|implicit|plain) ;;
+  *) echo "!! HERALDYX_SMTP_TLS must be starttls, implicit or plain, or unset; got '$HERALDYX_SMTP_TLS'. Nothing was applied." >&2; exit 1 ;;
+esac
 # Where the operator opens their own console. The link in the mail goes here
 # and nowhere else, and the default is what this script's own closing screen
 # tells them to run.
@@ -299,6 +307,7 @@ install_alerts() {
     printf '  HERALDYX_TO: %s\n'        "$(b64_ "$ALERT_TO")"
     printf '  HERALDYX_SMTP_HOST: %s\n' "$(b64_ "$SMTP_HOST")"
     printf '  HERALDYX_SMTP_FROM: %s\n' "$(b64_ "$SMTP_FROM")"
+    if [ -n "$HERALDYX_SMTP_TLS" ]; then printf '  HERALDYX_SMTP_TLS: %s\n' "$(b64_ "$HERALDYX_SMTP_TLS")"; fi
     printf '  HERALDYX_BOX: %s\n'       "$(b64_ "gcp")"
     if [ -n "$SMTP_USER" ]; then printf '  HERALDYX_SMTP_USER: %s\n' "$(b64_ "$SMTP_USER")"; fi
     if [ -n "$SMTP_PASS" ]; then printf '  HERALDYX_SMTP_PASS: %s\n' "$(b64_ "$SMTP_PASS")"; fi

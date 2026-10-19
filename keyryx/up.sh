@@ -74,7 +74,14 @@ kubectl -n "$NS" apply -f "$HERE/manifests/59-keyryx.yaml"
 kubectl -n "$NS" rollout status deployment/keyryx-custody --timeout=300s
 kubectl -n "$NS" rollout status deployment/keyryx-witness --timeout=300s
 
-kubectl -n "$NS" patch deployment wardryx --type strategic --patch-file "$HERE/wardryx-patch.yaml"
+# The deadline for v2 approval tokens minted before the switch (wardryx v2.2.x). An existing value is
+# kept, so a re-run does not extend the window; a first run allows one hour from now.
+v2until="$(kubectl -n "$NS" get deployment wardryx -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="WARDRYX_APPROVAL_V2_UNTIL")].value}' 2>/dev/null || true)"
+if [ -z "$v2until" ]; then
+  v2until="$(date -u -v+1H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '+1 hour' +%Y-%m-%dT%H:%M:%SZ)"
+fi
+sed "s/@WARDRYX_APPROVAL_V2_UNTIL@/$v2until/" "$HERE/wardryx-patch.yaml" >"$tmp/wardryx-patch.yaml"
+kubectl -n "$NS" patch deployment wardryx --type strategic --patch-file "$tmp/wardryx-patch.yaml"
 kubectl -n "$NS" rollout status deployment/wardryx --timeout=300s
 
 echo "Keyryx is on. Custody: keyryx-custody:4340, witness: keyryx-witness:4341."

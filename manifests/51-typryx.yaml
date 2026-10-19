@@ -62,7 +62,7 @@
 # the same credential either way.
 #
 # Needs typryx v0.2.0 or later: v0.1.0 predates typryx#6 and ignores this
-# variable (GOTCHAS 106). This file pins v0.4.1; v0.4.0 is the first release with the
+# variable (GOTCHAS 106). This file pins v0.5.0; v0.4.0 is the first release with the
 # `wardryx-proxy` subcommand that manifests/56 runs from this same image (v0.3.0
 # was the first to read TYPRYX_TRAINING_DIR, below, and to accept a distribution
 # rounded to four decimals). @measured on kind v0.33, 2026-09-26,
@@ -233,7 +233,7 @@ spec:
           volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
       containers:
         - name: typryx
-          image: ghcr.io/taipanbox/typryx:v0.4.1@sha256:c49bceb2003e6486a6d2c82b34a7c7cc3834933b9c6108e8074fefa35b926502
+          image: ghcr.io/taipanbox/typryx:v0.5.0@sha256:c9278289b3722d3e89fd90f4834666c295ee0c83b4b014c0df160500f2b57a20
           imagePullPolicy: IfNotPresent
           # ENTRYPOINT defaults to `serve`; TYPRYX_ADDR and TYPRYX_TEMPLATES
           # are baked into the image (0.0.0.0:4320, the three example

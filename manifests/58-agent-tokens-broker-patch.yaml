@@ -8,7 +8,8 @@
 #
 #   TOKENFUSE_AGENT_TOKENS=accept                  the broker admits an agent's own token as a door credential
 #   TOKENFUSE_DELEGATION_*                         the same verifier the gateway uses: the issuer, the JWKS, the
-#                                                  audience (vouchryx's issuer), the broker's own address for the
+#                                                  audience (the https identifier the gateway and vouchryx share,
+#                                                  invariant 54), the broker's own address for the
 #                                                  DPoP htu, the revocation list (closed, at most 60 s old)
 #   TOKENFUSE_MCP_TAINT_GATEWAY                    the gateway's tool-call check, which the broker relays to
 #   TOKENFUSE_MCP_TAINT_GATEWAY_KEY_FILE           the broker's own client key (id `broker`, minted with the
@@ -26,7 +27,7 @@ spec:
             - { name: TOKENFUSE_AGENT_TOKENS, value: "accept" }
             - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
             - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
-            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "http://vouchryx:4310" }
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "https://vouchryx.agent-stack.invalid" }
             - { name: TOKENFUSE_DELEGATION_URL, value: "http://tokenfuse-mcp-broker:4200" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS, value: "http://vouchryx:4310/v1/revocations" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: "closed" }

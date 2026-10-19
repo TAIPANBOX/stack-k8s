@@ -353,7 +353,7 @@ else:
 # with nothing noticing. Same fault, same gate, the other file it now reads.
 run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
 	'./scripts/pinned-images.sh' \
-	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.1.47@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
 	"moves: a pod can come back different"
 
 # The default apply set must not publish anything to the world, and must not
@@ -1339,7 +1339,7 @@ run_case "typed-mode-is-honest: a launcher stops forwarding --typed-training" fa
 
 run_case "typed-mode-is-honest: the typryx pin goes back before the wardryx-proxy" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.1", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
+	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.5.0", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
 	"older than v0.4.0"
 
 run_case "typed-mode-is-honest: a document names a second typryx tag" fail \
@@ -1349,8 +1349,8 @@ run_case "typed-mode-is-honest: a document names a second typryx tag" fail \
 
 run_case "typed-mode-is-honest: the typryx image is no longer named" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.1", "image: example.invalid/typ:v0.4.0")
-edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.1", "image: example.invalid/typ:v0.4.0")')" \
+	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.5.0", "image: example.invalid/typ:v0.4.0")
+edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.5.0", "image: example.invalid/typ:v0.4.0")')" \
 	"measured nothing about the typryx pin"
 
 run_case "typed-mode-is-honest: a comment in the training section changes" pass \
@@ -1549,7 +1549,7 @@ run_case "typed-mode-is-honest: a launcher stops forwarding --typed-risk-signal"
 
 run_case "typed-mode-is-honest: the proxy runs another typryx tag than typryx" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.4.1", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.5.0", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
 	"different tags"
 
 run_case "typed-mode-is-honest: the proxy runs the service, not the proxy" fail \
@@ -1629,7 +1629,7 @@ run_case "chain-verifier: the verifier shares the money plane's uid" fail \
 
 run_case "chain-verifier: the image has no watch-dir" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/agent-conform:v1.1.0", "image: ghcr.io/taipanbox/agent-conform:v1.0.2")')" \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/agent-conform:v2.0.1", "image: ghcr.io/taipanbox/agent-conform:v1.0.2")')" \
 	"older than v1.1.0"
 
 run_case "chain-verifier: the verifier is in an opt-in file" fail \
@@ -1651,7 +1651,7 @@ run_case "chain-verifier: a comment on the verifier changes" pass \
 
 run_case "chain-verifier: no verifier left to judge" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/agent-conform:v1.1.0", "image: ghcr.io/taipanbox/agent-conform-other:v1.1.0")')" \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/agent-conform:v2.0.1", "image: ghcr.io/taipanbox/agent-conform-other:v1.1.0")')" \
 	"measured nothing about the verifier"
 
 # The bus file names (invariant 30). heraldyx v0.3.0 and idryx v1.1.0 refuse an event
@@ -1857,8 +1857,8 @@ run_case "temp: the console's temp is mounted read-only" fail \
 
 run_case "temp: no container left that needs a temp" fail \
 	'./scripts/read-only-root-has-a-temp.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.8.0", "image: registry.invalid/costcrew:v0.6.0")
-edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.8.0", "image: registry.invalid/costcrew:v0.6.0")')" \
+	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.9.0", "image: registry.invalid/costcrew:v0.6.0")
+edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.9.0", "image: registry.invalid/costcrew:v0.6.0")')" \
 	"measured NOTHING"
 
 run_case "temp: TMPDIR inside the data volume instead of a /tmp mount" pass \
@@ -2525,8 +2525,8 @@ run_case "wardryx-key-is-pep: the migration writes the key on the command line" 
 
 run_case "wardryx-key-is-pep: a pin moves back to the old wardryx" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.1.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
-	"does not pin wardryx v2.1.0"
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.2.1", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
+	"does not pin wardryx v2.2.1"
 
 run_case "wardryx-key-is-pep: a reworded comment is not a fault" pass \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
@@ -2934,13 +2934,28 @@ run_case "agent-tokens: the gateway patch turns the door off" fail \
 
 run_case "agent-tokens: the gateway door starts with no audience" fail \
 	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx:4310\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"\"")')" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"\"")')" \
 	"leaves TOKENFUSE_DELEGATION_AUDIENCE empty"
 
 run_case "agent-tokens: the gateway accepts a wider audience than vouchryx's issuer" fail \
 	"$AGT" \
-	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx:4310\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx.other:4310\"")')" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.other.invalid\"")')" \
 	"not vouchryx's issuer"
+
+run_case "agent-tokens: the broker's delegation audience is not the gateway's" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-broker-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.other.invalid\"")')" \
+	"does not set the broker's delegation audience"
+
+run_case "agent-tokens: vouchryx allows an audience the doors do not check" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-vouchryx-patch.yaml", "VOUCHRYX_ALLOWED_AUDIENCES, value: \"https://vouchryx.agent-stack.invalid\"", "VOUCHRYX_ALLOWED_AUDIENCES, value: \"https://vouchryx.other.invalid\"")')" \
+	"allows an audience other than"
+
+run_case "agent-tokens: the gateway names the audience in http, not https" fail \
+	"$AGT" \
+	"$(py 'edit("manifests/58-agent-tokens-gateway-patch.yaml", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\"", "TOKENFUSE_DELEGATION_AUDIENCE, value: \"http://vouchryx.agent-stack.invalid\"")')" \
+	"sets the audience to"
 
 run_case "agent-tokens: a stopped agent keeps working while the list is unreadable" fail \
 	"$AGT" \
@@ -3097,7 +3112,7 @@ run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)"
 # edits one tracked file the gate reads; the gate's own baseline must be green first.
 run_case "verified-images: a TAIPANBOX image carries a tag only" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.1.47@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739", "image: ghcr.io/taipanbox/genaryx-console:v1.1.47")')" \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
 	"image not pinned by digest"
 run_case "verified-images: an upstream image nobody allowed" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -3153,7 +3168,7 @@ run_case "verified-images: the keyless policy is absent (measured nothing)" fail
 	"measured NOTHING"
 run_case "verified-images: a comment naming an unpinned image (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/up.sh", "kubectl get namespace agent-stack >/dev/null\n", "kubectl get namespace agent-stack >/dev/null\n# image: ghcr.io/taipanbox/wardryx:v2.1.0 is named here in prose, not as a reference\n")')"
+	"$(py 'edit("policy/up.sh", "kubectl get namespace agent-stack >/dev/null\n", "kubectl get namespace agent-stack >/dev/null\n# image: ghcr.io/taipanbox/wardryx:v2.2.1 is named here in prose, not as a reference\n")')"
 run_case "verified-images: a reason reworded (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres), an upstream image", "# reason: the policy store (postgres), an upstream image")')"
@@ -3164,6 +3179,11 @@ run_case "stream-precreate: wardryx loses its init container" fail \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "- name: precreate-streams", "- name: precreate-streams-off")')" \
 	"Deployment wardryx -> /var/lib/stack/events/wardryx.ndjson: no precreate-streams"
+run_case "stream-precreate: heraldyx loses the init that creates its journal" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "- name: precreate-streams", "- name: precreate-streams-off")')" \
+	"Deployment heraldyx -> /var/lib/stack/heraldyx/sent.ndjson: no precreate-streams"
+
 run_case "stream-precreate: the init runs as root" fail \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false", "runAsUser: 0, runAsGroup: 10001, allowPrivilegeEscalation: false")')" \

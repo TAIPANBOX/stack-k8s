@@ -91,9 +91,20 @@ spec:
       tolerations:
         - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+      # Creates the dispatch journal before heraldyx starts, as its own uid (CLAUDE.md invariant 59,
+      # GOTCHAS 136). heraldyx opens sent.ndjson with agent-stack-go v2's event writer, which creates a
+      # missing file only in a directory its own process owns; the root of the state volume belongs to
+      # root, so without this the notifier refuses to start on a fresh volume. An existing file is
+      # left as it is, so an upgraded box keeps its journal.
+      initContainers:
+        - name: precreate-streams
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "f=/var/lib/stack/heraldyx/sent.ndjson; if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; ls -ln /var/lib/stack/heraldyx"]
+          volumeMounts: [{ name: state, mountPath: /var/lib/stack/heraldyx }]
       containers:
         - name: heraldyx
-          image: ghcr.io/taipanbox/heraldyx:v0.7.0@sha256:0774468fb06c78dc0172f99f6c7fb024423d52921c7051ddd0b0d684f22b9ef7
+          image: ghcr.io/taipanbox/heraldyx:v0.8.0@sha256:8b4b60f61d0778e473d3a88df1bd63ea5eeb67428754fa341cf23051766b40b5
           imagePullPolicy: IfNotPresent
           env:
             # The deployment's own shape. What the OPERATOR chooses (who to
@@ -135,6 +146,13 @@ spec:
             # than guessing, and an alert naming the wrong team at three in the
             # morning is worse than one naming none.
             - { name: HERALDYX_PASSPORTS, value: "/var/lib/stack/passports" }
+            # Mail transport security (heraldyx 0.8.0). Unset is starttls, which refuses a server that
+            # does not offer STARTTLS; "implicit" is for port 465; "plain" is allowed only for a loopback
+            # host. It lives in the heraldyx-mail Secret, where deploy.sh and the two cloud launchers put
+            # HERALDYX_SMTP_TLS when the operator sets it in their environment. Optional: an absent key
+            # leaves heraldyx on its default (GOTCHAS 136 has the release note this follows).
+            - name: HERALDYX_SMTP_TLS
+              valueFrom: { secretKeyRef: { name: heraldyx-mail, key: HERALDYX_SMTP_TLS, optional: true } }
           envFrom:
             # optional: true is load-bearing. Applied without the Secret, this
             # pod must still start: a notifier that CrashLoops because nobody

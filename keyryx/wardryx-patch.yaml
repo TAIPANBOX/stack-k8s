@@ -1,4 +1,4 @@
-# wardryx signs its approval tokens through Keyryx (wardryx v2.2.0, the 2.2 signer).
+# wardryx signs its approval tokens through Keyryx (wardryx v2.2.1, the 2.2 signer).
 # Applied by keyryx/up.sh with `kubectl patch --type strategic`, never by
 # `apply -k`: a patch leaves the last-applied annotation alone, so the default
 # manifests/10-planes.yaml stays what the default install applies (GOTCHAS 113,
@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v2.2.0@sha256:c91cd4f2bb2542a2be6972a612666672122e15514341fe9ac49f5370357ee903
+          image: ghcr.io/taipanbox/wardryx:v2.2.1@sha256:67718da5ef5551767156ef0ea893765f448c484fcbb5dcce5923a0ca83b8c309
           env:
             - name: WARDRYX_APPROVAL_SIGNER
               value: keyryx
@@ -32,6 +32,12 @@ spec:
               value: http://keyryx-custody.agent-stack.svc.cluster.local:4340
             - name: WARDRYX_KEYRYX_CREDENTIAL_FILE
               value: /run/keyryx-client/credential
+            # The end of the window in which a v2 HMAC approval token, minted before this switch, still
+            # verifies (RFC 3339). keyryx/up.sh substitutes it at apply time: one hour from the first run,
+            # then kept, so a re-run does not move it. Without it wardryx refuses every v2 token the moment
+            # the signer is on (wardryx v2.2.x), and a pending hold goes back to a person.
+            - name: WARDRYX_APPROVAL_V2_UNTIL
+              value: "@WARDRYX_APPROVAL_V2_UNTIL@"
           volumeMounts:
             - name: keyryx-client
               mountPath: /run/keyryx-client
