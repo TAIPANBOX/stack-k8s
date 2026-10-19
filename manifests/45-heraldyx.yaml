@@ -91,7 +91,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: heraldyx
-          image: ghcr.io/taipanbox/heraldyx:v0.7.0
+          image: ghcr.io/taipanbox/heraldyx:v0.7.0@sha256:0774468fb06c78dc0172f99f6c7fb024423d52921c7051ddd0b0d684f22b9ef7
           imagePullPolicy: IfNotPresent
           env:
             # The deployment's own shape. What the OPERATOR chooses (who to

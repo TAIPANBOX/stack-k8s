@@ -1,0 +1,70 @@
+# Why the admission policy finds no signature (2026-10-19)
+# Commands run from a Mac with docker; cosign only from its official images. Nothing installed.
+
+## 1. cosign v3.1.3 verifies a TAIPANBOX image (the release workflows' version)
+$ docker run --rm ghcr.io/sigstore/cosign/cosign:v3.1.3 verify \
+    --certificate-identity-regexp '^https://github.com/TAIPANBOX/wardryx/' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com ghcr.io/taipanbox/wardryx:v2.2.0
+exit=0
+Verification for ghcr.io/taipanbox/wardryx:v2.2.0 --
+  - The cosign claims were validated
+  - Existence of the claims in the transparency log was verified offline
+  - The code-signing certificate was verified using trusted certificate authority certificates
+[{"critical":{"identity":{"docker-reference":"ghcr.io/taipanbox/wardryx:v2.2.0"},"image":{"docker-manifest-digest":"sha256:c91cd4f2bb2542a2be6972a612666672122e15514341fe9ac49f5370357ee903"},"type":"https://sigstore.dev/cosign/sign/v1"},"optional":{}}, ... "https://slsa.dev/provenance/v1" ...]
+# the signed digest is the index digest, the one the manifests pin (2)
+
+$ ... verify ... ghcr.io/taipanbox/tokenfuse:v1.17.0   -> exit=0, docker-manifest-digest sha256:8bd5fc4f142305058db3b6c910d3939791bd22866ab2c312f616193329f26678 (the v1.17.0 index)
+$ ... verify ... ghcr.io/taipanbox/tokenfuse:v1.16.0   -> exit=0, docker-manifest-digest sha256:a119ce03a6bc0b3c9eacb755707397bf6b20c75c8d1838f0eeeb0bf4f0c8354c (the pinned digest)
+
+## 2. Where the signature lives (wardryx v2.2.0, digest sha256:c91cd4f2...)
+$ docker run --rm ghcr.io/sigstore/cosign/cosign:v3.1.3 tree ghcr.io/taipanbox/wardryx@sha256:c91cd4f2bb2542a2be6972a612666672122e15514341fe9ac49f5370357ee903
+📦 Supply Chain Security Related artifacts for an image: ghcr.io/taipanbox/wardryx@sha256:c91cd4f2...
+└── 🔗 https://sigstore.dev/cosign/sign/v1 artifacts via OCI referrer: ghcr.io/taipanbox/wardryx@sha256:b24e9f34...
+   └── 🍒 sha256:ce5c63a1...
+└── 🔗 https://slsa.dev/provenance/v1 artifacts via OCI referrer: ghcr.io/taipanbox/wardryx@sha256:e1c3161a...
+   └── 🍒 sha256:0392de67...
+$ curl -s -o /dev/null -w "%{http_code}" .../manifests/sha256-c91cd4f2...sig      -> 404
+$ registry tags containing ".sig" for taipanbox/wardryx: 0
+# ghcr answers the OCI referrers API with MANIFEST_UNKNOWN; the bundle is listed in the fallback index sha256-c91cd4f2...
+
+## 3. What cosign v3.1.3 writes (local registry, key-signed, same storage path as keyless)
+$ cosign sign --yes --key k.key localhost:5000/sigt/a@sha256:bd44eb13...          (default mode)
+  tags after: ["1","sha256-bd44eb13...]                 -> no .sig tag
+$ cosign sign --yes --registry-referrers-mode=legacy --key k.key localhost:5000/sigt/b@sha256:2e1a7aa4...
+  tags after: ["1","sha256-2e1a7aa4..."]                 -> no .sig tag (the flag governs fetching, not writing)
+
+## 4. What cosign v2 writes (same registry, same key)
+$ cosign v2.4.0 sign --yes --key k.key localhost:5000/sigt/a@sha256:bd44eb13...
+  tags after: ["1","sha256-bd44eb13...","sha256-bd44eb13....sig"]    -> .sig tag written
+$ cosign v2.6.5 sign --yes --key k.key ...   -> .sig tag written (same tag list)
+
+## 5. What policy-controller v0.15.1 does with each format (kind v1.37.0, real ClusterImagePolicy)
+taipanbox-signed, no signatureFormat:
+  wardryx@sha256:c91cd4f2... (v2.2.0, signed v3)       -> REFUSED: "...: no signatures found"
+  tokenfuse@sha256:a119ce03... (v1.16.0, signed v3)     -> REFUSED: "...: no signatures found"
+  genaryx-console@sha256:54218cfb... (unsigned)         -> REFUSED: "...: no signatures found"
+taipanbox-signed with signatureFormat: bundle:
+  every image -> "bundle support for image signatures is not yet implemented"
+  (controller log: failed validSignatures for authority authority-0 with fulcio ...)
+legacy keyless signature (cosign v2.4.0 image, signed by a Google service account):
+  wrong issuer -> REFUSED: "no matching signatures: ..."   (found and checked)
+  correct issuer -> ADMITTED                                  (verified)
+  (its .sig tag is read; so the path to Fulcio, Rekor and TUF works from kind)
+
+## 6. Newer policy-controller
+$ gh release list (sigstore/policy-controller): v0.15.1 is the newest, published 2026-03-26.
+$ main (80f7d39, 2026-10-02): pkg/webhook/validator.go no longer contains "not yet implemented"; the
+  unstable image (digest sha256:a5e51ce6...) with our policy refused every pod with
+  `secret "" not found`. Not investigated further; not pinned.
+$ open upstream issues: sigstore/policy-controller#1968 "fix: Support cosign v3 signature verification"
+  (open, PR add-support-for-cosignv3-signitures open, not merged), #1958, #1899.
+
+## 7. The release workflows (signing lines)
+cosign-release: v3.1.3 + "cosign sign --yes ghcr.io/taipanbox/<name>@${{ steps.push.outputs.digest }}":
+  tokenfuse/release.yml:595-597 (control-plane and tokenfuse matrix), wardryx/release.yml:137-139,
+  vouchryx/release.yml:133-135, keyryx/release.yml:133-135, costcrew/release.yml:115-117,
+  idryx/release.yml:231-233, heraldyx/release.yml:137-139, scopyx/release.yml:160-162 and :203,
+  typryx/release.yml:136-138, trailryx/release.yml:303-305, qryx/release.yml:252-254,
+  agent-stack-go/release.yml:267-269 (agent-conform).
+sign-blob (SHA256SUMS bundles, not used by admission): tokenfuse:281-283, idryx:103-105, trailryx:194-196,
+  qryx:120-122, agent-stack-go:141-143.

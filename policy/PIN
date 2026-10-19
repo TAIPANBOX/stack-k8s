@@ -1,0 +1,8 @@
+# Pins the Sigstore policy-controller that policy/policy-controller.yaml renders (invariant 58).
+# scripts/verified-images-are-enforced.sh holds the manifest to rendered_sha256, byte for byte:
+# change the manifest and this file together, or neither.
+release: v0.15.1
+commit: cc75baab1d34d3bae47bde7bd934bf79e5ca3afc
+source: https://github.com/sigstore/policy-controller/tree/v0.15.1
+image: ghcr.io/sigstore/policy-controller/policy-controller:v0.15.1@sha256:0492bb264fb1d9bdc8e3f343ef542cc85b7dd7c7fd8d9524b453c2bd31a1d128
+rendered_sha256: 3ea95a95807dcce0ad33db9d173f131be312319e7e15666f1d4c249b9d70f783

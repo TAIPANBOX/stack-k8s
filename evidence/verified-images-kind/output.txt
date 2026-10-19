@@ -1,0 +1,63 @@
+# verified images, measured 2026-10-19T02:14:45Z on kind v0.33.0
+kubernetes v1.37.0
+
+## 0. no policy yet
+unsigned genaryx-console                       ADMITTED  ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739
+
+
+## 1. policy/up.sh without --enforce
+    up.sh exit=0; installed: the controller and the policies. agent-stack is NOT opted in, so nothing is refused.
+    agent-stack   Active   41s   
+unsigned genaryx-console, installed not enforced ADMITTED  ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739
+
+
+## 2. policy/up.sh --enforce
+    up.sh --enforce exit=0
+    taipanbox-signed   3s
+    upstream-pinned    3s
+    agent-stack   Active   44s   true
+unsigned genaryx-console                       REFUSED   ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739
+      reason: validation failed: failed policy: taipanbox-signed: spec.containers[0].image ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739 signature keyless validation failed for authority authority-0 for ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739: no signatures found 
+unsigned mockryx                               REFUSED   ghcr.io/taipanbox/mockryx@sha256:758d31650f43b283762da81c8543e3c5dea000d7360a9fb4df8f408f1503c5c7
+      reason: validation failed: failed policy: taipanbox-signed: spec.containers[0].image ghcr.io/taipanbox/mockryx@sha256:758d31650f43b283762da81c8543e3c5dea000d7360a9fb4df8f408f1503c5c7 signature keyless validation failed for authority authority-0 for ghcr.io/taipanbox/mockryx@sha256:758d31650f43b283762da81c8543e3c5dea000d7360a9fb4df8f408f1503c5c7: no signatures found 
+signed wardryx v2.1.0 (release workflow)       REFUSED   ghcr.io/taipanbox/wardryx@sha256:9e6a9a9e38f12089499d64c09e23fb5022ac2f1858aefa81187b1df260a87869
+      reason: validation failed: failed policy: taipanbox-signed: spec.containers[0].image ghcr.io/taipanbox/wardryx@sha256:9e6a9a9e38f12089499d64c09e23fb5022ac2f1858aefa81187b1df260a87869 signature keyless validation failed for authority authority-0 for ghcr.io/taipanbox/wardryx@sha256:9e6a9a9e38f12089499d64c09e23fb5022ac2f1858aefa81187b1df260a87869: no signatures found 
+signed tokenfuse v1.16.0 (release workflow)    REFUSED   ghcr.io/taipanbox/tokenfuse@sha256:a119ce03a6bc0b3c9eacb755707397bf6b20c75c8d1838f0eeeb0bf4f0c8354c
+      reason: validation failed: failed policy: taipanbox-signed: spec.containers[0].image ghcr.io/taipanbox/tokenfuse@sha256:a119ce03a6bc0b3c9eacb755707397bf6b20c75c8d1838f0eeeb0bf4f0c8354c signature keyless validation failed for authority authority-0 for ghcr.io/taipanbox/tokenfuse@sha256:a119ce03a6bc0b3c9eacb755707397bf6b20c75c8d1838f0eeeb0bf4f0c8354c: no signatures found 
+signed genaryx-console v1.1.47 (console-image.yml) REFUSED   ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739
+      reason: validation failed: failed policy: taipanbox-signed: spec.containers[0].image ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739 signature keyless validation failed for authority authority-0 for ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739: no signatures found 
+signed stack-caddy v1.1.47 (tunnel-images.yml) REFUSED   ghcr.io/taipanbox/stack-caddy@sha256:bc25472c32d2098b0273ec2ae90241c79b11e46bc69bcf047eca8f8cc37814de
+      reason: validation failed: failed policy: taipanbox-signed: spec.containers[0].image ghcr.io/taipanbox/stack-caddy@sha256:bc25472c32d2098b0273ec2ae90241c79b11e46bc69bcf047eca8f8cc37814de signature keyless validation failed for authority authority-0 for ghcr.io/taipanbox/stack-caddy@sha256:bc25472c32d2098b0273ec2ae90241c79b11e46bc69bcf047eca8f8cc37814de: no signatures found 
+signed stack-wg v1.1.47 (tunnel-images.yml)    REFUSED   ghcr.io/taipanbox/stack-wg@sha256:9b40e62acd99a115c4ac3ea5acb44cbfe556e50dc523b2283aa70d8c6e9847d6
+      reason: validation failed: failed policy: taipanbox-signed: spec.containers[0].image ghcr.io/taipanbox/stack-wg@sha256:9b40e62acd99a115c4ac3ea5acb44cbfe556e50dc523b2283aa70d8c6e9847d6 signature keyless validation failed for authority authority-0 for ghcr.io/taipanbox/stack-wg@sha256:9b40e62acd99a115c4ac3ea5acb44cbfe556e50dc523b2283aa70d8c6e9847d6: no signatures found 
+listed upstream postgres, digest               ADMITTED  postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+
+listed upstream busybox, digest                ADMITTED  busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+
+listed upstream caddy, digest                  ADMITTED  caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+
+unlisted upstream alpine, tag                  REFUSED   alpine:3.20
+      reason: validation failed: no matching policies: spec.containers[0].image index.docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc 
+
+## 3. the verifier, on a keyless signature it can read (cosign v2.4.0, legacy .sig)
+cosign v2.4.0, identity GitHub (wrong issuer)  REFUSED   ghcr.io/sigstore/cosign/cosign:v2.4.0@sha256:9d50ceb15f023eda8f58032849eedc0216236d2e2f4cfe1cdf97c00ae7798cfe
+      reason: validation failed: failed policy: measure-cosign-identity: spec.containers[0].image ghcr.io/sigstore/cosign/cosign:v2.4.0@sha256:9d50ceb15f023eda8f58032849eedc0216236d2e2f4cfe1cdf97c00ae7798cfe signature keyless validation failed for authority authority-0 for ghcr.io/sigstore/cosign/cosign@sha256:9d50ceb15f023eda8f58032849eedc0216236d2e2f4cfe1cdf97c00ae7798cfe: no matching signatures: error verifying bundle: empty key  none of the expected identities matched what was in the certificate, got subjects [keyless@projectsigstore.iam.gserviceaccount.com] with issuer https://accounts.go
+
+cosign v2.4.0, identity its own signer         ADMITTED  ghcr.io/sigstore/cosign/cosign:v2.4.0@sha256:9d50ceb15f023eda8f58032849eedc0216236d2e2f4cfe1cdf97c00ae7798cfe
+
+
+## 4. a namespace that is not opted in
+unsigned genaryx-console, not opted in         ADMITTED  ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739
+
+
+## 5. policy/down.sh
+    down.sh exit=0
+    validatingwebhookconfiguration.admissionregistration.k8s.io "validating.clusterimagepolicy.sigstore.dev" deleted
+    validatingwebhookconfiguration.admissionregistration.k8s.io "policy.sigstore.dev" deleted
+    mutatingwebhookconfiguration.admissionregistration.k8s.io "defaulting.clusterimagepolicy.sigstore.dev" deleted
+    mutatingwebhookconfiguration.admissionregistration.k8s.io "policy.sigstore.dev" deleted
+unsigned genaryx-console, after down.sh        ADMITTED  ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739
+
+
+finished 2026-10-19T02:16:23Z
+RUN_EXIT=0

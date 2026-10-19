@@ -34,6 +34,9 @@ jobs:
       - name: every image is pinned or built here
         run: ./scripts/pinned-images.sh
 
+      - name: every image is pinned by digest, and the admission policy is held to invariant 58
+        run: ./scripts/verified-images-are-enforced.sh
+
       - name: node names are pinned by the install, not by a boot
         run: ./scripts/node-name-is-pinned.sh
 

@@ -106,7 +106,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: scopyx
-          image: ghcr.io/taipanbox/scopyx:v1.0.1
+          image: ghcr.io/taipanbox/scopyx:v1.0.1@sha256:e9625b5dcae3447175b9a0c6e37f0d470aaa57272d9e3c5344c9f7d948161f68
           imagePullPolicy: IfNotPresent
           env:
             # 0.0.0.0 because a pod binding loopback is reachable by nothing.
