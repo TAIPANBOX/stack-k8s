@@ -28,7 +28,7 @@ probe() { # probe <label> <namespace> <image>
   rc=$?
   if [ "$rc" -eq 0 ]; then verdict=ADMITTED; else verdict=REFUSED; fi
   printf '%-46s %-9s %s\n' "$label" "$verdict" "$img"
-  printf '%s\n' "$out" | sed -n 's/.*denied the request: /      reason: /p' | cut -c1-260
+  printf '%s\n' "$out" | tr '\n' ' ' | sed -n 's/.*denied the request: /      reason: /p' | cut -c1-600; echo
 }
 
 kubectl create namespace agent-stack >/dev/null

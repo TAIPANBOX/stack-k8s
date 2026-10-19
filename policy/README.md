@@ -2,7 +2,8 @@
 
 **Status: blocked for enforcement.** Measured 2026-10-19 on kind (Kubernetes v1.37.0) with
 policy-controller v0.15.1: once agent-stack is opted in, the controller refuses every TAIPANBOX image
-the manifests name, signed or not. The reason is in "Why it is blocked" below. Until that is resolved,
+the manifests name, signed or not. The cause is a signature format the controller does not read; see
+"Why it is blocked" below. Until that is resolved,
 `policy/up.sh --enforce` must not be run on a cluster that serves the stack.
 
 ## What is here
@@ -19,27 +20,17 @@ No manifest names this directory, so `kubectl apply -k manifests/` does not turn
 
 ## Why it is blocked
 
-The release workflows of the TAIPANBOX repositories sign each image keyless, and the signature is a
-cosign v3 bundle whose Fulcio certificate names the release workflow at its tag. Measured on the
-registry (2026-10-19, `ghcr.io/taipanbox/wardryx:v2.1.0`):
+Root cause, measured 2026-10-19 (commands and outputs in `evidence/verified-images-kind/signing-format.txt`):
 
-- the signature is not at the legacy `sha256-<digest>.sig` tag;
-- ghcr answers the OCI referrers API for the digest with `MANIFEST_UNKNOWN`;
-- the bundle is only listed in the OCI fallback index at the tag `sha256-<digest>`.
+- The release workflows sign every image with `cosign-release: v3.1.3` and `cosign sign --yes "ghcr.io/taipanbox/<name>@<digest>"`. Eleven image-signing jobs do this (tokenfuse, wardryx, vouchryx, keyryx, costcrew, idryx, heraldyx, scopyx, typryx, trailryx, qryx, agent-stack-go). cosign v3 writes each signature as an OCI referrer, stored at the fallback tag `sha256-<digest>` (an index of sigstore bundles). It writes no `sha256-<digest>.sig` tag, with either value of `--registry-referrers-mode` (tested on a local registry).
+- policy-controller v0.15.1, the newest release, reads the legacy `.sig` tag for image signatures. Its `signatureFormat: bundle` option fails with `bundle support for image signatures is not yet implemented` (kind, 2026-10-19).
+- cosign v2.4.0 and v2.6.5 write the `.sig` tag, and the controller reads it. A keyless signature in that form, made by a third party, was found and verified on the same kind cluster.
+- The signed digests are the index digests the manifests pin. `cosign verify` with v3.1.3 passes for `wardryx:v2.2.0`, `tokenfuse:v1.16.0` and `tokenfuse:v1.17.0`, so the signatures are real and they are not missing.
 
-policy-controller v0.15.1 (cosign library v3.0.5) reads the legacy `.sig` tag and the referrers
-API; it does not read the fallback index. Setting `enable-oci11` to true changed nothing (tested 2026-10-19). A signed TAIPANBOX image is therefore refused with
-`no signatures found`, the same message an unsigned image gets. The same controller on the same kind
-cluster does find and verify a legacy keyless signature: cosign v2.4.0 (`ghcr.io/sigstore/cosign`) was
-admitted under a test policy that named its signer (`evidence/verified-images-kind/run.sh`, step 5).
-So the path to Fulcio, Rekor and TUF works from kind; the gap is discovery.
+What would unblock it, either one:
 
-What would unblock it, any one of:
-
-1. The release workflows of the TAIPANBOX repositories also publish signatures in the legacy `.sig`
-   form the controller reads. That is a change in each release workflow, and it needs a test push first.
-2. A policy-controller release that reads cosign's bundle fallback index.
-3. A registry that supports the OCI referrers API for these images.
+1. Sign with cosign v2 (v2.6.5 is the newest v2 release). That is the `cosign-release:` line of each image job above, in each of the eleven repositories. Images already released stay on the v3 format and need a re-sign from their tags.
+2. A policy-controller release that verifies bundle image signatures. None exists yet: v0.15.1 (2026-03-26) is the newest release, and the `unstable` image of main refused the policy with `secret "" not found` (not investigated further).
 
 Until one of them holds, `policy/up.sh` installs and does not opt anything in.
 

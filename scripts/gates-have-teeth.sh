@@ -3113,7 +3113,7 @@ run_case "verified-images: the subject expression accepts any repository" fail \
 	"accepts a foreign or non-release identity"
 run_case "verified-images: the subject expression accepts a fork's release" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/image-policy.yaml", "TAIPANBOX/[A-Za-z0-9._-]+/", "[A-Za-z0-9._-]+/")')" \
+	"$(py 'edit("policy/image-policy.yaml", "TAIPANBOX/[A-Za-z0-9._-]+/", "[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/")')" \
 	"accepts a foreign or non-release identity"
 run_case "verified-images: the issuer is widened" fail \
 	'./scripts/verified-images-are-enforced.sh' \
