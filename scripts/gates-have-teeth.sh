@@ -3671,17 +3671,28 @@ run_case "approver: the console's approver Secret becomes optional" fail \
 	'./scripts/approver-key-is-minted.sh' \
 	"$(py 'edit("manifests/20-console.yaml", "secret: \x7b secretName: console-approver-key, defaultMode: 0440 \x7d", "secret: \x7b secretName: console-approver-key, defaultMode: 0440, optional: true \x7d")')" \
 	"is not the Secret console-approver-key at mode 0440"
-run_case "approver: wardryx's JWK set becomes optional" fail \
+run_case "approver: wardryx sets the JWK set with no mount (a half state)" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "configMap: \x7b name: wardryx-approver-jwks \x7d", "configMap: \x7b name: wardryx-approver-jwks, optional: true \x7d")')" \
-	"or it is optional"
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n            - { name: WARDRYX_APPROVER_JWKS, value: \"/etc/wardryx/approver/approver-jwks.json\" }\n")')" \
+	"wardryx's approver wiring is half set"
+run_case "approver: wardryx reads the JWK set while the console is still v1.1.48" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n            - { name: WARDRYX_APPROVER_JWKS, value: \"/etc/wardryx/approver/approver-jwks.json\" }\n"); edit("manifests/10-planes.yaml", "            - { name: policy, mountPath: /etc/wardryx/policy, readOnly: true }\n", "            - { name: policy, mountPath: /etc/wardryx/policy, readOnly: true }\n            - { name: approver-jwks, mountPath: /etc/wardryx/approver, readOnly: true }\n"); edit("manifests/10-planes.yaml", "              - configMap: { name: wardryx-typed-hold, optional: true }\n", "              - configMap: { name: wardryx-typed-hold, optional: true }\n        - name: approver-jwks\n          configMap: { name: wardryx-approver-jwks }\n")')" \
+	"every approval would be refused"
+run_case "approver: the pending step is no longer named while wardryx is unwired" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "TODO(approver-jwks):", "TODO(approver-jwks-gone):")')" \
+	"names no TODO(approver-jwks)"
+run_case "approver: a comment reworded in the wiring (must pass)" pass \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "are NOT wired in v1.6.0.", "are not wired in v1.6.0.")')"
 run_case "approver: a cloud launcher never mints the approver key" fail \
 	'./scripts/approver-key-is-minted.sh' \
 	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\napprover_mint_settle\n", "\n")')" \
 	"never calls approver_mint_settle"
 run_case "approver: WARDRYX_ALLOW_KEY_APPROVALS is set on wardryx" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "value: \"/etc/wardryx/approver/approver-jwks.json\" \x7d\n", "value: \"/etc/wardryx/approver/approver-jwks.json\" \x7d\n            - \x7b name: WARDRYX_ALLOW_KEY_APPROVALS, value: \"1\" \x7d\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" \x7d\n", "            - \x7b name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" \x7d\n            - \x7b name: WARDRYX_ALLOW_KEY_APPROVALS, value: \"1\" \x7d\n")')" \
 	"sets WARDRYX_ALLOW_KEY_APPROVALS"
 run_case "approver: wardryx is pinned before the approver statements" fail \
 	'./scripts/approver-key-is-minted.sh' \
