@@ -17,7 +17,7 @@ spec:
         url: https://fulcio.sigstore.dev
         identities:
           - issuer: https://token.actions.githubusercontent.com
-            subjectRegExp: '^https://github\.com/TAIPANBOX/[A-Za-z0-9._-]+/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+            subjectRegExp: '^https://github\.com/TAIPANBOX/(?:[A-Za-z0-9._-]+/\.github/workflows/release\.yml|stack-k8s/\.github/workflows/(?:console-image|tunnel-images)\.yml)@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
 ---
 # upstream-pinned: images that are not ours and that the policy does not sign. Each one is trusted
 # by its digest alone, with the reason it is in the stack. A new upstream image is added here with

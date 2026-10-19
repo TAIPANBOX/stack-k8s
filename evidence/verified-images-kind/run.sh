@@ -13,7 +13,9 @@ trap 'kind delete cluster --name "$NAME" >/dev/null 2>&1; rm -rf "$WORK"' EXIT
 
 WARDRYX='ghcr.io/taipanbox/wardryx@sha256:9e6a9a9e38f12089499d64c09e23fb5022ac2f1858aefa81187b1df260a87869'
 TOKENFUSE='ghcr.io/taipanbox/tokenfuse@sha256:a119ce03a6bc0b3c9eacb755707397bf6b20c75c8d1838f0eeeb0bf4f0c8354c'
-CONSOLE='ghcr.io/taipanbox/genaryx-console@sha256:54218cfb989f7499da3a92d52d917ef8bc67b938d1b54070ba63e88fdf164bdd'
+CONSOLE='ghcr.io/taipanbox/genaryx-console@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739'
+STACKCADDY='ghcr.io/taipanbox/stack-caddy@sha256:bc25472c32d2098b0273ec2ae90241c79b11e46bc69bcf047eca8f8cc37814de'
+STACKWG='ghcr.io/taipanbox/stack-wg@sha256:9b40e62acd99a115c4ac3ea5acb44cbfe556e50dc523b2283aa70d8c6e9847d6'
 MOCKRYX='ghcr.io/taipanbox/mockryx@sha256:758d31650f43b283762da81c8543e3c5dea000d7360a9fb4df8f408f1503c5c7'
 COSIGN='ghcr.io/sigstore/cosign/cosign:v2.4.0@sha256:9d50ceb15f023eda8f58032849eedc0216236d2e2f4cfe1cdf97c00ae7798cfe'
 
@@ -54,6 +56,9 @@ probe "unsigned genaryx-console" agent-stack "$CONSOLE"
 probe "unsigned mockryx" agent-stack "$MOCKRYX"
 probe "signed wardryx v2.1.0 (release workflow)" agent-stack "$WARDRYX"
 probe "signed tokenfuse v1.16.0 (release workflow)" agent-stack "$TOKENFUSE"
+probe "signed genaryx-console v1.1.47 (console-image.yml)" agent-stack "$CONSOLE"
+probe "signed stack-caddy v1.1.47 (tunnel-images.yml)" agent-stack "$STACKCADDY"
+probe "signed stack-wg v1.1.47 (tunnel-images.yml)" agent-stack "$STACKWG"
 probe "listed upstream postgres, digest" agent-stack "postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea"
 probe "listed upstream busybox, digest" agent-stack "busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e"
 probe "listed upstream caddy, digest" agent-stack "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b"

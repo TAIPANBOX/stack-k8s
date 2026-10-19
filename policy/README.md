@@ -12,7 +12,7 @@ the manifests name, signed or not. The cause is a signature format the controlle
 |---|---|
 | `policy-controller.yaml` | The Sigstore policy-controller v0.15.1, rendered from its source at tag v0.15.1 (commit `cc75baa`), with its webhook image pinned by digest and `no-match-policy: deny`. |
 | `PIN` | The release, its commit, the image digest and the sha256 of the rendered manifest. The gate holds the manifest to that sha256. |
-| `image-policy.yaml` | `taipanbox-signed`: keyless, enforce, for `ghcr.io/taipanbox/**`, issuer GitHub Actions, subject the `release.yml` workflow of a TAIPANBOX repository on a version tag. `upstream-pinned`: three upstream images, by digest, each with its reason. |
+| `image-policy.yaml` | `taipanbox-signed`: keyless, enforce, for `ghcr.io/taipanbox/**`, issuer GitHub Actions, subject either the `release.yml` workflow of a TAIPANBOX repository on a version tag, or stack-k8s's own `console-image.yml` and `tunnel-images.yml` on a version tag (the three images the stack builds itself). `upstream-pinned`: three upstream images, by digest, each with its reason. |
 | `up.sh` | Installs the controller and the policies. With `--enforce`, it also opts `agent-stack` in, last. |
 | `down.sh` | Removes the webhooks first, then the policies and the controller. |
 
@@ -36,13 +36,12 @@ Until one of them holds, `policy/up.sh` installs and does not opt anything in.
 
 ## The unsigned images the manifests still name
 
-These are refused once the namespace is opted in, even after the discovery gap closes, unless they are
-signed too:
+- `ghcr.io/taipanbox/mockryx:v0.2.1` (the drills CronJob, suspended). Its repository is not in this one;
+  no signature was found on the registry. It is refused once the namespace is opted in, unless it is signed.
 
-- `ghcr.io/taipanbox/genaryx-console:v1.1.46` (manifests 20 and 40, and security-tests.sh). Built by
-  `.github/workflows/console-image.yml`, which has no signing step.
-- `ghcr.io/taipanbox/mockryx:v0.2.1` (the drills CronJob, suspended). Its repository is not in this
-  one; no signature was found on the registry.
+`genaryx-console` is pinned at v1.1.47, signed by stack-k8s's `console-image.yml` (identity covered above).
+`stack-caddy` and `stack-wg` (v1.1.47, signed by `tunnel-images.yml`) are not named by any manifest; the tunnel
+builds them locally as `stack/*:dev` (see "Not covered").
 
 ## Upstream images, and why each is trusted
 

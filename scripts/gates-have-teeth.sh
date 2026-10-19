@@ -353,7 +353,7 @@ else:
 # with nothing noticing. Same fault, same gate, the other file it now reads.
 run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
 	'./scripts/pinned-images.sh' \
-	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.1.46@sha256:54218cfb989f7499da3a92d52d917ef8bc67b938d1b54070ba63e88fdf164bdd", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.1.47@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
 	"moves: a pod can come back different"
 
 # The default apply set must not publish anything to the world, and must not
@@ -3097,7 +3097,7 @@ run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)"
 # edits one tracked file the gate reads; the gate's own baseline must be green first.
 run_case "verified-images: a TAIPANBOX image carries a tag only" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.1.46@sha256:54218cfb989f7499da3a92d52d917ef8bc67b938d1b54070ba63e88fdf164bdd", "image: ghcr.io/taipanbox/genaryx-console:v1.1.46")')" \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.1.47@sha256:0f688de13628990984b9b422a14b1e3c1b0803bf3d1e08310adfb8903478d739", "image: ghcr.io/taipanbox/genaryx-console:v1.1.47")')" \
 	"image not pinned by digest"
 run_case "verified-images: an upstream image nobody allowed" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -3113,7 +3113,7 @@ run_case "verified-images: the subject expression accepts any repository" fail \
 	"accepts a foreign or non-release identity"
 run_case "verified-images: the subject expression accepts a fork's release" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("policy/image-policy.yaml", "TAIPANBOX/[A-Za-z0-9._-]+/", "[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/")')" \
+	"$(py 'edit("policy/image-policy.yaml", "TAIPANBOX/(?:[A-Za-z0-9._-]+/", "(?:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/")')" \
 	"accepts a foreign or non-release identity"
 run_case "verified-images: the issuer is widened" fail \
 	'./scripts/verified-images-are-enforced.sh' \

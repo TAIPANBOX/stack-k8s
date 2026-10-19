@@ -111,7 +111,7 @@ if signed is None:
 
 GLOB = "ghcr.io/taipanbox/**"
 ISSUER = "https://token.actions.githubusercontent.com"
-SUBJECT_RE = r"^https://github\.com/TAIPANBOX/[A-Za-z0-9._-]+/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$"
+SUBJECT_RE = r"^https://github\.com/TAIPANBOX/(?:[A-Za-z0-9._-]+/\.github/workflows/release\.yml|stack-k8s/\.github/workflows/(?:console-image|tunnel-images)\.yml)@refs/tags/v[0-9][A-Za-z0-9._+-]*$"
 
 if signed:
     if not re.search(rf"glob:\s*['\"]?{re.escape(GLOB)}['\"]?\s*$", signed, re.M):
@@ -134,6 +134,8 @@ if signed:
             must = [
                 "https://github.com/TAIPANBOX/wardryx/.github/workflows/release.yml@refs/tags/v2.1.0",
                 "https://github.com/TAIPANBOX/tokenfuse/.github/workflows/release.yml@refs/tags/v1.16.0",
+                "https://github.com/TAIPANBOX/stack-k8s/.github/workflows/console-image.yml@refs/tags/v1.1.47",
+                "https://github.com/TAIPANBOX/stack-k8s/.github/workflows/tunnel-images.yml@refs/tags/v1.1.47",
                 "https://github.com/TAIPANBOX/agent-stack-go/.github/workflows/release.yml@refs/tags/v1.1.0",
                 "https://github.com/TAIPANBOX/trailryx/.github/workflows/release.yml@refs/tags/v1.2.1",
             ]
@@ -141,6 +143,8 @@ if signed:
                 "https://github.com/evil-fork/wardryx/.github/workflows/release.yml@refs/tags/v2.1.0",
                 "https://github.com/TAIPANBOX/wardryx/.github/workflows/ci.yml@refs/heads/main",
                 "https://github.com/TAIPANBOX/wardryx/.github/workflows/release.yml@refs/heads/main",
+                "https://github.com/TAIPANBOX/stack-k8s/.github/workflows/ci.yml@refs/tags/v1.1.47",
+                "https://github.com/evil-fork/stack-k8s/.github/workflows/console-image.yml@refs/tags/v1.1.47",
                 "https://github.com/TAIPANBOX/wardryx/.github/workflows/release.yml@refs/tags/v2.1.0/../../x",
                 "https://github.com/TAIPANBOX/wardryx/.github/workflows/release.yml@refs/tags/v2.1.0\nextra",
             ]
