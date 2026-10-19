@@ -3712,6 +3712,27 @@ run_case "add-site: a comment reworded beside the reader (must pass)" pass \
 	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
 	"$(py 'edit("hub/add-site.sh", "# The manifests pin the image as name:tag@sha256", "# The manifests pin the image, as name:tag@sha256")')"
 
+# The record-seal fails closed: a failed pack ends the run non-zero, and only the known empty case exits 0 (CLAUDE.md invariant 71).
+run_case "record-seal: a failed pack exits zero again (the old fallback)" fail \
+	'./scripts/record-seal-fails-closed.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "exit \"$rc\"", "exit 0")')" \
+	"a failed pack exits 0"
+run_case "record-seal: the known empty case is matched loosely" fail \
+	'./scripts/record-seal-fails-closed.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "*\"$known\"*)", "*nothing*)")')" \
+	"a failed pack exits 0"
+run_case "record-seal: the known empty case stops exiting zero" fail \
+	'./scripts/record-seal-fails-closed.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "echo \"nothing sealed here to pack yet\"; exit 0 ;;", "echo \"nothing sealed here to pack yet\"; exit 1 ;;")')" \
+	"does not exit 0 with its line when nothing is sealed"
+run_case "record-seal: the CronJob is renamed away" fail \
+	'./scripts/record-seal-fails-closed.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "name: record-seal\n  namespace: agent-stack", "name: record-sea1\n  namespace: agent-stack")')" \
+	"has no record-seal CronJob"
+run_case "record-seal: a comment reworded in the pack step (must pass)" pass \
+	'./scripts/record-seal-fails-closed.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "# A failed pack ends the run non-zero, except", "# A failed pack ends the run non-zero, unless")')"
+
 # The witness reads the record it countersigns, and the record-seal reads the attestations, through shared volumes (CLAUDE.md invariant 70).
 run_case "witness-records: the witness stops reading the record" fail \
 	'./scripts/keyryx-witness-shares-the-record.sh' \

@@ -10,9 +10,9 @@
 #
 # TODO(keyryx-attest-mode): TRAILRYX_WITNESS_ATTESTATIONS is NOT set. keyryx v0.1.1 writes each attestation with
 # os.CreateTemp (mode 0600, owned by the witness's uid 20100), and the record-seal runs as uid 10001, so it cannot read
-# the files. Setting the variable now would make `trailryx-node read --pack` fail on every run, and the job's own
-# fallback would then print "nothing sealed here to pack yet" and exit 0. Set it when keyryx writes the attestations
-# readable by group 10001 (a release of keyryx). Until then the subPath mount below is wired and reads nothing.
+# the files. Setting the variable now would make `trailryx-node read --pack` fail on every run, and the job would then
+# end non-zero and say why (CLAUDE.md invariant 71), so the attempt would be loud, not silent. Set it when keyryx writes
+# the attestations readable by group 10001 (a release of keyryx). Until then the subPath mount below is wired and reads nothing.
 #
 # TRAILRYX_KEYRYX_KID, the pin of Keyryx's key, is NOT here either: trailryx#112 is not released (TODO in the library).
 apiVersion: batch/v1

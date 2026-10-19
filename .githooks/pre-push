@@ -98,6 +98,7 @@ step "hub/add-site.sh reads a digest-pinned tokenfuse-cloud image" "./scripts/hu
 step "the console approver key is minted once and wardryx verifies with it (invariant 67)" "./scripts/approver-key-is-minted.sh"
 step "Keyryx is installed by default, with --without-keyryx as the opt-out (invariant 69)" "./scripts/keyryx-is-default.sh"
 step "the Keyryx witness reads the record and the record-seal reads attestations through shared volumes (invariant 70)" "./scripts/keyryx-witness-shares-the-record.sh"
+step "the record-seal fails closed: a failed pack ends the run non-zero (invariant 71)" "./scripts/record-seal-fails-closed.sh"
 step "the teeth shards cover every case once" "./scripts/teeth-shards-cover-every-case.sh"
 
 echo

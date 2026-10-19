@@ -376,6 +376,11 @@ jobs:
       - name: the Keyryx witness reads the record and the record-seal reads attestations through shared volumes (invariant 70)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/keyryx-witness-shares-the-record.sh
 
+      # Added 2026-10-19 with invariant 71. A failed record-seal pack ends the run non-zero; only the known empty
+      # case exits 0. See GOTCHAS 151.
+      - name: the record-seal fails closed on a failed pack, and exits zero only when nothing is sealed (invariant 71)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/record-seal-fails-closed.sh
+
       # Added 2026-10-14 with invariant 44. A cost report that meets a machine type with no
       # rate exits non-zero and names it, instead of counting it as zero. See GOTCHAS 127.
       - name: a cost report refuses an unknown machine rate (invariant 44)
