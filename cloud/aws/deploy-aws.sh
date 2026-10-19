@@ -621,13 +621,28 @@ else
   [ -n "$DIST_PUB" ] || die "could not prepare the distribution key on the builder"
 
   PRIVS=""
+  PEER_PAIRS=()
   for n in "${ALL_NODES[@]}"; do
     [ "$n" = "$BUILDER" ] && continue
     p="$(imds "$n" local-ipv4)"
     [ -n "$p" ] || die "could not read the private address of $n"
     PRIVS="$PRIVS $p"
+    PEER_PAIRS+=("$n" "$p")
     sh_ "$n" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qF '$DIST_PUB' ~/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '$DIST_PUB' >> ~/.ssh/authorized_keys"
   done
+
+  # The builder reaches each peer at its PRIVATE address and checks the key it finds there
+  # against the key this script verified before its first connection (CLAUDE.md invariant 61).
+  # The peer file names every node by its public and its private address, with the same
+  # verified key, and it is written over the verified connection before the builder's first
+  # ssh to a peer. A node the builder cannot be checked against is refused here, not later.
+  . "$ROOT/lib/hostkeys.sh"
+  PEERS_TMP="$(mktemp "${TMPDIR:-/tmp}/stack-k8s-peers.XXXXXX")" || die "could not create the peer file"
+  hostkeys_peer_file "$PEERS_TMP" "$KNOWN_HOSTS_RUN" ${PEER_PAIRS[@]+"${PEER_PAIRS[@]}"} \
+    || die "could not build the builder's peer file from the verified keys: nothing was distributed"
+  su_ "$BUILDER" 'sh -c "umask 077; mkdir -p /root/.ssh && cat > /root/.ssh/stack-known-hosts && chmod 0600 /root/.ssh/stack-known-hosts"' < "$PEERS_TMP" \
+    || die "could not write /root/.ssh/stack-known-hosts on the builder: nothing was distributed"
+  rm -f "$PEERS_TMP"
 
   # Only what was actually built here goes over the private network. The
   # pulled ones are the kubelet's business and never touch this path, which
@@ -640,7 +655,7 @@ else
   su_ "$BUILDER" "sh -c \"for img in $IMAGES; do
       docker save \\\$img | k3s ctr images import - >/dev/null 2>&1 && echo '   '\\\$img' -> builder' || echo '   '\\\$img' -> builder FAILED'
       for p in $PRIVS; do
-        docker save \\\$img | ssh -i /root/.ssh/stack-distribute -o BatchMode=yes -o StrictHostKeyChecking=no $SSH_USER@\\\$p 'sudo k3s ctr images import -' >/dev/null 2>&1 \
+        docker save \\\$img | ssh -i /root/.ssh/stack-distribute -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/stack-known-hosts $SSH_USER@\\\$p 'sudo k3s ctr images import -' >/dev/null 2>&1 \
           && echo '   '\\\$img' -> '\\\$p || echo '   '\\\$img' -> '\\\$p' FAILED'
       done
     done\""

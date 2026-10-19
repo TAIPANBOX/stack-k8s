@@ -61,3 +61,22 @@ Feature: a node's host key is verified before the first connection
     When hostkeys-are-verified.sh runs
     Then it reports that it measured nothing and does not say OK
     # -> gates-have-teeth.sh "hostkeys-are-verified: no cloud installer left, measured nothing"
+
+  Scenario: the builder checks its peers before it pushes an image
+    Given a cloud cluster whose builder pushes each image to its peers over the private network
+    When the builder connects to a peer at its private address
+    Then the connection is strict against a peer file the launcher wrote over its verified connection, naming each peer by its public and its private address
+    # -> hostkeys-are-verified.sh case I
+    # -> hostkeys-are-verified.sh case J
+    # -> hostkeys-are-verified.sh case L
+    # -> gates-have-teeth.sh "hostkeys-are-verified: the peer file is written after the first node-to-node ssh"
+    # -> gates-have-teeth.sh "hostkeys-are-verified: the peer file drops the private names"
+
+  Scenario: no tracked script turns host key checking off
+    Given every tracked script in the repository
+    When hostkeys-are-verified.sh reads them
+    Then none carries the option that disables host key checking, and the prose that names it is left alone
+    # -> hostkeys-are-verified.sh case K
+    # -> gates-have-teeth.sh "hostkeys-are-verified: a node-to-node ssh goes back to host key checking off"
+    # -> gates-have-teeth.sh "hostkeys-are-verified: a helper names the forbidden option in a comment"
+    # -> gates-have-teeth.sh "hostkeys-are-verified: the option named in a prose note is not a script (must pass)"

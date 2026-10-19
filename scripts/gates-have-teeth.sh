@@ -3415,6 +3415,52 @@ run_case "hostkeys-are-verified: no cloud installer left, measured nothing" fail
 	"$(py 'pass')" \
 	"measured NOTHING"
 
+# ---- node-to-node: the peer file, and no tracked script that disables host key checking (invariant 61, part 4) ----
+run_case "hostkeys-are-verified: a node-to-node ssh goes back to host key checking off" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "-o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/stack-known-hosts $SSH_USER@", "-o StrictHostKeyChecking=" + "no $SSH_USER@")')" \
+	"still disable host key checking"
+
+run_case "hostkeys-are-verified: a helper names the forbidden option in a comment" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'open("lib/hostkeys.sh", "a").write("# note: StrictHostKeyChecking=" + "no is what the peer file replaced\n")')" \
+	"still disable host key checking"
+
+run_case "hostkeys-are-verified: the Hetzner distribution is strict against no file" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("deploy.sh", "StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/stack-known-hosts root@\\$p", "StrictHostKeyChecking=yes root@\\$p")')" \
+	"is not strict against"
+
+run_case "hostkeys-are-verified: the distribution is strict against no file (GCP)" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/stack-known-hosts $SSH_USER@", "StrictHostKeyChecking=yes $SSH_USER@")')" \
+	"is not strict against"
+
+run_case "hostkeys-are-verified: the peer file is written after the first node-to-node ssh" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'import re
+s = open("deploy.sh").read()
+W = "  sh_ \"$BUILDER\" \x27umask 077; mkdir -p /root/.ssh && cat > /root/.ssh/stack-known-hosts && chmod 0600 /root/.ssh/stack-known-hosts\x27 < \"$PEERS_TMP\" \\\n    || die \"could not write /root/.ssh/stack-known-hosts on the builder: nothing was distributed\"\n"
+assert s.count(W) == 1
+s = s.replace(W, "", 1)
+s = s.replace("\n# ---- 3. the workload", "\n" + W + "\n# ---- 3. the workload", 1)
+open("deploy.sh", "w").write(s)')" \
+	"is written at line"
+
+run_case "hostkeys-are-verified: the peer file drops the private names" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("lib/hostkeys.sh", "for name in \"$pub\" \"$priv\"; do", "for name in \"$pub\"; do")')" \
+	"I  peer file"
+
+run_case "hostkeys-are-verified: a launcher builds no peer file" fail \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "hostkeys_peer_file \"$PEERS_TMP\"", "true \"$PEERS_TMP\"")')" \
+	"does not build its peer file"
+
+run_case "hostkeys-are-verified: the option named in a prose note is not a script (must pass)" pass \
+	'./scripts/hostkeys-are-verified.sh' \
+	"$(py 'open("GOTCHAS.md", "a").write("\nNote: StrictHostKeyChecking=" + "no was the old setting of the image distribution.\n")')"
+
 # A listing is not a run. Stop before the verdict, which would count cases this
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then

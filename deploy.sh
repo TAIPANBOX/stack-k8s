@@ -650,13 +650,30 @@ REMOTE
   IMAGES="stack/tokenfuse:dev stack/wg:dev stack/caddy:dev"
   [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
   PRIVS=""
+  PEER_PAIRS=()
   for n in "${ALL_NODES[@]}"; do
-    PRIVS="$PRIVS $(sh_ "$n" "curl -sf --max-time 5 http://169.254.169.254/hetzner/v1/metadata/private-networks | awk '/^- ip:/ {print \$3; exit}'")"
+    p="$(sh_ "$n" "curl -sf --max-time 5 http://169.254.169.254/hetzner/v1/metadata/private-networks | awk '/^- ip:/ {print \$3; exit}'")"
+    PRIVS="$PRIVS $p"
+    PEER_PAIRS+=("$n" "$p")
   done
+  # The builder reaches each peer at its PRIVATE address and checks the key it finds there
+  # against the key this launcher verified before its first connection (CLAUDE.md invariant 61).
+  # The peer file names every node by its public and its private address, with the same
+  # verified key, and it is written over the verified connection before the builder's first
+  # ssh to a peer. SSH_KNOWN_HOSTS (when set) is the operator's pin; otherwise the keys accept-new
+  # recorded in the operator's known_hosts.
+  . "$ROOT/lib/hostkeys.sh"
+  PEERS_TMP="$(mktemp "${TMPDIR:-/tmp}/stack-k8s-peers.XXXXXX")" || die "could not create the peer file"
+  if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then PEER_SRC="$SSH_KNOWN_HOSTS"; else PEER_SRC="$HOME/.ssh/known_hosts"; fi
+  hostkeys_peer_file "$PEERS_TMP" "$PEER_SRC" "${PEER_PAIRS[@]}" \
+    || die "could not build the builder's peer file from the verified keys: nothing was distributed"
+  sh_ "$BUILDER" 'umask 077; mkdir -p /root/.ssh && cat > /root/.ssh/stack-known-hosts && chmod 0600 /root/.ssh/stack-known-hosts' < "$PEERS_TMP" \
+    || die "could not write /root/.ssh/stack-known-hosts on the builder: nothing was distributed"
+  rm -f "$PEERS_TMP"
   sh_ "$BUILDER" "for img in $IMAGES; do
       docker save \$img | k3s ctr images import - >/dev/null 2>&1 && echo \"   \$img -> this node\" || echo \"   \$img -> this node FAILED\"
       for p in $PRIVS; do
-        docker save \$img | ssh -o BatchMode=yes -o StrictHostKeyChecking=no root@\$p 'k3s ctr images import -' >/dev/null 2>&1 \
+        docker save \$img | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/stack-known-hosts root@\$p 'k3s ctr images import -' >/dev/null 2>&1 \
           && echo \"   \$img -> \$p\" || true
       done
     done" || echo "   (import over the private network needs node-to-node ssh; see the note at the end)"

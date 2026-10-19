@@ -173,3 +173,27 @@ hostkeys_populate_aws() {
     hostkeys_aws "$id" "$n" "$file" || return 1
   done
 }
+
+# hostkeys_peer_file OUT SRC PUB PRIV [PUB PRIV ...]   (CLAUDE.md invariant 61, the node-to-node case)
+# The image distribution runs on the builder, which reaches each peer at its PRIVATE address.
+# For every node, OUT gets the node's verified key from SRC (a known_hosts-format file) under
+# its public name and under its private name: the same key, two names. PRIV may be empty.
+# SRC is the launcher's verified keys: the per-run file the cloud launchers fill before their
+# first connection, the operator's SSH_KNOWN_HOSTS, or the keys accept-new recorded.
+hostkeys_peer_file() {
+  local out="$1" src="$2" pub priv name lines
+  shift 2
+  : > "$out" || return 1
+  while [ "$#" -ge 2 ]; do
+    pub="$1"; priv="$2"; shift 2
+    lines="$(ssh-keygen -F "$pub" -f "$src" 2>/dev/null | grep -v '^#')"
+    if [ -z "$lines" ]; then
+      printf 'hostkeys: no verified host key for %s in %s, so the builder cannot check that node. Nothing was connected to.\n' "$pub" "$src" >&2
+      return 1
+    fi
+    for name in "$pub" "$priv"; do
+      [ -n "$name" ] || continue
+      printf '%s\n' "$lines" | awk -v n="$name" 'NF >= 3 { print n, $2, $3 }' >> "$out"
+    done
+  done
+}

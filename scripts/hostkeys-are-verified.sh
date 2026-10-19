@@ -31,6 +31,11 @@
 #   F  GCE, no guest attributes: refused at the deadline with the reason named.
 #   G  install.sh: with SSH_KNOWN_HOSTS its first ssh is strict against that file;
 #      without it, accept-new, and the accepted key is printed with how to pin it.
+#   I  The builder's peer file names each node by its public and its private address, with the same verified key.
+#   J  A strict connection from the builder to a peer's private address succeeds with that file, and is refused without the name.
+#   K  No tracked script (prose excepted) disables host key checking.
+#   L  Each launcher that pushes an image to its peers writes the peer file before its first such ssh, and that ssh is strict against it.
+#   M  Each such launcher builds the peer file from the verified keys (hostkeys_peer_file).
 #   H  The cloud installers and deploy scripts: no accept-new left, and each takes
 #      its keys before the first connection that uses SSH_OPTS.
 #
@@ -208,7 +213,64 @@ for n, line in enumerate(open(sys.argv[1]), 1):
 ' "$f")
   if [ -n "$pop" ] && [ -n "$use" ] && [ "$pop" -lt "$use" ]; then pass "H  $f takes its host keys (line $pop) before the first connection (line $use)"; else bad "H  $f: keys at line ${pop:-none}, first connection at line ${use:-none}"; fi
 done
-if [ "$(grep -v '^[[:space:]]*#' install.sh | grep -c 'StrictHostKeyChecking=no')" -gt 0 ]; then bad "H  install.sh disables host key checking"; else pass "H  install.sh never disables host key checking"; fi
+NO_CHECK="StrictHostKeyChecking=""no"   # split: this file must not contain the option it forbids
+if [ "$(grep -v '^[[:space:]]*#' install.sh | grep -c "$NO_CHECK")" -gt 0 ]; then bad "H  install.sh disables host key checking"; else pass "H  install.sh never disables host key checking"; fi
+
+# ---- I, J: the node-to-node peer file names each peer by its public and its private address ----
+# The image distribution runs on the builder and reaches each peer at its PRIVATE address, so
+# the file the builder reads must name that address with the peer's verified key (same key,
+# other name). The same stub ssh as above stands in for the builder's connection.
+PRIV=10.0.0.7
+SRC_KH="$T/peer-src"
+printf '%s\n' "$K1_LINE" > "$SRC_KH"
+( export PATH="$T/bin:$PATH"; . lib/hostkeys.sh && hostkeys_peer_file "$T/peer-out" "$SRC_KH" "$IP" "$PRIV" ) >"$T/out-i" 2>&1; rc=$?
+if [ "$rc" = 0 ] && [ "$(wc -l < "$T/peer-out" | tr -d ' ')" = 2 ] && grep -qxF "$K1_LINE" "$T/peer-out" && grep -qxF "$PRIV ${K1_LINE#* }" "$T/peer-out"; then
+  pass "I  the peer file names a node by its public and its private address, with the same key"
+else
+  bad "I  peer file: rc=$rc, $(cat "$T/peer-out" 2>/dev/null | tr '\n' '|') $(cat "$T/out-i")"
+fi
+printf '%s %s\n' "$PRIV" "${K1_LINE#* }" > "$T/present"
+PATH="$T/bin:$PATH" ssh -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$T/peer-out" -o BatchMode=yes "root@$PRIV" true >/dev/null 2>&1 \
+  && pass "J  a strict connection from the builder to the private address succeeds" \
+  || bad "J  a strict connection to a peer's private address was refused with its verified key in the file"
+printf '%s\n' "$K1_LINE" > "$T/kh-public-only"
+PATH="$T/bin:$PATH" ssh -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$T/kh-public-only" -o BatchMode=yes "root@$PRIV" true >/dev/null 2>&1
+[ $? = 255 ] && pass "J  without the private name in the file, the same connection is refused" || bad "J  a peer's private address connected without its key being in the file"
+
+# ---- K: no tracked script disables host key checking ----
+# Scope: every tracked file but the prose (*.md), where the option may be named. The option is
+# split in this file and in the teeth harness, so neither flags itself.
+hits="$(git ls-files | grep -v '\.md$' | while IFS= read -r f; do grep -lF -- "$NO_CHECK" "$f" 2>/dev/null; done)"
+if [ -z "$hits" ]; then pass "K  no tracked script disables host key checking"; else bad "K  these tracked files still disable host key checking: $(echo $hits)"; fi
+
+# ---- L, M: every node-to-node ssh is strict against the peer file, and the file is written first ----
+# A subject is a tracked launcher whose peer loop pipes a variable image into a peer over ssh
+# (`docker save $img | ssh`). build.sh pipes the operator's own image to the one node it names, an
+# operator-side path with its own ssh policy, and is not a subject.
+# Found, not listed: a fourth cloud or a fifth launcher is judged the day it has that line.
+subjects=""
+for f in $(git ls-files '*.sh' | grep -v '^scripts/'); do
+  if grep -qE 'docker save \\*\$img \| *ssh ' "$f"; then subjects="$subjects $f"; fi
+done
+if [ -z "$subjects" ]; then
+  bad "L  no launcher pipes an image to a peer over ssh, so this measured NOTHING about node-to-node ssh"
+fi
+for f in $subjects; do
+  w="$(grep -nE '^[^#]*cat > /root/\.ssh/stack-known-hosts' "$f" | head -1 | cut -d: -f1)"
+  n="$(grep -nE '^[^#]*docker save \\*\$img \| *ssh ' "$f" | head -1 | cut -d: -f1)"
+  line="$(sed -n "${n:-1}p" "$f")"
+  if [ -z "$w" ]; then
+    bad "L  $f never writes /root/.ssh/stack-known-hosts, so its node-to-node ssh has no verified keys"
+  elif [ "$w" -ge "$n" ]; then
+    bad "L  $f: the peer file is written at line $w, after its first node-to-node ssh at line $n"
+  else
+    case "$line" in
+      *"StrictHostKeyChecking=yes"*"UserKnownHostsFile=/root/.ssh/stack-known-hosts"*) pass "L  $f writes its peer file (line $w) before its first node-to-node ssh (line $n), and that ssh is strict against it" ;;
+      *) bad "L  $f: the node-to-node ssh at line $n is not strict against /root/.ssh/stack-known-hosts" ;;
+    esac
+  fi
+  if [ "$(grep -c 'hostkeys_peer_file' "$f")" -gt 0 ]; then pass "M  $f builds its peer file from the verified keys (hostkeys_peer_file)"; else bad "M  $f does not build its peer file with hostkeys_peer_file"; fi
+done
 
 if [ "$fails" -gt 0 ]; then
   printf '\nFAIL: %d case(s) of the host key checks did not hold.\n' "$fails"
