@@ -4,11 +4,11 @@
 # be signed keyless by its own release workflow, so the policy names that signer; a third-party
 # image is admitted only when it is pinned by digest and listed with a reason.
 #
-# @claude 2026-10-19: BLOCKED for enforcement. policy-controller v0.15.1 finds no signature on any
-# TAIPANBOX image as published (the bundle sits only at the OCI fallback tag), so an opted-in
-# namespace refuses every TAIPANBOX image. The scenarios below that say "admitted" for a TAIPANBOX
-# image are the target, not what holds today; evidence/verified-images-kind/run.sh measures both.
-# Each scenario is bound to a case in scripts/gates-have-teeth.sh, or to the kind run.
+# @claude 2026-10-19: the earlier block is lifted for v1.2.0. Every TAIPANBOX image the manifests pin
+# carries a legacy .sig tag that its own repository's release workflow made, and policy-controller
+# v0.15.1 admits each one on a kind run (evidence/verified-images-kind/admission-v120-output.txt).
+# The policy is one ClusterImagePolicy per repository, and the default install (deploy.sh) turns it
+# on for agent-stack. Each scenario is bound to a case in scripts/gates-have-teeth.sh, or to the kind run.
 Feature: the cluster admits only images whose signature verifies
 
   Scenario: an unsigned TAIPANBOX image is refused once the namespace is opted in
@@ -17,11 +17,11 @@ Feature: the cluster admits only images whose signature verifies
     Then the admission is refused, measured on kind by evidence/verified-images-kind/run.sh
     # -> gates-have-teeth.sh "verified-images: the keyless policy turns to warn" (the gate holds enforce)
 
-  Scenario: a signed TAIPANBOX image from its release workflow is admitted (target, blocked today)
-    Given the policy names the release workflow of a TAIPANBOX repository as its only signer
+  Scenario: a signed TAIPANBOX image from its own repository's release workflow is admitted
+    Given the policy for that image names its own repository's release workflow as its only signer
     When a pod names an image that workflow signed on a version tag, and the controller can read the signature
-    Then the admission is allowed; today the controller reads no such signature, so this is refused
-    # -> gates-have-teeth.sh "verified-images: the subject expression accepts any repository"
+    Then the admission is allowed, measured for every digest the manifests pin by evidence/verified-images-kind/admission-v120.sh
+    # -> gates-have-teeth.sh "verified-images: a policy admits another repository's identity" (the policy names its own repository)
 
   Scenario: a keyless signature the controller can read is admitted when its signer matches
     Given a legacy keyless signature (cosign v2.4.0) and a policy that names its signer
@@ -95,11 +95,18 @@ Feature: the cluster admits only images whose signature verifies
     Then verified-images-are-enforced.sh fails
     # -> gates-have-teeth.sh "verified-images: the controller runs an image that is not pinned by digest"
 
-  Scenario: the default install does not turn the policy on
-    Given the policy is opt-in, like identity and closure
-    When manifests/kustomization.yaml names policy/
-    Then verified-images-are-enforced.sh fails
+  Scenario: the default apply set does not name the policy, and the default install turns it on after the apply
+    Given manifests/kustomization.yaml is the default apply set, which must not name policy/
+    When deploy.sh applies the manifests and then runs policy/up.sh --enforce
+    Then verified-images-are-enforced.sh passes, and fails when the admission step is removed
     # -> gates-have-teeth.sh "verified-images: the default apply set names policy"
+    # -> gates-have-teeth.sh "verified-images: the default install stops turning admission on"
+
+  Scenario: a TAIPANBOX image with no signer row is refused by the gate before the controller sees it
+    Given every TAIPANBOX image the tracked files name has a row in BINDINGS
+    When a manifest names a TAIPANBOX image with a name no row covers
+    Then verified-images-are-enforced.sh fails
+    # -> gates-have-teeth.sh "verified-images: a manifest names a TAIPANBOX image with no signer row"
 
   Scenario: a comment that names an image is not an image
     Given a comment may explain a tag without making it a reference

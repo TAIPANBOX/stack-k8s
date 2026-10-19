@@ -1,11 +1,11 @@
-# Admission policy for the stack's namespace (opt-in, invariant 58)
+# Admission policy for the stack's namespace (invariant 58)
 
-**Status: opt-in.** Measured 2026-10-19 on kind (Kubernetes v1.37.0) with policy-controller v0.15.1, on the
-pins this repository had before the agent-security pin move: the controller refused every TAIPANBOX image the
-manifests named, because none carried a signature in the format the controller reads. The pins in the pin move
-now name images that do carry one (section "What it admits today"). Whether the controller admits them is NOT
-measured yet, so do not run `policy/up.sh --enforce` on a cluster that serves the stack until that run is in
-the section "What it admits today".
+**Status: on in the default install.** `deploy.sh` runs `policy/up.sh --enforce` after it applies the manifests, so
+the stack's namespace admits an image only when its signature verifies for its own repository. Measured on kind
+(Kubernetes v1.37.0) with policy-controller v0.15.1 for stack-k8s v1.2.0: every digest the manifests pin is admitted,
+an unsigned image and a bundle-only signature are refused, and a TAIPANBOX image signed only by another repository's
+identity is refused. Run: `evidence/verified-images-kind/admission-v120.sh`, output beside it. The cloud deploy
+scripts (`cloud/gcp/deploy-gcp.sh`, `cloud/aws/deploy-aws.sh`) do not turn it on yet (see "Not covered").
 
 ## What is here
 
@@ -13,103 +13,127 @@ the section "What it admits today".
 |---|---|
 | `policy-controller.yaml` | The Sigstore policy-controller v0.15.1, rendered from its source at tag v0.15.1 (commit `cc75baa`), with its webhook image pinned by digest and `no-match-policy: deny`. |
 | `PIN` | The release, its commit, the image digest and the sha256 of the rendered manifest. The gate holds the manifest to that sha256. |
-| `image-policy.yaml` | `taipanbox-signed`: keyless, enforce, for `ghcr.io/taipanbox/**`, issuer GitHub Actions, subject either the `release.yml` workflow of a TAIPANBOX repository on a version tag, or stack-k8s's own `console-image.yml` and `tunnel-images.yml` on a version tag (the three images the stack builds itself). `upstream-pinned`: three upstream images, by digest, each with its reason. |
-| `up.sh` | Installs the controller and the policies. With `--enforce`, it also opts `agent-stack` in, last. |
+| `image-policy.yaml` | One `ClusterImagePolicy` per TAIPANBOX repository (fifteen), and `upstream-pinned`. Each TAIPANBOX policy names the image names of one repository, digest-anchored (`name@sha256:*`), and one keyless identity: that repository's `release.yml` on a version tag, or for stack-k8s, `console-image.yml` (the console) or `tunnel-images.yml` (the tunnel images). `upstream-pinned`: three upstream images, by digest, each with its reason. |
+| `up.sh` | Installs the controller and the policies, in that order, and waits for the webhook. With `--enforce`, it also opts `agent-stack` in, last. `KUBECTL` names the client (deploy.sh sets it to k3s's kubectl on the node). |
 | `down.sh` | Removes the webhooks first, then the policies and the controller. |
+| `operator-image-policy.example.yaml` | The template for your own agent images, tracked, all comments. See "Your own agent images". |
+| `operator-image-policy.yaml` | Your copy of the template, with your entries. Gitignored: it is yours, not the repository's. When it exists and holds an entry, `up.sh` applies it. |
 
-No manifest names this directory, so `kubectl apply -k manifests/` does not turn the policy on.
+No manifest names this directory. The default install runs `up.sh --enforce` from `deploy.sh`, not from `kubectl apply -k`.
 
-## Why it is blocked
+## Why one policy per repository
 
-Root cause, measured 2026-10-19 (commands and outputs in `evidence/verified-images-kind/signing-format.txt`):
+The first version named one identity for every TAIPANBOX image: the `release.yml` of any TAIPANBOX repository. A
+signature made by one repository's workflow then admitted another repository's image name. GOTCHAS 138 has the
+measurement. Now an image is admitted only on the signature of its own repository's workflow, and the gate
+(`scripts/verified-images-are-enforced.sh`) holds a table of image name to repository and workflow, requires every
+TAIPANBOX image the tracked files name to have a row, and fails a policy whose identity accepts another row's identity.
 
-- The release workflows sign every image with cosign v3.1.3, `cosign sign --yes "ghcr.io/taipanbox/<name>@<digest>"`:
-  twelve TAIPANBOX repositories (tokenfuse, wardryx, vouchryx, keyryx, costcrew,
-  idryx, heraldyx, scopyx, typryx, trailryx, qryx, agent-stack-go), and stack-k8s's `console-image.yml` and
-  `tunnel-images.yml`. cosign v3 writes each signature as a bundle at the OCI fallback tag `sha256-<digest>`,
-  with no `sha256-<digest>.sig` tag.
-- policy-controller v0.15.1, the newest release, reads only the legacy `.sig` tag for image signatures. Its
-  `signatureFormat: bundle` option fails with `bundle support for image signatures is not yet implemented`.
-- cosign v2.4.0, v2.6.5, and cosign v3.1.3 with `--new-bundle-format=false --use-signing-config=false` write the
-  `.sig` tag. The controller reads it: a key-signed image with the legacy flags was admitted on kind.
-- The signed digests are the index digests the manifests pin, and `cosign verify` with v3.1.3 passes on them.
+The controller matches a glob against the image as `name@sha256:digest`: the tag is not part of the match. The
+manifests write `name:tag@sha256:digest`, and the probes in the kind run use those strings, so they match.
 
-## The decision
+## The signing format
 
-`@decided 2026-10-19` (paraphrased): image signatures are written in the legacy format, so the admission
-policy can read them, and the bundle format stays until the controller reads it. The flags are deprecated in
-cosign v3 but still accepted; source and read date are in the evidence file.
-
-- stack-k8s: `console-image.yml` and `tunnel-images.yml` sign with the two flags, with a comment to remove
-  them when the controller reads bundles (upstream PR sigstore/policy-controller#1968).
-- The twelve TAIPANBOX repositories listed above: the same two flags on their image sign lines. Each one is a change in its own repository; it is not made here.
-- Images already released keep the bundle format. They become admissible only after a signing run with the
-  flags, from their release tag: the next release, or a re-sign run.
-
-Until those land, the policy is not turned on for a running stack.
+The release workflows sign every image with cosign v3.1.3, `cosign sign --yes`. The controller v0.15.1 reads only
+the legacy `sha256-<digest>.sig` tag for image signatures, not the OCI bundle that cosign v3 writes by default, and
+its `signatureFormat: bundle` option fails with `bundle support for image signatures is not yet implemented`.
+So the signing steps write the legacy format: cosign v3.1.3 with `--new-bundle-format=false --use-signing-config=false`
+(the flags are deprecated in cosign v3 and still accepted). stack-k8s's `console-image.yml` and `tunnel-images.yml`
+do this, and so do the TAIPANBOX repositories' image sign lines. Images released before that carry only the bundle,
+and the controller refuses them: a re-sign run from the release tag, or the next release, makes them admissible.
+`@decided 2026-10-19` (paraphrased): the legacy format is written until the controller reads bundles, and the
+bundle format stays otherwise. Upstream issue sigstore/policy-controller#1968.
 
 ## What it admits today
 
-Measured 2026-10-19 on the pins after the pin move: a `.sig` probe (`docker buildx imagetools inspect`) finds a
-legacy `.sig` tag on each of the 13 TAIPANBOX digests the manifests name (wardryx v2.2.1, idryx v1.2.2,
-genaryx-console v1.1.48, heraldyx v0.8.0, vouchryx v0.6.0, scopyx v1.1.0, typryx v0.5.0, costcrew v0.9.0, qryx v1.1.0,
-trailryx-node v1.3.1, mockryx v0.2.2, agent-conform v2.0.1 from agent-stack-go, keyryx v0.1.1), and
-`cosign` v3.1.3, run from its official image, verifies each against the release-tag identity of its own
-repository (for the console, stack-k8s's `console-image.yml` at `v1.1.48`; for scopyx's chromium digest, the
-identity of the `v1.1.0` release, which builds both). That is the input the admission rule needs. It is not an
-admission result. Not measured: whether the controller admits these digests on a cluster. The earlier kind run
-refused the old digests for want of a legacy tag, and says nothing about these.
+Measured 2026-10-19 by `evidence/verified-images-kind/admission-v120.sh` on the v1.2.0 pins, with the default
+install's call (`policy/up.sh --enforce`):
 
-- **tokenfuse v1.18.0** (`tokenfuse`, `tokenfuse-control-plane`, pinned in this change): the legacy `.sig` tag is present on both (probed after the release run finished), and cosign v3.1.3 verifies both against the `v1.18.0` tag of `TAIPANBOX/tokenfuse`.
-- **TAIPANBOX images: signed, admission not measured.** `genaryx-console` v1.1.48 is the one `stack-k8s` builds;
-  the tunnel images (`stack-caddy`, `stack-wg`) are not named by any manifest.
-- **Upstream images: three**, admitted by digest only (postgres, caddy, busybox, the table below).
-- **`mockryx` v0.2.2** (suspended drills CronJob): signed by its own repository's release, the same probe as above.
+- **Every digest `manifests/` and `keyryx/manifests/` pin: admitted** (19 of 19 distinct references, the three
+  upstream digests included). The probes are the manifests' own `name:tag@sha256:digest` strings.
+- **Unsigned** genaryx-console v1.1.46 (`sha256:54218cfb...`): refused.
+- **Bundle format only** genaryx-console v1.1.47 (`sha256:0f688de1...`): refused.
+- **Unlisted upstream** `alpine:3.20`: refused (no matching policy).
+- **Another repository's identity**: with the policy for `mockryx` replaced for the test by one that names
+  tokenfuse's release, the mockryx digest (signed by mockryx's release) is refused; with mockryx's own policy back,
+  it is admitted. Same image, same signature, only the identity differs.
+- **After `policy/down.sh`**: the unsigned image is admitted, so the refusals above were the policy's doing.
 
-Opt-in `policy/up.sh` installs the controller and the policies, and admits nothing new until
-`policy/up.sh --enforce` is run.
+The identities were checked with cosign v3.1.3 for all sixteen TAIPANBOX digests the tracked files pin, each
+against its repository's own `release.yml` (or the stack-k8s workflows) on a version tag:
+`evidence/verified-images-kind/identity-per-repo-v120.txt`.
 
-## Images the manifests name, and their signing
-
-- `genaryx-console` v1.1.48, signed by stack-k8s's `console-image.yml` in the legacy `.sig` format (#185 and the
-  v1.1.48 release): the one TAIPANBOX image this repository builds and names.
-- `mockryx` v0.2.2, from its own repository (not this one): legacy `.sig` tag present (probe above).
-- `stack-caddy` and `stack-wg` are not named by any manifest; the tunnel builds them locally as
-  `stack/*:dev` (see "Not covered").
-
-## Upstream images, and why each is trusted
+Upstream images are trusted only by digest, and only where listed with a reason:
 
 | Image | Reason |
 |---|---|
 | `postgres:16-alpine`, by digest | the policy-db; upstream, not signed by us |
 | `caddy`, by digest | the hub's TLS front; upstream, pinned in manifests/53 |
-| `busybox`, by digest | the root-key copy in keyryx; a shell-only init container |
+| `busybox`, by digest | the init containers that copy keys and create streams; a shell-only image |
 
-The three are matched by their digest, with the tag not part of the match. A new upstream image is
-refused until it is pinned by digest and listed with a reason in `image-policy.yaml`.
+A new upstream image is refused until it is pinned by digest and listed with a reason in `image-policy.yaml`.
 
-## Not covered
+## Your own agent images
 
-- `kube-system` (the cloud controllers the AWS and GCP installers apply) and `agent-tunnel` (the
-  tunnel). Neither namespace is opted in.
-- `stack/*:dev` images from `build.sh`. They have no registry digest and no signature; an opted-in
-  namespace refuses them. Build from a registry image or leave the namespace out.
+With admission on, an image that no policy covers is refused, and an agent's image is not a TAIPANBOX image. An
+agent pod (one that carries `taipanbox.dev/agent-token: "true"`, see `agent-tokens/example-agent.yaml`) is refused
+until its image is listed. To list it:
 
-## No internet egress
+```bash
+cp policy/operator-image-policy.example.yaml policy/operator-image-policy.yaml
+# add one ClusterImagePolicy per image above the end marker, then:
+policy/up.sh --enforce   # or the deploy, which runs it
+```
 
-Keyless verification needs Fulcio's roots and Rekor, reached through the TUF repository. The decision
-is to fail closed: an image whose signature cannot be fetched or verified is refused, and nothing is
-admitted on trust. `@claude 2026-10-19`: this was not measured with egress blocked. Running pods are not
-re-checked; a pod that is created again (a restart, a reschedule) is checked again. An air-gapped
-deployment would need a `TrustRoot` with the roots vendored; that is not built.
+Each entry is one of three forms, and the template has all three:
+
+- **static**: the image is trusted by its digest alone. The glob names one exact digest:
+  `registry.example.com/acme/agent@sha256:<64 hex digits>`.
+- **keyless**: the image is signed by a workflow, and the entry names that workflow. The subject expression is
+  anchored and names one repository, on a version tag.
+- **key**: the image is signed with a key, and the entry carries the public key (PEM). Never the private key.
+
+The gate (`scripts/verified-images-are-enforced.sh`, section 8) holds every entry to four rules, and refuses the
+entry, not the deploy:
+
+1. a glob names an image by digest; a wildcard name (`*`) is refused, and so is a digest wildcard under `static`;
+2. a `static` entry names one exact digest per glob;
+3. a signed entry names its signer, and a subject expression that accepts a stranger's repository, a branch or any
+   identity is refused (the gate tries it on probe identities);
+4. no entry covers `ghcr.io/taipanbox/`. TAIPANBOX images go through their repository's row in
+   `image-policy.yaml`, which the gate keeps separately.
+
+Measured on kind (`evidence/verified-images-kind/admission-operator-v120.sh`): an agent pod whose image is not listed
+is refused; the same image, listed as a `static` entry in the copy, is admitted. The keyless and key forms are checked
+by the gate's teeth cases, not measured on a cluster.
 
 ## Running it
 
 ```bash
 policy/up.sh             # installs the controller and the policies; agent-stack is not opted in
-policy/up.sh --enforce   # also opts agent-stack in; refuses unverified images
+policy/up.sh --enforce   # also opts agent-stack in; an unsigned or foreign-signed image is refused
 policy/down.sh           # removes the admission; running pods are not touched
 ```
 
-The measurement is `evidence/verified-images-kind/run.sh`, which creates and deletes its own kind
-cluster.
+The default install does the `--enforce` step itself, after the manifests are applied, because the namespace must exist
+first. The controller's webhook must answer before the label is set: `up.sh` waits for its rollout, and a namespace
+labelled before that refuses every pod create in it.
+
+## Not covered
+
+- **Keyless and key operator entries on a cluster.** The gate checks their rules; the kind run measured the `static` form only.
+- **The cloud deploy scripts.** `cloud/gcp/deploy-gcp.sh` and `cloud/aws/deploy-aws.sh` apply the manifests but do not
+  run `policy/up.sh --enforce` yet. A cloud cluster is therefore not admitted until that is wired in, and the Hetzner
+  path (`deploy.sh`) is the only default install that turns it on.
+- **Egress.** Keyless verification needs Fulcio's roots and Rekor, reached through Sigstore's TUF repository. The
+  decision is to fail closed: an image whose signature cannot be fetched or verified is refused. Measured with egress
+  open only. A cluster that cannot reach Sigstore refuses every new pod in the namespace. An air-gapped deployment
+  would need a `TrustRoot` with the roots vendored; that is not built.
+- **Running pods.** A pod already running is not re-checked. A pod that is created again (a restart, a reschedule, a
+  rollout) is checked again, so a rollout that changes an image is judged on the new image.
+- **The tunnel images.** `stack-caddy` and `stack-wg` have a policy (signed by `tunnel-images.yml`), but no v1.2.0
+  manifest names them. The tunnel builds them locally as `stack/*:dev`, which have no registry digest and no signature,
+  so an opted-in namespace refuses them. Build from a registry image or keep the tunnel out of `agent-stack`.
+- **The controller's availability.** The webhook is on the path of every pod create in the namespace. Its outage stops
+  new pods there; `down.sh` is the way out, and it is not run by anything automatically.
+- **`kube-system`** (the cloud controllers the AWS and GCP installers apply) and `agent-tunnel`. Neither is opted in.

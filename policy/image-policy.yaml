@@ -1,23 +1,242 @@
-# Admission policy for the stack's namespace (invariant 58 of CLAUDE.md). Opt-in: policy/up.sh
-# applies this file once the controller answers, then opts agent-stack in. See policy/README.md.
+# Admission policy for the stack's namespace (invariant 58 of CLAUDE.md). Opt-in on a cluster with
+# policy/up.sh; the default install opts agent-stack in (deploy.sh). See policy/README.md.
 #
-# taipanbox-signed: every image under ghcr.io/taipanbox/ must carry a keyless signature made by the
-# release workflow of a TAIPANBOX repository, on a version tag, through GitHub Actions. Measured on
-# the registry 2026-10-19 for the images the manifests name (identities listed in the gate).
+# One ClusterImagePolicy per TAIPANBOX repository, so an image is admitted only on the signature of its own
+# repository's workflow: a release signed by repository A does not admit an image named for repository B.
+# Each policy's glob names the image names of one repository, digest-anchored (`name@sha256:*`, which is how
+# the controller matches: the tag is not part of the match), and each policy's identity names that
+# repository's release workflow, or stack-k8s's console-image.yml / tunnel-images.yml, on a version tag.
+# An image under ghcr.io/taipanbox/ that no policy covers is refused (`no-match-policy: deny`).
+#
+# The identities were checked on the registry on 2026-10-19 with cosign v3.1.3: each image of a repository
+# verifies against that repository's identity below (policy/README.md, "What it admits today").
+---
 apiVersion: policy.sigstore.dev/v1beta1
 kind: ClusterImagePolicy
 metadata:
-  name: taipanbox-signed
+  name: taipanbox-tokenfuse
 spec:
   mode: enforce
   images:
-    - glob: "ghcr.io/taipanbox/**"
+    - glob: "ghcr.io/taipanbox/tokenfuse@sha256:*"
+    - glob: "ghcr.io/taipanbox/tokenfuse-control-plane@sha256:*"
   authorities:
     - keyless:
         url: https://fulcio.sigstore.dev
         identities:
           - issuer: https://token.actions.githubusercontent.com
-            subjectRegExp: '^https://github\.com/TAIPANBOX/(?:[A-Za-z0-9._-]+/\.github/workflows/release\.yml|stack-k8s/\.github/workflows/(?:console-image|tunnel-images)\.yml)@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+            subjectRegExp: '^https://github\.com/TAIPANBOX/tokenfuse/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-wardryx
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/wardryx@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/wardryx/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-idryx
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/idryx@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/idryx/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-heraldyx
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/heraldyx@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/heraldyx/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-vouchryx
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/vouchryx@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/vouchryx/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-scopyx
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/scopyx@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/scopyx/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-typryx
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/typryx@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/typryx/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-costcrew
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/costcrew@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/costcrew/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-qryx
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/qryx@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/qryx/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-trailryx
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/trailryx-node@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/trailryx/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-mockryx
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/mockryx@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/mockryx/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-keyryx
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/keyryx@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/keyryx/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-agent-stack-go
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/agent-conform@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/agent-stack-go/\.github/workflows/release\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-console
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/genaryx-console@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/stack-k8s/\.github/workflows/console-image\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: taipanbox-tunnel
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/taipanbox/stack-caddy@sha256:*"
+    - glob: "ghcr.io/taipanbox/stack-wg@sha256:*"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/TAIPANBOX/stack-k8s/\.github/workflows/tunnel-images\.yml@refs/tags/v[0-9][A-Za-z0-9._+-]*$'
 ---
 # upstream-pinned: images that are not ours and that the policy does not sign. Each one is trusted
 # by its digest alone, with the reason it is in the stack. A new upstream image is added here with

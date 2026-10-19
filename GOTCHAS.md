@@ -4588,3 +4588,14 @@ Fixed: one identifier, `https://vouchryx.agent-stack.invalid`, on the gateway do
 `scripts/agent-tokens-are-wired.sh` checks the three values against each other and checks the identifier is an absolute https URL; three teeth cases were added for a door, the broker and vouchryx that name another audience, and one for an http audience.
 
 **What it does not cover.** The kind run in `evidence/agent-tokens-kind/` was measured on the http audience with tokenfuse v1.16.0 and was not re-run with v1.18.0 in this change, so the new broker and the audience have no live run here.
+
+
+## 138. One signer for every TAIPANBOX image admitted an image that another repository's release signed
+
+**Ours, and fixed.** The first admission policy, `taipanbox-signed` in `policy/image-policy.yaml` (invariant 58), matched every `ghcr.io/taipanbox/**` image against one subject expression: the `release.yml` of any TAIPANBOX repository, or stack-k8s's console and tunnel workflows, on a version tag. The expression bound an image to no repository. A release signed by repository A therefore admitted an image named for repository B, and the gate had checked that the expression refused a fork and a branch, but not another TAIPANBOX repository.
+
+Fixed: one ClusterImagePolicy per repository, each glob naming one image name, digest-anchored, and each identity naming that repository's own workflow. `scripts/verified-images-are-enforced.sh` holds the table of image name to repository and workflow (`BINDINGS`), requires every TAIPANBOX image a tracked file names to have a row, and fails any policy whose identity accepts another row's identity. Measured on kind with `evidence/verified-images-kind/admission-v120.sh`: the mockryx digest, signed by mockryx's own release, is refused under a policy that names tokenfuse's release and admitted under its own policy.
+
+Also measured through the webhook: a pod image written `name:tag@sha256:digest`, as the manifests write it, matches a glob written `name@sha256:*`, which names no tag. The probes in section 2 of `admission-v120.sh` use the manifests' own strings and all match. The identities were checked with cosign v3.1.3 for all sixteen TAIPANBOX digests the tracked files pin (`evidence/verified-images-kind/identity-per-repo-v120.txt`), each against its own repository's `release.yml` (or stack-k8s's `console-image.yml`, `tunnel-images.yml`) on a version tag.
+
+**What it does not cover.** The table is hand-kept, and the gate checks it only one way: a name the manifests use must have a row, and a row must have a policy that names it. A new repository that signs under a workflow other than `release.yml` is refused until its row says so, which is the intent but is not a discovery of the signer from the registry.

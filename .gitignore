@@ -33,3 +33,7 @@ cloud/**/.terraform.lock.hcl
 
 # hub/add-site.sh writes a site's four credentials here, mode 0600; never commit one.
 hub/site-*.env
+
+# The operator's own admission entries for agent images: a copy of policy/operator-image-policy.example.yaml,
+# with the digests and identities of its own images. The copy is the operator's, never the repository's.
+policy/operator-image-policy.yaml
