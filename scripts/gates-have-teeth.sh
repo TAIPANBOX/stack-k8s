@@ -3602,7 +3602,7 @@ run_case "verified-images: a reason reworded (must pass)" pass \
 run_case "costcrew-ceiling: the validator accepts three decimals" fail \
 	'./scripts/costcrew-ceiling-is-set.sh' \
 	"$(py 'edit("budget/costcrew-ceiling.sh", "(\\.[0-9]\x7b1,2\x7d)?$", "(\\.[0-9]\x7b1,6\x7d)?$")')" \
-	"accepts 1.234"
+	"accepts '1.234'"
 run_case "costcrew-ceiling: zero is accepted" fail \
 	'./scripts/costcrew-ceiling-is-set.sh' \
 	"$(py 'edit("budget/costcrew-ceiling.sh", "  \"\") refuse", "  \"zz\") refuse")')" \
