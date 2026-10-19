@@ -611,7 +611,7 @@ spec:
             - "-events"
             - "/var/lib/stack/events/wardryx.ndjson"
             - "-policy"
-            - "/etc/wardryx/policy.yaml"
+            - "/etc/wardryx/policy"
           env:
             # Durable policy + approval store (15-policy-store.yaml). Without
             # it wardryx keeps both in MEMORY, so a pod restart silently drops
@@ -653,7 +653,10 @@ spec:
           lifecycle: { preStop: { sleep: { seconds: 5 } } }
           volumeMounts:
             - { name: events, mountPath: /var/lib/stack/events }
-            - { name: policy, mountPath: /etc/wardryx, readOnly: true }
+            # A directory, not one file: the starter policy and, only with --typed-risk-signal, the hold
+            # that holds a brokered call with no risk signal (CLAUDE.md invariant 65). wardryx reads every
+            # *.yaml in it once, at start.
+            - { name: policy, mountPath: /etc/wardryx/policy, readOnly: true }
           # /healthz, not /readyz, on purpose. wardryx 1.0.3's /readyz answers 503
           # while its policy store is unreachable, but POST /v1/decide does not use
           # the store and keeps answering. A readiness probe on /readyz would take
@@ -673,8 +676,14 @@ spec:
       volumes:
         - name: events
           persistentVolumeClaim: { claimName: stack-events }
+        # The policy directory. The starter ConfigMap is always there; the hold ConfigMap is optional, and
+        # the typed launcher creates it only with --typed-risk-signal (CLAUDE.md invariant 65). A projected
+        # volume is how two ConfigMaps become one directory.
         - name: policy
-          configMap: { name: wardryx-policy }
+          projected:
+            sources:
+              - configMap: { name: wardryx-policy }
+              - configMap: { name: wardryx-typed-hold, optional: true }
 ---
 apiVersion: v1
 kind: Service

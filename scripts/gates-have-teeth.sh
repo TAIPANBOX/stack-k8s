@@ -3597,6 +3597,52 @@ run_case "verified-images: a reason reworded (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres), an upstream image", "# reason: the policy store (postgres), an upstream image")')"
 
+# The risk hold (CLAUDE.md invariant 65): with --typed-risk-signal wardryx holds a call with no signal, and
+# only with the flag. Each case takes one property away; the braces in the py bodies are \x7b and \x7d.
+run_case "risk-hold: the policy volume drops the optional hold source" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "              - configMap: \x7b name: wardryx-typed-hold, optional: true \x7d\n", "")')" \
+	"does not project the ConfigMap wardryx-typed-hold"
+run_case "risk-hold: the hold source is required, so the plane cannot start without a hold" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "wardryx-typed-hold, optional: true \x7d", "wardryx-typed-hold \x7d")')" \
+	"is not optional"
+run_case "risk-hold: wardryx reads one file again, not the policy directory" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "- \"/etc/wardryx/policy\"", "- \"/etc/wardryx/policy.yaml\"")')" \
+	"does not read its policy from the directory"
+run_case "risk-hold: the hold also holds read-only calls" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("typed/mode.sh", "values: [destructive, external_send, financial]", "values: [read_only, destructive, external_send, financial]")')" \
+	"holds on"
+run_case "risk-hold: the hold carries a key that could deny" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("typed/mode.sh", "min_probability: 0.8\\n        when_absent: hold", "min_probability: 0.8\\n        decision: deny\\n        when_absent: hold")')" \
+	"could deny"
+run_case "risk-hold: the hold is printed without the flag" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("typed/mode.sh", "[ \"$RISK\" = 1 ] && [ \"$EFFECTIVE\" != off ] || return 0", "true")')" \
+	"WITHOUT the flag prints a document"
+run_case "risk-hold: the hold verb is taken out of the dispatch" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("typed/mode.sh", "  hold)        emit_risk_hold ;;\n", "")')" \
+	"has no \`hold\` verb"
+run_case "risk-hold: deploy.sh never applies the hold" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("deploy.sh", "\"$ROOT/typed/mode.sh\" hold ${TYPED_ARGS", "\"$ROOT/typed/mode.sh\" holdx ${TYPED_ARGS")')" \
+	"deploy.sh: does not apply the hold ConfigMap"
+run_case "risk-hold: the AWS launcher applies the hold and restarts a different plane" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 's = open("cloud/aws/deploy-aws.sh").read(); i = s.index("could not restart wardryx to load the hold rule"); j = s.rindex("rollout restart deployment/wardryx", 0, i); open("cloud/aws/deploy-aws.sh", "w").write(s[:j] + "rollout restart deployment/otherplane" + s[j + len("rollout restart deployment/wardryx"):])')" \
+	"does not restart wardryx after the hold changes"
+run_case "risk-hold: the GCP launcher does not clear the hold without the flag" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "delete configmap wardryx-typed-hold --ignore-not-found", "delete configmap wardryx-typed-holdx --ignore-not-found")')" \
+	"does not clear wardryx-typed-hold"
+run_case "risk-hold: a comment reworded in the planes manifest (must pass)" pass \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "# A directory, not one file:", "# A directory, not a single file:")')"
+
 # Stream files are precreated (CLAUDE.md invariant 59, GOTCHAS 135). A writer that refuses to start
 # on a root-owned volume is the failure; each case below takes one property the gate judges away.
 #

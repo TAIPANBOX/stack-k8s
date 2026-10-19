@@ -825,6 +825,23 @@ if [ "$TYPED_EFFECTIVE" != off ]; then
       || die "could not apply the typed-answer key Secret"
   fi
   "$ROOT/typed/mode.sh" render ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} | k_ "apply -f -"
+  # The hold rule (CLAUDE.md invariant 65), with the flag only. wardryx reads its policy once, at start,
+  # so the plane is restarted to load it.
+  if [ "$TYPED_RISK_SIGNAL" = 1 ]; then
+    "$ROOT/typed/mode.sh" hold ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} | k_ "apply -f -" >/dev/null \
+      || die "could not apply the wardryx hold rule"
+    k_ "-n agent-stack rollout restart deployment/wardryx" >/dev/null \
+      || die "could not restart wardryx to load the hold rule"
+  fi
+fi
+
+# Without the flag, a hold an earlier run with the flag left behind is removed, and wardryx restarted only
+# when there was one to remove (CLAUDE.md invariant 65).
+if [ "$TYPED_RISK_SIGNAL" != 1 ]; then
+  if [ -n "$(k_ "-n agent-stack delete configmap wardryx-typed-hold --ignore-not-found -o name")" ]; then
+    k_ "-n agent-stack rollout restart deployment/wardryx" >/dev/null \
+      || die "could not restart wardryx after removing the hold rule"
+  fi
 fi
 
 # Tell the console which origin its operator will actually arrive from, before

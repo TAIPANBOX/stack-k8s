@@ -91,6 +91,7 @@ step "every k3s server starts with --secrets-encryption" "./scripts/servers-encr
 step "no secret value on any command line" "./scripts/no-secret-on-argv.sh"
 step "every cloud host key is verified before the first connection" "./scripts/hostkeys-are-verified.sh"
 step "a stdin-fed remote command reads its stdin once" "./scripts/stdin-is-read-once.sh"
+step "the risk hold follows --typed-risk-signal (invariant 65)" "./scripts/risk-hold-follows-the-flag.sh"
 step "the teeth shards cover every case once" "./scripts/teeth-shards-cover-every-case.sh"
 
 echo
