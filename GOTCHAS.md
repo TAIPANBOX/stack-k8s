@@ -4587,4 +4587,4 @@ Fixed: one identifier, `https://vouchryx.agent-stack.invalid`, on the gateway do
 
 `scripts/agent-tokens-are-wired.sh` checks the three values against each other and checks the identifier is an absolute https URL; three teeth cases were added for a door, the broker and vouchryx that name another audience, and one for an http audience.
 
-**What it does not cover.** The kind run in `evidence/agent-tokens-kind/` was measured on the http audience with tokenfuse v1.16.0 and was not re-run here, because the v1.18.0 images were not published when this change was made.
+**What it does not cover.** The kind run in `evidence/agent-tokens-kind/` was measured on the http audience with tokenfuse v1.16.0 and was not re-run with v1.18.0 in this change, so the new broker and the audience have no live run here.

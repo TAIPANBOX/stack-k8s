@@ -60,6 +60,7 @@ identity of the `v1.1.0` release, which builds both). That is the input the admi
 admission result. Not measured: whether the controller admits these digests on a cluster. The earlier kind run
 refused the old digests for want of a legacy tag, and says nothing about these.
 
+- **tokenfuse v1.18.0** (`tokenfuse`, `tokenfuse-control-plane`, pinned in this change): the legacy `.sig` tag is present on both (probed after the release run finished), and cosign v3.1.3 verifies both against the `v1.18.0` tag of `TAIPANBOX/tokenfuse`.
 - **TAIPANBOX images: signed, admission not measured.** `genaryx-console` v1.1.48 is the one `stack-k8s` builds;
   the tunnel images (`stack-caddy`, `stack-wg`) are not named by any manifest.
 - **Upstream images: three**, admitted by digest only (postgres, caddy, busybox, the table below).
