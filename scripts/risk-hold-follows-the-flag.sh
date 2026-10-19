@@ -142,7 +142,7 @@ for path in LAUNCHERS:
         bad.append(f"{path} is absent: its risk-hold step is measured NOTHING")
         continue
     live = "\n".join(l for l in text.split("\n") if not l.lstrip().startswith("#"))
-    apply_hold = re.search(r'typed/mode\.sh" hold[^\n]*\|\s*k_ "apply -f -"', live)
+    apply_hold = re.search(r'typed/mode\.sh" hold\s[^\n]*\|\s*k_ "apply -f -"', live)
     render_at = re.search(r'typed/mode\.sh" render[^\n]*\|\s*k_ "apply -f -"', live)
     if apply_hold is None:
         bad.append(f"{path}: does not apply the hold ConfigMap through `typed/mode.sh hold | k_ \"apply -f -\"`")
