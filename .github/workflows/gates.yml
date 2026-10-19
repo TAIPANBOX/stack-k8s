@@ -341,6 +341,46 @@ jobs:
       - name: the typed-answer door is minted by the deploy (invariant 42)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/typed-door-is-minted.sh
 
+      # Added 2026-10-19 with invariant 65. With --typed-risk-signal the policy plane holds a brokered call
+      # that arrives with no risk signal, and only with the flag. See GOTCHAS and CLAUDE.md invariant 65.
+      - name: the risk hold follows --typed-risk-signal (invariant 65)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/risk-hold-follows-the-flag.sh
+
+      # Added 2026-10-19 with invariant 66. The CostCrew run ceiling is validated before any install and written
+      # after the last apply, and the crew CronJob is suspended. See CLAUDE.md invariant 66.
+      - name: the CostCrew ceiling is validated and written after apply (invariant 66)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/costcrew-ceiling-is-set.sh
+
+      # Added 2026-10-19 with invariant 68. A workflow checks out another repository at a full commit, never a
+      # branch or no ref. See CLAUDE.md invariant 68.
+      - name: every workflow checkout of another repository is a full commit (invariant 68)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/workflow-checkouts-are-pinned.sh
+
+      # Added 2026-10-19. hub/add-site.sh reads the Cloud's version from a name:tag@sha256 reference, the form
+      # the manifests pin. v1.5.3 read the digest as the tag and refused every pinned install.
+      - name: hub/add-site.sh reads a digest-pinned tokenfuse-cloud image
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/hub-add-site-reads-the-pinned-image.sh
+
+      # Added 2026-10-19 with invariant 67. The console's approver key is minted once; wardryx verifies
+      # the console's statements with its public half, and no bearer key decides a hold. See CLAUDE.md invariant 67.
+      - name: the console approver key is minted once and wardryx verifies with it (invariant 67)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/approver-key-is-minted.sh
+
+      # Added 2026-10-19 with invariant 69. Keyryx is installed by default in every launcher, and the record and
+      # the approvals are signed through custody. See CLAUDE.md invariant 69.
+      - name: Keyryx is installed by default, with --without-keyryx as the opt-out (invariant 69)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/keyryx-is-default.sh
+
+      # Added 2026-10-19 with invariant 70. The Keyryx witness reads the record it countersigns, and the record-seal
+      # reads the witness's attestations, through volumes the two share. See CLAUDE.md invariant 70.
+      - name: the Keyryx witness reads the record and the record-seal reads attestations through shared volumes (invariant 70)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/keyryx-witness-shares-the-record.sh
+
+      # Added 2026-10-19 with invariant 71. A failed record-seal pack ends the run non-zero; only the known empty
+      # case exits 0. See GOTCHAS 151.
+      - name: the record-seal fails closed on a failed pack, and exits zero only when nothing is sealed (invariant 71)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/record-seal-fails-closed.sh
+
       # Added 2026-10-14 with invariant 44. A cost report that meets a machine type with no
       # rate exits non-zero and names it, instead of counting it as zero. See GOTCHAS 127.
       - name: a cost report refuses an unknown machine rate (invariant 44)

@@ -45,6 +45,16 @@ name: console image
 # Six checkouts happen twice, once per architecture, which is the cost. It buys
 # a console that pulls on a Graviton node with the same pinned tag as on an x86
 # one, and nobody has to know which they got.
+# The commits this image is built from, in one place (CLAUDE.md invariant 68). Each is the commit its release
+# tag names (read with git ls-remote, the peeled commit). genaryx has no tags, so it is the merge commit of
+# TAIPANBOX/genaryx#132, the approver-statement change. Move one by changing this block and nothing else.
+env:
+  QRYX_REF: e2e776d648aa28ffa9971bb21bc828335c86a89c      # qryx v1.1.0
+  MOCKRYX_REF: 14c954dcf8dbcca40b2fa28c5cf202372b8480fc   # mockryx v0.3.0
+  VERDRYX_REF: 42617d2268500e46b93302a93de7412522668e91   # verdryx v0.1.0
+  ENGRAM_REF: b0b72a87bda73b8ec1287ee6d2450dd60290a0b3    # engram v3.0.0
+  GENARYX_REF: 03c6c88f6664bf6aa25300868ffd8f61d9ecaa31   # genaryx #132 merge commit
+
 on:
   push:
     tags: ["v*"]
@@ -100,22 +110,27 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: TAIPANBOX/genaryx
+          ref: ${{ env.GENARYX_REF }}
           path: genaryx-a360
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: TAIPANBOX/qryx
+          ref: ${{ env.QRYX_REF }}
           path: qryx
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: TAIPANBOX/mockryx
+          ref: ${{ env.MOCKRYX_REF }}
           path: mockryx
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: TAIPANBOX/verdryx
+          ref: ${{ env.VERDRYX_REF }}
           path: verdryx
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: TAIPANBOX/engram
+          ref: ${{ env.ENGRAM_REF }}
           path: engram
 
       # What went in, recorded where somebody can read it later. An image built
@@ -404,22 +419,27 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: TAIPANBOX/genaryx
+          ref: ${{ env.GENARYX_REF }}
           path: genaryx-a360
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: TAIPANBOX/qryx
+          ref: ${{ env.QRYX_REF }}
           path: qryx
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: TAIPANBOX/mockryx
+          ref: ${{ env.MOCKRYX_REF }}
           path: mockryx
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: TAIPANBOX/verdryx
+          ref: ${{ env.VERDRYX_REF }}
           path: verdryx
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: TAIPANBOX/engram
+          ref: ${{ env.ENGRAM_REF }}
           path: engram
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1

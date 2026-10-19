@@ -1,0 +1,66 @@
+# The record-seal CronJob signs each sealed root through Keyryx, and reads the witness's attestations (CLAUDE.md
+# invariants 69 and 70). Applied by lib/keyryx-install.sh with `kubectl patch --type strategic`, after `apply -k`: a
+# patch leaves the last-applied annotation alone, so the default manifests/40-routines-and-secrets.yaml stays what the
+# default install applies (invariant 24's mechanism). keyryx/record-seal-unpatch.yaml reverses it.
+#
+# Two ReadWriteOnce (Longhorn) claims are shared with the witness: trailryx-records (the record) and
+# keyryx-witness-state (its attestations). A RWO volume is mounted on one node, so the record-seal is pod-affined to
+# the witness, which runs on that node. The witness state is mounted through subPath data/attestations only, so the
+# record-seal never sees the witness key, which sits in the same claim's data directory.
+#
+# TODO(keyryx-attest-mode): TRAILRYX_WITNESS_ATTESTATIONS is NOT set. keyryx v0.1.1 writes each attestation with
+# os.CreateTemp (mode 0600, owned by the witness's uid 20100), and the record-seal runs as uid 10001, so it cannot read
+# the files. Setting the variable now would make `trailryx-node read --pack` fail on every run, and the job would then
+# end non-zero and say why (CLAUDE.md invariant 71), so the attempt would be loud, not silent. Set it when keyryx writes
+# the attestations readable by group 10001 (a release of keyryx). Until then the subPath mount below is wired and reads nothing.
+#
+# TRAILRYX_KEYRYX_KID, the pin of Keyryx's key, is NOT here either: trailryx#112 is not released (TODO in the library).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: record-seal
+  namespace: agent-stack
+spec:
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            keyryx-consumer: "true"
+        spec:
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app: keyryx-witness
+                  topologyKey: kubernetes.io/hostname
+          containers:
+            - name: trailryx
+              env:
+                - name: TRAILRYX_SIGNER
+                  value: keyryx
+                - name: TRAILRYX_KEYRYX_URL
+                  value: http://keyryx-custody.agent-stack.svc.cluster.local:4340
+                - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE
+                  value: /run/keyryx-client/credential
+              volumeMounts:
+                - name: keyryx-client
+                  mountPath: /run/keyryx-client
+                  readOnly: true
+                - name: witness-attestations
+                  mountPath: /var/lib/stack/attestations
+                  subPath: data/attestations
+                  readOnly: true
+          volumes:
+            - name: keyryx-client
+              secret:
+                secretName: keyryx-trailryx-client
+                defaultMode: 0440
+                items:
+                  - key: credential
+                    path: credential
+            - name: witness-attestations
+              persistentVolumeClaim:
+                claimName: keyryx-witness-state
+                readOnly: true

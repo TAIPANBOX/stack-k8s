@@ -2926,8 +2926,8 @@ run_case "wardryx-key-is-pep: the migration writes the key on the command line" 
 
 run_case "wardryx-key-is-pep: a pin moves back to the old wardryx" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.3.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
-	"does not pin wardryx v2.3.0"
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.4.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
+	"does not pin wardryx v2.4.0"
 
 run_case "wardryx-key-is-pep: a reworded comment is not a fault" pass \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
@@ -3508,9 +3508,21 @@ run_case "verified-images: a glob wider than one repository's image name" fail \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "ghcr.io/taipanbox/wardryx@sha256:*", "ghcr.io/taipanbox/**")')" \
 	"not a digest-anchored name of one repository"
+# A cross-signed image: wardryx's image admitted on the signature of tokenfuse's release workflow. The
+# policy must name its own repository's signer, so the gate refuses the policy that names another one.
+run_case "verified-images: wardryx's image admitted on tokenfuse's signer (cross-signed)" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 's = open("policy/image-policy.yaml").read(); i = s.index("name: taipanbox-wardryx"); j = s.index("TAIPANBOX/wardryx/", i); open("policy/image-policy.yaml", "w").write(s[:j] + "TAIPANBOX/tokenfuse/" + s[j + len("TAIPANBOX/wardryx/"):])')" \
+	"is not the identity of wardryx"
+# A moved glob: wardryx's policy re-pointed at idryx's image name. Two policies then cover one name, and
+# wardryx's name is covered by none, so the gate refuses the move rather than admitting on the wrong signer.
+run_case "verified-images: a policy's glob moved onto another repository's image name" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 's = open("policy/image-policy.yaml").read(); i = s.index("name: taipanbox-wardryx"); j = s.index("ghcr.io/taipanbox/wardryx@sha256:*", i); open("policy/image-policy.yaml", "w").write(s[:j] + "ghcr.io/taipanbox/idryx@sha256:*" + s[j + len("ghcr.io/taipanbox/wardryx@sha256:*"):])')" \
+	"covered by two policies"
 run_case "verified-images: a manifest names a TAIPANBOX image with no signer row" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.3.0@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.3.0@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.4.0@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.4.0@sha256:")')" \
 	"has no signer row in BINDINGS"
 run_case "verified-images: the default install stops turning admission on" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -3585,12 +3597,344 @@ run_case "verified-images: a reason reworded (must pass)" pass \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("policy/image-policy.yaml", "# reason: the policy-db (postgres), an upstream image", "# reason: the policy store (postgres), an upstream image")')"
 
+# Keyryx is installed by default in every launcher, with --without-keyryx as the weaker opt-out (CLAUDE.md invariant 69).
+run_case "keyryx: Keyryx is off by default in deploy.sh" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("deploy.sh", "KEYRYX_INSTALL=\"$\x7bKEYRYX_INSTALL:-1\x7d\"", "KEYRYX_INSTALL=\"$\x7bKEYRYX_INSTALL:-0\x7d\"")')" \
+	"deploy.sh does not default KEYRYX_INSTALL to 1"
+run_case "keyryx: the opt-out flag is not parsed by the GCP launcher" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "    --without-keyryx)     KEYRYX_INSTALL=0; shift ;;\n", "")')" \
+	"does not parse --without-keyryx"
+run_case "keyryx: the install runs before the apply in deploy.sh" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("deploy.sh", ". \"$ROOT/lib/keyryx-install.sh\" || die \"no lib/keyryx-install.sh in $ROOT\"\n", ". \"$ROOT/lib/keyryx-install.sh\" || die \"no lib/keyryx-install.sh in $ROOT\"\nkeyryx_install_settle\n")')" \
+	"installs Keyryx before its last apply -k"
+run_case "keyryx: the record-seal stops signing through keyryx" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "value: keyryx\n", "value: keyrx\n")')" \
+	"does not set TRAILRYX_SIGNER=keyryx"
+run_case "keyryx: the record-seal pod is not labelled a consumer" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "keyryx-consumer: \"true\"", "keyryx-consumer: \"false\"")')" \
+	"does not label the pod keyryx-consumer"
+run_case "keyryx: the record-seal is given an attestation directory with no writer" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "value: /run/keyryx-client/credential\n", "value: /run/keyryx-client/credential\n                - name: TRAILRYX_WITNESS_ATTESTATIONS\n                  value: /var/lib/stack/attest\n")')" \
+	"sets TRAILRYX_WITNESS_ATTESTATIONS, which has no writer"
+run_case "keyryx: the custody policy grants trailryx nothing" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("keyryx/policy.json.tmpl", "\"grants\": \x7b\"trailryx-root\": [\"sign\"]\x7d", "\"grants\": \x7b\x7d")')" \
+	"does not grant trailryx-node the sign operation"
+run_case "keyryx: the wardryx patch rolls wardryx back to v2.3.0" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("keyryx/wardryx-patch.yaml", "ghcr.io/taipanbox/wardryx:v2.4.0@sha256:8a110dec235fd81c3907ed769d2c31a8e095767fbae4fa29316631eff5228e97", "ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543")')" \
+	"would roll wardryx back"
+run_case "keyryx: the witness is pointed at no stream directory" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "KEYRYX_WITNESS_EVENTS", "KEYRYX_WITNESS_EVENTSX")')" \
+	"does not point the witness at the shared stream directory"
+run_case "keyryx: the opt-out never removes the signers" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("deploy.sh", "  keyryx_remove_settle\n", "  true\n")')" \
+	"never calls keyryx_remove_settle"
+run_case "keyryx: the trailryx pin TODO is dropped from the library" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "TODO(trailryx-kid)", "TODO(kid)")')" \
+	"does not name the trailryx pin as a TODO"
+run_case "keyryx: the library sets the attestation variable" fail \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "  keyryx_patch_record_seal\n  printf", "  keyryx_patch_record_seal\n  export TRAILRYX_WITNESS_ATTESTATIONS=/x\n  printf")')" \
+	"sets TRAILRYX_WITNESS_ATTESTATIONS, which keyryx v0.1.1 never writes"
+run_case "keyryx: a comment reworded in the library (must pass)" pass \
+	'./scripts/keyryx-is-default.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "# Keyryx, installed by default:", "# Keyryx, on by default:")')"
+
+# The console's approver key and wardryx's copy of its public half (CLAUDE.md invariant 67).
+run_case "approver: the mint applies over an existing key" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("lib/approver-mint.sh", "k_ \"-n $APPROVER_NS create -f -\"", "k_ \"-n $APPROVER_NS apply -f -\"")')" \
+	"runs \`apply\` on the approver objects"
+run_case "approver: the key is written as SEC1, not PKCS#8" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("lib/approver-mint.sh", "pkcs8 -topk8 -nocrypt -out", "ec -out")')" \
+	"does not write the key as unencrypted PKCS#8"
+run_case "approver: the curve is not P-256" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("lib/approver-mint.sh", "ecparam -name prime256v1", "ecparam -name secp384r1")')" \
+	"does not make a P-256 key"
+run_case "approver: the console reads the key from another path" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "value: \"/run/approver/approver.pem\"", "value: \"/run/other/approver.pem\"")')" \
+	"GENARYX_APPROVER_KEY_FILE is"
+run_case "approver: the console's approver Secret becomes optional" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "secret: \x7b secretName: console-approver-key, defaultMode: 0440 \x7d", "secret: \x7b secretName: console-approver-key, defaultMode: 0440, optional: true \x7d")')" \
+	"is not the Secret console-approver-key at mode 0440"
+run_case "approver: wardryx sets the JWK set with no mount (a half state)" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n            - { name: WARDRYX_APPROVER_JWKS, value: \"/etc/wardryx/approver/approver-jwks.json\" }\n")')" \
+	"wardryx's approver wiring is half set"
+run_case "approver: wardryx reads the JWK set while the console is still v1.1.48" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n            - { name: WARDRYX_APPROVER_JWKS, value: \"/etc/wardryx/approver/approver-jwks.json\" }\n"); edit("manifests/10-planes.yaml", "            - { name: policy, mountPath: /etc/wardryx/policy, readOnly: true }\n", "            - { name: policy, mountPath: /etc/wardryx/policy, readOnly: true }\n            - { name: approver-jwks, mountPath: /etc/wardryx/approver, readOnly: true }\n"); edit("manifests/10-planes.yaml", "              - configMap: { name: wardryx-typed-hold, optional: true }\n", "              - configMap: { name: wardryx-typed-hold, optional: true }\n        - name: approver-jwks\n          configMap: { name: wardryx-approver-jwks }\n")')" \
+	"every approval would be refused"
+run_case "approver: the pending step is no longer named while wardryx is unwired" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "TODO(approver-jwks):", "TODO(approver-jwks-gone):")')" \
+	"names no TODO(approver-jwks)"
+run_case "approver: a comment reworded in the wiring (must pass)" pass \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "are NOT wired in v1.6.0.", "are not wired in v1.6.0.")')"
+run_case "approver: a cloud launcher never mints the approver key" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\napprover_mint_settle\n", "\n")')" \
+	"never calls approver_mint_settle"
+run_case "approver: WARDRYX_ALLOW_KEY_APPROVALS is set on wardryx" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" \x7d\n", "            - \x7b name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" \x7d\n            - \x7b name: WARDRYX_ALLOW_KEY_APPROVALS, value: \"1\" \x7d\n")')" \
+	"sets WARDRYX_ALLOW_KEY_APPROVALS"
+run_case "approver: wardryx is pinned before the approver statements" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.4.0@sha256:", "wardryx:v2.3.0@sha256:")')" \
+	"before the approver statements"
+run_case "approver: the mint rewrites a kept pair" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("lib/approver-mint.sh", "if [ \"$secret_there\" = yes ] && [ \"$cm_there\" = yes ]; then", "if false; then")')" \
+	"was not kept"
+run_case "approver: a comment reworded in the mint library (must pass)" pass \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("lib/approver-mint.sh", "# The console'"'"'s approver key, and wardryx'"'"'s copy", "# The console'"'"'s approver key, and the copy wardryx keeps")')"
+
+# hub/add-site.sh reads the Cloud's version from a pinned image reference (name:tag@sha256:<64 hex>).
+run_case "add-site: the reader takes the digest for the tag (the v1.5.3 defect)" fail \
+	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
+	"$(py 'edit("hub/add-site.sh", "REF=\"$\x7bIMAGE%%@*\x7d\"", "REF=\"$\x7bIMAGE\x7d\"")')" \
+	"reference, the form the manifests pin, is not read"
+run_case "add-site: a short digest is accepted" fail \
+	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
+	"$(py 'edit("hub/add-site.sh", "^sha256:[0-9a-f]\x7b64\x7d$", "^sha256:[0-9a-f]\x7b1,64\x7d$")')" \
+	"a short digest is not refused"
+run_case "add-site: a digest with no tag is read as a version" fail \
+	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
+	"$(py 'edit("hub/add-site.sh", "  *) TAG=\"\" ;;", "  *) TAG=\"v0.0.0\" ;;")')" \
+	"a digest with no tag is not refused"
+run_case "add-site: a comment reworded beside the reader (must pass)" pass \
+	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
+	"$(py 'edit("hub/add-site.sh", "# The manifests pin the image as name:tag@sha256", "# The manifests pin the image, as name:tag@sha256")')"
+
+# The record-seal fails closed: a failed pack ends the run non-zero, and only the known empty case exits 0 (CLAUDE.md invariant 71).
+run_case "record-seal: a failed pack exits zero again (the old fallback)" fail \
+	'./scripts/record-seal-fails-closed.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "exit \"$rc\"", "exit 0")')" \
+	"a failed pack exits 0"
+run_case "record-seal: the known empty case is matched loosely" fail \
+	'./scripts/record-seal-fails-closed.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "*\"$known\"*)", "*nothing*)")')" \
+	"a failed pack exits 0"
+run_case "record-seal: the known empty case stops exiting zero" fail \
+	'./scripts/record-seal-fails-closed.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "echo \"nothing sealed here to pack yet\"; exit 0 ;;", "echo \"nothing sealed here to pack yet\"; exit 1 ;;")')" \
+	"does not exit 0 with its line when nothing is sealed"
+run_case "record-seal: the CronJob is renamed away" fail \
+	'./scripts/record-seal-fails-closed.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "name: record-seal\n  namespace: agent-stack", "name: record-sea1\n  namespace: agent-stack")')" \
+	"has no record-seal CronJob"
+run_case "record-seal: a comment reworded in the pack step (must pass)" pass \
+	'./scripts/record-seal-fails-closed.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "# A failed pack ends the run non-zero, except", "# A failed pack ends the run non-zero, unless")')"
+
+# The witness reads the record it countersigns, and the record-seal reads the attestations, through shared volumes (CLAUDE.md invariant 70).
+run_case "witness-records: the witness stops reading the record" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "KEYRYX_WITNESS_RECORDS", "KEYRYX_WITNESS_RECORDSX")')" \
+	"does not read the record"
+run_case "witness-records: the witness mounts the record writable" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "            - name: trailryx-records\n              mountPath: /var/lib/stack/records\n              readOnly: true\n", "            - name: trailryx-records\n              mountPath: /var/lib/stack/records\n")')" \
+	"does not mount the trailryx-records claim read-only"
+run_case "witness-records: the record claim is not read only" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "            claimName: trailryx-records\n            readOnly: true\n", "            claimName: trailryx-records\n")')" \
+	"is not a read-only claim of trailryx-records"
+run_case "witness-records: the witness Deployment is no longer Recreate" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("strategy: { type: Recreate }"); open(p, "w").write(s[:i] + "strategy: { type: RollingUpdate }" + s[i + len("strategy: { type: Recreate }"):])')" \
+	"is not Recreate"
+run_case "witness-records: the witness init stops making the attestation directory" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "mkdir -p /var/lib/keyryx-witness/data/attestations && chmod 0750 /var/lib/keyryx-witness/data/attestations &&", "true &&")')" \
+	"does not make data/attestations"
+run_case "witness-records: the record-seal is not pinned to the witness node" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "topologyKey: kubernetes.io/hostname", "topologyKey: topology.kubernetes.io/zone")')" \
+	"not pod-affined to the witness"
+run_case "witness-records: the record-seal mounts the whole witness state" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "                  subPath: data/attestations\n", "")')" \
+	"without the subPath data/attestations"
+run_case "witness-records: the record-seal reads attestations it cannot read (mode 0600)" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "                - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE\n", "                - name: TRAILRYX_WITNESS_ATTESTATIONS\n                  value: /var/lib/stack/attestations\n                - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE\n")')" \
+	"sets TRAILRYX_WITNESS_ATTESTATIONS while"
+run_case "witness-records: the attestation blocker is dropped from the patch" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "TODO(keyryx-attest-mode)", "TODO(attest)")')" \
+	"does not name the attestation-mode blocker"
+run_case "witness-records: the opt-out keeps the pod affinity" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/record-seal-unpatch.yaml", "affinity: null", "affinity: {}")')" \
+	"does not remove the pod affinity"
+run_case "witness-records: the record-seal passes its own tenant" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "--seal-records 500 || true", "--tenant other --seal-records 500 || true")')" \
+	"passes --tenant"
+run_case "witness-records: a comment reworded in the record-seal patch (must pass)" pass \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "Applied by lib/keyryx-install.sh with `kubectl patch", "Applied by the library lib/keyryx-install.sh with `kubectl patch")')"
+
+# Workflow checkouts of other repositories are pinned to a full commit (CLAUDE.md invariant 68).
+run_case "workflow-checkouts: a checkout of another repository has no ref" fail \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "          ref: $\x7b\x7b env.QRYX_REF \x7d\x7d\n", "")')" \
+	"checkout of TAIPANBOX/qryx has no ref:"
+run_case "workflow-checkouts: a checkout reads a branch" fail \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "ref: $\x7b\x7b env.GENARYX_REF \x7d\x7d", "ref: main")')" \
+	"is not a full 40-hex commit"
+run_case "workflow-checkouts: a pinned commit is shortened" fail \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "QRYX_REF: e2e776d648aa28ffa9971bb21bc828335c86a89c", "QRYX_REF: e2e776d648aa28ff")')" \
+	"not a full 40-hex commit"
+run_case "workflow-checkouts: a sixth repository is checked out with no ref" fail \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'p = ".github/workflows/console-image.yml"; s = open(p).read(); open(p, "w").write(s + "\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          repository: TAIPANBOX/newtool\n          path: newtool\n")')" \
+	"checkout of TAIPANBOX/newtool has no ref:"
+run_case "workflow-checkouts: the env block that holds the commits is taken away" fail \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "env:\n  QRYX_REF:", "env_:\n  QRYX_REF:")')" \
+	"does not set"
+run_case "workflow-checkouts: a comment reworded in the workflow (must pass)" pass \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "# The commits this image is built from, in one place", "# The commits this image is built from, pinned in one place")')"
+
+# The CostCrew run ceiling and the crew's schedule (CLAUDE.md invariant 66). No default ships, the
+# figure is validated before anything is installed, and the crew CronJob is suspended until an operator resumes it.
+run_case "costcrew-ceiling: the validator accepts three decimals" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("budget/costcrew-ceiling.sh", "(\\.[0-9]\x7b1,2\x7d)?$", "(\\.[0-9]\x7b1,6\x7d)?$")')" \
+	"accepts '1.234'"
+run_case "costcrew-ceiling: zero is accepted" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("budget/costcrew-ceiling.sh", "  \"\") refuse", "  \"zz\") refuse")')" \
+	"accepts '0'"
+run_case "costcrew-ceiling: the GCP launcher does not validate the figure" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\"$ROOT/budget/costcrew-ceiling.sh\" check", "\"$ROOT/budget/costcrew-ceilingx.sh\" check")')" \
+	"does not validate the CostCrew ceiling"
+run_case "costcrew-ceiling: the AWS launcher never writes the ceiling" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "patch configmap stack-wiring --type merge", "patch configmapx stack-wiring --type merge")')" \
+	"never writes COSTCREW_CEILING"
+run_case "costcrew-ceiling: the crew reads the ceiling optionally" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "configMapKeyRef: \x7b name: stack-wiring, key: COSTCREW_CEILING \x7d", "configMapKeyRef: \x7b name: stack-wiring, key: COSTCREW_CEILING, optional: true \x7d")')" \
+	"or reads it optionally"
+run_case "costcrew-ceiling: the crew CronJob is suspended" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "  suspend: false\n", "  suspend: true\n")')" \
+	"does not run the crew on its schedule"
+run_case "costcrew-ceiling: a launcher says the crew ships suspended" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "runs on its schedule, bounded by", "ships suspended, bounded by")')" \
+	"says the crew is suspended"
+run_case "costcrew-ceiling: the README says the crew is suspended" fail \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("README.md", "runs every day at 05:57", "is suspended and runs every day at 05:57")')" \
+	"README.md says the crew is suspended"
+run_case "costcrew-ceiling: deploy.sh stops parsing the flag" fail \
+	'./scripts/deploy-flags-agree.sh' \
+	"$(py 'edit("deploy.sh", "    --costcrew-ceiling)   COSTCREW_CEILING_ARG=\"$2\"; shift 2 ;;\n", "")')" \
+	"does not parse --costcrew-ceiling"
+run_case "costcrew-ceiling: a comment reworded in the validator (must pass)" pass \
+	'./scripts/costcrew-ceiling-is-set.sh' \
+	"$(py 'edit("budget/costcrew-ceiling.sh", "# The ONE copy of the validation:", "# The one copy of the validation:")')"
+
+# The risk hold (CLAUDE.md invariant 65): with --typed-risk-signal wardryx holds a call with no signal, and
+# only with the flag. Each case takes one property away; the braces in the py bodies are \x7b and \x7d.
+run_case "risk-hold: the policy volume drops the optional hold source" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "              - configMap: \x7b name: wardryx-typed-hold, optional: true \x7d\n", "")')" \
+	"does not project the ConfigMap wardryx-typed-hold"
+run_case "risk-hold: the hold source is required, so the plane cannot start without a hold" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "wardryx-typed-hold, optional: true \x7d", "wardryx-typed-hold \x7d")')" \
+	"is not optional"
+run_case "risk-hold: wardryx reads one file again, not the policy directory" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "- \"/etc/wardryx/policy\"", "- \"/etc/wardryx/policy.yaml\"")')" \
+	"does not read its policy from the directory"
+run_case "risk-hold: the hold also holds read-only calls" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("typed/mode.sh", "values: [destructive, external_send, financial]", "values: [read_only, destructive, external_send, financial]")')" \
+	"holds on"
+run_case "risk-hold: the hold carries a key that could deny" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("typed/mode.sh", "min_probability: 0.8\\n        when_absent: hold", "min_probability: 0.8\\n        decision: deny\\n        when_absent: hold")')" \
+	"could deny"
+run_case "risk-hold: the hold is printed without the flag" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("typed/mode.sh", "[ \"$RISK\" = 1 ] && [ \"$EFFECTIVE\" != off ] || return 0", "true")')" \
+	"WITHOUT the flag prints a document"
+run_case "risk-hold: the hold verb is taken out of the dispatch" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("typed/mode.sh", "  hold)        emit_risk_hold ;;\n", "")')" \
+	"has no \`hold\` verb"
+run_case "risk-hold: deploy.sh never applies the hold" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("deploy.sh", "\"$ROOT/typed/mode.sh\" hold ${TYPED_ARGS", "\"$ROOT/typed/mode.sh\" holdx ${TYPED_ARGS")')" \
+	"deploy.sh: does not apply the hold ConfigMap"
+run_case "risk-hold: the AWS launcher applies the hold and restarts a different plane" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 's = open("cloud/aws/deploy-aws.sh").read(); i = s.index("could not restart wardryx to load the hold rule"); j = s.rindex("rollout restart deployment/wardryx", 0, i); open("cloud/aws/deploy-aws.sh", "w").write(s[:j] + "rollout restart deployment/otherplane" + s[j + len("rollout restart deployment/wardryx"):])')" \
+	"does not restart wardryx after the hold changes"
+run_case "risk-hold: the GCP launcher does not clear the hold without the flag" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "delete configmap wardryx-typed-hold --ignore-not-found", "delete configmap wardryx-typed-holdx --ignore-not-found")')" \
+	"does not clear wardryx-typed-hold"
+run_case "risk-hold: a comment reworded in the planes manifest (must pass)" pass \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "# A directory, not one file:", "# A directory, not a single file:")')"
+
 # Stream files are precreated (CLAUDE.md invariant 59, GOTCHAS 135). A writer that refuses to start
 # on a root-owned volume is the failure; each case below takes one property the gate judges away.
+#
+# 10-planes.yaml now holds two precreate-streams inits (wardryx and the tokenfuse gateway, GOTCHAS 150),
+# so the cases that edit one of them find it by the file its command creates, not by the first match.
 run_case "stream-precreate: wardryx loses its init container" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "- name: precreate-streams", "- name: precreate-streams-off")')" \
+	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/wardryx.ndjson"); j = s.rindex("- name: precreate-streams", 0, i); open("manifests/10-planes.yaml", "w").write(s[:j] + "- name: precreate-streams-off" + s[j + len("- name: precreate-streams"):])')" \
 	"Deployment wardryx -> /var/lib/stack/events/wardryx.ndjson: no precreate-streams"
+run_case "stream-precreate: tokenfuse-gateway loses its init container" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/tokenfuse.ndjson"); j = s.rindex("- name: precreate-streams", 0, i); open("manifests/10-planes.yaml", "w").write(s[:j] + "- name: precreate-streams-off" + s[j + len("- name: precreate-streams"):])')" \
+	"Deployment tokenfuse-gateway -> /var/lib/stack/events/tokenfuse.ndjson: no precreate-streams"
+run_case "stream-precreate: the gateway's init creates a file idryx does not load" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "f=/var/lib/stack/events/tokenfuse.ndjson;", "f=/var/lib/stack/events/tokenfuse-x.ndjson;")')" \
+	"does not create /var/lib/stack/events/tokenfuse.ndjson"
+run_case "stream-precreate: the gateway's init runs as root" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/tokenfuse.ndjson"); j = s.rindex("runAsUser: 10001", 0, i); open("manifests/10-planes.yaml", "w").write(s[:j] + "runAsUser: 0" + s[j + len("runAsUser: 10001"):])')" \
+	"the init container runs as root"
+run_case "stream-precreate: the gateway's init creates the file in another group" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/tokenfuse.ndjson"); j = s.rindex("runAsGroup: 10001", 0, i); open("manifests/10-planes.yaml", "w").write(s[:j] + "runAsGroup: 65532" + s[j + len("runAsGroup: 10001"):])')" \
+	"does not create the file in group 10001"
+run_case "stream-precreate: the gateway's init leaves the file group-readable (umask 022)" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/tokenfuse.ndjson"); j = s.index("umask 027", i); open("manifests/10-planes.yaml", "w").write(s[:j] + "umask 022" + s[j + len("umask 027"):])')" \
+	"does not set the file to 0640"
 run_case "stream-precreate: heraldyx loses the init that creates its journal" fail \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/45-heraldyx.yaml", "- name: precreate-streams", "- name: precreate-streams-off")')" \
@@ -3629,7 +3973,7 @@ run_case "stream-precreate: the init mounts a different volume than the file liv
 	"does not mount the volume journal"
 run_case "stream-precreate: the init image is not pinned by digest" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "- name: precreate-streams\n          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e", "- name: precreate-streams\n          image: busybox:1.36")')" \
+	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/wardryx.ndjson"); j = s.rindex("image: busybox@sha256:", 0, i); k = s.index("\n", j); open("manifests/10-planes.yaml", "w").write(s[:j] + "image: busybox:1.36" + s[k:])')" \
 	"does not run busybox by digest"
 run_case "stream-precreate: the object the table names is renamed away" fail \
 	'./scripts/stream-files-are-precreated.sh' \

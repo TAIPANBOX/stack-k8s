@@ -1,11 +1,15 @@
 {
   "version": 1,
   "keys": [
-    {"name": "wardryx-approval", "alg": "ES256"}
+    {"name": "wardryx-approval", "alg": "ES256"},
+    {"name": "trailryx-root", "alg": "ES256"}
   ],
   "consumers": [
     {"name": "wardryx",
      "auth": {"key_digest": "sha256:@WARDRYX_DIGEST@"},
-     "grants": {"wardryx-approval": ["sign"]}}
+     "grants": {"wardryx-approval": ["sign"]}},
+    {"name": "trailryx-node",
+     "auth": {"key_digest": "sha256:@TRAILRYX_DIGEST@"},
+     "grants": {"trailryx-root": ["sign"]}}
   ]
 }

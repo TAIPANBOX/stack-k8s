@@ -186,6 +186,7 @@ spec:
             - >-
               mkdir -p /var/lib/keyryx-witness/data && chmod 0700 /var/lib/keyryx-witness/data &&
               mkdir -p /var/lib/keyryx-witness/alerts &&
+              mkdir -p /var/lib/keyryx-witness/data/attestations && chmod 0750 /var/lib/keyryx-witness/data/attestations &&
               cp /in/root.key /run/keyryx/root.key && chmod 0400 /run/keyryx/root.key
           securityContext:
             runAsNonRoot: true
@@ -217,6 +218,11 @@ spec:
               value: /var/lib/keyryx-witness/alerts/keyryx.ndjson
             - name: KEYRYX_WITNESS_ADDR
               value: 0.0.0.0:4341
+            # The record the witness countersigns: tenant|directory, the tenant trailryx-node seals as by default
+            # (acme) and the directory it seals into, read-only (CLAUDE.md invariant 70). The witness writes its
+            # attestation for each sealed root under KEYRYX_WITNESS_DATA/attestations (keyryx v0.1.1).
+            - name: KEYRYX_WITNESS_RECORDS
+              value: "acme|/var/lib/stack/records"
           ports:
             - name: http
               containerPort: 4341
@@ -243,6 +249,11 @@ spec:
             - name: keyryx-key-tmp
               mountPath: /run/keyryx
               readOnly: true
+            # The trailryx record, read-only. RWO (ReadWriteOnce): the witness shares it only with pods on its own
+            # node, which is why the record-seal is pod-affined to the witness (record-seal-patch.yaml, invariant 70).
+            - name: trailryx-records
+              mountPath: /var/lib/stack/records
+              readOnly: true
       volumes:
         - name: keyryx-witness-root
           secret:
@@ -256,6 +267,10 @@ spec:
         - name: events
           persistentVolumeClaim:
             claimName: stack-events
+        - name: trailryx-records
+          persistentVolumeClaim:
+            claimName: trailryx-records
+            readOnly: true
 ---
 apiVersion: v1
 kind: Service

@@ -4691,3 +4691,19 @@ Fixed: `hostkeys_console_fingerprints` removes every carriage return before anyt
 
 Fixed in the three installers: the name is read into `AGENT_NAME` before the pipeline, and each agent is waited for by that name, with a stop after 200 s that says it did not register. Gate: `scripts/stdin-is-read-once.sh`, red first on the unfixed tree with six problems; five teeth cases.
 
+
+## 150. idryx loads tokenfuse.ndjson at start, but the gateway creates that file only on its first call, so idryx restarted until traffic arrived
+
+**Ours, and fixed.** On the GCP live run of 2026-10-19, idryx restarted three times with `read tokenfuse.ndjson: no such file` while the rest of the stack came up. idryx's Deployment starts with `--load tokenfuse:/var/lib/stack/events/tokenfuse.ndjson`, and the gateway (tokenfuse, a Rust binary) creates its event stream when it writes the first event, not when it starts. On a cluster with no call through the gateway yet, the file does not exist, idryx exits, and the pod restarts. Invariant 59 precreates the streams of the Go writers, and this writer is not one of them, so nothing made the file.
+
+Fixed in the gateway pod: an init container `precreate-streams`, busybox pinned by digest, runs as the gateway's own uid 10001 and creates `tokenfuse.ndjson` only when it is absent, with `umask 027`. The file is therefore 0640 in group 10001, the gateway's own fsGroup, and idryx's read path is unchanged. The gate `scripts/stream-files-are-precreated.sh` has a row for the gateway, and `scripts/gates-have-teeth.sh` has five cases for it: the init removed, the wrong file, a root uid, a wrong group and a wider umask.
+
+Not run on a cluster. The gate and its teeth show the manifest creates the file; that idryx now starts on a fresh volume with no traffic is what the next live run has to show.
+
+## 151. The record-seal's fallback exited 0 whenever `trailryx-node read --pack` failed, so a pack that never sealed read as a quiet night
+
+**Ours, and fixed.** The record-seal command ran `trailryx-node read --pack` and, on any failure, printed "nothing sealed here to pack yet" and exited 0. The fallback was written for one case, an empty ledger, and it caught every other failure too: a permission error on the records volume, a signature that could not be read, a pack that could not be written. The job then reported Complete with nothing sealed, the same shape as GOTCHAS 90. Found while wiring the Keyryx witness (invariant 70), where the one way to fail was the one this fallback hid.
+
+Fixed in `manifests/40-routines-and-secrets.yaml`: the command keeps trailryx-node's output and status. Only the line trailryx-node prints for an empty ledger exits 0, and that run does not verify. Any other failure exits with trailryx-node's own status and prints its reason. The gate `scripts/record-seal-fails-closed.sh` runs the script under stand-in binaries, and five cases in `scripts/gates-have-teeth.sh` cover it. On the unfixed manifest the gate failed on a failed pack that exited 0.
+
+Not run on a cluster. The empty-case line is trailryx-node v1.4.0's wording, read from its tag, not from the image. A later release that changes the wording makes the job fail loudly until the gate and the manifest carry the new line.

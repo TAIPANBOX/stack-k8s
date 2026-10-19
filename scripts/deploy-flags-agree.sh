@@ -101,6 +101,7 @@ FLAGS=$(cat <<'ROWS'
 --firewall|TOKENFUSE_FIREWALL|set env
 --pii-mode|TOKENFUSE_DLP_PII|set env
 --pii-mode|TOKENFUSE_MCP_DLP_PII|set env
+--costcrew-ceiling|COSTCREW_CEILING|patch
 ROWS
 )
 

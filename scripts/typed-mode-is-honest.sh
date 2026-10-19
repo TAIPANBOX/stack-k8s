@@ -61,7 +61,8 @@
 #      NetworkPolicy edges broker -> proxy -> wardryx name exactly one peer on
 #      one port and nothing selects the proxy for ingress but the broker; the
 #      model egress policy selects the proxy too, and no wider; no
-#      hold_if_signal policy is seeded anywhere; and every render validates
+#      hold_if_signal policy is seeded in the base manifests (the one hold is the flag's own document,
+#      CLAUDE.md invariant 65, held by scripts/risk-hold-follows-the-flag.sh); and every render validates
 #      strictly;
 #  15. the flag is refused when typryx is not deployed, names itself, and says
 #      what it does when accepted; every launcher parses and forwards it.
@@ -675,9 +676,9 @@ for label, args in (("stub", ["--with-typed"]), ("jev", JEV), ("own-model", OWN)
     r = run("check", *args, *RISK)
     err = r.stderr.lower()
     check("15 risk signal says what it does", r.returncode == 0 and "every tool call" in err and "fails closed" in err
-          and "no policy is seeded" in err,
+          and "holds a brokered tool call that arrives with no risk signal" in err,
           f"{label}: `check --typed-risk-signal` exited {r.returncode} and did not say that the broker now asks about "
-          "every tool call, fails closed, and that no policy is seeded")
+          "every tool call, fails closed, and that wardryx holds a call with no risk signal")
     check("15 risk signal says what it does", "risk signal" not in run("check", *args).stderr.lower(),
           f"{label}: the notice talks about a risk signal nobody asked for")
     check("15 risk signal leaves the mode alone",

@@ -141,8 +141,9 @@
 #   3. `typryx-egress-model`, when the mode has one, widened to select the proxy
 #      pod as well, so the proxy reaches exactly what typryx reaches.
 #
-# It seeds NO policy: nothing is held until an operator writes a `hold_if_signal`
-# rule (README, "A typed risk signal"). It is refused when typryx is not deployed:
+# It also seeds one policy rule, through the `hold` verb (CLAUDE.md invariant 65): wardryx holds a
+# brokered tool call that arrives with no risk signal, and a signal can hold only, never deny. Without
+# the flag, `hold` prints nothing. It is refused when typryx is not deployed:
 # there is nothing to ask. Without the flag every render is byte for byte what it
 # was before the flag existed, which scripts/typed-mode-is-honest.sh holds.
 set -euo pipefail
@@ -206,8 +207,8 @@ while [ $# -gt 0 ]; do
 done
 
 case "$verb" in
-  check|render|secrets|has-secrets|mode|door-secrets) ;;
-  *) refuse "usage: typed/mode.sh check|render|secrets|has-secrets|mode|door-secrets [flags]" ;;
+  check|render|hold|secrets|has-secrets|mode|door-secrets) ;;
+  *) refuse "usage: typed/mode.sh check|render|hold|secrets|has-secrets|mode|door-secrets [flags]" ;;
 esac
 if [ "$verb" != door-secrets ] && { [ "$HAVE_GIVEN" = 1 ] || [ -n "$DOOR_DOMAIN" ]; }; then
   refuse "--have and --trust-domain only go with door-secrets"
@@ -486,6 +487,18 @@ render() {
   # by emit_mode through manifests/56; nothing to add here for the stub, which has no egress.
 }
 
+# The risk hold (CLAUDE.md invariant 65). With --typed-risk-signal, wardryx holds a brokered tool call that
+# arrives with no action.risk_class signal. The rule is a file wardryx reads once, at start, from the
+# optional ConfigMap wardryx-typed-hold that manifests/10-planes.yaml projects into its policy directory.
+# The launchers apply this document only with the flag, restart wardryx after it, and clear the
+# ConfigMap without the flag. Printed by `hold` alone, never by `render`, so the render gate holds.
+emit_risk_hold() {
+  [ "$RISK" = 1 ] && [ "$EFFECTIVE" != off ] || return 0
+  printf -- '---\n# wardryx holds a tool call that arrives with no action.risk_class signal, for a person to approve\n# (CLAUDE.md invariant 65). A signal can only hold: this rule never denies.\n'
+  printf 'apiVersion: v1\nkind: ConfigMap\nmetadata: { name: wardryx-typed-hold, namespace: %s, labels: { app: wardryx, plane: policy } }\ndata:\n  typed-risk-hold.yaml: |\n' "$NS"
+  printf '    - name: typed-risk-hold\n      target: "agent://*"\n      hold_if_signal:\n        name: action.risk_class\n        values: [destructive, external_send, financial]\n        min_probability: 0.8\n        when_absent: hold\n'
+}
+
 secrets() {
   case "$EFFECTIVE" in
     jev) emit_secret typryx-jev-key "$JEV_KEY_FILE" ;;
@@ -579,9 +592,9 @@ notice() {
   if [ "$RISK" = 1 ]; then
     printf 'typed: risk signal ON (--typed-risk-signal). typryx'"'"'s wardryx-proxy now sits between tokenfuse'"'"'s MCP broker and wardryx (manifests/56), answering from the same backend as typryx. The LLM gateway keeps asking wardryx directly.\n' >&2
     printf '       The broker asks wardryx about EVERY tool call on every cluster (invariant 51), now through the proxy, and fails closed: while wardryx or the proxy is down, tool calls through the broker are refused.\n' >&2
-    printf '       No policy is seeded. Nothing is held until you write a hold_if_signal rule (README "A typed risk signal"); a rule that would deny on a signal is refused by wardryx.\n' >&2
+    printf '       wardryx holds a brokered tool call that arrives with no risk signal, for a person to approve (the hold rule, CLAUDE.md invariant 65). A signal that answers holds only destructive, external_send and financial at 0.8 or more, and never denies.\n' >&2
     case "$EFFECTIVE" in
-      stub) printf '       The stub backend answers every call the same way and its probabilities mean nothing: a hold_if_signal rule on them would hold on noise.\n' >&2 ;;
+      stub) printf '       The stub backend answers every call the same way and its probabilities mean nothing: the hold acts on that noise for each call the stub classes as destructive, external_send or financial.\n' >&2 ;;
       jev)  printf '       Each tool call that carries a name and whole arguments is one Jev ask, a paid call, and the tool name, arguments and target leave the cluster; the proxy has its own hourly cap (TYPRYX_MAX_CALLS_PER_HOUR, default 1000).\n' >&2 ;;
       own-model) printf '       Each tool call that carries a name and whole arguments is one ask of your model; the tool name, arguments and target go to it.\n' >&2 ;;
     esac
@@ -599,6 +612,7 @@ notice() {
 case "$verb" in
   check)       notice ;;
   render)      render ;;
+  hold)        emit_risk_hold ;;
   secrets)
     [ ! -t 1 ] || refuse "refusing to print a Secret to a terminal: pipe it into 'kubectl apply -f -' and nowhere else"
     secrets ;;

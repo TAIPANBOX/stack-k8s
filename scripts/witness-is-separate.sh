@@ -79,14 +79,22 @@ if uid(custody) == 0 or uid(witness) == 0:
 for label, d in (("custody", custody), ("witness", witness)):
     for m in re.finditer(r"claimName:\s*(\S+)", d):
         claim = m.group(1)
+        if claim == "trailryx-records" and label == "witness":
+            # The one claim the witness adds, read only: the record it countersigns (CLAUDE.md invariant 70).
+            continue
         if claim not in ("keyryx-state", "keyryx-witness-state", "stack-events"):
             bad.append(f"{label} mounts an unexpected claim {claim}")
+        if claim == "trailryx-records":
+            bad.append(f"{label} mounts the trailryx record; only the witness may, and read only")
 if "claimName: keyryx-witness-state" in custody or "claimName: keyryx-state" in witness:
     bad.append("a role mounts the other role's state claim")
 if "secretName: keyryx-witness-root" in custody or "secretName: keyryx-root" in witness:
     bad.append("a role mounts the other role's root key Secret")
 if "claimName: stack-events" in custody:
     bad.append("custody mounts the event streams")
+rec = re.search(r"-\s*name:\s*trailryx-records\s*\n\s*mountPath:[^\n]*\n(\s*readOnly:\s*true)?", witness)
+if rec is None or rec.group(1) is None:
+    bad.append("the witness mounts the trailryx record without readOnly: true")
 
 # The witness's stack-events mount must be read only. Read the volumeMount that
 # names the events volume and look for readOnly: true in the lines after it.

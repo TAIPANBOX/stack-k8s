@@ -54,9 +54,8 @@
 # `--with-finops` additionally builds and applies CostCrew, the finops plane:
 # the bill, worked by a crew of agents. It is off by default because it is a
 # whole plane somebody may not want, not because it is dangerous. The half of
-# it that CAN spend on a model account ships suspended, so this flag applies a
-# console and starts no meter; see manifests/49-costcrew.yaml for how to run
-# the crew deliberately afterwards.
+# it that CAN spend on a model account runs on its schedule, bounded by
+# --costcrew-ceiling and the console's cadence switch; see manifests/49-costcrew.yaml.
 #
 # `--with-typed` additionally applies typryx, the typed-answer plane: it answers a
 # typed question (a choice, a score, a yes or no) with a probability, and
@@ -126,8 +125,9 @@ esac
 ALERT_CONSOLE_DEFAULT="http://localhost:17420"
 ALERT_CONSOLE_URL="${ALERT_CONSOLE_URL:-}"
 # The finops plane, off by default. It is a whole plane somebody may simply not
-# want, and the half of it that can spend money ships suspended, so the flag
-# carries the plane and never the spending. See manifests/49-costcrew.yaml.
+# want, and the half of it that can spend money runs only once cadence is on and a
+# ceiling is set (--costcrew-ceiling), so the flag carries the plane and the spending
+# stays off until then. See manifests/49-costcrew.yaml.
 WITH_FINOPS="${WITH_FINOPS:-0}"
 # The typed-answer plane, off by default: a whole plane somebody may simply
 # not want. Unlike WITH_FINOPS nothing behind it can spend money.
@@ -157,6 +157,10 @@ TRUST_DOMAIN="${TRUST_DOMAIN:-}"
 # Set, it is checked by budget/ceiling.sh before anything is installed and applied AFTER
 # the kustomization, the only position where it sticks (the same rule as the trust domain).
 RUN_BUDGET_CEILING="${RUN_BUDGET_CEILING:-}"
+# The CostCrew run ceiling, COSTCREW_CEILING in stack-wiring (CLAUDE.md invariant 66). No default ships.
+COSTCREW_CEILING_ARG="${COSTCREW_CEILING_ARG:-}"
+# Keyryx is part of every install (CLAUDE.md invariant 69). 0 turns its wiring off: the weaker setting.
+KEYRYX_INSTALL="${KEYRYX_INSTALL:-1}"
 # The agent firewall's mode on the gateway (TokenFuse invariants 25 to 27 and 93, CLAUDE.md
 # invariant 37). Empty leaves 10-planes.yaml's enforce. Set, it is checked by firewall/mode.sh
 # before anything is installed and applied AFTER the kustomization, the only position where it
@@ -204,6 +208,8 @@ while [ $# -gt 0 ]; do
     --typed-risk-signal)    TYPED_RISK_SIGNAL=1; shift ;;
     --trust-domain)  TRUST_DOMAIN="$2"; shift 2 ;;
     --run-budget-ceiling) RUN_BUDGET_CEILING="$2"; shift 2 ;;
+    --costcrew-ceiling)   COSTCREW_CEILING_ARG="$2"; shift 2 ;;
+    --without-keyryx)     KEYRYX_INSTALL=0; shift ;;
     --firewall) FIREWALL_MODE="$2"; shift 2 ;;
     --pii-mode) PII_MODE="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
@@ -366,6 +372,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 . "$ROOT/lib/gen.sh" || die "no lib/gen.sh in $ROOT"
 . "$ROOT/lib/policy-store.sh" || die "no lib/policy-store.sh in $ROOT"
 . "$ROOT/lib/identity-mint.sh" || die "no lib/identity-mint.sh in $ROOT"
+. "$ROOT/lib/approver-mint.sh" || die "no lib/approver-mint.sh in $ROOT"
+. "$ROOT/lib/keyryx-install.sh" || die "no lib/keyryx-install.sh in $ROOT"
 . "$ROOT/lib/upstream-key.sh" || die "no lib/upstream-key.sh in $ROOT"
 
 # ---- the typed data mode, refused BEFORE anything is installed ---------------
@@ -393,6 +401,12 @@ TYPED_EFFECTIVE="$("$ROOT/typed/mode.sh" mode ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"
 if [ -n "$RUN_BUDGET_CEILING" ]; then
   "$ROOT/budget/ceiling.sh" check "$RUN_BUDGET_CEILING" \
     || die "the run-budget ceiling was refused, so nothing has been installed yet."
+fi
+
+# ---- the CostCrew run ceiling, refused BEFORE anything is installed (CLAUDE.md invariant 66) -----
+if [ -n "$COSTCREW_CEILING_ARG" ]; then
+  "$ROOT/budget/costcrew-ceiling.sh" check "$COSTCREW_CEILING_ARG" \
+    || die "the CostCrew ceiling was refused, so nothing has been installed yet."
 fi
 
 # ---- the agent firewall's mode, refused BEFORE anything is installed -------------
@@ -760,6 +774,14 @@ say "client keys: the gateway answers no caller without one"
 vouchryx_mint_settle
 static_keys_settle
 identity_mint_settle "$ROOT/agent-key"
+# The console's approver key and wardryx's public copy (CLAUDE.md invariant 67), minted once, after the apply.
+approver_mint_settle
+# Keyryx (CLAUDE.md invariant 69): on by default. --without-keyryx removes its wiring, which is the weaker setting.
+if [ "$KEYRYX_INSTALL" = 1 ]; then
+  keyryx_install_settle
+else
+  keyryx_remove_settle
+fi
 
 # The run-budget ceiling, set AFTER the kustomization for the reason the trust domain is:
 # 10-planes.yaml declares TOKENFUSE_MAX_RUN_BUDGET_USD (5.00), and `apply -k` puts the
@@ -774,6 +796,14 @@ if [ -n "$RUN_BUDGET_CEILING" ]; then
     || die "could not set the run-budget ceiling on the gateway"
 fi
 
+# The CostCrew run ceiling, written to stack-wiring AFTER the kustomization (CLAUDE.md invariant 66). The
+# crew CronJob reads the key when a job starts. Empty leaves the key as the operator last set it.
+if [ -n "$COSTCREW_CEILING_ARG" ]; then
+  say "CostCrew ceiling: $COSTCREW_CEILING_ARG USD per crew run (written after apply, which is what makes it stick)"
+  k_ "-n agent-stack patch configmap stack-wiring --type merge -p '{\"data\":{\"COSTCREW_CEILING\":\"$COSTCREW_CEILING_ARG\"}}'" >/dev/null \
+    || die "could not set COSTCREW_CEILING in stack-wiring"
+fi
+
 # The agent firewall's mode, set AFTER the kustomization for the reason the run-budget ceiling
 # is: 10-planes.yaml declares TOKENFUSE_FIREWALL=enforce, and `kubectl apply -k` puts the declared
 # value back over anything set before it or by hand. Without the flag nothing is set and the
@@ -786,10 +816,10 @@ fi
 
 # The finops plane, applied from its own file for the same reason heraldyx and
 # scopyx are: it is not in the kustomization, so it arrives only when somebody
-# asked for it. Its crew CronJob ships suspended, so this applies a plane and
-# starts no spending.
+# asked for it. Its crew CronJob runs on its schedule, and each run does nothing until
+# cadence is on, so this applies a plane and starts no spending.
 if [ "$WITH_FINOPS" = 1 ]; then
-  say "finops: applying the CostCrew plane (its crew stays suspended)"
+  say "finops: applying the CostCrew plane (its crew runs on its schedule, bounded by --costcrew-ceiling)"
   k_ "apply -f /root/stack-k8s/manifests/49-costcrew.yaml"
 fi
 
@@ -825,6 +855,23 @@ if [ "$TYPED_EFFECTIVE" != off ]; then
       || die "could not apply the typed-answer key Secret"
   fi
   "$ROOT/typed/mode.sh" render ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} | k_ "apply -f -"
+  # The hold rule (CLAUDE.md invariant 65), with the flag only. wardryx reads its policy once, at start,
+  # so the plane is restarted to load it.
+  if [ "$TYPED_RISK_SIGNAL" = 1 ]; then
+    "$ROOT/typed/mode.sh" hold ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} | k_ "apply -f -" >/dev/null \
+      || die "could not apply the wardryx hold rule"
+    k_ "-n agent-stack rollout restart deployment/wardryx" >/dev/null \
+      || die "could not restart wardryx to load the hold rule"
+  fi
+fi
+
+# Without the flag, a hold an earlier run with the flag left behind is removed, and wardryx restarted only
+# when there was one to remove (CLAUDE.md invariant 65).
+if [ "$TYPED_RISK_SIGNAL" != 1 ]; then
+  if [ -n "$(k_ "-n agent-stack delete configmap wardryx-typed-hold --ignore-not-found -o name")" ]; then
+    k_ "-n agent-stack rollout restart deployment/wardryx" >/dev/null \
+      || die "could not restart wardryx after removing the hold rule"
+  fi
 fi
 
 # Tell the console which origin its operator will actually arrive from, before

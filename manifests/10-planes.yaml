@@ -179,7 +179,16 @@ spec:
       # against the key set vouchryx serves, so the gateway fetches that set before it starts, into a memory
       # volume, and waits if vouchryx is not up yet. Public material, one connection, admitted by the
       # NetworkPolicy in 54-delegation.yaml from this pod alone. The same key set is what wardryx polls (invariant 63).
+      #
+      # precreate-streams (CLAUDE.md invariant 59, GOTCHAS 150): idryx loads tokenfuse.ndjson at start, and the
+      # gateway creates that file only on its first call. Made here, by the gateway's own uid, mode 0640 in the
+      # bus group, so idryx starts and reads an empty stream on a quiet cluster. Only when absent.
       initContainers:
+        - name: precreate-streams
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "f=/var/lib/stack/events/tokenfuse.ndjson; if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; ls -ln /var/lib/stack/events"]
+          volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
         - name: fetch-vouchryx-jwks
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
           securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
@@ -592,7 +601,7 @@ spec:
           volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543
+          image: ghcr.io/taipanbox/wardryx:v2.4.0@sha256:8a110dec235fd81c3907ed769d2c31a8e095767fbae4fa29316631eff5228e97
           imagePullPolicy: IfNotPresent
           # Single-dash flags, exactly as up.sh calls it.
           args:
@@ -602,7 +611,7 @@ spec:
             - "-events"
             - "/var/lib/stack/events/wardryx.ndjson"
             - "-policy"
-            - "/etc/wardryx/policy.yaml"
+            - "/etc/wardryx/policy"
           env:
             # Durable policy + approval store (15-policy-store.yaml). Without
             # it wardryx keeps both in MEMORY, so a pod restart silently drops
@@ -637,6 +646,12 @@ spec:
             - { name: WARDRYX_AGENT_TOKEN_JWKS_URL, value: "http://vouchryx:4310/.well-known/jwks.json" }
             - { name: WARDRYX_AGENT_TOKEN_REVOCATION_URL, value: "http://vouchryx:4310/v1/revocations" }
             - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: "http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200" }
+            # The console's approver public keys (CLAUDE.md invariant 67) are NOT wired in v1.6.0. With
+            # WARDRYX_APPROVER_JWKS set, wardryx requires a statement the console signed on every grant and denial,
+            # and the console pinned here (v1.1.48) sends none, so every approval would be refused. TODO(approver-jwks):
+            # v1.6.1 sets WARDRYX_APPROVER_JWKS=/etc/wardryx/approver/approver-jwks.json, mounts the ConfigMap
+            # wardryx-approver-jwks read only at /etc/wardryx/approver (not optional), and pins genaryx-console:v1.6.0
+            # by digest. Never WARDRYX_ALLOW_KEY_APPROVALS.
           ports: [{ name: http, containerPort: 8090 }]
           # Stop taking traffic before stopping: the endpoint leaves the
           # Service while this sleeps. Without it a rolling update refused 3
@@ -644,7 +659,10 @@ spec:
           lifecycle: { preStop: { sleep: { seconds: 5 } } }
           volumeMounts:
             - { name: events, mountPath: /var/lib/stack/events }
-            - { name: policy, mountPath: /etc/wardryx, readOnly: true }
+            # A directory, not one file: the starter policy and, only with --typed-risk-signal, the hold
+            # that holds a brokered call with no risk signal (CLAUDE.md invariant 65). wardryx reads every
+            # *.yaml in it once, at start.
+            - { name: policy, mountPath: /etc/wardryx/policy, readOnly: true }
           # /healthz, not /readyz, on purpose. wardryx 1.0.3's /readyz answers 503
           # while its policy store is unreachable, but POST /v1/decide does not use
           # the store and keeps answering. A readiness probe on /readyz would take
@@ -664,8 +682,14 @@ spec:
       volumes:
         - name: events
           persistentVolumeClaim: { claimName: stack-events }
+        # The policy directory. The starter ConfigMap is always there; the hold ConfigMap is optional, and
+        # the typed launcher creates it only with --typed-risk-signal (CLAUDE.md invariant 65). A projected
+        # volume is how two ConfigMaps become one directory.
         - name: policy
-          configMap: { name: wardryx-policy }
+          projected:
+            sources:
+              - configMap: { name: wardryx-policy }
+              - configMap: { name: wardryx-typed-hold, optional: true }
 ---
 apiVersion: v1
 kind: Service

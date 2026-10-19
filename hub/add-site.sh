@@ -49,7 +49,20 @@ fi
 IMAGE="$(kubectl -n "$NS" get deployment tokenfuse-cloud \
   -o jsonpath='{.spec.template.spec.containers[?(@.name=="cloud")].image}' 2>/dev/null || true)"
 [ -n "$IMAGE" ] || die "no tokenfuse-cloud Deployment in $NS. Is the stack up? kubectl apply -k manifests/"
-TAG="${IMAGE##*:}"
+# The manifests pin the image as name:tag@sha256:<64 hex> (CLAUDE.md invariant 58), so the reference has a digest
+# after its tag. The digest has a colon of its own, and a registry may carry a port, so the tag is read from the
+# last path segment of the name, and only after the digest is set aside. A digest that is not 64 hex is refused.
+REF="${IMAGE%%@*}"
+if [ "$REF" != "$IMAGE" ]; then
+  DIGEST="${IMAGE#*@}"
+  printf '%s' "$DIGEST" | grep -qE '^sha256:[0-9a-f]{64}$' \
+    || die "tokenfuse-cloud's image ($IMAGE) carries a digest that is not a sha256 digest of 64 hex"
+fi
+LAST="${REF##*/}"
+case "$LAST" in
+  *:*) TAG="${LAST##*:}" ;;
+  *) TAG="" ;;
+esac
 case "$TAG" in
   v*) VER="${TAG#v}" ;;
   *) die "tokenfuse-cloud's image ($IMAGE) has no vX.Y.Z tag this script can read" ;;

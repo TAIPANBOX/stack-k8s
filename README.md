@@ -97,11 +97,11 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 
 CostCrew reads the bills and works out what to do about them. It is off by default and is not in the default apply. `--with-finops` on `cloud/aws/deploy-aws.sh` and `cloud/gcp/deploy-gcp.sh` applies `49-costcrew.yaml`; on Hetzner (`deploy.sh`) it is applied by hand with `kubectl apply -f manifests/49-costcrew.yaml`.
 
-Once applied, the crew CronJob `costcrew-crew` runs every day at 05:57 and is **not suspended**. Firing is not spending: each run does only the work that the console's cadence has marked due (`-due`). With cadence off, which is the default, a run exits 2, creates nothing and spends nothing.
+Once applied, the crew CronJob `costcrew-crew` runs every day at 05:57. Each run does only the work that the console's cadence has marked due (`-due`), and the run's ceiling is the figure set with `--costcrew-ceiling`. With cadence off, which is the default, a run exits 2, creates nothing and spends nothing.
 
 When cadence is on and a run has work, the crew calls a model through the gateway, with the crew's own client key from the optional `costcrew-client-key` Secret, minted with the gateway's keys. The gateway holds the provider key, and the provider bills it. Without the client key the run refuses at the call and names the missing variable. An analyst hired with the OpenRouter engine is refused, because no gateway route for OpenRouter exists in this stack yet. Two caps bound each run, and the smaller one applies: `COSTCREW_CEILING`, which the operator sets in `stack-wiring` (no value ships, and the pod does not start until the key exists), and the console's own `cadence.ceiling_cents`, set at the console's `/cadence` page.
 
-To switch it on, the deploy has minted `costcrew-client-key` with the gateway's keys, set `COSTCREW_CEILING` in `stack-wiring`, then turn cadence on and set its ceiling at `/cadence`. To switch it off, turn cadence off at `/cadence`. Every deliverable the crew writes is a draft marked live, which only a person's stamp publishes.
+To switch it on, the deploy has minted `costcrew-client-key` with the gateway's keys, set the ceiling with `--costcrew-ceiling USD` on the deploy (or `COSTCREW_CEILING` in `stack-wiring`), turn cadence on and set its ceiling at `/cadence`, To switch it off, turn cadence off at `/cadence`. Every deliverable the crew writes is a draft marked live, which only a person's stamp publishes.
 
 ## Keys stay yours
 
@@ -622,9 +622,12 @@ write. All of it is off by default.
   and target leave the cluster; the proxy has its own hourly cap
   (`TYPRYX_MAX_CALLS_PER_HOUR`, default 1000). The `stub` backend's probabilities
   mean nothing: do not write a rule against them.
-- **What holds nothing.** No policy is seeded. Until you write a `hold_if_signal`
-  rule the signal is added and ignored. A rule can turn an allow into a hold for a
-  person and nothing else; wardryx refuses a rule that would deny on a signal.
+- **What holds, and what does not.** With this flag the policy plane also holds a brokered
+  tool call that arrives with no risk signal, for a person to approve (CLAUDE.md invariant
+  65). A signal that answers holds only `destructive`, `external_send` and `financial` at 0.8
+  or more; a signal never denies, and wardryx refuses a rule that would. Without the flag no
+  hold exists, and the signal, where there is one, is added and ignored. The stub's
+  probabilities are noise, so the hold acts on that noise too.
 
 An example policy, written once, through the policy API (read the key from the
 cluster, reach wardryx with a port-forward, since the namespace is default-deny):
