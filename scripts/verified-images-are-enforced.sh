@@ -153,6 +153,21 @@ if signed:
         if expr != SUBJECT_RE:
             bad.append("taipanbox-signed subjectRegExp is not the release-workflow expression recorded in this gate")
 
+def norm(ref):
+    """The name the admission controller matches a glob against: no tag, no digest, and Docker Hub's
+    short names spelled out (postgres -> index.docker.io/library/postgres)."""
+    base = ref.split("@", 1)[0]
+    head, _, last = base.rpartition("/")
+    last = last.split(":", 1)[0]
+    base = head + "/" + last if head else last
+    first = base.split("/", 1)[0]
+    if "/" not in base:
+        base = "index.docker.io/library/" + base
+    elif "." not in first and ":" not in first and first != "localhost":
+        base = "index.docker.io/" + base
+    return base
+
+
 # 3. Static allows: digest pinned, with a reason, and the same digests as the manifests name.
 static_docs = [d for d in docs if d is not signed]
 static_digests = {}
@@ -163,7 +178,7 @@ for d in static_docs:
         glob = m.group(1)
         if "@sha256:" not in glob:
             bad.append(f"static allow is not pinned by digest: {glob}")
-        name = glob.split("@", 1)[0]
+        name = norm(glob)
         digest = glob.split("@", 1)[1] if "@" in glob else ""
         static_digests[name] = digest
         # the reason is a comment line immediately above the glob
@@ -219,9 +234,10 @@ ALLOW_UNPINNED = {
         "upstream cloud controller in kube-system, not opted in; pinned by version, not digest",
 }
 files = subprocess.run(["git", "ls-files", "*.yaml", "*.yml", "*.sh"], capture_output=True, text=True).stdout.split()
-skip_prefixes = ("evidence/", "docs/", "features/", "policy/PIN", ".github/")
+skip_prefixes = ("evidence/", "docs/", "features/", "policy/PIN", "policy/policy-controller.yaml", ".github/")
 refs = []
 for f in files:
+    # the controller's own image is judged against policy/PIN in section 1, not here
     if f.startswith(skip_prefixes) or f == "scripts/gates-have-teeth.sh":
         continue
     try:
@@ -248,8 +264,8 @@ for f, n, img in refs:
         if not name.startswith("ghcr.io/taipanbox/"):
             bad.append(f"{f}:{n} {img} is not under {GLOB}")
         continue
-    if name in static_digests and static_digests[name] == img.split("@", 1)[1]:
-        checked_upstream[name] = True
+    if static_digests.get(norm(name)) == img.split("@", 1)[1]:
+        checked_upstream[norm(name)] = True
         continue
     bad.append(f"{f}:{n} {img} is neither a TAIPANBOX image nor on the static allow list in policy/image-policy.yaml")
 

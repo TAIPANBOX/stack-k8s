@@ -131,6 +131,7 @@ Two callers, one copy of each check: `.github/workflows/gates.yml` and
 ./scripts/keyryx-root-is-not-in-env.sh # invariant 55 (Keyryx, opt-in: keyryx/up.sh)
 ./scripts/witness-is-separate.sh   # invariant 56 (Keyryx, opt-in)
 ./scripts/keyryx-reaches-only-consumers.sh # invariant 57 (Keyryx, opt-in)
+./scripts/verified-images-are-enforced.sh # invariant 58; policy/ is opt-in, and blocked for enforcement (policy/README.md)
 ./scripts/bus-names-match-the-source-rule.sh # invariant 30
 ./scripts/chain-verifier-watches-the-bus.sh # invariant 31
 ./scripts/mounted-keys-are-readable.sh # invariant 32; GOTCHAS 117
@@ -224,10 +225,10 @@ an absent invariant.
    manifest, which is also what makes the version somebody reported reproducible
    a month later.
 
-   One upstream image is deliberately not pinned by digest and the gate says so
-   out loud rather than passing it in silence: `postgres:16-alpine` moves inside
-   the 16 series to pick up patch releases of the database holding what the
-   fleet is permitted to do.
+   Upstream images are pinned by digest too (`postgres`, `caddy`, `busybox`), and
+   invariant 58 lists each one with its reason. `scripts/pinned-images.sh` still
+   allows the `postgres:16-alpine` tag by name; no manifest names that tag any
+   more, and the allowance stays only so its teeth case stays honest.
    *(gate: `scripts/pinned-images.sh`; verified by pointing a manifest at
    `:latest`, which fails it, and by taking every manifest out of its reach,
    which now fails it too. Until 2026-08-09 that second case PASSED: the script
@@ -1241,6 +1242,8 @@ an absent invariant.
     `scripts/gates-have-teeth.sh`, one a pass case; scenarios in
     `features/keyryx-custody-and-witness.feature`. Not covered: that a pod without
     the label is refused on the launchers' own CNI (kind's was measured).)*
+
+58. **The stack's namespace admits only images whose signature verifies through the Sigstore policy-controller, and every image the stack names is pinned by digest.** `@decided 2026-10-18` (paraphrased): the cluster admits only images whose signature verifies, through the Sigstore policy-controller. `@claude 2026-10-19`: every image in `manifests/`, `keyryx/`, `security-tests.sh` and the typed renders is `name:tag@sha256:digest`; upstream postgres, caddy and busybox are pinned too. `policy/` is opt-in (`policy/up.sh`, `--enforce` to opt agent-stack in), with the controller pinned by `policy/PIN` and a keyless ClusterImagePolicy for `ghcr.io/taipanbox/**` that names the `release.yml` workflow of a TAIPANBOX repository on a version tag as its only signer. **Not enforced end to end, measured 2026-10-19 on kind:** policy-controller v0.15.1 finds no signature on any TAIPANBOX image as published (the signatures sit only at the OCI fallback tag `sha256-<digest>`, and ghcr answers no referrers API), so with agent-stack opted in every TAIPANBOX image is refused, signed or not; `policy/README.md` says what unblocks it. Unsigned upstream images are trusted only by digest and only where listed with a reason. *(gate: `scripts/verified-images-are-enforced.sh`, in both callers: the controller against its pin, the keyless identity expression run against registry identities and against identities it must refuse, every static allow by digest with a reason, the order of `policy/up.sh`, every image reference in the tracked manifests and scripts by digest, and the default apply set not naming `policy/`; 16 teeth cases in `scripts/gates-have-teeth.sh`; scenarios in `features/the-cluster-admits-only-verified-images.feature`. @measured `evidence/verified-images-kind/run.sh` 2026-10-19 on kind v0.33.0 (Kubernetes v1.37.0): the unsigned and the signed TAIPANBOX images both refused, an unlisted upstream image refused, a listed digest admitted, an unopted namespace admitted, a keyless signature by a third party admitted under a test policy. Not covered: the release workflows' signatures being discoverable (blocked, above); a cluster without egress to Sigstore's roots and transparency log (the decision is to fail closed; not measured); the cloud controllers in kube-system and the tunnel, which are not opted in.)*
 
 ## Decisions that have no gate yet
 
