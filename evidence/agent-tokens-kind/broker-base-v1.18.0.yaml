@@ -1,4 +1,4 @@
-# The broker BEFORE agent tokens (v1.1.49 pin set): the product's own env subset, no agent-token door, no taint key.
+# The broker BEFORE agent tokens (v1.2.0 pin set): the product's own env subset, no agent-token door, no taint key.
 apiVersion: apps/v1
 kind: Deployment
 metadata: { name: tokenfuse-mcp-broker, namespace: agent-stack, labels: { app: tokenfuse-mcp-broker } }

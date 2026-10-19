@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Measured on the stack-k8s v1.1.49 pin set (CLAUDE.md invariant 54, GOTCHAS 137): tokenfuse v1.18.0 at
+# Measured on the stack-k8s v1.2.0 pin set (CLAUDE.md invariant 54, GOTCHAS 137): tokenfuse v1.18.0 at
 # the gateway and the broker, vouchryx v0.6.0 from manifests/54-delegation.yaml, the agent audience
 # https://vouchryx.agent-stack.invalid. The product files are applied where they exist: vouchryx, and the
 # agent-token door through agent-tokens/up.sh. Stand-ins: the provider (upstream), the MCP upstream, the

@@ -1,7 +1,7 @@
 import base64, json, subprocess, sys, urllib.parse, urllib.request, urllib.error
 import dpop
 ISS = "http://vouchryx:4310"
-# The one audience an agent token carries (stack-k8s v1.1.49, invariant 54, GOTCHAS 137). An agent asks for
+# The one audience an agent token carries (stack-k8s v1.2.0, invariant 54, GOTCHAS 137). An agent asks for
 # it as RFC 8707 `resource`; a request that names none is refused audience_not_allowed.
 AUD = "https://vouchryx.agent-stack.invalid"
 LOCAL = "http://127.0.0.1:24310"

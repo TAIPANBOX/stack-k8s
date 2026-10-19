@@ -5,9 +5,9 @@ The scripts here drove the REAL images on a local kind cluster (kindest/node 1.3
 for everything else. The product manifests were applied to the same objects with
 `agent-tokens/up.sh` and `agent-tokens/down.sh`, which turned the door off and on again.
 
-## The v1.1.49 pin set, measured 2026-10-19
+## The v1.2.0 pin set, measured 2026-10-19
 
-`run-v1.18.0.sh` is the run for the pin set of stack-k8s v1.1.49 (PR #188): tokenfuse v1.18.0 at the gateway
+`run-v1.18.0.sh` is the run for the pin set of stack-k8s v1.2.0 (PR #188): tokenfuse v1.18.0 at the gateway
 and the broker, vouchryx v0.6.0 applied from `manifests/54-delegation.yaml` itself, and the agent-token door
 switched on by `agent-tokens/up.sh` from the repository. The audience is `https://vouchryx.agent-stack.invalid`
 (CLAUDE.md invariant 54, GOTCHAS 137). Its output is `output-v1.18.0.txt`, beside this README. Run it with
@@ -28,7 +28,7 @@ are 24310, 24400 and 24420, because 14310 is published by another container on t
 The run below is the pre-pin-move measurement (vouchryx v0.4.0, tokenfuse v1.16.0, the `http://vouchryx:4310`
 audience) and was not re-run.
 
-Not covered by the v1.1.49 run: the workload path (`e2e2.py` still names kind-k2e2e and the old audience),
+Not covered by the v1.2.0 run: the workload path (`e2e2.py` still names kind-k2e2e and the old audience),
 `failclosed.py` and `ban_trials.py` (they keep the old port), a real k3s issuer, and NetworkPolicy beyond
 what kind enforces.
 

@@ -1,4 +1,4 @@
-# Base gateway for the v1.1.49 pin set: no agent-token door. agent-tokens/up.sh applies
+# Base gateway for the v1.2.0 pin set: no agent-token door. agent-tokens/up.sh applies
 # manifests/58-agent-tokens-gateway-patch.yaml, which turns the door on and sets the audience.
 apiVersion: apps/v1
 kind: Deployment

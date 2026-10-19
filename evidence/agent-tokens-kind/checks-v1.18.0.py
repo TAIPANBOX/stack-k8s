@@ -1,4 +1,4 @@
-# The checks of the v1.1.49 pin set, run from the scratch directory (the files the helpers read live
+# The checks of the v1.2.0 pin set, run from the scratch directory (the files the helpers read live
 # there: enrol.secret, gw-client.secret, revoke.key, dpop-agent.pem). Prints one line per check.
 import base64, io, json, contextlib, sys, time, urllib.error
 import dpop, request, calls, broker_call
