@@ -3792,6 +3792,31 @@ run_case "hostkeys-are-verified: a mismatched console fingerprint is accepted" f
 	"$TEETH_EDIT_204" \
 	"B  mismatch"
 
+run_case "stdin-is-read-once: the GCP agent name is read inside the pipeline again" fail \
+	'./scripts/stdin-is-read-once.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "      --node-name \x27$AGENT_NAME\x27 \\\n", "      --node-name \x27$(node_name_of \"$n\")\x27 \\\n")')" \
+	"install-gcp.sh"
+
+run_case "stdin-is-read-once: the AWS installer no longer stops on an agent that never registers" fail \
+	'./scripts/stdin-is-read-once.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "did not register with the cluster", "was not seen")')" \
+	"never stops when the agent does not register"
+
+run_case "stdin-is-read-once: the BYO installer runs a remote lookup inside the pipeline" fail \
+	'./scripts/stdin-is-read-once.sh' \
+	"$(py 'edit("install.sh", "      --node-name \x27$AGENT_NAME\x27 \\\n", "      --node-name \x27$(sh_ \"$n\" hostname)\x27 \\\n")')" \
+	"install.sh"
+
+run_case "stdin-is-read-once: a pure lookup in the pipeline is not a fault" pass \
+	'./scripts/stdin-is-read-once.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "      --node-name \x27$AGENT_NAME\x27 \\\n", "      --node-name \x27$AGENT_NAME\x27 --node-label \x27x=$(priv_of \"$n\")\x27 \\\n")')"
+
+run_case "stdin-is-read-once: no installer at all" fail \
+	'./scripts/stdin-is-read-once.sh' \
+	"$(py 'import os
+for f in ["install.sh","deploy.sh","cloud/gcp/install-gcp.sh","cloud/aws/install-aws.sh","cloud/gcp/deploy-gcp.sh","cloud/aws/deploy-aws.sh"]: os.remove(f)')" \
+	"measured nothing"
+
 run_case "hostkeys-are-verified: cloud-init's syslog prefix is no longer removed" fail \
 	'./scripts/hostkeys-are-verified.sh' \
 	"$(py 'edit("lib/hostkeys.sh", " cloud-init: //", " cloud-init-never: //")')" \

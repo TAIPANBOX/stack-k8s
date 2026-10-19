@@ -4685,3 +4685,9 @@ Fixed: `hostkeys_console_fingerprints` removes every carriage return before anyt
 
 **The lesson kept here.** A fixture for a parser of outside output is built from the captured bytes (`od -c` or a byte count of `\r`), not from what a terminal displays.
 
+## 149. A command substitution in the agent's command string ran its own ssh, which ate the token and the k3s script from the pipeline's stdin
+
+**Ours, and fixed.** The first live GCP run of 2026-10-19 (stack-k8s v1.5.0, one server and two agents) brought up the server and Calico, then waited on Longhorn: neither agent had joined, and the deploy printed `== k3s agent: <ip>` for each and nothing else. The agent loop sent the cluster token and the k3s install script on the stdin of `... | su_ "$n" "sh -c \"IFS= read -r K3S_TOKEN; ... sh -s - agent --node-name '$(node_name_of "$n")' ...\""`. `node_name_of` runs `ssh ... hostname`, and bash runs that substitution while it builds the arguments of the outer ssh, after the pipe is connected, so the inner ssh inherited the pipe and read the token and the script. The outer command then read an empty token and `sh -s` read no script, and both exited 0. The same pipeline run by hand on a node, with nothing else reading its stdin, installed the agent. The server-join loop never had the fault: it reads the name into `JOINED_NAME` before the pipeline. The fault arrived with the token's move to stdin (GOTCHAS 140), which no gate here could see, because a single-node kind run joins no agent.
+
+Fixed in the three installers: the name is read into `AGENT_NAME` before the pipeline, and each agent is waited for by that name, with a stop after 200 s that says it did not register. Gate: `scripts/stdin-is-read-once.sh`, red first on the unfixed tree with six problems; five teeth cases.
+
