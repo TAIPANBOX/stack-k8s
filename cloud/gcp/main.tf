@@ -303,6 +303,13 @@ resource "google_compute_instance" "node" {
     # of the image, so it is chosen here.
     ssh-keys = "${var.ssh_user}:${trimspace(file(var.ssh_public_key_path))}"
 
+    # Guest attributes ON. The guest agent publishes this node's SSH host keys as the
+    # hostkeys/ guest attribute only when this is TRUE, and lib/hostkeys.sh reads them
+    # there before the first connection (invariant 61). Without it the attribute is
+    # absent (HTTP 404) and the deploy refuses every node at the deadline, measured on
+    # the first live GCP run, 2026-10-19 (GOTCHAS 146).
+    enable-guest-attributes = "TRUE"
+
     # OS Login OFF, explicitly. With it on, GCP ignores this key, derives the
     # username from the Google account instead, and every ssh line in this repo
     # and in the deploy scripts stops working with a permission error that names

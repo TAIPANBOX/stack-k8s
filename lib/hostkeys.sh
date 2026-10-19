@@ -36,8 +36,18 @@ hostkeys_gcp_lines() {
   python3 -c '
 import json, re, sys
 KEY = re.compile(r"^(ssh-ed25519|ssh-rsa|ssh-dss|ecdsa-sha2-nistp(256|384|521))\s+([A-Za-z0-9+/=]+)")
+KEYTYPE = re.compile(r"^(ssh-ed25519|ssh-rsa|ssh-dss|ecdsa-sha2-nistp(256|384|521))$")
+B64 = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
 def walk(node):
     if isinstance(node, dict):
+        # What gcloud --format=json prints for each attribute (measured live 2026-10-19,
+        # GOTCHAS 147): {"namespace": "hostkeys", "key": "<type>", "value": "<base64>"}.
+        # The type is the key and the base64 the value, so neither is a full key line.
+        k, v = node.get("key"), node.get("value")
+        if node.get("namespace") == "hostkeys" and isinstance(k, str) and isinstance(v, str):
+            if KEYTYPE.match(k) and B64.match(v.strip()):
+                yield f"{k} {v.strip()}"
+                return
         for v in node.values():
             yield from walk(v)
     elif isinstance(node, list):
@@ -94,6 +104,19 @@ hostkeys_aws_console() { # instance-id
   esac
 }
 
+# The fingerprints in a console block, one per line, sorted. On EC2 cloud-init writes
+# the block through syslog, so each line of it carries a syslog prefix such as
+# `<14>Oct 19 17:25:04 cloud-init: ` (measured on a live m7i.xlarge, 2026-10-19,
+# GOTCHAS 145). That prefix is removed only in that exact shape and only when the
+# program is cloud-init, and a line is read only when what is left is exactly
+# `<bits> SHA256:<base64> <comment> (<TYPE>)`. A line in any other shape is not
+# read, so a fingerprint another program printed to the console is not taken.
+hostkeys_console_fingerprints() {
+  sed -E 's/^<[0-9]{1,3}>[A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2} cloud-init: //' |
+    awk '$1 ~ /^[0-9]+$/ && $2 ~ /^SHA256:[A-Za-z0-9+\/]+$/ && $NF ~ /^\([A-Z0-9]+\)$/ { print $2 }' |
+    sort -u
+}
+
 hostkeys_aws() {
   local id="$1" ip="$2" file="$3" deadline block scan tmp console_fp scan_fp
   deadline=$(( $(date +%s) + $(hostkeys_deadline) ))
@@ -103,7 +126,7 @@ hostkeys_aws() {
     scan="$(ssh-keyscan -T 10 "$ip" 2>/dev/null)"
     if [ -n "$block" ] && [ -n "$scan" ]; then
       printf '%s\n' "$scan" > "$tmp/scan"
-      console_fp="$(printf '%s\n' "$block" | awk '$2 ~ /^SHA256:/ {print $2}' | sort -u)"
+      console_fp="$(printf '%s\n' "$block" | hostkeys_console_fingerprints)"
       scan_fp="$(ssh-keygen -lf "$tmp/scan" 2>/dev/null | awk '{print $2}' | sort -u)"
       if [ -n "$console_fp" ] && [ "$console_fp" = "$scan_fp" ]; then
         printf '%s\n' "$scan" >> "$file"

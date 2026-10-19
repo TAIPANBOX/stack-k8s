@@ -26,13 +26,21 @@
 #      connection is refused too.
 #   C  AWS, no console block: refused at the deadline with the reason named.
 #   D  AWS, the console answers base64: decoded, and A holds.
+#   D2 AWS, every console line carries cloud-init's syslog prefix, as EC2 prints it:
+#      the fingerprints are read, and A holds.
+#   D3 AWS, the matching fingerprint is printed under another program's prefix:
+#      not read, so the node is refused.
 #   E  GCE, the guest attributes carry the keys: written, and a strict connection
 #      succeeds.
+#   E2 GCE, the attributes in the shape gcloud --format=json prints them (the type as
+#      the key, the base64 as the value): written.
 #   F  GCE, no guest attributes: refused at the deadline with the reason named.
 #   G  install.sh: with SSH_KNOWN_HOSTS its first ssh is strict against that file;
 #      without it, accept-new, and the accepted key is printed with how to pin it.
 #   I  The builder's peer file names each node by its public and its private address, with the same verified key.
 #   J  A strict connection from the builder to a peer's private address succeeds with that file, and is refused without the name.
+#   N  cloud/gcp/main.tf turns guest attributes on for every node, without which GCE
+#      publishes no host keys and E can never happen on a real cluster.
 #   K  No tracked script (prose excepted) disables host key checking.
 #   L  Each launcher that pushes an image to its peers writes the peer file before its first such ssh, and that ssh is strict against it.
 #   M  Each such launcher builds the peer file from the verified keys (hostkeys_peer_file).
@@ -150,6 +158,19 @@ helper hostkeys_aws i-0123 "$IP" "$T/kh-d" >"$T/out-d" 2>&1; rc=$?
 if [ "$rc" = 0 ] && grep -qF "$K1_LINE" "$T/kh-d"; then pass "D  base64 console output is decoded"; else bad "D  base64 console: rc=$rc, $(cat "$T/out-d")"; fi
 block_for "$K1_FP" > "$T/console"
 
+# ---- D2: AWS, cloud-init's syslog prefix on every line (the live EC2 shape) ------------
+block_for "$K1_FP" | sed 's/^/<14>Oct 19 17:25:04 cloud-init: /' > "$T/console"; printf '%s\n' "$K1_LINE" > "$T/scan"
+: > "$T/kh-d2"
+helper hostkeys_aws i-0123 "$IP" "$T/kh-d2" >"$T/out-d2" 2>&1; rc=$?
+if [ "$rc" = 0 ] && grep -qF "$K1_LINE" "$T/kh-d2"; then pass "D2 a console block with cloud-init's syslog prefix is read"; else bad "D2 prefixed console: rc=$rc, $(cat "$T/out-d2")"; fi
+
+# ---- D3: AWS, the fingerprint under another program's prefix -------------------------
+block_for "$K1_FP" | sed 's/^/<14>Oct  9 17:25:04 sshd-forger: /' > "$T/console"
+: > "$T/kh-d3"
+helper hostkeys_aws i-0123 "$IP" "$T/kh-d3" >"$T/out-d3" 2>&1; rc=$?
+if [ "$rc" = 2 ] && [ ! -s "$T/kh-d3" ]; then pass "D3 a fingerprint under another program's prefix is not read, the node is refused"; else bad "D3 foreign prefix: rc=$rc, file=$(wc -c < "$T/kh-d3") bytes, $(cat "$T/out-d3")"; fi
+block_for "$K1_FP" > "$T/console"
+
 # ---- E: GCE, the guest attributes carry the keys --------------------------------------
 printf '%s\n' '{"queryValue":{"items":[{"key":"ed25519","namespace":"hostkeys","value":"'"$(cut -d' ' -f1,2 "$T/keys/k1.pub")"' node-one"}]}}' > "$T/guest"
 : > "$T/kh-e"
@@ -157,6 +178,12 @@ helper hostkeys_populate_gcp "$T/kh-e" "$IP" >"$T/out-e" 2>&1; rc=$?
 if [ "$rc" = 0 ] && grep -qF "$K1_LINE" "$T/kh-e"; then pass "E  GCE guest-attribute keys are written"; else bad "E  GCE keys: rc=$rc, $(cat "$T/out-e")"; fi
 printf '%s\n' "$K1_LINE" > "$T/present"
 strict_ssh "$T/kh-e" >/dev/null 2>&1 && pass "E  a strict connection to that node succeeds" || bad "E  a strict connection to the GCE node was refused"
+
+# ---- E2: GCE, the gcloud --format=json shape (type as key, base64 as value) ------------
+printf '%s\n' '[{"key":"'"$(cut -d' ' -f1 "$T/keys/k1.pub")"'","namespace":"hostkeys","value":"'"$(cut -d' ' -f2 "$T/keys/k1.pub")"'"}]' > "$T/guest"
+: > "$T/kh-e2"
+helper hostkeys_populate_gcp "$T/kh-e2" "$IP" >"$T/out-e2" 2>&1; rc=$?
+if [ "$rc" = 0 ] && grep -qF "$K1_LINE" "$T/kh-e2"; then pass "E2 GCE keys in the gcloud json shape are written"; else bad "E2 gcloud json shape: rc=$rc, $(cat "$T/out-e2")"; fi
 
 # ---- F: GCE, no guest attributes ------------------------------------------------------
 printf '{}\n' > "$T/guest"; : > "$T/kh-f"; start=$(date +%s)
@@ -271,6 +298,14 @@ for f in $subjects; do
   fi
   if [ "$(grep -c 'hostkeys_peer_file' "$f")" -gt 0 ]; then pass "M  $f builds its peer file from the verified keys (hostkeys_peer_file)"; else bad "M  $f does not build its peer file with hostkeys_peer_file"; fi
 done
+
+# ---- N: GCE publishes host keys only with guest attributes on ----
+tf=cloud/gcp/main.tf
+nodes="$(grep -c '^resource "google_compute_instance"' "$tf")"
+on="$(grep -cE '^[[:space:]]*enable-guest-attributes[[:space:]]*=[[:space:]]*"TRUE"' "$tf")"
+if [ "$nodes" -eq 0 ]; then bad "N  $tf declares no google_compute_instance, so N measured nothing"
+elif [ "$on" -ge "$nodes" ]; then pass "N  $tf turns guest attributes on for its $nodes instance resource(s)"
+else bad "N  $tf sets enable-guest-attributes = \"TRUE\" $on time(s) for $nodes instance resource(s): GCE then publishes no host keys and every deploy is refused"; fi
 
 if [ "$fails" -gt 0 ]; then
   printf '\nFAIL: %d case(s) of the host key checks did not hold.\n' "$fails"
