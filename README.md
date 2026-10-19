@@ -622,9 +622,12 @@ write. All of it is off by default.
   and target leave the cluster; the proxy has its own hourly cap
   (`TYPRYX_MAX_CALLS_PER_HOUR`, default 1000). The `stub` backend's probabilities
   mean nothing: do not write a rule against them.
-- **What holds nothing.** No policy is seeded. Until you write a `hold_if_signal`
-  rule the signal is added and ignored. A rule can turn an allow into a hold for a
-  person and nothing else; wardryx refuses a rule that would deny on a signal.
+- **What holds, and what does not.** With this flag the policy plane also holds a brokered
+  tool call that arrives with no risk signal, for a person to approve (CLAUDE.md invariant
+  65). A signal that answers holds only `destructive`, `external_send` and `financial` at 0.8
+  or more; a signal never denies, and wardryx refuses a rule that would. Without the flag no
+  hold exists, and the signal, where there is one, is added and ignored. The stub's
+  probabilities are noise, so the hold acts on that noise too.
 
 An example policy, written once, through the policy API (read the key from the
 cluster, reach wardryx with a port-forward, since the namespace is default-deny):
