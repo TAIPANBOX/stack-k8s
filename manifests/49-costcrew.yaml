@@ -119,7 +119,7 @@ spec:
           volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
       containers:
         - name: costcrew
-          image: ghcr.io/taipanbox/costcrew:v0.8.0@sha256:872c1e60930ffab138848dd867d6da65b26415722ac0691c46fa0610f898cf89
+          image: ghcr.io/taipanbox/costcrew:v0.9.0@sha256:4f7883951aac2a0b723e5b0d7b36cf4005c8b94e4a6335ed051c14370a37b9b7
           imagePullPolicy: IfNotPresent
           args:
             - "-addr"
@@ -306,7 +306,7 @@ spec:
               volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
           containers:
             - name: crew
-              image: ghcr.io/taipanbox/costcrew:v0.8.0@sha256:872c1e60930ffab138848dd867d6da65b26415722ac0691c46fa0610f898cf89
+              image: ghcr.io/taipanbox/costcrew:v0.9.0@sha256:4f7883951aac2a0b723e5b0d7b36cf4005c8b94e4a6335ed051c14370a37b9b7
               imagePullPolicy: IfNotPresent
               # Overrides the image's ENTRYPOINT (the console server): this is
               # another binary in the same image (since v0.4.0 it carries five:

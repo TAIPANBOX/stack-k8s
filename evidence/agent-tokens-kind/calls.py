@@ -1,6 +1,6 @@
 import base64, hashlib, json, sys, time, urllib.request, urllib.error
 import dpop, request
-GW = "http://127.0.0.1:14400"
+GW = "http://127.0.0.1:24400"
 GW_HTU = "http://tokenfuse-gateway:4100/v1/messages"
 BODY = json.dumps({"model": "stub", "max_tokens": 8, "messages": [{"role": "user", "content": "hi"}]}).encode()
 

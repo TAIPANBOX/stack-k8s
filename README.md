@@ -394,6 +394,7 @@ The notifier's daily pulse and quiet hours are set in `manifests/45-heraldyx.yam
 - `HERALDYX_PULSE_HOURS` (default `24`): one mail a day saying the notifier is alive, once a recipient is set; `0` turns it off.
 - `HERALDYX_QUIET` (default empty): quiet hours as `HH:MM-HH:MM`; alerts below critical are held and reported when they end, and a critical is always sent.
 - `HERALDYX_TZ` (default empty): the IANA zone the quiet hours are read in, for example `Europe/London`.
+- `HERALDYX_SMTP_TLS` (default unset, which is `starttls`): how heraldyx 0.8.0 secures the mail connection. Unset, the server must offer STARTTLS, and a server that does not is refused, so mail is never sent in the clear to a remote host. Use `implicit` for a server on port 465, and `plain` only for a loopback relay. Set it in your environment before `./deploy.sh`, `cloud/aws/deploy-aws.sh` or `cloud/gcp/deploy-gcp.sh`: the script checks the word and writes it into the `heraldyx-mail` Secret, and the notifier reads it from there.
 
 ### The typed-answer plane
 
@@ -896,10 +897,14 @@ where the credential is `sha256:<digest of an enrolment key>` or
 `workload:<the cluster's issuer>#system:serviceaccount:agent-stack:<ServiceAccount>`. A pod
 that is one of these agents is labelled `taipanbox.dev/agent-token: "true"` and mounts a
 projected token for `http://vouchryx:4310` (see `agent-tokens/example-agent.yaml`). It holds no
-Kubernetes API token and no secret.
+Kubernetes API token and no secret. To get an agent token, the agent asks vouchryx for
+`resource=https://vouchryx.agent-stack.invalid` (RFC 8707; the example carries it as `VOUCHRYX_AGENT_RESOURCE`).
+A request that names no resource is refused `audience_not_allowed`: vouchryx does not fall back to its own issuer.
 
-Turning it on sets the gateway's audience to vouchryx's issuer, so delegated calls minted for
-any other audience are refused from then on. A stop is one call to vouchryx with `ban: true`,
+Turning it on sets the gateway's audience to `https://vouchryx.agent-stack.invalid`, the same
+identifier the broker's door and vouchryx's allowed audiences name, so delegated calls minted for
+any other audience are refused from then on. It is an identifier, not an address, and nothing serves
+it (tokenfuse v1.17.0 needs an https URL there; GOTCHAS.md entry 137). A stop is one call to vouchryx with `ban: true`,
 and the gateway refuses the agent within one poll (12 s). The measured run is in
 `evidence/agent-tokens-kind/`. Not yet: the broker's own key, and `require` (refusing static
 keys), which is a later, dated decision. CLAUDE.md invariant 54 holds the rule.
@@ -996,7 +1001,7 @@ kubectl -n agent-stack delete configmap gateway-identity-map
 
 ## Keyryx on the cluster (opt-in)
 
-Keyryx (`ghcr.io/taipanbox/keyryx:v0.1.0`) is the key custody service and the
+Keyryx (`ghcr.io/taipanbox/keyryx:v0.1.1`) is the key custody service and the
 independent witness of the record. Off by default: `kubectl apply -k manifests/`
 never applies it. `keyryx/up.sh` turns it on, `keyryx/down.sh` turns it off and
 keeps every key and claim.

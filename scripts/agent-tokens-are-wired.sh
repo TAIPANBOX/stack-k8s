@@ -15,17 +15,19 @@
 # WHAT THIS CHECKS
 #
 #   1. the gateway patch that turns the door on: TOKENFUSE_AGENT_TOKENS is `accept`; the
-#      audience is non-empty and is vouchryx's own issuer; the revocation list fails closed; its
+#      audience is non-empty, an absolute https URL, and the one audience AUDIENCE below that the
+#      broker and vouchryx share; the revocation list fails closed; its
 #      age is at most 60 seconds.
 #   2. no default manifest names the door, its audience or the registry: only the 58-agent-tokens
 #      files do, so `kubectl apply -k manifests/` leaves the door off.
 #   3. the vouchryx patch takes the registry and the workload issuer from ConfigMaps (data, not
-#      literals), names one audience that is vouchryx's issuer, and mounts the workload JWKS at
+#      literals), names the one audience AUDIENCE, and mounts the workload JWKS at
 #      the path agent-tokens/up.sh writes into the workload issuer line.
 #   4. agent-tokens/up.sh refuses before it applies anything, never runs `apply -k`, and writes
 #      that same JWKS path.
 #   5. the example agent pod is labelled for the network rules, carries no Kubernetes API token,
-#      and projects a token whose audience is vouchryx's issuer for at most 600 seconds, with no
+#      and projects a token whose audience is vouchryx's issuer (the workload audience, which the
+#      agent token audience is not) for at most 600 seconds, with no
 #      secret read into its environment.
 #   6. the network rules let agent pods reach vouchryx's port and the gateway's, and nothing
 #      else; vouchryx accepts port 4310 from agent pods only.
@@ -40,12 +42,22 @@ import glob
 import pathlib
 import re
 import sys
+import urllib.parse
 
+# The issuer of vouchryx's tokens, and the audience a pod's projected workload token carries.
 ISSUER = "http://vouchryx:4310"
+# The one audience an agent token carries. tokenfuse v1.17.0 refuses an agent audience that is not an
+# absolute https URL (its invariant 126), so this is one. Nothing serves it: it names a token's
+# audience, it is not an address the stack dials.
+AUDIENCE = "https://vouchryx.agent-stack.invalid"
 fails = []
 
 def fail(msg):
     fails.append(msg)
+
+_aud = urllib.parse.urlsplit(AUDIENCE)
+if _aud.scheme != "https" or not _aud.netloc:
+    fail(f"the agent-token audience {AUDIENCE!r} is not an absolute https URL (tokenfuse invariant 126)")
 
 def read(path):
     p = pathlib.Path(path)
@@ -82,8 +94,8 @@ if gw:
     aud = env_value(gw, "TOKENFUSE_DELEGATION_AUDIENCE")
     if not aud:
         fail(f"{GW} leaves TOKENFUSE_DELEGATION_AUDIENCE empty: the agent-token door refuses to start without an audience")
-    elif aud != ISSUER:
-        fail(f"{GW} sets the audience to {aud!r}, not vouchryx's issuer {ISSUER!r}: an agent token carries that audience")
+    elif aud != AUDIENCE:
+        fail(f"{GW} sets the audience to {aud!r}, not {AUDIENCE!r}: an agent token carries that audience, and the broker and vouchryx check against the same one")
     if env_value(gw, "TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE") != "closed":
         fail(f"{GW} does not set TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE to closed: a stopped agent would keep working while the list is unreadable")
     age = env_value(gw, "TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS")
@@ -111,8 +123,8 @@ if vx:
     for name, key in (("VOUCHRYX_AGENTS", "agents"), ("VOUCHRYX_WORKLOAD_ISSUERS", "issuers")):
         if not re.search(r'name:\s*' + name + r'\s*\n\s*valueFrom:\s*\{\s*configMapKeyRef:\s*\{\s*name:\s*\S+,\s*key:\s*' + key + r'\s*\}', vx):
             fail(f"{VX} does not read {name} from a ConfigMap key {key}: the registry is data, and a literal would not be re-read on a change")
-    if env_value(vx, "VOUCHRYX_ALLOWED_AUDIENCES") != ISSUER:
-        fail(f"{VX} allows an audience other than vouchryx's issuer {ISSUER}")
+    if env_value(vx, "VOUCHRYX_ALLOWED_AUDIENCES") != AUDIENCE:
+        fail(f"{VX} allows an audience other than {AUDIENCE}")
     if not re.search(r'mountPath:\s*/etc/vouchryx/workload\b', vx):
         fail(f"{VX} does not mount the workload JWKS at /etc/vouchryx/workload")
 
@@ -143,6 +155,9 @@ if ex:
     aud = re.search(r'audience:\s*"([^"]*)"', ex)
     if not aud or aud.group(1) != ISSUER:
         fail(f"{EX} projects a token whose audience is not vouchryx's issuer {ISSUER}")
+    res = re.search(r'name:\s*VOUCHRYX_AGENT_RESOURCE,\s*value:\s*"([^"]*)"', ex)
+    if not res or res.group(1) != AUDIENCE:
+        fail(f"{EX} does not name the agent's audience {AUDIENCE} in VOUCHRYX_AGENT_RESOURCE: the agent asks vouchryx for that resource (RFC 8707), and a request that names none is refused")
     exp = re.search(r'expirationSeconds:\s*(\d+)', ex)
     if not exp or int(exp.group(1)) > 600:
         fail(f"{EX} projects a token that lives longer than 600 seconds")
@@ -167,8 +182,8 @@ brk = read(BRK)
 if brk:
     if not re.search(r'TOKENFUSE_AGENT_TOKENS, value: "accept"', brk):
         fail(f"{BRK} does not turn the agent-token door on in the broker")
-    if env_value(brk, "TOKENFUSE_DELEGATION_AUDIENCE") != ISSUER:
-        fail(f"{BRK} does not set the broker's delegation audience to vouchryx's issuer {ISSUER}")
+    if env_value(brk, "TOKENFUSE_DELEGATION_AUDIENCE") != AUDIENCE:
+        fail(f"{BRK} does not set the broker's delegation audience to {AUDIENCE}")
     if env_value(brk, "TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE") != "closed":
         fail(f"{BRK} does not fail the broker's revocation list closed")
     if env_value(brk, "TOKENFUSE_MCP_TAINT_GATEWAY") != "http://tokenfuse-gateway:4100":
@@ -209,7 +224,7 @@ if fails:
 
 gates = len([p for p in (GW, VX, NET, UP, EX) if pathlib.Path(p).exists()])
 print(f"OK: agent tokens are off in every default manifest; the gateway patch turns the door on with a non-empty audience "
-      f"({ISSUER}), a closed revocation list at most 60 s old; vouchryx takes its registry and workload issuer from ConfigMaps; "
+      f"({AUDIENCE}, https), a closed revocation list at most 60 s old; vouchryx takes its registry and workload issuer from ConfigMaps; "
       f"the opt-in refuses before it applies; the example agent projects a 600 s token for vouchryx and holds no secret; "
       f"agent pods reach only vouchryx and the gateway ({gates} files judged).")
 PY

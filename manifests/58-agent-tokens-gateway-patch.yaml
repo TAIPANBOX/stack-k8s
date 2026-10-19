@@ -8,10 +8,15 @@
 #
 #   TOKENFUSE_AGENT_TOKENS=accept   an agent's own DPoP-bound token is a door credential beside
 #                                   the static client keys (`require` is a later, dated step)
-#   TOKENFUSE_DELEGATION_AUDIENCE   must be non-empty for the door to start. 54's patch leaves it
-#                                   empty, which is right for delegation alone; an agent token is
-#                                   minted for VOUCHRYX_ISSUER, so that is the one audience this
-#                                   door accepts. Consequence (breaking, see the report): delegated
+#   TOKENFUSE_DELEGATION_AUDIENCE   must be non-empty for the door to start, and since tokenfuse
+#                                   v1.17.0 an absolute https URL (invariant 126 of tokenfuse). 54's
+#                                   patch leaves it empty, which is right for delegation alone. An
+#                                   agent token carries the one audience below, the same value the
+#                                   broker door (58-agent-tokens-broker-patch.yaml) and vouchryx
+#                                   (58-agent-tokens-vouchryx-patch.yaml, VOUCHRYX_ALLOWED_AUDIENCES)
+#                                   use, so one agent token verifies at both doors. It is an
+#                                   identifier, not an address: nothing serves it, and it does not
+#                                   need to. Consequence (breaking, see the release notes): delegated
 #                                   calls minted for any other audience are refused once this is on.
 #   REVOCATIONS_FAILMODE=closed     a revocation list that cannot be read stops the gateway
 #                                   honouring agent tokens, rather than letting a stopped agent
@@ -26,6 +31,6 @@ spec:
         - name: gateway
           env:
             - { name: TOKENFUSE_AGENT_TOKENS, value: "accept" }
-            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "http://vouchryx:4310" }
+            - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "https://vouchryx.agent-stack.invalid" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: "closed" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS_MAX_AGE_SECS, value: "60" }

@@ -7,7 +7,10 @@
 #   VOUCHRYX_WORKLOAD_ISSUERS  <issuer>|<audience>|<jwks path>: the cluster's own service-account
 #                              issuer, with the audience its projected tokens carry (this
 #                              vouchryx) and the JWKS file mounted below
-#   VOUCHRYX_ALLOWED_AUDIENCES the one audience agent tokens may carry: this vouchryx's issuer
+#   VOUCHRYX_ALLOWED_AUDIENCES the one audience agent tokens may carry: the https identifier the
+#                              gateway and the broker verify against (invariant 54). The workload
+#                              issuer's own audience, this vouchryx's address, is unchanged: it is
+#                              what the pods' projected tokens carry, not what agent tokens carry.
 #
 # A ConfigMap read here is not optional: vouchryx refuses to start without the registry it
 # was told to load, which is the point.
@@ -17,7 +20,7 @@ spec:
       containers:
         - name: vouchryx
           env:
-            - { name: VOUCHRYX_ALLOWED_AUDIENCES, value: "http://vouchryx:4310" }
+            - { name: VOUCHRYX_ALLOWED_AUDIENCES, value: "https://vouchryx.agent-stack.invalid" }
             - name: VOUCHRYX_AGENTS
               valueFrom: { configMapKeyRef: { name: vouchryx-agents, key: agents } }
             - name: VOUCHRYX_WORKLOAD_ISSUERS

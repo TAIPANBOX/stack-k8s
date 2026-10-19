@@ -1,10 +1,11 @@
 # Admission policy for the stack's namespace (opt-in, invariant 58)
 
-**Status: opt-in, and it admits no TAIPANBOX image today.** Measured 2026-10-19 on kind (Kubernetes v1.37.0)
-with policy-controller v0.15.1: once agent-stack is opted in, the controller refuses every TAIPANBOX image
-the manifests name, signed or not, because none of them has a signature in the format the controller reads.
-Do not run `policy/up.sh --enforce` on a cluster that serves the stack until the section "What it admits
-today" shows the images you run.
+**Status: opt-in.** Measured 2026-10-19 on kind (Kubernetes v1.37.0) with policy-controller v0.15.1, on the
+pins this repository had before the agent-security pin move: the controller refused every TAIPANBOX image the
+manifests named, because none carried a signature in the format the controller reads. The pins in the pin move
+now name images that do carry one (section "What it admits today"). Whether the controller admits them is NOT
+measured yet, so do not run `policy/up.sh --enforce` on a cluster that serves the stack until that run is in
+the section "What it admits today".
 
 ## What is here
 
@@ -49,23 +50,31 @@ Until those land, the policy is not turned on for a running stack.
 
 ## What it admits today
 
-Measured 2026-10-19 with a `.sig` probe on every pinned TAIPANBOX digest in the manifests: none has a `.sig`
-tag. So:
+Measured 2026-10-19 on the pins after the pin move: a `.sig` probe (`docker buildx imagetools inspect`) finds a
+legacy `.sig` tag on each of the 13 TAIPANBOX digests the manifests name (wardryx v2.2.1, idryx v1.2.2,
+genaryx-console v1.1.48, heraldyx v0.8.0, vouchryx v0.6.0, scopyx v1.1.0, typryx v0.5.0, costcrew v0.9.0, qryx v1.1.0,
+trailryx-node v1.3.1, mockryx v0.2.2, agent-conform v2.0.1 from agent-stack-go, keyryx v0.1.1), and
+`cosign` v3.1.3, run from its official image, verifies each against the release-tag identity of its own
+repository (for the console, stack-k8s's `console-image.yml` at `v1.1.48`; for scopyx's chromium digest, the
+identity of the `v1.1.0` release, which builds both). That is the input the admission rule needs. It is not an
+admission result. Not measured: whether the controller admits these digests on a cluster. The earlier kind run
+refused the old digests for want of a legacy tag, and says nothing about these.
 
-- **TAIPANBOX images: none.** That includes `genaryx-console` v1.1.47, `stack-caddy` and `stack-wg` v1.1.47,
-  and every other pinned version. Each is refused once the namespace is opted in, until it is signed in the
-  legacy format.
+- **tokenfuse v1.18.0** (`tokenfuse`, `tokenfuse-control-plane`, pinned in this change): the legacy `.sig` tag is present on both (probed after the release run finished), and cosign v3.1.3 verifies both against the `v1.18.0` tag of `TAIPANBOX/tokenfuse`.
+- **TAIPANBOX images: signed, admission not measured.** `genaryx-console` v1.1.48 is the one `stack-k8s` builds;
+  the tunnel images (`stack-caddy`, `stack-wg`) are not named by any manifest.
 - **Upstream images: three**, admitted by digest only (postgres, caddy, busybox, the table below).
-- **`mockryx` v0.2.1** (suspended drills CronJob): unsigned, refused.
+- **`mockryx` v0.2.2** (suspended drills CronJob): signed by its own repository's release, the same probe as above.
 
 Opt-in `policy/up.sh` installs the controller and the policies, and admits nothing new until
 `policy/up.sh --enforce` is run.
 
 ## Images the manifests name, and their signing
 
-- `genaryx-console` v1.1.47, signed by stack-k8s's `console-image.yml`, in the bundle format: no `.sig` tag.
-- `mockryx` v0.2.1, from its own repository (not this one): no signature found on the registry.
-- `stack-caddy` and `stack-wg` v1.1.47 are not named by any manifest; the tunnel builds them locally as
+- `genaryx-console` v1.1.48, signed by stack-k8s's `console-image.yml` in the legacy `.sig` format (#185 and the
+  v1.1.48 release): the one TAIPANBOX image this repository builds and names.
+- `mockryx` v0.2.2, from its own repository (not this one): legacy `.sig` tag present (probe above).
+- `stack-caddy` and `stack-wg` are not named by any manifest; the tunnel builds them locally as
   `stack/*:dev` (see "Not covered").
 
 ## Upstream images, and why each is trusted

@@ -103,7 +103,7 @@ spec:
               mountPath: /run/keyryx
       containers:
         - name: keyryx
-          image: ghcr.io/taipanbox/keyryx:v0.1.0@sha256:02e5d434e86c8f982eb2cf523abb254a4dde17823005b02861498ac38eab7c3e
+          image: ghcr.io/taipanbox/keyryx:v0.1.1@sha256:a9f88c44b62545555baffa19e3ace4b9c699c69c3a4aadbae28089aa2b29eb51
           args: [custody]
           env:
             - name: KEYRYX_DATA
@@ -204,7 +204,7 @@ spec:
               mountPath: /run/keyryx
       containers:
         - name: keyryx-witness
-          image: ghcr.io/taipanbox/keyryx:v0.1.0@sha256:02e5d434e86c8f982eb2cf523abb254a4dde17823005b02861498ac38eab7c3e
+          image: ghcr.io/taipanbox/keyryx:v0.1.1@sha256:a9f88c44b62545555baffa19e3ace4b9c699c69c3a4aadbae28089aa2b29eb51
           args: [witness]
           env:
             - name: KEYRYX_WITNESS_DATA

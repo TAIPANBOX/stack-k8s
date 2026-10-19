@@ -1,7 +1,10 @@
 import base64, json, subprocess, sys, urllib.parse, urllib.request, urllib.error
 import dpop
 ISS = "http://vouchryx:4310"
-LOCAL = "http://127.0.0.1:14310"
+# The one audience an agent token carries (stack-k8s v1.2.0, invariant 54, GOTCHAS 137). An agent asks for
+# it as RFC 8707 `resource`; a request that names none is refused audience_not_allowed.
+AUD = "https://vouchryx.agent-stack.invalid"
+LOCAL = "http://127.0.0.1:24310"
 
 def form_enc(s):
     return urllib.parse.quote(s, safe="")
@@ -24,13 +27,15 @@ def post_token(key, headers, body):
     except urllib.error.HTTPError as e:
         return e.code, json.loads(e.read() or b"{}")
 
-def enrolled(key):
+def enrolled(key, resource=AUD):
     secret = open("enrol.secret").read().strip()
-    return post_token(key, {"Authorization": basic("agent://k2.example/agents/enrolled-agent", secret)},
-                      {"grant_type": "client_credentials", "resource": ISS})
+    body = {"grant_type": "client_credentials"}
+    if resource is not None:
+        body["resource"] = resource
+    return post_token(key, {"Authorization": basic("agent://k2.example/agents/enrolled-agent", secret)}, body)
 
 def workload(key, sa_token):
-    return post_token(key, {}, {"grant_type": "client_credentials", "resource": ISS,
+    return post_token(key, {}, {"grant_type": "client_credentials", "resource": AUD,
                                 "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
                                 "client_assertion": sa_token})
 
@@ -39,8 +44,10 @@ if __name__ == "__main__":
     which = sys.argv[1]
     if which == "enrolled":
         st, body = enrolled(key)
+    elif which == "no-resource":
+        st, body = enrolled(key, resource=None)
     else:
-        tok = subprocess.run(["kubectl", "--context", "kind-k2e2e", "-n", "agent-stack", "create", "token", "workload-agent",
+        tok = subprocess.run(["kubectl", "-n", "agent-stack", "create", "token", "workload-agent",
                               "--audience", ISS, "--duration", "600s"], check=True, capture_output=True, text=True).stdout.strip()
         st, body = workload(key, tok)
     print("HTTP", st, sorted(body.keys()) if isinstance(body, dict) else body)

@@ -1,0 +1,15 @@
+# The stand-in for the gateway's egress to its provider. The product's 30-network-policy.yaml gives the
+# gateway an internet egress rule; this kind namespace has the stand-in provider instead. Without it the
+# gateway, selected by 54-delegation.yaml's gateway-egress-vouchryx policy (an Egress policy), cannot reach
+# the upstream: the gateway answers 502 upstream_error after its connection timeout.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: gateway-egress-upstream, namespace: agent-stack }
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-gateway } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: upstream } }
+      ports:
+        - { protocol: TCP, port: 18080 }

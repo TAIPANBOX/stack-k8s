@@ -135,6 +135,14 @@ SMTP_HOST="${SMTP_HOST:-}"
 SMTP_FROM="${SMTP_FROM:-}"
 SMTP_USER="${SMTP_USER:-}"
 SMTP_PASS=""
+# Mail transport security for the notifier (heraldyx 0.8.0): unset is starttls, the default.
+# Set it in your environment to pass it into the heraldyx-mail Secret (below): starttls, implicit
+# (port 465) or plain (a loopback relay only). Checked here, before anything is installed.
+HERALDYX_SMTP_TLS="${HERALDYX_SMTP_TLS:-}"
+case "$HERALDYX_SMTP_TLS" in
+  ""|starttls|implicit|plain) ;;
+  *) echo "!! HERALDYX_SMTP_TLS must be starttls, implicit or plain, or unset; got '$HERALDYX_SMTP_TLS'. Nothing was applied." >&2; exit 1 ;;
+esac
 # The record plane's trust domain. Empty leaves 00-base.yaml's `set-me.invalid`
 # in place, the right default and, measured 2026-09-13, NOT loud by itself:
 # verify.sh is what makes the placeholder red (GOTCHAS 90); see where it is used
@@ -776,6 +784,7 @@ if [ -n "$ALERT_TO" ]; then
     printf '  HERALDYX_TO: %s\n'        "$(b64_ "$ALERT_TO")"
     printf '  HERALDYX_SMTP_HOST: %s\n' "$(b64_ "$SMTP_HOST")"
     printf '  HERALDYX_SMTP_FROM: %s\n' "$(b64_ "$SMTP_FROM")"
+    if [ -n "$HERALDYX_SMTP_TLS" ]; then printf '  HERALDYX_SMTP_TLS: %s\n' "$(b64_ "$HERALDYX_SMTP_TLS")"; fi
     printf '  HERALDYX_BOX: %s\n'       "$(b64_ "${CONSOLE_DOMAIN:-agent stack}")"
     if [ -n "$SMTP_USER" ]; then printf '  HERALDYX_SMTP_USER: %s\n' "$(b64_ "$SMTP_USER")"; fi
     if [ -n "$SMTP_PASS" ]; then printf '  HERALDYX_SMTP_PASS: %s\n' "$(b64_ "$SMTP_PASS")"; fi

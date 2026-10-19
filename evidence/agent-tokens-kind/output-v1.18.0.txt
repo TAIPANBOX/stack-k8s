@@ -1,0 +1,30 @@
+== setup (cluster: kind-agent-tokens-pins, namespace agent-stack)
+== the delegation plane: vouchryx v0.6.0 from manifests/54-delegation.yaml
+== the stand-ins: provider, gateway base, MCP upstream, broker base
+== the agent-token door: agent-tokens/up.sh (registry and patches from the repository)
+cluster issuer: https://kubernetes.default.svc.cluster.local
+   registry, workload issuer and JWKS written as ConfigMaps (the secrets are digests and public keys only)
+patching vouchryx (registry and workload issuer)
+patching tokenfuse-gateway (agent tokens accept)
+patching tokenfuse-mcp-broker (agent tokens, and its own key for the tool-call check)
+agent tokens are on: label an agent pod taipanbox.dev/agent-token=true (see agent-tokens/example-agent.yaml).
+A stop is one call to vouchryx: POST http://vouchryx:4310/v1/revoke with ban:true, bearer = the revoke_key in the vouchryx-keys Secret.
+== vouchryx's JWKS from the pod serving now (up.sh rolled it; the signing key is the same secret, but a
+   gateway that read the first pod's keys refuses every token it did not mint: GOTCHAS 136-style check)
+== checks (tokenfuse 7cbaa794670560468b15a7a6a3c37396767435332e8eca3a30af627de29ad6d9, vouchryx v0.6.0)
+1 admitted: resource=AUD -> HTTP 200; aud=https://vouchryx.agent-stack.invalid iss=http://vouchryx:4310 sub=agent://k2.example/agents/enrolled-agent
+2 no audience named -> HTTP 400 {"error": "invalid_target"}
+3 gateway door, agent token -> HTTP 200
+4 broker door, agent token -> HTTP 200 {"id":7,"jsonrpc":"2.0","result":{"content":[{"text":"stub answered lookup","type":"text"}],"isError":false}}
+5 ban trial 1: refused after 6.23 s (HTTP 401)
+5 ban trial 2: refused after 9.37 s (HTTP 401)
+5 ban trial 3: refused after 9.72 s (HTTP 401)
+5 ban: 3 trials, min 6.23 max 9.72 s (the gateway polls every 12 s)
+RESULT: PASS
+== the refusal reasons, from vouchryx's event journal (the HTTP body carries the code, not the reason)
+      1 "reason":"audience_not_allowed"
+== exit 0
+./evidence/agent-tokens-kind/run-v1.18.0.sh: line 17: 49799 Terminated: 15          kubectl -n "$NS" port-forward svc/vouchryx 24310:4310 > /dev/null 2>&1
+./evidence/agent-tokens-kind/run-v1.18.0.sh: line 17: 49808 Terminated: 15          kubectl -n "$NS" port-forward svc/tokenfuse-gateway 24400:4100 > /dev/null 2>&1
+./evidence/agent-tokens-kind/run-v1.18.0.sh: line 17: 49809 Terminated: 15          kubectl -n "$NS" port-forward svc/tokenfuse-mcp-broker 24420:4200 > /dev/null 2>&1
+EXIT=0
