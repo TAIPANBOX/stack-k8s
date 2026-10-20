@@ -27,6 +27,31 @@ spec:
     requests:
       storage: 5Gi
 ---
+# The Keyryx witness's findings, `keyryx.ndjson` (CLAUDE.md invariant 75). Not a
+# corner of `stack-events`: the witness reads the bus and must never write it, so
+# its one stream is on a claim of its own. The witness mounts it read-write and
+# is its only writer; the console and heraldyx mount it read only, on whatever
+# nodes they run, which is why it is ReadWriteMany on the same Longhorn class.
+# In the default set, so a reader's mount never waits for a claim that a
+# `--without-keyryx` install did not make; with no witness it stays empty.
+#
+# @claude 2026-10-20: on the three launchers `stack-rwx` is Longhorn on the
+# nodes' own disks, which PORTABILITY.md prices at nothing beyond those disks;
+# it adds 1Gi times three replicas of node disk and one Longhorn share-manager
+# pod. A new claim is the operator's decision in this repository (the record
+# claim below was agreed before it was added), and this one waits for that.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: keyryx-alerts
+  namespace: agent-stack
+spec:
+  accessModes: ["ReadWriteMany"]
+  storageClassName: stack-rwx
+  resources:
+    requests:
+      storage: 1Gi
+---
 # The money plane's own state. `tokenfuse-cloud` keeps runs, budgets, incidents
 # and the savings ledger in memory and snapshots them to `TOKENFUSE_CLOUD_DATA`
 # every two seconds; with that variable unset it keeps NOTHING, which on one

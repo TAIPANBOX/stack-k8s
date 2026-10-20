@@ -394,6 +394,20 @@ jobs:
       - name: tokenfuse v1.20.0 is pinned by digest and the door origins name every address (invariant 74)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/tokenfuse-door-origins.sh
 
+      # Added 2026-10-20. Invariants 55 to 57 named these three gates and no caller ran them, so they held
+      # nothing; they run here now, beside the gate of invariant 75, which the witness's findings need.
+      - name: a Keyryx root key never reaches a process as an environment value (invariant 55)
+        run: ./scripts/keyryx-root-is-not-in-env.sh
+      - name: the Keyryx witness and custody share nothing but the image (invariant 56)
+        run: ./scripts/witness-is-separate.sh
+      - name: only labelled consumers reach a Keyryx role, and neither has egress (invariant 57)
+        run: ./scripts/keyryx-reaches-only-consumers.sh
+
+      # Added 2026-10-20 with invariant 75. The Keyryx witness's findings are a claim of their own, written by the
+      # witness alone and read only by the console and heraldyx; the witness mounts the bus read only.
+      - name: the witness's findings reach the console and heraldyx read only, and the witness never writes the bus (invariant 75)
+        run: ./scripts/keyryx-alerts-reach-readers.sh
+
       # Added 2026-10-14 with invariant 44. A cost report that meets a machine type with no
       # rate exits non-zero and names it, instead of counting it as zero. See GOTCHAS 127.
       - name: a cost report refuses an unknown machine rate (invariant 44)

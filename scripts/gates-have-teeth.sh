@@ -2004,7 +2004,7 @@ run_case "bus-names: an idryx --load path is not a stream file" fail \
 run_case "bus-names: a renamed stream that the notifier declares is not a fault" pass \
 	'./scripts/bus-names-match-the-source-rule.sh' \
 	"$(py 'edit("manifests/00-base.yaml", "WARDRYX_EVENTS_PATH: \"/var/lib/stack/events/wardryx.ndjson\"", "WARDRYX_EVENTS_PATH: \"/var/lib/stack/events/policy-events.ndjson\"")
-edit("manifests/45-heraldyx.yaml", "            - \x7b name: HERALDYX_EVENTS, value: \"/var/lib/stack/events\" \x7d\n", "            - \x7b name: HERALDYX_EVENTS, value: \"/var/lib/stack/events\" \x7d\n            - \x7b name: HERALDYX_STREAMS, value: \"policy-events=wardryx\" \x7d\n")')"
+edit("manifests/45-heraldyx.yaml", "            - \x7b name: HERALDYX_EVENTS, value: \"/var/lib/stack/events,/var/lib/keyryx-alerts/keyryx.ndjson\" \x7d\n", "            - \x7b name: HERALDYX_EVENTS, value: \"/var/lib/stack/events,/var/lib/keyryx-alerts/keyryx.ndjson\" \x7d\n            - \x7b name: HERALDYX_STREAMS, value: \"policy-events=wardryx\" \x7d\n")')"
 
 run_case "bus-names: the control plane and the broker keep their tokenfuse rows" pass \
 	'./scripts/bus-names-match-the-source-rule.sh' \
@@ -3402,7 +3402,7 @@ run_case "witness-is-separate: custody mounts the event streams" fail \
 	"custody mounts the event streams"
 run_case "witness-is-separate: the witness writes its alerts into the event directory" fail \
 	'./scripts/witness-is-separate.sh' \
-	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "value: /var/lib/keyryx-witness/alerts/keyryx.ndjson", "value: /var/lib/stack/events/keyryx.ndjson")')" \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "value: /var/lib/keyryx-alerts/keyryx.ndjson", "value: /var/lib/stack/events/keyryx.ndjson")')" \
 	"writes its alerts into the event directory"
 run_case "witness-is-separate: the witness Deployment is absent (measured nothing)" fail \
 	'./scripts/witness-is-separate.sh' \
@@ -3411,6 +3411,63 @@ run_case "witness-is-separate: the witness Deployment is absent (measured nothin
 run_case "witness-is-separate: a comment in the manifest (must pass)" pass \
 	'./scripts/witness-is-separate.sh' \
 	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "apiVersion: v1\n", "# the witness is read only over the events, and separate in every other way\napiVersion: v1\n")')"
+run_case "witness-is-separate: custody mounts the witness's findings claim" fail \
+	'./scripts/witness-is-separate.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "        - name: keyryx-state\n          persistentVolumeClaim:\n            claimName: keyryx-state\n", "        - name: keyryx-state\n          persistentVolumeClaim:\n            claimName: keyryx-state\n        - name: peek\n          persistentVolumeClaim:\n            claimName: keyryx-alerts\n")')" \
+	"custody mounts the witness's findings claim"
+# invariant 75: the witness's findings reach the console and heraldyx, read only, and the witness never
+# writes the bus it witnesses.
+run_case "keyryx-alerts: the witness writes its findings onto the bus" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "value: /var/lib/keyryx-alerts/keyryx.ndjson", "value: /var/lib/stack/events/keyryx.ndjson")')" \
+	"on the bus it witnesses"
+run_case "keyryx-alerts: the witness mounts the bus read-write" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "              mountPath: /var/lib/stack/events\n              readOnly: true\n", "              mountPath: /var/lib/stack/events\n")')" \
+	"mounts stack-events read-write"
+run_case "keyryx-alerts: the findings go back to the witness's state claim" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "value: /var/lib/keyryx-alerts/keyryx.ndjson", "value: /var/lib/keyryx-witness/alerts/keyryx.ndjson")')" \
+	"is not under its mount of keyryx-alerts"
+run_case "keyryx-alerts: the console mounts the findings read-write" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "            - \x7b name: keyryx-alerts, mountPath: /var/lib/keyryx-alerts, readOnly: true \x7d\n", "            - \x7b name: keyryx-alerts, mountPath: /var/lib/keyryx-alerts \x7d\n")')" \
+	"read-write at /var/lib/keyryx-alerts"
+run_case "keyryx-alerts: the console's findings volume is not read only" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "\x7b claimName: keyryx-alerts, readOnly: true \x7d", "\x7b claimName: keyryx-alerts \x7d")')" \
+	"without readOnly: true on the volume"
+run_case "keyryx-alerts: heraldyx is not told to read the findings" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-alerts/keyryx.ndjson\"", "value: \"/var/lib/stack/events\"")')" \
+	"heraldyx does not read the witness's findings"
+run_case "keyryx-alerts: the console is not told to read the findings" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "            - \x7b name: GENARYX_EVENTS_EXTRA, value: \"/var/lib/keyryx-alerts/keyryx.ndjson\" \x7d\n", "")')" \
+	"genaryx-console does not read the witness's findings"
+run_case "keyryx-alerts: the findings claim is ReadWriteOnce" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("manifests/00-base.yaml", "  name: keyryx-alerts\n  namespace: agent-stack\nspec:\n  accessModes: [\"ReadWriteMany\"]\n", "  name: keyryx-alerts\n  namespace: agent-stack\nspec:\n  accessModes: [\"ReadWriteOnce\"]\n")')" \
+	"is not ReadWriteMany"
+run_case "keyryx-alerts: the findings claim is gone (measured nothing)" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("manifests/00-base.yaml", "  name: keyryx-alerts\n  namespace: agent-stack\n", "  name: keyryx-findings-moved\n  namespace: agent-stack\n")')" \
+	"measured NOTHING"
+run_case "keyryx-alerts: a comment beside the findings claim (must pass)" pass \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("manifests/00-base.yaml", "# In the default set, so a reader", "# In the default set, so a reading pod")')"
+run_case "bus-names: the witness's findings file loses its keyryx stem" fail \
+	'./scripts/bus-names-match-the-source-rule.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "value: /var/lib/keyryx-alerts/keyryx.ndjson", "value: /var/lib/keyryx-alerts/alerts.ndjson")')" \
+	"is named for no source heraldyx reads from it"
+run_case "bus-names: the heraldyx pin goes back before the keyryx source" fail \
+	'./scripts/bus-names-match-the-source-rule.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "ghcr.io/taipanbox/heraldyx:v0.8.0@", "ghcr.io/taipanbox/heraldyx:v0.7.0@")')" \
+	"older than v0.8.0"
+run_case "stream-files-are-precreated: the witness's findings file is not made before it starts" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "        - name: precreate-streams\n", "        - name: make-findings-later\n")')" \
+	"keyryx-witness -> /var/lib/keyryx-alerts/keyryx.ndjson: no precreate-streams init container"
 TEETH_EDIT_186="$(py 'edit("keyryx/manifests/59-keyryx.yaml", "        - podSelector:\n            matchLabels: { keyryx-consumer: \"true\" }\n", "        - {}\n")')"
 run_case "keyryx-reaches-only-consumers: custody admits every pod" fail \
 	'./scripts/keyryx-reaches-only-consumers.sh' \

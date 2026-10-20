@@ -29,7 +29,11 @@
 #   2. every idryx `--load source:path` has a path whose stem may carry `source`,
 #      by the table or by an IDRYX_STREAMS declaration. idryx refuses the lines
 #      otherwise, and `identity-sweep` would find an empty graph;
-#   3. the table below is what heraldyx v0.3.0 and idryx v1.1.0 each carry (they
+#   3. the Keyryx witness's findings, a stream OFF the bus that heraldyx reads
+#      (CLAUDE.md invariant 75), under /var/lib/keyryx-alerts: its stem is one
+#      heraldyx accepts as the source the witness stamps, `keyryx`, and the heraldyx
+#      the manifests pin is v0.8.0 or later, the first whose table knows it;
+#   4. the table below is what heraldyx v0.3.0 and idryx v1.1.0 each carry (they
 #      each carry a copy and nothing holds the two equal; this is a third copy, so
 #      it is held to them by reading: internal/stream/stream.go in heraldyx,
 #      the same table in idryx). It is named here so a launcher change that needs
@@ -62,6 +66,10 @@ KNOWN = ["agent-conform", "console", "costcrew", "engram", "heraldyx", "idryx",
 ALLOWED = {s: {s} for s in KNOWN}
 ALLOWED["tokenfuse-cloud"] = {"tokenfuse"}
 ALLOWED["tokenfuse-mcp"] = {"tokenfuse"}
+# The witness's findings, off the bus (invariant 75). heraldyx v0.8.0 is the first
+# whose knownSources carries keyryx, so a stem here needs that pin.
+ALERTS = "/var/lib/keyryx-alerts"
+OFF_BUS = {"keyryx": {"keyryx": (0, 8, 0)}}
 
 
 def code_of(text):
@@ -83,6 +91,7 @@ files = sorted(pathlib.Path("manifests").glob("*.yaml"))
 tracked = subprocess.run(["git", "ls-files", "typed", "delegation", "hub", "tunnel"],
                          capture_output=True, text=True).stdout.split()
 files += [pathlib.Path(p) for p in tracked if p.endswith(".sh")]
+files += sorted(pathlib.Path("keyryx/manifests").glob("*.yaml"))
 files = [f for f in files if f.name != "secrets.example.yaml"]
 if not files:
     print("FAIL: no manifest or script found, so this measured nothing about the bus file names.")
@@ -118,6 +127,23 @@ for f, stem in streams:
                     "HERALDYX_STREAMS does not declare it, so heraldyx raises it as unknown and a "
                     "line claiming any other source is refused")
 
+off_bus = []
+for f, t in texts.items():
+    for m in re.finditer(re.escape(ALERTS) + r"/([A-Za-z0-9][A-Za-z0-9._-]*)\.ndjson", t):
+        off_bus.append((f, m.group(1)))
+for f, stem in sorted(set(off_bus)):
+    if stem not in OFF_BUS:
+        problems.append(f"{f}: the witness's findings file {stem}.ndjson under {ALERTS} is named for no source "
+                        "heraldyx reads from it; the witness stamps keyryx, so heraldyx would refuse every finding")
+        continue
+    least = OFF_BUS[stem]["keyryx"]
+    pins = re.findall(r"ghcr\.io/taipanbox/heraldyx:v(\d+)\.(\d+)\.(\d+)", texts.get(pathlib.Path("manifests/45-heraldyx.yaml"), ""))
+    if not pins:
+        problems.append(f"{f}: {stem}.ndjson is read by heraldyx and manifests/45-heraldyx.yaml pins no heraldyx image")
+    for pin in pins:
+        if tuple(int(x) for x in pin) < least:
+            problems.append(f"{f}: {stem}.ndjson is read by heraldyx v{'.'.join(pin)}, older than "
+                            f"v{'.'.join(map(str, least))}, the first that accepts source keyryx: every finding is refused")
 loads = []
 for f, t in texts.items():
     toks = re.findall(r"\"([^\"]*)\"", t)
@@ -150,6 +176,7 @@ if problems:
     sys.exit(1)
 
 stems = sorted({s for _, s in streams})
-print(f"OK: {len(stems)} stream name(s) on the bus ({', '.join(stems)}), each one the readers accept, and "
+print(f"OK: {len(stems)} stream name(s) on the bus ({', '.join(stems)}), each one the readers accept, "
+      f"{len(set(s for _, s in off_bus))} off the bus for heraldyx ({', '.join(sorted(set(s for _, s in off_bus))) or 'none'}), and "
       f"{len(loads)} idryx --load pair(s), each a source its file may carry.")
 PY

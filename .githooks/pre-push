@@ -101,6 +101,11 @@ step "the Keyryx witness reads the record and the record-seal reads attestations
 step "the record-seal fails closed: a failed pack ends the run non-zero (invariant 71)" "./scripts/record-seal-fails-closed.sh"
 step "the Keyryx images and the record seal's trailryx-node are the release pins (invariant 72)" "./scripts/keyryx-release-pins.sh"
 step "tokenfuse v1.20.0 is pinned by digest and the door origins name every address (invariant 74)" "./scripts/tokenfuse-door-origins.sh"
+step "the record seal is pinned to custody's one ES384 key, kept on a re-run (invariant 73)" "./scripts/keyryx-kid-is-pinned.sh"
+step "a Keyryx root key never reaches a process as an environment value (invariant 55)" "./scripts/keyryx-root-is-not-in-env.sh"
+step "the Keyryx witness and custody share nothing but the image (invariant 56)" "./scripts/witness-is-separate.sh"
+step "only labelled consumers reach a Keyryx role, and neither has egress (invariant 57)" "./scripts/keyryx-reaches-only-consumers.sh"
+step "the witness's findings reach the console and heraldyx read only, and the witness never writes the bus (invariant 75)" "./scripts/keyryx-alerts-reach-readers.sh"
 step "the teeth shards cover every case once" "./scripts/teeth-shards-cover-every-case.sh"
 
 echo

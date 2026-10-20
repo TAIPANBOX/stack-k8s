@@ -29,9 +29,9 @@
 #      as in the group when the pod-level securityContext has fsGroup 10001, supplementalGroups with
 #      10001, or runAsGroup 10001; a container-level runAsGroup is not counted (named limit).
 #
-# Not a writer here: keyryx-witness. Its alerts file sits in a directory its own uid created in
-# root-key-copy, so openAppend's ownership test passes without a precreate, and nothing on the bus
-# reads it.
+# keyryx-witness is a writer here since invariant 75: its findings file is on the claim keyryx-alerts,
+# whose root is not the witness's, and the console and heraldyx read it, so it is made up front like
+# the bus files.
 #
 # A subject that is absent is "measured NOTHING", never a pass.
 set -uo pipefail
@@ -67,6 +67,9 @@ WRITERS = [
     ("45-heraldyx.yaml", "Deployment", "heraldyx", "/var/lib/stack/heraldyx/sent.ndjson", 65532, 65532, "state"),
     ("47-scopyx.yaml", "Deployment", "scopyx", "/var/lib/scopyx/events.ndjson", 65532, 65532, "journal"),
     ("48-scopyx-browser.yaml", "Deployment", "scopyx", "/var/lib/scopyx/events.ndjson", 65532, 65532, "journal"),
+    # The Keyryx witness's findings (CLAUDE.md invariant 75), on a claim of their own and not the bus; the
+    # console and heraldyx read it in group 10001.
+    ("keyryx/manifests/59-keyryx.yaml", "Deployment", "keyryx-witness", "/var/lib/keyryx-alerts/keyryx.ndjson", 20100, 10001, "keyryx-alerts"),
 ]
 
 # Pods that mount the stack-events claim WITHOUT group 10001, each with the reason it does not need it.

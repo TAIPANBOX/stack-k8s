@@ -993,6 +993,18 @@ init container. wardryx is moved to v2.2.0 and signs its approval tokens through
 custody; its bearer key is `keyryx-wardryx-client`. Only pods labelled
 `keyryx-consumer: "true"` may reach custody.
 
+**The witness's findings reach the console and the notifier.** The witness writes
+`keyryx.ndjson` on a claim of its own, `keyryx-alerts` (ReadWriteMany, `stack-rwx`,
+1Gi, in the default set), and mounts the event streams read only, so it never writes
+the bus it witnesses. The console (`GENARYX_EVENTS_EXTRA`) and heraldyx
+(`HERALDYX_EVENTS`) mount that claim read only and read the file; heraldyx 0.8.0
+renders the seven `witness_*` types and mails the high ones. On the three launchers
+`stack-rwx` is Longhorn on the nodes' own disks, so the claim adds node disk and one
+Longhorn share-manager pod, not a billed disk; on a cluster whose `stack-rwx` is a
+managed RWX service it is billed. The console pinned here does not read
+`GENARYX_EVENTS_EXTRA` yet (TAIPANBOX/genaryx#134): until a console image built from
+that change is pinned, the findings reach the mail and not the console.
+
 Not wired yet: vouchryx and tokenfuse (their Keyryx releases are not published
 yet, so their pins stay where they are) and trailryx (its next release is later).
 

@@ -113,7 +113,10 @@ spec:
             # this box) lives in the Secret below instead, so that changing any
             # of it is one `kubectl create secret` and a restart rather than an
             # edit to a file in git.
-            - { name: HERALDYX_EVENTS, value: "/var/lib/stack/events" }
+            # The bus, and the Keyryx witness's findings, which are not on the bus (CLAUDE.md
+            # invariant 75): a file on a claim heraldyx mounts read only. Its stem, keyryx, is a
+            # source heraldyx 0.8.0 reads and renders.
+            - { name: HERALDYX_EVENTS, value: "/var/lib/stack/events,/var/lib/keyryx-alerts/keyryx.ndjson" }
             - { name: HERALDYX_STATE, value: "/var/lib/stack/heraldyx/state.json" }
             # "high", not stack-up's "medium": deliberately different, and
             # previously unstated anywhere, which is its own kind of trap. This
@@ -165,6 +168,8 @@ spec:
             # process reads the log and can do nothing else to it. Every limit
             # it applies is a limit on MESSAGES, never on evidence.
             - { name: events, mountPath: /var/lib/stack/events, readOnly: true }
+            # Read only, for the same reason: the witness writes its findings, heraldyx reads them.
+            - { name: keyryx-alerts, mountPath: /var/lib/keyryx-alerts, readOnly: true }
             - { name: state, mountPath: /var/lib/stack/heraldyx }
             # Read-only for the same reason as the log: this process reads a
             # passport to learn one field and has no business editing the
@@ -188,6 +193,8 @@ spec:
       volumes:
         - name: events
           persistentVolumeClaim: { claimName: stack-events }
+        - name: keyryx-alerts
+          persistentVolumeClaim: { claimName: keyryx-alerts, readOnly: true }
         # optional: true, so a cluster with no passports yet mounts an empty
         # directory and the alert simply carries no owner line. Create it when
         # there are passports to put in it:
