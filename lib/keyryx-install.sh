@@ -135,7 +135,12 @@ keyryx_patch_reader() {
 # reports wiring removed that it did not remove. scripts/keyryx-patches-round-trip.sh runs every pair.
 keyryx_unpatch() {
   local kind="$1" name="$2" file="$3"
-  if ! k_ "-n $KEYRYX_NS get $kind $name" >/dev/null 2>&1; then
+  local found
+  # --ignore-not-found prints nothing for an object that is not there and fails on any other error, so a
+  # cluster that cannot be read stops the run instead of reading as "not installed".
+  found="$(k_ "-n $KEYRYX_NS get $kind $name --ignore-not-found -o name")" \
+    || die "could not read $kind $name to remove its Keyryx wiring"
+  if [ -z "$found" ]; then
     printf '   %s %s: not installed, nothing to remove\n' "$kind" "$name"
     return 0
   fi

@@ -3520,10 +3520,18 @@ run_case "keyryx-alerts: the opt-out never unpatches the console" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
 	"$(py 'edit("lib/keyryx-install.sh", "  keyryx_unpatch_reader genaryx-console console-findings-unpatch.yaml\n", "")')" \
 	"keyryx_remove_settle does not unpatch genaryx-console"
-run_case "keyryx-alerts: keyryx/down.sh deletes the witness with heraldyx still bound to it" fail \
+run_case "keyryx-alerts: the opt-out leaves the record-seal patched" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
-	"$(py 'edit("keyryx/down.sh", "unpatch_reader heraldyx heraldyx-findings-unpatch.yaml\n", "")')" \
-	"keyryx/down.sh does not unpatch heraldyx"
+	"$(py 'edit("lib/keyryx-install.sh", "  keyryx_unpatch cronjob record-seal record-seal-unpatch.yaml\n", "")')" \
+	"keyryx_remove_settle does not reverse cronjob record-seal"
+run_case "keyryx-alerts: keyryx/down.sh deletes the witness with its readers and the record-seal still bound to it" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("keyryx/down.sh", "\nkeyryx_remove_settle\n", "\n")')" \
+	"keyryx/down.sh does not run keyryx_remove_settle"
+run_case "keyryx-alerts: keyryx/down.sh deletes before it unpatches" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("keyryx/down.sh", "\nkeyryx_remove_settle\n", "\n"); open("keyryx/down.sh", "a").write("keyryx_remove_settle\n")')" \
+	"runs keyryx_remove_settle after its first delete"
 run_case "keyryx-alerts: the GCP deploy applies heraldyx and never its findings patch" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
 	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "    keyryx_patch_reader heraldyx heraldyx-findings-patch.yaml\n", "")')" \

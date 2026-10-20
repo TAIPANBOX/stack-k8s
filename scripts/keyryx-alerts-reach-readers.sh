@@ -48,8 +48,10 @@
 #   6. lib/keyryx-install.sh patches both readers in keyryx_install_settle and
 #      unpatches both in keyryx_remove_settle, wardryx and the record-seal are reversed there through
 #      keyryx_unpatch too, and a refused unpatch stops it (keyryx_unpatch and keyryx_unpatch_reader end
-#      in die, never in `|| true`), keyryx/down.sh unpatches both before it
-#      deletes the witness, and each deploy script patches heraldyx after it applies it;
+#      in die, never in `|| true`); every object a keyryx/*-patch.yaml names (wardryx, the
+#      record-seal, the console, heraldyx) is reversed by keyryx_remove_settle, keyryx/down.sh
+#      runs keyryx_remove_settle before its first delete, and each deploy script patches
+#      heraldyx after it applies it;
 #   7. no file under manifests/ mounts keyryx-witness-state or names the findings
 #      directory, and every other pod that mounts keyryx-witness-state does so read
 #      only on the claim and on the mount.
@@ -371,9 +373,33 @@ for patch, unpatch, _, dep, _, _ in READERS:
         bad.append(f"lib/keyryx-install.sh: keyryx_install_settle does not patch {dep} with {posixpath.basename(patch)}")
     if not re.search(rf"keyryx_unpatch_reader\s+{re.escape(dep)}\s+{re.escape(posixpath.basename(unpatch))}", rem):
         bad.append(f"lib/keyryx-install.sh: keyryx_remove_settle does not unpatch {dep} with {posixpath.basename(unpatch)}")
-    down = read("keyryx/down.sh") or ""
-    if not re.search(rf"unpatch_reader\s+{re.escape(dep)}\s+{re.escape(posixpath.basename(unpatch))}", down):
-        bad.append(f"keyryx/down.sh does not unpatch {dep} before it deletes the witness it is affined to")
+
+# Every object a keyryx/*-patch.yaml names, which keyryx_install_settle applies, is reversed by
+# keyryx_remove_settle, and keyryx/down.sh runs keyryx_remove_settle before its first delete.
+patched = []
+for f in sorted(x for x in files if x.startswith("keyryx/") and x.endswith("-patch.yaml")):
+    t = read(f) or ""
+    k = re.search(r"^kind:\s*(\S+)", t, re.M)
+    n = re.search(r"^  name:\s*(\S+)", t, re.M)
+    if not (k and n):
+        continue
+    patched.append((k.group(1).lower(), n.group(1), posixpath.basename(f).replace("-patch.yaml", "-unpatch.yaml")))
+if not patched:
+    nothing("no keyryx/*-patch.yaml names an object")
+for kind, name, unf in patched:
+    if not re.search(rf"keyryx_unpatch(?:_reader)?\s+(?:{kind}\s+)?{re.escape(name)}\s+{re.escape(unf)}", rem):
+        bad.append(f"lib/keyryx-install.sh: keyryx_remove_settle does not reverse {kind} {name} with {unf}")
+down = read("keyryx/down.sh")
+if down is None:
+    nothing("keyryx/down.sh is absent")
+first_delete = re.search(r"^\s*kubectl\b.*\bdelete\b", down, re.M)
+call = re.search(r"^\s*keyryx_remove_settle\s*$", down, re.M)
+sourced = re.search(r"^\s*\.\s+\"\$ROOT/lib/keyryx-install\.sh\"", down, re.M)
+if not (call and sourced):
+    bad.append("keyryx/down.sh does not run keyryx_remove_settle, so it deletes the witness with the objects patched to it still patched")
+elif first_delete and call.start() > first_delete.start():
+    bad.append("keyryx/down.sh runs keyryx_remove_settle after its first delete: a reader or the record-seal is still bound to the witness it deletes")
+
 for f in DEPLOYS:
     t = read(f)
     if t is None:

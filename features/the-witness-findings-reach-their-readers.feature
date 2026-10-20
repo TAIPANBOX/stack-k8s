@@ -133,11 +133,23 @@ Feature: The Keyryx witness's findings reach the console and heraldyx, read only
     Then the gate fails and names keyryx_remove_settle
     # @teeth: keyryx-alerts: the opt-out never unpatches the console
 
-  Scenario: Turning Keyryx off leaves a reader bound to a deleted witness
-    Given keyryx/down.sh unpatches both readers before it deletes the witness
-    When heraldyx's unpatch is dropped
-    Then the gate fails, because heraldyx could not be scheduled again
-    # @teeth: keyryx-alerts: keyryx/down.sh deletes the witness with heraldyx still bound to it
+  Scenario: The opt-out leaves the record-seal patched
+    Given keyryx_remove_settle reverses every object a keyryx patch names
+    When the record-seal's unpatch is dropped from it
+    Then the gate fails, because every seal would stay bound to a witness that is gone
+    # @teeth: keyryx-alerts: the opt-out leaves the record-seal patched
+
+  Scenario: Turning Keyryx off leaves the record-seal and the readers bound to a deleted witness
+    Given keyryx/down.sh runs keyryx_remove_settle before it deletes anything
+    When it no longer runs it
+    Then the gate fails, because the record-seal, the console and heraldyx could not be scheduled again
+    # @teeth: keyryx-alerts: keyryx/down.sh deletes the witness with its readers and the record-seal still bound to it
+
+  Scenario: Turning Keyryx off deletes before it unpatches
+    Given keyryx/down.sh runs keyryx_remove_settle before its first delete
+    When the call moves below the deletes
+    Then the gate fails, because the witness is gone while the objects bound to it are still patched
+    # @teeth: keyryx-alerts: keyryx/down.sh deletes before it unpatches
 
   Scenario: A deploy applies heraldyx and never its findings patch
     Given each deploy script patches heraldyx right after it applies it
