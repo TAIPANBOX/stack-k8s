@@ -41,3 +41,10 @@ Feature: Turning Keyryx off leaves no record seal waiting for a witness that is 
     When it removes the Keyryx wiring first
     Then nothing it prints says custody or the witness stays
     # @teeth: keyryx-off: the opt-out says custody and the witness stay
+
+  Scenario: Only the record seal's own Jobs are released, by either part of the wiring
+    Given a Job another CronJob owns carries the whole Keyryx wiring, and a record-seal Job only signs through custody
+    When Keyryx is turned off
+    Then the other CronJob's Job is left alone, and the record-seal Job is deleted
+    # @teeth: keyryx-off: the release takes any CronJob's Job for a seal
+    # @teeth: keyryx-off: the release sees the affinity only, not the signer

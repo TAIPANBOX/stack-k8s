@@ -3603,6 +3603,14 @@ run_case "keyryx-off: the opt-out says custody and the witness stay" fail \
 	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
 	"$(py 'edit("lib/keyryx-install.sh", "Custody, the witness and every key are left as they are by this step.", "Custody and the witness stay until removed by hand.")')" \
 	"says custody or the witness stays"
+run_case "keyryx-off: the release takes any CronJob's Job for a seal" fail \
+	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "    if o.get(\"kind\") == \"Job\" and \"record-seal\" in owners(o, \"CronJob\"):", "    if o.get(\"kind\") == \"Job\":")')" \
+	"a Job another CronJob owns is deleted as a record seal"
+run_case "keyryx-off: the release sees the affinity only, not the signer" fail \
+	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "if done or not (affined(spec) or signs(spec)):", "if done or not affined(spec):")')" \
+	"a seal that signs through custody, which down.sh deletes, is left running unfinished"
 run_case "keyryx-off: the library is absent (measured nothing)" fail \
 	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
 	"$(py 'import os; os.remove("lib/keyryx-install.sh")')" \
