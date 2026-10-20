@@ -353,7 +353,7 @@ else:
 # with nothing noticing. Same fault, same gate, the other file it now reads.
 run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
 	'./scripts/pinned-images.sh' \
-	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.6.0@sha256:b226b16fb3cd58c1ad083cea668e0367e911bc0320c3fe5fa87366251570152b", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
 	"moves: a pod can come back different"
 
 # The default apply set must not publish anything to the world, and must not
@@ -774,7 +774,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.0@sha256:84f6856dcfe609410429774c965bbc531d063b29c640871dd44b1c34b07ba628\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 # The gateway's declassify key (invariant 27). POST /v1/fuse/declassify lifts a
@@ -834,7 +834,7 @@ run_case "declassify-is-keyed: an installer never gives an existing Secret the k
 # Each must say it measured nothing, never OK.
 run_case "declassify-is-keyed: no gateway container left to judge" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.0@sha256:84f6856dcfe609410429774c965bbc531d063b29c640871dd44b1c34b07ba628\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the declassify key"
 
 run_case "declassify-is-keyed: no installer left to read" fail \
@@ -1208,7 +1208,7 @@ run_case "agent-tokens-are-required: the gateway drops the governed profile" fai
 
 run_case "agent-tokens-are-required: the gateway runs a tokenfuse that predates the governed profile" fail \
 	"$AGT" \
-	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.19\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
+	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.20\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
 	"predates the governed profile and the static-key list"
 
 TEETH_EDIT_27="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"\" }")')"
@@ -1392,7 +1392,7 @@ run_case "wardryx-verifies-agent-tokens: the proof is switched off" fail \
 	"$TEETH_EDIT_39" \
 	"proof is required by default and must not be switched off"
 
-TEETH_EDIT_40="$(py 'edit("manifests/10-planes.yaml", "value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }", "value: \"http://tokenfuse-mcp-broker:4200\" }")')"
+TEETH_EDIT_40="$(py 'edit("manifests/10-planes.yaml", "WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\" }", "WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\" }")')"
 run_case "wardryx-verifies-agent-tokens: the gateway's door origin is not named" fail \
 	"$WVA" \
 	"$TEETH_EDIT_40" \
@@ -1725,7 +1725,7 @@ run_case "run-budget-ceiling-is-set: a comment next to the ceiling changes" pass
 	'./scripts/run-budget-ceiling-is-set.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "# The operator\x27s ceiling on a run\x27s budget (tokenfuse v1.5.0,", "# The operator\x27s ceiling on the budget of a run (tokenfuse v1.5.0,")')"
 
-TEETH_EDIT_68="$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')"
+TEETH_EDIT_68="$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.0@sha256:84f6856dcfe609410429774c965bbc531d063b29c640871dd44b1c34b07ba628\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')"
 run_case "run-budget-ceiling-is-set: no gateway container left to judge" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
 	"$TEETH_EDIT_68" \
@@ -3288,7 +3288,7 @@ run_case "broker-blocks-raw-secrets: the broker cannot reach wardryx" fail \
 
 run_case "broker-blocks-raw-secrets: the broker image cannot be pulled" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.0@sha256:84f6856dcfe609410429774c965bbc531d063b29c640871dd44b1c34b07ba628\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
 	"could not pull ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag"
 
 run_case "broker-blocks-raw-secrets: no broker left to judge" fail \
@@ -3437,7 +3437,7 @@ run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)"
 # edits one tracked file the gate reads; the gate's own baseline must be green first.
 run_case "verified-images: a TAIPANBOX image carries a tag only" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.6.0@sha256:b226b16fb3cd58c1ad083cea668e0367e911bc0320c3fe5fa87366251570152b", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
 	"image not pinned by digest"
 run_case "verified-images: an upstream image nobody allowed" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -3618,10 +3618,10 @@ run_case "keyryx: the record-seal pod is not labelled a consumer" fail \
 	'./scripts/keyryx-is-default.sh' \
 	"$(py 'edit("keyryx/record-seal-patch.yaml", "keyryx-consumer: \"true\"", "keyryx-consumer: \"false\"")')" \
 	"does not label the pod keyryx-consumer"
-run_case "keyryx: the record-seal is given an attestation directory with no writer" fail \
+run_case "keyryx: the record-seal is not pointed at its attestation directory" fail \
 	'./scripts/keyryx-is-default.sh' \
-	"$(py 'edit("keyryx/record-seal-patch.yaml", "value: /run/keyryx-client/credential\n", "value: /run/keyryx-client/credential\n                - name: TRAILRYX_WITNESS_ATTESTATIONS\n                  value: /var/lib/stack/attest\n")')" \
-	"sets TRAILRYX_WITNESS_ATTESTATIONS, which has no writer"
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "                - name: TRAILRYX_WITNESS_ATTESTATIONS\n                  value: /var/lib/stack/attestations\n", "")')" \
+	"does not point TRAILRYX_WITNESS_ATTESTATIONS at its attestations directory"
 run_case "keyryx: the custody policy grants trailryx nothing" fail \
 	'./scripts/keyryx-is-default.sh' \
 	"$(py 'edit("keyryx/policy.json.tmpl", "\"grants\": \x7b\"trailryx-root\": [\"sign\"]\x7d", "\"grants\": \x7b\x7d")')" \
@@ -3638,17 +3638,71 @@ run_case "keyryx: the opt-out never removes the signers" fail \
 	'./scripts/keyryx-is-default.sh' \
 	"$(py 'edit("deploy.sh", "  keyryx_remove_settle\n", "  true\n")')" \
 	"never calls keyryx_remove_settle"
-run_case "keyryx: the trailryx pin TODO is dropped from the library" fail \
+run_case "keyryx: the library stops pinning the record seal" fail \
 	'./scripts/keyryx-is-default.sh' \
-	"$(py 'edit("lib/keyryx-install.sh", "TODO(trailryx-kid)", "TODO(kid)")')" \
-	"does not name the trailryx pin as a TODO"
+	"$(py 'edit("lib/keyryx-install.sh", "keyryx_pin_trailryx_kid() {", "keyryx_pin_trailryx_kidX() {")')" \
+	"does not pin the record seal"
 run_case "keyryx: the library sets the attestation variable" fail \
 	'./scripts/keyryx-is-default.sh' \
 	"$(py 'edit("lib/keyryx-install.sh", "  keyryx_patch_record_seal\n  printf", "  keyryx_patch_record_seal\n  export TRAILRYX_WITNESS_ATTESTATIONS=/x\n  printf")')" \
-	"sets TRAILRYX_WITNESS_ATTESTATIONS, which keyryx v0.1.1 never writes"
+	"belongs to the record-seal patch"
 run_case "keyryx: a comment reworded in the library (must pass)" pass \
 	'./scripts/keyryx-is-default.sh' \
 	"$(py 'edit("lib/keyryx-install.sh", "# Keyryx, installed by default:", "# Keyryx, on by default:")')"
+
+# The record seal is pinned to custody's one ES384 key, kept on a re-run and re-pinned only on a named rotation (CLAUDE.md invariant 73).
+run_case "keyryx-kid: the custody policy keeps trailryx-root on ES256" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("keyryx/policy.json.tmpl", "\"alg\": \"ES384\"", "\"alg\": \"ES256\"")')" \
+	"does not declare trailryx-root as ES384"
+run_case "keyryx-kid: the pin is taken after the record seal is patched" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "  keyryx_pin_trailryx_kid\n  keyryx_patch_record_seal\n", "  keyryx_patch_record_seal\n  keyryx_pin_trailryx_kid\n")')" \
+	"patches the record seal before it pins the kid"
+run_case "keyryx-kid: the record seal reads the kid as a literal" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "valueFrom: { configMapKeyRef: { name: stack-wiring, key: TRAILRYX_KEYRYX_KID, optional: false } }", "value: KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK")')" \
+	"does not read TRAILRYX_KEYRYX_KID from the stack-wiring ConfigMap"
+run_case "keyryx-kid: the pin is made optional" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "optional: false", "optional: true")')" \
+	"does not read TRAILRYX_KEYRYX_KID from the stack-wiring ConfigMap"
+run_case "keyryx-kid: a re-run re-pins instead of keeping the pin" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "  elif [ -n \"$current\" ]; then", "  elif false; then")')" \
+	"keeps the pin on a re-run when it is still in the set"
+run_case "keyryx-kid: the key set's coordinates are printed" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "  local current jwks es384 n kid\n", "  local current jwks es384 n kid\n  keyryx_probe_jwks trailryx-root >&2\n")')" \
+	"carries a coordinate of the key"
+run_case "keyryx-kid: the probe pod loses its consumer label" fail \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "keyryx-consumer: \"true\", app", "keyryx-consumer: \"false\", app")')" \
+	"the probe pod does not carry"
+run_case "keyryx-kid: a comment reworded in the library (must pass)" pass \
+	'./scripts/keyryx-kid-is-pinned.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "# keyryx_probe_jwks NAME: prints custody", "# keyryx_probe_jwks NAME: prints the custody")')"
+
+# The Keyryx images and the record seal's trailryx-node are the release pins, by tag and digest (CLAUDE.md invariant 72).
+run_case "keyryx-release-pins: the witness is left on keyryx v0.1.1" fail \
+	'./scripts/keyryx-release-pins.sh' \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("keyryx:v0.1.2@sha256:9b6d"); open(p, "w").write(s[:i] + "keyryx:v0.1.1@sha256:9b6d" + s[i + len("keyryx:v0.1.2@sha256:9b6d"):])')" \
+	"is not the release pin"
+run_case "keyryx-release-pins: the record seal is left on trailryx-node v1.4.0" fail \
+	'./scripts/keyryx-release-pins.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "trailryx-node:v1.5.0@sha256:f152", "trailryx-node:v1.4.0@sha256:f152")')" \
+	"is not the release pin"
+run_case "keyryx-release-pins: one keyryx digest is not the tag's" fail \
+	'./scripts/keyryx-release-pins.sh' \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); s = s.replace("9b6d4e0e8988076e", "9b6d4e0e8988076f", 1); open(p, "w").write(s)')" \
+	"is not the release pin"
+run_case "keyryx-release-pins: the record seal's image is absent (measured nothing)" fail \
+	'./scripts/keyryx-release-pins.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/trailryx-node:", "image: ghcr.io/taipanbox/trailryx-nodx:")')" \
+	"measured NOTHING"
+run_case "keyryx-release-pins: a comment reworded in the Keyryx manifest (must pass)" pass \
+	'./scripts/keyryx-release-pins.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "# Images: keyryx v0.1.0, pinned by the index digest of the tag.", "# Images: keyryx, pinned by the index digest of the tag.")')"
 
 # The console's approver key and wardryx's copy of its public half (CLAUDE.md invariant 67).
 run_case "approver: the mint applies over an existing key" fail \
@@ -3673,26 +3727,35 @@ run_case "approver: the console's approver Secret becomes optional" fail \
 	"is not the Secret console-approver-key at mode 0440"
 run_case "approver: wardryx sets the JWK set with no mount (a half state)" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n            - { name: WARDRYX_APPROVER_JWKS, value: \"/etc/wardryx/approver/approver-jwks.json\" }\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: approver-jwks, mountPath: /etc/wardryx/approver, readOnly: true }\n", "")')" \
 	"wardryx's approver wiring is half set"
-run_case "approver: wardryx reads the JWK set while the console is still v1.1.48" fail \
+run_case "approver: the JWK set's volume becomes optional (a half state)" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n", "            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }\n            - { name: WARDRYX_APPROVER_JWKS, value: \"/etc/wardryx/approver/approver-jwks.json\" }\n"); edit("manifests/10-planes.yaml", "            - { name: policy, mountPath: /etc/wardryx/policy, readOnly: true }\n", "            - { name: policy, mountPath: /etc/wardryx/policy, readOnly: true }\n            - { name: approver-jwks, mountPath: /etc/wardryx/approver, readOnly: true }\n"); edit("manifests/10-planes.yaml", "              - configMap: { name: wardryx-typed-hold, optional: true }\n", "              - configMap: { name: wardryx-typed-hold, optional: true }\n        - name: approver-jwks\n          configMap: { name: wardryx-approver-jwks }\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "configMap: { name: wardryx-approver-jwks }", "configMap: { name: wardryx-approver-jwks, optional: true }")')" \
+	"wardryx's approver wiring is half set"
+run_case "approver: wardryx reads the JWK set from another file" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "value: \"/etc/wardryx/approver/approver-jwks.json\"", "value: \"/etc/wardryx/approver/other.json\"")')" \
+	"but the JWK set is mounted at"
+run_case "approver: the console is left on v1.1.48 while wardryx reads the JWK set" fail \
+	'./scripts/approver-key-is-minted.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "genaryx-console:v1.6.0@sha256:b226b16fb3cd58c1ad083cea668e0367e911bc0320c3fe5fa87366251570152b", "genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
 	"every approval would be refused"
-run_case "approver: the pending step is no longer named while wardryx is unwired" fail \
+run_case "approver: a TODO is left in place after the wiring" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "TODO(approver-jwks):", "TODO(approver-jwks-gone):")')" \
-	"names no TODO(approver-jwks)"
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: WARDRYX_APPROVER_JWKS,", "            # TODO(approver-jwks): still pending\n            - { name: WARDRYX_APPROVER_JWKS,")')" \
+	"the TODO is stale"
 run_case "approver: a comment reworded in the wiring (must pass)" pass \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "are NOT wired in v1.6.0.", "are not wired in v1.6.0.")')"
+	"$(py 'edit("manifests/10-planes.yaml", "(CLAUDE.md invariant 67). With WARDRYX_APPROVER_JWKS set", "(CLAUDE.md invariant 67). Once WARDRYX_APPROVER_JWKS is set")')"
+
 run_case "approver: a cloud launcher never mints the approver key" fail \
 	'./scripts/approver-key-is-minted.sh' \
 	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\napprover_mint_settle\n", "\n")')" \
 	"never calls approver_mint_settle"
 run_case "approver: WARDRYX_ALLOW_KEY_APPROVALS is set on wardryx" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" \x7d\n", "            - \x7b name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" \x7d\n            - \x7b name: WARDRYX_ALLOW_KEY_APPROVALS, value: \"1\" \x7d\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\" \x7d\n", "            - \x7b name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\" \x7d\n            - \x7b name: WARDRYX_ALLOW_KEY_APPROVALS, value: \"1\" \x7d\n")')" \
 	"sets WARDRYX_ALLOW_KEY_APPROVALS"
 run_case "approver: wardryx is pinned before the approver statements" fail \
 	'./scripts/approver-key-is-minted.sh' \
@@ -3722,6 +3785,51 @@ run_case "add-site: a digest with no tag is read as a version" fail \
 run_case "add-site: a comment reworded beside the reader (must pass)" pass \
 	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
 	"$(py 'edit("hub/add-site.sh", "# The manifests pin the image as name:tag@sha256", "# The manifests pin the image, as name:tag@sha256")')"
+
+# tokenfuse v1.20.0 is pinned by digest; each tokenfuse door names only its own two origins, and wardryx's agent-token door names their union (CLAUDE.md invariant 74).
+run_case "tokenfuse-door-origins: the gateway is left on tokenfuse v1.19.0" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'p = "manifests/10-planes.yaml"; s = open(p).read(); s = s.replace("tokenfuse:v1.20.0@sha256:84f6", "tokenfuse:v1.19.0@sha256:84f6", 1); open(p, "w").write(s)')" \
+	"is not the release pin"
+run_case "tokenfuse-door-origins: the control plane digest is not the release pin" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "ab2510b3687455341fcc207361b8ed4801c4c7460f3ddc8b243603b6a982ca88", "ab2510b3687455341fcc207361b8ed4801c4c7460f3ddc8b243603b6a982ca89")')" \
+	"is not the release pin"
+run_case "tokenfuse-door-origins: the gateway's list names the broker's origin" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "TOKENFUSE_DELEGATION_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100\"", "TOKENFUSE_DELEGATION_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200\"")')" \
+	"must name exactly"
+run_case "tokenfuse-door-origins: the broker's delegation list names the gateway's origin" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_DELEGATION_ORIGINS, value: \"http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\"", "TOKENFUSE_DELEGATION_ORIGINS, value: \"http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200,http://tokenfuse-gateway:4100\"")')" \
+	"must name exactly"
+run_case "tokenfuse-door-origins: the broker's MCP proof list names the gateway's origin" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_MCP_PROOF_ORIGINS, value: \"http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\"", "TOKENFUSE_MCP_PROOF_ORIGINS, value: \"http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200,http://tokenfuse-gateway:4100\"")')" \
+	"must name exactly"
+run_case "tokenfuse-door-origins: wardryx's door list is missing the broker's cluster-internal name" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\"", "WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200\"")')" \
+	"must name exactly"
+run_case "tokenfuse-door-origins: the gateway's list carries an entry that is not an origin" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "TOKENFUSE_DELEGATION_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100\"", "TOKENFUSE_DELEGATION_ORIGINS, value: \"tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100\"")')" \
+	"is not an origin"
+run_case "tokenfuse-door-origins: the broker's MCP proof origins drop the cluster-internal name" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_MCP_PROOF_ORIGINS, value: \"http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\"", "TOKENFUSE_MCP_PROOF_ORIGINS, value: \"http://tokenfuse-mcp-broker:4200\"")')" \
+	"must name exactly"
+run_case "tokenfuse-door-origins: the broker's MCP proof origins are removed" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - { name: TOKENFUSE_MCP_PROOF_ORIGINS, value: \"http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\" }\n", "")')" \
+	"TOKENFUSE_MCP_PROOF_ORIGINS is not set"
+run_case "tokenfuse-door-origins: the gateway's origin list is removed (measured nothing)" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_DELEGATION_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100\" }\n", "")')" \
+	"TOKENFUSE_DELEGATION_ORIGINS is not set"
+run_case "tokenfuse-door-origins: a comment reworded beside the broker (must pass)" pass \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "Every address the broker is reached at in the cluster (CLAUDE.md invariant 74).", "Every address the broker is reached at, in the cluster (CLAUDE.md invariant 74).")')"
 
 # The record-seal fails closed: a failed pack ends the run non-zero, and only the known empty case exits 0 (CLAUDE.md invariant 71).
 run_case "record-seal: a failed pack exits zero again (the old fallback)" fail \
@@ -3773,14 +3881,18 @@ run_case "witness-records: the record-seal mounts the whole witness state" fail 
 	'./scripts/keyryx-witness-shares-the-record.sh' \
 	"$(py 'edit("keyryx/record-seal-patch.yaml", "                  subPath: data/attestations\n", "")')" \
 	"without the subPath data/attestations"
-run_case "witness-records: the record-seal reads attestations it cannot read (mode 0600)" fail \
+run_case "witness-records: the record-seal is not pointed at the attestations" fail \
 	'./scripts/keyryx-witness-shares-the-record.sh' \
-	"$(py 'edit("keyryx/record-seal-patch.yaml", "                - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE\n", "                - name: TRAILRYX_WITNESS_ATTESTATIONS\n                  value: /var/lib/stack/attestations\n                - name: TRAILRYX_KEYRYX_CREDENTIAL_FILE\n")')" \
-	"sets TRAILRYX_WITNESS_ATTESTATIONS while"
-run_case "witness-records: the attestation blocker is dropped from the patch" fail \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "                - name: TRAILRYX_WITNESS_ATTESTATIONS\n                  value: /var/lib/stack/attestations\n", "")')" \
+	"does not point TRAILRYX_WITNESS_ATTESTATIONS at its read-only attestations directory"
+run_case "witness-records: the witness runs outside the record plane's group" fail \
 	'./scripts/keyryx-witness-shares-the-record.sh' \
-	"$(py 'edit("keyryx/record-seal-patch.yaml", "TODO(keyryx-attest-mode)", "TODO(attest)")')" \
-	"does not name the attestation-mode blocker"
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "runAsUser: 20100\n        runAsGroup: 10001\n        fsGroup: 10001", "runAsUser: 20100\n        runAsGroup: 20100\n        fsGroup: 10001")')" \
+	"does not run as group 10001"
+run_case "witness-records: the witness init runs outside the record plane's group" fail \
+	'./scripts/keyryx-witness-shares-the-record.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "runAsUser: 20100\n            runAsGroup: 10001", "runAsUser: 20100\n            runAsGroup: 20100")')" \
+	"root-key-copy does not run as group 10001"
 run_case "witness-records: the opt-out keeps the pod affinity" fail \
 	'./scripts/keyryx-witness-shares-the-record.sh' \
 	"$(py 'edit("keyryx/record-seal-unpatch.yaml", "affinity: null", "affinity: {}")')" \

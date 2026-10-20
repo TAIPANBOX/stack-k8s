@@ -13,7 +13,7 @@
 #      and removes the wiring when the operator opts out.
 #   3. keyryx/record-seal-patch.yaml sets the record-seal's signer to keyryx: TRAILRYX_SIGNER, the custody URL,
 #      the consumer credential file, and the label that lets the pod reach custody. It never sets
-#      TRAILRYX_WITNESS_ATTESTATIONS: keyryx v0.1.1 has no attestation writer, so that directory would stay empty.
+#      TRAILRYX_WITNESS_ATTESTATIONS: the record-seal patch sets it to its read-only mount, and the library never does.
 #   4. keyryx/policy.json.tmpl grants trailryx-node the sign operation on trailryx-root, the key trailryx signs under.
 #   5. keyryx/wardryx-patch.yaml and keyryx/wardryx-unpatch.yaml pin the same wardryx image as manifests/10-planes.yaml.
 #      The patch runs after apply; a different image there would roll wardryx back on every default install.
@@ -51,10 +51,10 @@ else:
     for fn in ("keyryx_install_settle()", "keyryx_remove_settle()"):
         if fn not in lib:
             bad.append(f"{LIB} does not define {fn}")
-    if "TODO(trailryx-kid)" not in lib:
-        bad.append(f"{LIB} does not name the trailryx pin as a TODO (TRAILRYX_KEYRYX_KID, trailryx#112)")
+    if "keyryx_pin_trailryx_kid()" not in lib:
+        bad.append(f"{LIB} does not pin the record seal to custody's trailryx-root key (keyryx_pin_trailryx_kid, invariant 73)")
     if re.search(r"TRAILRYX_WITNESS_ATTESTATIONS", live(lib)):
-        bad.append(f"{LIB} sets TRAILRYX_WITNESS_ATTESTATIONS, which keyryx v0.1.1 never writes")
+        bad.append(f"{LIB} sets TRAILRYX_WITNESS_ATTESTATIONS, which belongs to the record-seal patch (invariant 70)")
 
 for path in LAUNCHERS:
     text = read(path)
@@ -91,15 +91,15 @@ else:
             bad.append(f"keyryx/record-seal-patch.yaml does not set {name}={value}")
     if not re.search(r'keyryx-consumer: "true"', rs):
         bad.append("keyryx/record-seal-patch.yaml does not label the pod keyryx-consumer, so custody refuses it")
-    if re.search(r"TRAILRYX_WITNESS_ATTESTATIONS", live(rs)):
-        bad.append("keyryx/record-seal-patch.yaml sets TRAILRYX_WITNESS_ATTESTATIONS, which has no writer")
+    if not re.search(r"name: TRAILRYX_WITNESS_ATTESTATIONS\n\s+value: \"?/var/lib/stack/attestations\"?", rs):
+        bad.append("keyryx/record-seal-patch.yaml does not point TRAILRYX_WITNESS_ATTESTATIONS at its attestations directory, so the seal reads no witness attestation")
 
 pol = read("keyryx/policy.json.tmpl")
 if pol is None:
     bad.append("keyryx/policy.json.tmpl is absent: the custody policy is measured NOTHING")
 else:
-    if not re.search(r'"name": "trailryx-root"\s*,\s*"alg": "ES256"', pol):
-        bad.append("keyryx/policy.json.tmpl does not declare the ES256 key trailryx-root")
+    if not re.search(r'"name": "trailryx-root"\s*,\s*"alg": "ES384"', pol):
+        bad.append("keyryx/policy.json.tmpl does not declare the ES384 key trailryx-root (the one trailryx-node pins, invariant 73)")
     if not re.search(r'"grants": \{"trailryx-root": \["sign"\]\}', pol) or "@TRAILRYX_DIGEST@" not in pol:
         bad.append("keyryx/policy.json.tmpl does not grant trailryx-node the sign operation on trailryx-root by digest")
 
