@@ -163,7 +163,7 @@ spec:
           # The gateway's own image and pin, exactly (see pinned-images.sh
           # and CLAUDE.md invariant 7): this is a subcommand of the same
           # binary, not a separate published artifact.
-          image: ghcr.io/taipanbox/tokenfuse:v1.19.0@sha256:32139654fc63ebc3026720413f1a9c16f07fb2507509714d946f50ffcf2a2434
+          image: ghcr.io/taipanbox/tokenfuse:v1.20.0@sha256:84f6856dcfe609410429774c965bbc531d063b29c640871dd44b1c34b07ba628
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse"]
           args: ["mcp-broker"]
@@ -227,7 +227,11 @@ spec:
             - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
             - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
             - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "https://vouchryx.agent-stack.invalid" }
+            # Every address the broker is reached at in the cluster (CLAUDE.md invariant 74): its Service name and the
+            # cluster-internal name. The same list serves the delegation door and the MCP proof door.
             - { name: TOKENFUSE_DELEGATION_URL, value: "http://tokenfuse-mcp-broker:4200" }
+            - { name: TOKENFUSE_DELEGATION_ORIGINS, value: "http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200" }
+            - { name: TOKENFUSE_MCP_PROOF_ORIGINS, value: "http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS, value: "http://vouchryx:4310/v1/revocations" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, value: "12000" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: "closed" }
