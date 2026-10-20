@@ -3755,7 +3755,7 @@ run_case "approver: a cloud launcher never mints the approver key" fail \
 	"never calls approver_mint_settle"
 run_case "approver: WARDRYX_ALLOW_KEY_APPROVALS is set on wardryx" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" \x7d\n", "            - \x7b name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" \x7d\n            - \x7b name: WARDRYX_ALLOW_KEY_APPROVALS, value: \"1\" \x7d\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\" \x7d\n", "            - \x7b name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\" \x7d\n            - \x7b name: WARDRYX_ALLOW_KEY_APPROVALS, value: \"1\" \x7d\n")')" \
 	"sets WARDRYX_ALLOW_KEY_APPROVALS"
 run_case "approver: wardryx is pinned before the approver statements" fail \
 	'./scripts/approver-key-is-minted.sh' \
