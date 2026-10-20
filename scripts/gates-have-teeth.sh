@@ -3547,6 +3547,69 @@ run_case "keyryx-alerts: heraldyx's patch is gone (measured nothing)" fail \
 run_case "keyryx-alerts: a comment beside heraldyx's patch (must pass)" pass \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
 	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", "# heraldyx reads the Keyryx witness'"'"'s findings", "# heraldyx reads the findings of the Keyryx witness")')"
+# invariant 75, the gate's own subjects: a keyryx/*-patch.yaml whose target the gate cannot read fails
+# loudly, and keyryx_unpatch_reader counts only for a Deployment (the kind is never optional).
+run_case "keyryx-alerts: a patch that names no kind" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "apiVersion: batch/v1\nkind: CronJob\n", "apiVersion: batch/v1\n")')" \
+	"keyryx/record-seal-patch.yaml: this gate cannot read which object the patch targets"
+run_case "keyryx-alerts: a fifth patch, its name indented four spaces, is never reversed" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'import subprocess
+open("keyryx/costcrew-patch.yaml", "w").write("apiVersion: apps/v1\nkind: Deployment\nmetadata:\n    name: costcrew\n    namespace: agent-stack\nspec: {}\n")
+subprocess.run(["git", "add", "keyryx/costcrew-patch.yaml"], check=True)')" \
+	"keyryx_remove_settle does not reverse deployment costcrew with costcrew-unpatch.yaml"
+run_case "keyryx-alerts: a CronJob patch reversed as a Deployment reader" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'import subprocess
+open("keyryx/costcrew-crew-patch.yaml", "w").write("apiVersion: batch/v1\nkind: CronJob\nmetadata:\n  name: costcrew-crew\n  namespace: agent-stack\nspec: {}\n")
+subprocess.run(["git", "add", "keyryx/costcrew-crew-patch.yaml"], check=True)
+edit("lib/keyryx-install.sh", "  keyryx_unpatch_reader heraldyx heraldyx-findings-unpatch.yaml\n", "  keyryx_unpatch_reader heraldyx heraldyx-findings-unpatch.yaml\n  keyryx_unpatch_reader costcrew-crew costcrew-crew-unpatch.yaml\n")')" \
+	"keyryx_remove_settle does not reverse cronjob costcrew-crew with costcrew-crew-unpatch.yaml"
+run_case "keyryx-alerts: a patch with its name indented four spaces (must pass)" pass \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("keyryx/record-seal-patch.yaml", "metadata:\n  name: record-seal\n  namespace: agent-stack\n", "metadata:\n    name: record-seal\n    namespace: agent-stack\n")')"
+# invariant 76: turning Keyryx off leaves no record-seal Job bound to the witness, and a read it
+# cannot make stops it. The gate runs keyryx/down.sh and the library against a stand-in kubectl.
+run_case "keyryx-off: the opt-out never releases the record-seal Jobs" fail \
+	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "  keyryx_release_seal\n", "")')" \
+	"the Job is not deleted, so its pod stays Pending"
+run_case "keyryx-off: the release runs before the record-seal is unpatched" fail \
+	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "  keyryx_unpatch cronjob record-seal record-seal-unpatch.yaml\n  keyryx_release_seal\n", "  keyryx_release_seal\n  keyryx_unpatch cronjob record-seal record-seal-unpatch.yaml\n")')" \
+	"before the record-seal CronJob is unpatched"
+run_case "keyryx-off: the release never checks what the delete left" fail \
+	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "  [ -z \"$left\" ] || die \"a record-seal Job or pod", "  true || die \"a record-seal Job or pod")')" \
+	"exited 0 with a record-seal Job still bound to the witness"
+run_case "keyryx-off: a running seal is deleted instead of let finish" fail \
+	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "deadline=$((SECONDS + ${KEYRYX_SEAL_WAIT:-300}))", "deadline=$SECONDS")')" \
+	"a seal that was running is deleted instead of let finish"
+run_case "keyryx-off: a seal is deleted without waiting for its pods" fail \
+	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "delete job $job --cascade=foreground --wait=true", "delete job $job --wait=false")')" \
+	"without waiting for its pods"
+run_case "keyryx-off: down.sh swallows a failed read of a Deployment" fail \
+	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
+	"$(py 'edit("keyryx/down.sh", "    || die \"could not read deployment $dep to wait for its rollout off Keyryx\"", "    || true")')" \
+	"down.sh exited 0 although it could not read deployment genaryx-console"
+run_case "keyryx-off: a failed read of a reader reads as not installed" fail \
+	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "    || die \"could not read deployment $dep to patch it", "    || true # could not read deployment $dep to patch it")')" \
+	"reading a failed read as"
+run_case "keyryx-off: the opt-out says custody and the witness stay" fail \
+	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "Custody, the witness and every key are left as they are by this step.", "Custody and the witness stay until removed by hand.")')" \
+	"says custody or the witness stays"
+run_case "keyryx-off: the library is absent (measured nothing)" fail \
+	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
+	"$(py 'import os; os.remove("lib/keyryx-install.sh")')" \
+	"measured NOTHING"
+run_case "keyryx-off: a comment in down.sh (must pass)" pass \
+	'./scripts/keyryx-off-leaves-nothing-bound.sh' \
+	"$(py 'edit("keyryx/down.sh", "# Keeps every key and every claim", "# Keeps each key and each claim")')"
 run_case "bus-names: the witness's findings file loses its keyryx stem" fail \
 	'./scripts/bus-names-match-the-source-rule.sh' \
 	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "value: /var/lib/keyryx-witness/alerts/keyryx.ndjson", "value: /var/lib/keyryx-witness/alerts/alerts.ndjson")')" \

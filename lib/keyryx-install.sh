@@ -23,9 +23,10 @@
 #     when its Deployment is there (heraldyx is opt-in), so the witness's findings reach them (invariant 75)
 #
 # WHAT keyryx_remove_settle DOES: the same patches in reverse (wardryx-unpatch.yaml, record-seal-unpatch.yaml,
-# console-findings-unpatch.yaml, heraldyx-findings-unpatch.yaml).
-# It keeps custody, the witness, every key and the policy, because apply prunes nothing and no key is deleted on
-# this repository's own initiative.
+# console-findings-unpatch.yaml, heraldyx-findings-unpatch.yaml), and, right after the record-seal's, no record-seal
+# Job left bound to the witness (keyryx_release_seal: a running one is let finish, any other deleted, then checked).
+# It removes no Keyryx object, key or policy, because apply prunes nothing and no key is deleted on this
+# repository's own initiative; keyryx/down.sh deletes custody and the witness after it.
 
 KEYRYX_NS="${KEYRYX_NS:-agent-stack}"
 
@@ -117,8 +118,12 @@ keyryx_patch_record_seal() {
 # this again for heraldyx once it is applied. The reader mounts the witness's own claim through subPath alerts, read
 # only, and is pod-affined to the witness, so it rolls onto the witness's node.
 keyryx_patch_reader() {
-  local dep="$1" file="$2"
-  if ! k_ "-n $KEYRYX_NS get deployment $dep" >/dev/null 2>&1; then
+  local dep="$1" file="$2" found
+  # --ignore-not-found prints nothing for a Deployment that is not there and fails on any other error, so a
+  # cluster that cannot be read stops the run instead of reading as "not installed" and skipping the patch.
+  found="$(k_ "-n $KEYRYX_NS get deployment $dep --ignore-not-found -o name")" \
+    || die "could not read deployment $dep to patch it to read the Keyryx witness's findings"
+  if [ -z "$found" ]; then
     printf '   %s: not installed, its findings patch waits until it is\n' "$dep"
     return 0
   fi
@@ -266,12 +271,90 @@ for k in keys:
   printf '   trailryx-kid: pinned to custody'"'"'s ES384 key %s (the record seal signs under it)\n' "$kid"
 }
 
-# keyryx_remove_settle: the opt-out. The signers come off; custody, the witness and every key stay.
+# keyryx_seal_bound: prints one line for each record-seal Job that has not finished and still carries the wiring of
+# keyryx/record-seal-patch.yaml (the required pod affinity to app: keyryx-witness, or TRAILRYX_SIGNER=keyryx), as
+# "job/<name> running" when one of its pods runs and "job/<name> waiting" when none does, and one line
+# "pod/<name> pending" for each Pending pod of a record-seal Job that carries that affinity. Prints nothing when no
+# seal is bound to Keyryx; fails when the Jobs and pods cannot be read or parsed.
+keyryx_seal_bound() {
+  local listing
+  listing="$(k_ "-n $KEYRYX_NS get jobs,pods -o json")" || return 1
+  printf '%s' "$listing" | python3 -c '
+import json, re, sys
+try:
+    items = json.load(sys.stdin).get("items")
+except (ValueError, AttributeError):
+    sys.exit("the Jobs and pods listing is not a JSON list")
+if not isinstance(items, list):
+    sys.exit("the Jobs and pods listing has no items")
+NAME = re.compile(r"[a-z0-9]([-a-z0-9.]*[a-z0-9])?")
+
+def owners(o, kind):
+    return [r.get("name") for r in (o.get("metadata", {}).get("ownerReferences") or []) if r.get("kind") == kind]
+
+def affined(spec):
+    terms = (((spec.get("affinity") or {}).get("podAffinity") or {}).get("requiredDuringSchedulingIgnoredDuringExecution") or [])
+    return any(((t.get("labelSelector") or {}).get("matchLabels") or {}).get("app") == "keyryx-witness" for t in terms)
+
+def signs(spec):
+    return any(e.get("name") == "TRAILRYX_SIGNER" and e.get("value") == "keyryx"
+               for c in spec.get("containers") or [] for e in c.get("env") or [])
+
+jobs = {}
+for o in items:
+    if o.get("kind") == "Job" and "record-seal" in owners(o, "CronJob"):
+        jobs[o["metadata"]["name"]] = o
+pods = [o for o in items if o.get("kind") == "Pod" and set(owners(o, "Job")) & set(jobs)]
+for name, j in sorted(jobs.items()):
+    done = any(c.get("type") in ("Complete", "Failed") and c.get("status") == "True"
+               for c in (j.get("status") or {}).get("conditions") or [])
+    spec = ((j.get("spec") or {}).get("template") or {}).get("spec") or {}
+    if done or not (affined(spec) or signs(spec)):
+        continue
+    if not NAME.fullmatch(name):
+        sys.exit("a record-seal Job has a name that is not a Kubernetes name: refusing to act on it")
+    running = any(name in owners(p, "Job") and (p.get("status") or {}).get("phase") == "Running" for p in pods)
+    print(f"job/{name} " + ("running" if running else "waiting"))
+for p in pods:
+    if (p.get("status") or {}).get("phase") == "Pending" and affined(p.get("spec") or {}):
+        print("pod/" + p["metadata"]["name"] + " pending")
+'
+}
+
+# keyryx_release_seal: run after the record-seal CronJob is unpatched. A Job the CronJob made before that keeps the
+# old template, and with it the required pod affinity to the witness: once the witness is deleted, a pod of that Job
+# stays Pending, and concurrencyPolicy Forbid then holds back every later seal. A seal that is running is let finish,
+# for KEYRYX_SEAL_WAIT seconds (300 by default); then every record-seal Job still bound to Keyryx is deleted with its
+# pods (a seal that has not started loses nothing: the next scheduled seal reads every event file again), and the
+# listing is read once more to show that no seal is left bound to the witness or Pending on it.
+keyryx_release_seal() {
+  local left deadline job
+  deadline=$((SECONDS + ${KEYRYX_SEAL_WAIT:-300}))
+  while :; do
+    left="$(keyryx_seal_bound)" || die "could not read the record-seal Jobs to release them from the Keyryx witness"
+    printf '%s\n' "$left" | grep -q ' running$' || break
+    [ "$SECONDS" -lt "$deadline" ] || break
+    sleep "${KEYRYX_SEAL_POLL:-5}"
+  done
+  for job in $(printf '%s\n' "$left" | sed -n 's|^job/\([^ ]*\) .*$|\1|p'); do
+    k_ "-n $KEYRYX_NS delete job $job --cascade=foreground --wait=true --timeout=120s" >/dev/null \
+      || die "could not delete the record-seal Job $job, which is still bound to the Keyryx witness"
+    printf '   record-seal Job %s: deleted, it still carried the Keyryx wiring (the next scheduled seal seals what it left)\n' "$job"
+  done
+  left="$(keyryx_seal_bound)" || die "could not read the record-seal Jobs after releasing them from the Keyryx witness"
+  [ -z "$left" ] || die "a record-seal Job or pod is still bound to the Keyryx witness: $(printf '%s' "$left" | tr '\n' ' ')"
+  printf '   record-seal: no Job and no pod is bound to the Keyryx witness\n'
+}
+
+# keyryx_remove_settle: the opt-out, and the first step of keyryx/down.sh. The signers come off and no record-seal Job
+# is left bound to the witness. This step removes no Keyryx object and no key: the opt-out keeps custody and the
+# witness, and keyryx/down.sh deletes them after it.
 keyryx_remove_settle() {
-  printf '\n>> Keyryx off (--without-keyryx): the approval signer and the record signer are removed, and the record is not signed by custody.\n'
+  printf '\n>> Keyryx wiring off: the approval signer and the record signer are removed, and the record is not signed by custody.\n'
   keyryx_unpatch deployment wardryx wardryx-unpatch.yaml
   keyryx_unpatch cronjob record-seal record-seal-unpatch.yaml
+  keyryx_release_seal
   keyryx_unpatch_reader genaryx-console console-findings-unpatch.yaml
   keyryx_unpatch_reader heraldyx heraldyx-findings-unpatch.yaml
-  printf '   wardryx, record-seal, the console and heraldyx: Keyryx wiring removed. Custody and the witness stay until removed by hand.\n'
+  printf '   wardryx, record-seal, the console and heraldyx: Keyryx wiring removed. Custody, the witness and every key are left as they are by this step.\n'
 }
