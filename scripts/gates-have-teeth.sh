@@ -3445,6 +3445,22 @@ run_case "keyryx-alerts: the console is not told to read the findings" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
 	"$(py 'edit("manifests/20-console.yaml", "            - \x7b name: GENARYX_EVENTS_EXTRA, value: \"/var/lib/keyryx-alerts/keyryx.ndjson\" \x7d\n", "")')" \
 	"genaryx-console does not read the witness's findings"
+run_case "keyryx-alerts: the witness's bus volume is not read only on the claim" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "            claimName: stack-events\n            readOnly: true\n        - name: keyryx-alerts\n", "            claimName: stack-events\n        - name: keyryx-alerts\n")')" \
+	"not readOnly on the claim"
+run_case "keyryx-alerts: heraldyx is handed the findings directory, not the file" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-alerts/keyryx.ndjson\"", "value: \"/var/lib/stack/events,/var/lib/keyryx-alerts\"")')" \
+	"heraldyx does not read the witness's findings"
+run_case "keyryx-alerts: the console is handed the findings directory, not the file" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "value: \"/var/lib/keyryx-alerts/keyryx.ndjson\" \x7d", "value: \"/var/lib/keyryx-alerts\" \x7d")')" \
+	"genaryx-console does not read the witness's findings"
+run_case "keyryx-alerts: only an init container of heraldyx is in the bus group" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "supplementalGroups: [10001]", "supplementalGroups: [65532]"); edit("manifests/45-heraldyx.yaml", "runAsUser: 65532, runAsGroup: 65532, allowPrivilegeEscalation", "runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation")')" \
+	"container heraldyx is not in the bus group"
 run_case "keyryx-alerts: the findings claim is ReadWriteOnce" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
 	"$(py 'edit("manifests/00-base.yaml", "  name: keyryx-alerts\n  namespace: agent-stack\nspec:\n  accessModes: [\"ReadWriteMany\"]\n", "  name: keyryx-alerts\n  namespace: agent-stack\nspec:\n  accessModes: [\"ReadWriteOnce\"]\n")')" \

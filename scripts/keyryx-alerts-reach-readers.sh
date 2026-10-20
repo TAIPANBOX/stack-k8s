@@ -20,14 +20,16 @@
 #   2. the witness names its findings file in KEYRYX_WITNESS_ALERTS, the file is called
 #      keyryx.ndjson (the stem heraldyx 0.8.0 reads as source keyryx), it is not under the
 #      bus directory, and it sits under the witness's read-write mount of keyryx-alerts;
-#   3. the witness mounts stack-events read only, and no claim read-write but its own
-#      state and keyryx-alerts;
+#   3. the witness mounts stack-events read only, on the volume (the claim's readOnly) and
+#      on every mount of it, and no claim read-write but its own state and keyryx-alerts;
 #   4. every other pod that mounts keyryx-alerts mounts it read only, on the volume and on
 #      every mount of it;
 #   5. the console and heraldyx each mount it and are told to read the file there: the
-#      console by an entry of GENARYX_EVENTS_EXTRA, heraldyx by an entry of HERALDYX_EVENTS
-#      (the file, or its directory), and each runs in the bus group 10001 the file is
-#      created in.
+#      console by an entry of GENARYX_EVENTS_EXTRA, heraldyx by an entry of HERALDYX_EVENTS,
+#      each the file itself and never its directory (a reader handed the directory would
+#      read any *.ndjson in it); and the reading container runs in the bus group 10001 the
+#      file is created in, by its own runAsGroup (or the pod's, when it sets none) or the
+#      pod's supplementalGroups. Another container's runAsGroup, or fsGroup, does not count.
 #
 # That the file is created before the witness starts, by its own uid, mode 0640, is
 # invariant 59's gate (scripts/stream-files-are-precreated.sh), which lists the witness.
@@ -46,8 +48,8 @@ CLAIM = "keyryx-alerts"
 BUS = "/var/lib/stack/events"
 NAME = "keyryx.ndjson"
 READERS = [
-    ("manifests/20-console.yaml", "Deployment", "genaryx-console", "GENARYX_EVENTS_EXTRA"),
-    ("manifests/45-heraldyx.yaml", "Deployment", "heraldyx", "HERALDYX_EVENTS"),
+    ("manifests/20-console.yaml", "Deployment", "genaryx-console", "GENARYX_EVENTS_EXTRA", "console"),
+    ("manifests/45-heraldyx.yaml", "Deployment", "heraldyx", "HERALDYX_EVENTS", "heraldyx"),
 ]
 WITNESS = ("keyryx/manifests/59-keyryx.yaml", "Deployment", "keyryx-witness")
 
@@ -136,8 +138,40 @@ def env_value(doc, var):
     return None
 
 
-def in_bus_group(doc):
-    return bool(re.search(r"\bfsGroup:\s*10001\b|supplementalGroups:\s*\[[^\]]*\b10001\b|\brunAsGroup:\s*10001\b", doc))
+def pod_security(doc):
+    """The pod-level securityContext (six spaces in), flow or block style, as text."""
+    ls = doc.split("\n")
+    for i, line in enumerate(ls):
+        if re.match(r"^      securityContext:", line):
+            body = [line]
+            for nxt in ls[i + 1:]:
+                if nxt.strip() and len(nxt) - len(nxt.lstrip(" ")) <= 6:
+                    break
+                body.append(nxt)
+            return "\n".join(body)
+    return ""
+
+
+def container(doc, cname):
+    """The text of the container item named cname under `containers:` (not an init container)."""
+    m = re.search(r"^      containers:\s*$", doc, re.M)
+    if not m:
+        return None
+    for text, ind in items(doc[m.end():]):
+        if ind == 8 and first_name(text) == cname:
+            return text
+    return None
+
+
+def in_bus_group(doc, cname):
+    c = container(doc, cname)
+    if c is None:
+        return False
+    pod = pod_security(doc)
+    group = field(c, "runAsGroup") or field(pod, "runAsGroup")
+    supp = re.search(r"supplementalGroups:\s*\[([^\]]*)\]", pod)
+    extra = {x.strip() for x in supp.group(1).split(",")} if supp else set()
+    return group == "10001" or "10001" in extra
 
 
 bad = []
@@ -183,6 +217,8 @@ for text, _ in items(wit):
     if "persistentVolumeClaim" not in text:
         continue
     claim, vname = field(text, "claimName"), first_name(text)
+    if claim == "stack-events" and field(text, "readOnly") != "true":
+        bad.append(f"the witness's volume {vname} of stack-events is not readOnly on the claim, so a mount of it can write the bus")
     for mp, ro in mounts_of(wit, vname):
         if claim == "stack-events" and not ro:
             bad.append("the witness mounts stack-events read-write: it writes the bus it witnesses")
@@ -215,7 +251,7 @@ for f, kind, name, d in mounters:
 
 # 5. the readers read it
 rel = posixpath.relpath(alerts, wmount[0]) if (alerts and wmount) else NAME
-for path, kind, name, var in READERS:
+for path, kind, name, var, cname in READERS:
     d = find(path, kind, name)
     if d is None:
         nothing(f"{path}: the {kind} {name} is absent")
@@ -228,10 +264,10 @@ for path, kind, name, var in READERS:
         for mp, _ in mounts_of(d, vname):
             there = posixpath.join(mp, rel)
     entries = [e.strip() for e in (env_value(d, var) or "").split(",") if e.strip()]
-    if there is None or not any(e == there or there.startswith(e.rstrip("/") + "/") for e in entries):
+    if there is None or there not in entries:
         bad.append(f"{name} does not read the witness's findings: {var} names {', '.join(entries) or 'nothing'}, not {there}")
-    if not in_bus_group(d):
-        bad.append(f"{name} is not in the bus group 10001, which the findings file is created in")
+    if not in_bus_group(d, cname):
+        bad.append(f"{name}'s container {cname} is not in the bus group 10001, which the findings file is created in")
 
 if bad:
     for b in bad:

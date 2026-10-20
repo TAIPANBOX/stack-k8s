@@ -22,6 +22,26 @@ Feature: The Keyryx witness's findings reach the console and heraldyx, read only
     Then the gate fails and names stack-events
     # @teeth: keyryx-alerts: the witness mounts the bus read-write
 
+  Scenario: The witness's bus volume is read only on the claim as well
+    Given the witness's volume of stack-events is readOnly on the claim and on the mount
+    When the claim's readOnly is dropped
+    Then the gate fails, because a mount of that volume added later could write the bus
+
+    # @teeth: keyryx-alerts: the witness's bus volume is not read only on the claim
+
+  Scenario: A reader is handed the findings directory instead of the file
+    Given heraldyx and the console each name keyryx.ndjson itself
+    When either is handed the directory that holds it
+    Then the gate fails, because a reader handed a directory reads any stream file in it
+    # @teeth: keyryx-alerts: heraldyx is handed the findings directory, not the file
+    # @teeth: keyryx-alerts: the console is handed the findings directory, not the file
+
+  Scenario: Only another container of a reader is in the bus group
+    Given heraldyx's container reads the findings through the pod's supplementalGroups 10001
+    When that group is dropped and only its init container runs in group 10001
+    Then the gate fails, because the container that reads the file cannot
+    # @teeth: keyryx-alerts: only an init container of heraldyx is in the bus group
+
   Scenario: The findings go back to the witness's own state claim
     Given the witness's state claim is ReadWriteOnce and holds its log and keys
     When its findings file is put back on that claim

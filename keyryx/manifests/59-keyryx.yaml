@@ -284,9 +284,12 @@ spec:
         - name: keyryx-witness-state
           persistentVolumeClaim:
             claimName: keyryx-witness-state
+        # Read only on the claim as well as on the mount (invariant 75): a
+        # container added later that mounts this volume cannot write the bus.
         - name: events
           persistentVolumeClaim:
             claimName: stack-events
+            readOnly: true
         - name: keyryx-alerts
           persistentVolumeClaim:
             claimName: keyryx-alerts
