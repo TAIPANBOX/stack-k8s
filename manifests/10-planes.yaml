@@ -287,10 +287,10 @@ spec:
             - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
             - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
             - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "https://vouchryx.agent-stack.invalid" }
-            # The four in-cluster origins every agent-proof door accepts (CLAUDE.md invariant 74): the gateway's and the
-            # broker's Service names and cluster-internal names. The same list is wardryx's agent-token door list below.
+            # The gateway's own two origins (CLAUDE.md invariant 74): its Service name and its cluster-internal name. A proof
+            # minted for the broker is refused here. wardryx's agent-token door list below names both services' origins.
             - { name: TOKENFUSE_DELEGATION_URL, value: "http://tokenfuse-gateway:4100" }
-            - { name: TOKENFUSE_DELEGATION_ORIGINS, value: "http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200" }
+            - { name: TOKENFUSE_DELEGATION_ORIGINS, value: "http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS, value: "http://vouchryx:4310/v1/revocations" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, value: "12000" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: "closed" }

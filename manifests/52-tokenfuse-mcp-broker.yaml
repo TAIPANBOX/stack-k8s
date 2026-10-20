@@ -227,11 +227,11 @@ spec:
             - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
             - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
             - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "https://vouchryx.agent-stack.invalid" }
-            # Every address the broker is reached at in the cluster (CLAUDE.md invariant 74). The same four-name list serves
-            # this broker's delegation door and its MCP proof door, and wardryx's agent-token door.
+            # Every address the broker is reached at in the cluster (CLAUDE.md invariant 74). This list serves this broker's
+            # delegation door and its MCP proof door; a proof minted for the gateway is refused here.
             - { name: TOKENFUSE_DELEGATION_URL, value: "http://tokenfuse-mcp-broker:4200" }
-            - { name: TOKENFUSE_DELEGATION_ORIGINS, value: "http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200" }
-            - { name: TOKENFUSE_MCP_PROOF_ORIGINS, value: "http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200" }
+            - { name: TOKENFUSE_DELEGATION_ORIGINS, value: "http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200" }
+            - { name: TOKENFUSE_MCP_PROOF_ORIGINS, value: "http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS, value: "http://vouchryx:4310/v1/revocations" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, value: "12000" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: "closed" }

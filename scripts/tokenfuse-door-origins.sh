@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# CLAUDE.md invariant 74. The stack runs tokenfuse v1.20.0, pinned by tag and digest, and every door that accepts an
-# agent's proof names the same in-cluster origins: the gateway, the broker, and wardryx's agent-token door. A proof is
-# accepted when its htu names one of the configured origins at the route's path (tokenfuse invariant 141), so a list
-# that omits an address refuses every caller that reaches the door at that address. The four lists are one set, so an
-# agent is accepted or refused the same way at every door.
+# CLAUDE.md invariant 74. The stack runs tokenfuse v1.20.0, pinned by tag and digest, and each tokenfuse door accepts
+# a proof only for the addresses that door is reached at (tokenfuse invariant 141). So each door names only its own
+# service's two origins, the Service name and the cluster-internal name. wardryx's agent-token door names all four,
+# because it verifies the proof of an agent calling either service. A proof minted for one door is therefore refused
+# at the other, which keeps the audience binding of each door.
 #
 # WHAT THIS CHECKS
 #
 #   1. manifests/10-planes.yaml and manifests/52-tokenfuse-mcp-broker.yaml: every tokenfuse image is the release pin
 #      below (tokenfuse and tokenfuse-control-plane, each by tag and digest).
-#   2. The gateway's Deployment: TOKENFUSE_DELEGATION_ORIGINS names exactly the addresses below, and its single origin,
-#      TOKENFUSE_DELEGATION_URL, is one of them.
+#   2. The gateway's Deployment: TOKENFUSE_DELEGATION_ORIGINS names exactly the gateway's own two origins, and its
+#      single origin, TOKENFUSE_DELEGATION_URL, is one of them.
 #   3. The broker's Deployment: TOKENFUSE_DELEGATION_ORIGINS and TOKENFUSE_MCP_PROOF_ORIGINS each name exactly the
-#      addresses below, and the broker's single origin, TOKENFUSE_DELEGATION_URL, is one of them.
-#   4. wardryx's Deployment: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS names exactly the same addresses, so the agent-token door
-#      accepts and refuses an agent exactly as the tokenfuse doors do.
+#      broker's own two origins, and its single origin, TOKENFUSE_DELEGATION_URL, is one of them.
+#   4. wardryx's Deployment: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS names exactly the union of the gateway's and the
+#      broker's own origins.
 #   5. Every entry in those lists is an origin, scheme://host[:port] with nothing after the port.
 #
 # An absent subject is "measured NOTHING", never a pass.
@@ -32,7 +32,7 @@ PINS = {
 }
 GATEWAY = ["http://tokenfuse-gateway:4100", "http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100"]
 BROKER = ["http://tokenfuse-mcp-broker:4200", "http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200"]
-ALL = GATEWAY + BROKER
+WARDRYX = GATEWAY + BROKER
 ORIGIN = re.compile(r"^https?://[a-z0-9.-]+(:[0-9]{1,5})?$")
 bad = []
 
@@ -92,26 +92,26 @@ gw = deployment(p10, "tokenfuse-gateway")
 if gw is None:
     print("FAIL manifests/10-planes.yaml has no tokenfuse-gateway Deployment: the gateway's origins are measured NOTHING")
     sys.exit(1)
-check_list("tokenfuse-gateway", gw, "TOKENFUSE_DELEGATION_ORIGINS", ALL,
+check_list("tokenfuse-gateway", gw, "TOKENFUSE_DELEGATION_ORIGINS", GATEWAY,
            must_contain=env_value(gw, "TOKENFUSE_DELEGATION_URL"))
 
 wf = deployment(p10, "wardryx")
 if wf is None:
     print("FAIL manifests/10-planes.yaml has no wardryx Deployment: the agent-token door's origins are measured NOTHING")
     sys.exit(1)
-check_list("wardryx", wf, "WARDRYX_AGENT_TOKEN_DOOR_ORIGINS", ALL)
+check_list("wardryx", wf, "WARDRYX_AGENT_TOKEN_DOOR_ORIGINS", WARDRYX)
 
 br = deployment(p52, "tokenfuse-mcp-broker")
 if br is None:
     print("FAIL manifests/52-tokenfuse-mcp-broker.yaml has no tokenfuse-mcp-broker Deployment: the broker's origins are measured NOTHING")
     sys.exit(1)
 for n in ("TOKENFUSE_DELEGATION_ORIGINS", "TOKENFUSE_MCP_PROOF_ORIGINS"):
-    check_list("tokenfuse-mcp-broker", br, n, ALL, must_contain=env_value(br, "TOKENFUSE_DELEGATION_URL"))
+    check_list("tokenfuse-mcp-broker", br, n, BROKER, must_contain=env_value(br, "TOKENFUSE_DELEGATION_URL"))
 
 if bad:
     for b in bad:
         print("FAIL " + b)
     print(f"{len(bad)} problem(s). See CLAUDE.md invariant 74.")
     sys.exit(1)
-print("OK: the stack runs tokenfuse v1.20.0 by tag and digest, and the gateway, the MCP broker's two doors and wardryx's agent-token door name the same four in-cluster origins; every entry is an origin.")
+print("OK: the stack runs tokenfuse v1.20.0 by tag and digest; each tokenfuse door names only its own two origins, wardryx's agent-token door names their union, and every entry is an origin.")
 PY
