@@ -106,6 +106,7 @@ step "a Keyryx root key never reaches a process as an environment value (invaria
 step "the Keyryx witness and custody share nothing but the image (invariant 56)" "./scripts/witness-is-separate.sh"
 step "only labelled consumers reach a Keyryx role, and neither has egress (invariant 57)" "./scripts/keyryx-reaches-only-consumers.sh"
 step "the witness's findings reach the console and heraldyx read only, and the witness never writes the bus (invariant 75)" "./scripts/keyryx-alerts-reach-readers.sh"
+step "every Keyryx patch applies and its unpatch reverts it exactly, through kubectl patch --local (invariants 69, 70, 75)" "./scripts/keyryx-patches-round-trip.sh"
 step "the teeth shards cover every case once" "./scripts/teeth-shards-cover-every-case.sh"
 
 echo

@@ -39,12 +39,16 @@
 #   4. the reading container runs in the bus group 10001 the file is created in, by
 #      its own runAsGroup (or the pod's, when it sets none) or the pod's
 #      supplementalGroups, read off the reader's default manifest;
-#   5. each patch has its unpatch, which deletes the volume and the mount, sets
-#      podAffinity to null, and puts the reader's setting back (heraldyx's
+#   5. each patch has its unpatch, which deletes the volume (by name) and the mount (by
+#      mountPath, the list's merge key; and no unpatch under keyryx/ deletes a volumeMount by
+#      name, which the API server refuses, so nothing is reverted), sets
+#      podAffinity (or, where the manifest declares no affinity, affinity) to null, and puts the reader's setting back (heraldyx's
 #      HERALDYX_EVENTS to the value its manifest declares, the console's
 #      GENARYX_EVENTS_EXTRA deleted);
 #   6. lib/keyryx-install.sh patches both readers in keyryx_install_settle and
-#      unpatches both in keyryx_remove_settle, keyryx/down.sh unpatches both before it
+#      unpatches both in keyryx_remove_settle, wardryx and the record-seal are reversed there through
+#      keyryx_unpatch too, and a refused unpatch stops it (keyryx_unpatch and keyryx_unpatch_reader end
+#      in die, never in `|| true`), keyryx/down.sh unpatches both before it
 #      deletes the witness, and each deploy script patches heraldyx after it applies it;
 #   7. no file under manifests/ mounts keyryx-witness-state or names the findings
 #      directory, and every other pod that mounts keyryx-witness-state does so read
@@ -318,11 +322,12 @@ for patch, unpatch, base, dep, cname, var in READERS:
         bad.append(f"{unpatch}: no unpatch of {dep}, so --without-keyryx would leave it mounting the witness's claim")
         continue
     for vname, _ in vols:
-        for text, _ in items(u):
-            pass
-        if not re.search(rf"- name:\s*{re.escape(vname)}\s*\n\s*\$patch:\s*delete", u) or len(re.findall(rf"- name:\s*{re.escape(vname)}\s*\n\s*\$patch:\s*delete", u)) < 2:
-            bad.append(f"{unpatch}: does not delete both the volume and the mount {vname}")
-    if not re.search(r"podAffinity:\s*null", u):
+        if not re.search(rf"- name:\s*{re.escape(vname)}\s*\n\s*\$patch:\s*delete", u):
+            bad.append(f"{unpatch}: does not delete the volume {vname}")
+        for mp, _, _ in mounts_of(p, vname):
+            if not re.search(rf"- mountPath:\s*{re.escape(mp)}\s*\n\s*\$patch:\s*delete", u):
+                bad.append(f"{unpatch}: does not delete the mount at {mp} by its mountPath, so the mount stays")
+    if not re.search(r"podAffinity:\s*null|^      affinity:\s*null\s*$", u, re.M):
         bad.append(f"{unpatch}: does not set podAffinity to null, so {dep} stays bound to the witness's node")
     base_value = env_value(bd, var)
     if base_value is None:
@@ -330,6 +335,16 @@ for patch, unpatch, base, dep, cname, var in READERS:
             bad.append(f"{unpatch}: does not delete {var}, which {base} does not declare")
     elif env_value(u, var) != base_value:
         bad.append(f"{unpatch}: puts {var} back to {env_value(u, var)!r}, not {base_value!r} as {base} declares")
+
+# 5b. every unpatch under keyryx/ deletes a volumeMount by mountPath, the list's merge key. A
+# delete keyed by name is refused by the API server ("does not contain declared merge key:
+# mountPath"), and the whole unpatch then reverts nothing. scripts/keyryx-patches-round-trip.sh
+# runs each pair through kubectl; this is the text half, so it holds without kubectl too.
+for f in sorted(x for x in files if x.startswith("keyryx/") and x.endswith("unpatch.yaml")):
+    t = read(f) or ""
+    for m in re.finditer(r"^( *)volumeMounts:\s*\n((?:\1 +.*\n?)*)", t, re.M):
+        if re.search(r"^\s*- name:\s*\S+\s*\n\s*\$patch:\s*delete", m.group(2), re.M):
+            bad.append(f"{f}: deletes a volumeMount by name; its merge key is mountPath, so the API server refuses the unpatch and nothing is reverted")
 
 # 6. who applies them
 lib = read("lib/keyryx-install.sh")
@@ -343,6 +358,14 @@ def body(text, fn):
 
 
 ins, rem = body(lib, "keyryx_install_settle"), body(lib, "keyryx_remove_settle")
+for fn in ("keyryx_unpatch", "keyryx_unpatch_reader"):
+    unp = body(lib, fn)
+    if not unp:
+        bad.append(f"lib/keyryx-install.sh defines no {fn}")
+    elif "die" not in unp or re.search(r"\|\|\s*true", unp):
+        bad.append(f"lib/keyryx-install.sh: {fn} can fail and still let the opt-out report the wiring removed")
+if not re.search(r"keyryx_unpatch\s+deployment\s+wardryx\s+wardryx-unpatch\.yaml", rem) or not re.search(r"keyryx_unpatch\s+cronjob\s+record-seal\s+record-seal-unpatch\.yaml", rem):
+    bad.append("lib/keyryx-install.sh: keyryx_remove_settle does not reverse wardryx and the record-seal through keyryx_unpatch")
 for patch, unpatch, _, dep, _, _ in READERS:
     if not re.search(rf"keyryx_patch_reader\s+{re.escape(dep)}\s+{re.escape(posixpath.basename(patch))}", ins):
         bad.append(f"lib/keyryx-install.sh: keyryx_install_settle does not patch {dep} with {posixpath.basename(patch)}")

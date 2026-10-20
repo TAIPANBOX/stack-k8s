@@ -9,15 +9,16 @@ metadata:
 spec:
   template:
     spec:
-      affinity:
-        podAffinity: null
+      # 45-heraldyx.yaml declares no affinity, so the whole field goes (an empty one would stay).
+      affinity: null
       containers:
         - name: heraldyx
           env:
             - name: HERALDYX_EVENTS
               value: "/var/lib/stack/events"
+          # Keyed by mountPath, not by name: a delete by name is refused and reverts nothing.
           volumeMounts:
-            - name: keyryx-findings
+            - mountPath: /var/lib/keyryx-findings
               $patch: delete
       volumes:
         - name: keyryx-findings

@@ -8,7 +8,8 @@
 # new volume is added. The claim is ReadWriteOnce (Longhorn), so the console is pod-affined to the witness, as the
 # record-seal is (invariant 70); podAffinity sits beside the kustomization's preferred podAntiAffinity, which this
 # patch leaves as it is. subPath alerts is the only part of the claim it sees: never data/, where the witness key
-# lives. The witness makes alerts/ 0750 and keyryx.ndjson 0640 in group 10001, and the console runs in group 10001.
+# lives. The witness makes alerts/ 0750 and keyryx.ndjson 0640 in group 10001 (the kubelet's fsGroup can make
+# the file 0660 on a later start of the witness, which a read-only reader cannot use), and the console runs in group 10001.
 #
 # GENARYX_EVENTS_EXTRA names the file itself, never its directory: the console reads an extra stream only while it
 # is a regular file and stores a line from it only when it claims the source its name gives (genaryx#134).

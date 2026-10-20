@@ -203,7 +203,7 @@ spec:
             - name: keyryx-key-tmp
               mountPath: /run/keyryx
         # The witness's findings, made before the witness starts, by its own uid, in the bus group its readers
-        # share (CLAUDE.md invariants 59 and 75): the directory alerts/ 0750 and keyryx.ndjson 0640 on its own
+        # share (CLAUDE.md invariants 59 and 75): the directory alerts/ 0750 and keyryx.ndjson 0640 (0660 after a later start, the kubelet's fsGroup) on its own
         # state claim. heraldyx and the console mount only that directory, through subPath alerts, read only
         # (keyryx/heraldyx-findings-patch.yaml, keyryx/console-findings-patch.yaml), so they never see data/,
         # where the witness key lives.

@@ -3476,7 +3476,34 @@ run_case "keyryx-alerts: only an init container of heraldyx is in the bus group"
 run_case "keyryx-alerts: heraldyx's unpatch leaves the witness's claim mounted" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
 	"$(py 'edit("keyryx/heraldyx-findings-unpatch.yaml", "      volumes:\n        - name: keyryx-findings\n          $patch: delete\n", "")')" \
-	"does not delete both the volume and the mount"
+	"does not delete the volume keyryx-findings"
+run_case "keyryx-alerts: an unpatch deletes a mount by name" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("keyryx/wardryx-unpatch.yaml", "            - mountPath: /run/keyryx-client\n", "            - name: keyryx-client\n")')" \
+	"deletes a volumeMount by name"
+run_case "keyryx-alerts: a refused unpatch is swallowed by the opt-out" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("lib/keyryx-install.sh", "    || die \"could not remove the Keyryx wiring from $kind $name", "    || true # \"could not remove the Keyryx wiring from $kind $name")')" \
+	"keyryx_unpatch can fail and still let the opt-out report"
+run_case "keyryx-patches-round-trip: an unpatch deletes a mount by name" fail \
+	'./scripts/keyryx-patches-round-trip.sh' \
+	"$(py 'edit("keyryx/console-findings-unpatch.yaml", "            - mountPath: /var/lib/keyryx-findings\n", "            - name: keyryx-findings\n")')" \
+	"does not contain declared merge key: mountPath"
+run_case "keyryx-patches-round-trip: an unpatch leaves the setting behind" fail \
+	'./scripts/keyryx-patches-round-trip.sh' \
+	"$(py 'edit("keyryx/console-findings-unpatch.yaml", "            - name: GENARYX_EVENTS_EXTRA\n              $patch: delete\n", "")')" \
+	"does not take Deployment genaryx-console back"
+run_case "keyryx-patches-round-trip: the record seal keeps its credential mount" fail \
+	'./scripts/keyryx-patches-round-trip.sh' \
+	"$(py 'edit("keyryx/record-seal-unpatch.yaml", "                - mountPath: /run/keyryx-client\n                  $patch: delete\n", "")')" \
+	"does not take CronJob record-seal back"
+run_case "keyryx-patches-round-trip: a patch is gone (measured nothing)" fail \
+	'./scripts/keyryx-patches-round-trip.sh' \
+	"$(py 'import os; os.remove("keyryx/heraldyx-findings-patch.yaml")')" \
+	"measured NOTHING"
+run_case "keyryx-patches-round-trip: a comment in an unpatch (must pass)" pass \
+	'./scripts/keyryx-patches-round-trip.sh' \
+	"$(py 'edit("keyryx/heraldyx-findings-unpatch.yaml", "# Reverses keyryx/heraldyx-findings-patch.yaml", "# Undoes keyryx/heraldyx-findings-patch.yaml")')"
 run_case "keyryx-alerts: heraldyx's unpatch does not put its setting back" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
 	"$(py 'edit("keyryx/heraldyx-findings-unpatch.yaml", "              value: \"/var/lib/stack/events\"\n", "              $patch: delete\n")')" \

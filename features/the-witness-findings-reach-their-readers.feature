@@ -186,3 +186,45 @@ Feature: The Keyryx witness's findings reach the console and heraldyx, read only
     When the mkdir is dropped
     Then stream-files-are-precreated.sh fails, because the subPath directory would not exist
     # @teeth: stream-files-are-precreated: the witness's init mounts its claim and never makes alerts/
+
+  Scenario: An unpatch deletes a mount by name
+    Given every unpatch under keyryx/ deletes a volume mount by mountPath, its merge key
+    When the wardryx unpatch deletes its mount by name
+    Then the gate fails, because the API server refuses that unpatch and nothing is reverted
+    # @teeth: keyryx-alerts: an unpatch deletes a mount by name
+
+  Scenario: A refused unpatch is swallowed by the opt-out
+    Given keyryx_unpatch stops the opt-out when the API server refuses an unpatch
+    When its die becomes || true
+    Then the gate fails, because the opt-out would report wiring removed that it did not remove
+    # @teeth: keyryx-alerts: a refused unpatch is swallowed by the opt-out
+
+  Scenario: kubectl refuses an unpatch that names a mount by name
+    Given each patch and unpatch pair is run through kubectl patch --local
+    When the console's unpatch deletes its mount by name
+    Then the round trip fails with the API server's own refusal
+    # @teeth: keyryx-patches-round-trip: an unpatch deletes a mount by name
+
+  Scenario: An unpatch leaves a setting behind
+    Given the console's unpatch deletes GENARYX_EVENTS_EXTRA
+    When that delete is removed
+    Then the round trip fails, because the console does not come back to what the default install applies
+    # @teeth: keyryx-patches-round-trip: an unpatch leaves the setting behind
+
+  Scenario: The record seal keeps its credential mount after the opt-out
+    Given the record seal's unpatch deletes its custody credential mount
+    When that delete is removed
+    Then the round trip fails, because the record seal does not come back to what the default install applies
+    # @teeth: keyryx-patches-round-trip: the record seal keeps its credential mount
+
+  Scenario: A patch is gone
+    Given the round trip reads each patch file
+    When heraldyx's patch file is removed
+    Then the gate says it measured NOTHING rather than OK
+    # @teeth: keyryx-patches-round-trip: a patch is gone (measured nothing)
+
+  Scenario: A reworded comment in an unpatch is not a fault
+    Given the header of heraldyx's unpatch says what it reverses
+    When the comment is reworded
+    Then the round trip still passes
+    # @teeth: keyryx-patches-round-trip: a comment in an unpatch (must pass)
