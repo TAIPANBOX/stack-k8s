@@ -268,7 +268,9 @@ for path, kind, name, var, cname in READERS:
     if there is None or there not in entries:
         bad.append(f"{name} does not read the witness's findings: {var} names {', '.join(entries) or 'nothing'}, not {there}")
     for e in entries:
-        p = posixpath.normpath(e)
+        # normpath keeps a leading "//" (POSIX leaves it to the system), and the kernel
+        # reads it as "/", so collapse every run of leading slashes first.
+        p = posixpath.normpath(re.sub(r"^/+", "/", e))
         if e != there and any(p == mp or p.startswith(mp + "/") for mp in mps):
             bad.append(f"{name}: {var} names {e} under the findings mount, beside the file: a reader takes only {there} from that claim")
     if not in_bus_group(d, cname):

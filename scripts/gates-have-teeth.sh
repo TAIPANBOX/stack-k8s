@@ -3461,6 +3461,10 @@ run_case "keyryx-alerts: heraldyx is handed the findings directory beside the fi
 	'./scripts/keyryx-alerts-reach-readers.sh' \
 	"$(py 'edit("manifests/45-heraldyx.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-alerts/keyryx.ndjson\"", "value: \"/var/lib/stack/events,/var/lib/keyryx-alerts,/var/lib/keyryx-alerts/keyryx.ndjson\"")')" \
 	"under the findings mount, beside the file"
+run_case "keyryx-alerts: heraldyx is handed the findings directory behind a double slash" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-alerts/keyryx.ndjson\"", "value: \"/var/lib/stack/events,//var/lib/keyryx-alerts,/var/lib/keyryx-alerts/keyryx.ndjson\"")')" \
+	"under the findings mount, beside the file"
 run_case "keyryx-alerts: only an init container of heraldyx is in the bus group" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
 	"$(py 'edit("manifests/45-heraldyx.yaml", "supplementalGroups: [10001]", "supplementalGroups: [65532]"); edit("manifests/45-heraldyx.yaml", "runAsUser: 65532, runAsGroup: 65532, allowPrivilegeEscalation", "runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation")')" \
@@ -3482,8 +3486,8 @@ run_case "bus-names: the witness's findings file loses its keyryx stem" fail \
 	"is named for no source heraldyx reads from it"
 run_case "bus-names: the heraldyx pin goes back before the keyryx source" fail \
 	'./scripts/bus-names-match-the-source-rule.sh' \
-	"$(py 'edit("manifests/45-heraldyx.yaml", "ghcr.io/taipanbox/heraldyx:v0.8.0@", "ghcr.io/taipanbox/heraldyx:v0.7.0@")')" \
-	"older than v0.8.0"
+	"$(py 'edit("manifests/45-heraldyx.yaml", "ghcr.io/taipanbox/heraldyx:v0.8.1@", "ghcr.io/taipanbox/heraldyx:v0.8.0@")')" \
+	"older than v0.8.1"
 run_case "stream-files-are-precreated: the witness's findings file is not made before it starts" fail \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "        - name: precreate-streams\n", "        - name: make-findings-later\n")')" \

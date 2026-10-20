@@ -41,6 +41,7 @@ Feature: The Keyryx witness's findings reach the console and heraldyx, read only
     When its setting also names the directory that holds it
     Then the gate fails, because that entry reads anything else put beside the file
     # @teeth: keyryx-alerts: heraldyx is handed the findings directory beside the file
+    # @teeth: keyryx-alerts: heraldyx is handed the findings directory behind a double slash
 
   Scenario: Only another container of a reader is in the bus group
     Given heraldyx's container reads the findings through the pod's supplementalGroups 10001
@@ -92,9 +93,9 @@ Feature: The Keyryx witness's findings reach the console and heraldyx, read only
     Then bus-names-match-the-source-rule.sh fails, because heraldyx would refuse every finding
     # @teeth: bus-names: the witness's findings file loses its keyryx stem
 
-  Scenario: heraldyx is pinned before the release that reads keyryx
-    Given heraldyx 0.8.0 is the first release that reads and renders the keyryx source
-    When manifests/45-heraldyx.yaml pins heraldyx 0.7.0
+  Scenario: heraldyx is pinned before the release that reads the findings file safely
+    Given heraldyx 0.8.0 is the first release that reads the keyryx source, and 0.8.1 the first that reads a named stream file only as a regular file
+    When manifests/45-heraldyx.yaml pins heraldyx 0.8.0
     Then bus-names-match-the-source-rule.sh fails and names the pin
     # @teeth: bus-names: the heraldyx pin goes back before the keyryx source
 

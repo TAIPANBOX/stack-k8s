@@ -997,8 +997,10 @@ custody; its bearer key is `keyryx-wardryx-client`. Only pods labelled
 `keyryx.ndjson` on a claim of its own, `keyryx-alerts` (ReadWriteMany, `stack-rwx`,
 1Gi, in the default set), and mounts the event streams read only, so it never writes
 the bus it witnesses. The console (`GENARYX_EVENTS_EXTRA`) and heraldyx
-(`HERALDYX_EVENTS`) mount that claim read only and read the file; heraldyx 0.8.0
-renders the seven `witness_*` types and mails the high ones. On the three launchers
+(`HERALDYX_EVENTS`) mount that claim read only and read the file, and each reads it
+only as a regular file, never through a link (heraldyx 0.8.1, pinned here, and the
+console from genaryx#134). heraldyx renders the seven `witness_*` types and mails the
+high ones. On the three launchers
 `stack-rwx` is Longhorn on the nodes' own disks, so the claim adds node disk and one
 Longhorn share-manager pod, not a billed disk; on a cluster whose `stack-rwx` is a
 managed RWX service it is billed. The console pinned here does not read

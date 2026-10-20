@@ -67,9 +67,12 @@ ALLOWED = {s: {s} for s in KNOWN}
 ALLOWED["tokenfuse-cloud"] = {"tokenfuse"}
 ALLOWED["tokenfuse-mcp"] = {"tokenfuse"}
 # The witness's findings, off the bus (invariant 75). heraldyx v0.8.0 is the first
-# whose knownSources carries keyryx, so a stem here needs that pin.
+# whose knownSources carries keyryx, and v0.8.1 the first that reads a named stream
+# file only while it is a regular file (heraldyx invariant 33), never a link or a
+# directory planted at that name; the claim's root is group-writable, so a stem
+# here needs v0.8.1.
 ALERTS = "/var/lib/keyryx-alerts"
-OFF_BUS = {"keyryx": {"keyryx": (0, 8, 0)}}
+OFF_BUS = {"keyryx": {"keyryx": (0, 8, 1)}}
 
 
 def code_of(text):
@@ -143,7 +146,7 @@ for f, stem in sorted(set(off_bus)):
     for pin in pins:
         if tuple(int(x) for x in pin) < least:
             problems.append(f"{f}: {stem}.ndjson is read by heraldyx v{'.'.join(pin)}, older than "
-                            f"v{'.'.join(map(str, least))}, the first that accepts source keyryx: every finding is refused")
+                            f"v{'.'.join(map(str, least))}, the first that accepts source keyryx and reads the findings file only as a regular file")
 loads = []
 for f, t in texts.items():
     toks = re.findall(r"\"([^\"]*)\"", t)
