@@ -27,7 +27,7 @@
 #   5. the console and heraldyx each mount it and are told to read the file there: the
 #      console by an entry of GENARYX_EVENTS_EXTRA, heraldyx by an entry of HERALDYX_EVENTS,
 #      each the file itself and never its directory (a reader handed the directory would
-#      read any *.ndjson in it); and the reading container runs in the bus group 10001 the
+#      read any *.ndjson in it), and no other entry under the findings mount; and the reading container runs in the bus group 10001 the
 #      file is created in, by its own runAsGroup (or the pod's, when it sets none) or the
 #      pod's supplementalGroups. Another container's runAsGroup, or fsGroup, does not count.
 #
@@ -259,13 +259,18 @@ for path, kind, name, var, cname in READERS:
     if not vols:
         bad.append(f"{name} does not mount the claim {CLAIM}, so it does not read the witness's findings")
         continue
-    there = None
+    there, mps = None, []
     for vname, _ in vols:
         for mp, _ in mounts_of(d, vname):
             there = posixpath.join(mp, rel)
+            mps.append(mp.rstrip("/"))
     entries = [e.strip() for e in (env_value(d, var) or "").split(",") if e.strip()]
     if there is None or there not in entries:
         bad.append(f"{name} does not read the witness's findings: {var} names {', '.join(entries) or 'nothing'}, not {there}")
+    for e in entries:
+        p = posixpath.normpath(e)
+        if e != there and any(p == mp or p.startswith(mp + "/") for mp in mps):
+            bad.append(f"{name}: {var} names {e} under the findings mount, beside the file: a reader takes only {there} from that claim")
     if not in_bus_group(d, cname):
         bad.append(f"{name}'s container {cname} is not in the bus group 10001, which the findings file is created in")
 

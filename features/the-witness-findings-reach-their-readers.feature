@@ -36,6 +36,12 @@ Feature: The Keyryx witness's findings reach the console and heraldyx, read only
     # @teeth: keyryx-alerts: heraldyx is handed the findings directory, not the file
     # @teeth: keyryx-alerts: the console is handed the findings directory, not the file
 
+  Scenario: A reader is handed the findings directory beside the file
+    Given heraldyx names keyryx.ndjson itself
+    When its setting also names the directory that holds it
+    Then the gate fails, because that entry reads anything else put beside the file
+    # @teeth: keyryx-alerts: heraldyx is handed the findings directory beside the file
+
   Scenario: Only another container of a reader is in the bus group
     Given heraldyx's container reads the findings through the pod's supplementalGroups 10001
     When that group is dropped and only its init container runs in group 10001

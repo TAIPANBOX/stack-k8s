@@ -3457,6 +3457,10 @@ run_case "keyryx-alerts: the console is handed the findings directory, not the f
 	'./scripts/keyryx-alerts-reach-readers.sh' \
 	"$(py 'edit("manifests/20-console.yaml", "value: \"/var/lib/keyryx-alerts/keyryx.ndjson\" \x7d", "value: \"/var/lib/keyryx-alerts\" \x7d")')" \
 	"genaryx-console does not read the witness's findings"
+run_case "keyryx-alerts: heraldyx is handed the findings directory beside the file" fail \
+	'./scripts/keyryx-alerts-reach-readers.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-alerts/keyryx.ndjson\"", "value: \"/var/lib/stack/events,/var/lib/keyryx-alerts,/var/lib/keyryx-alerts/keyryx.ndjson\"")')" \
+	"under the findings mount, beside the file"
 run_case "keyryx-alerts: only an init container of heraldyx is in the bus group" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
 	"$(py 'edit("manifests/45-heraldyx.yaml", "supplementalGroups: [10001]", "supplementalGroups: [65532]"); edit("manifests/45-heraldyx.yaml", "runAsUser: 65532, runAsGroup: 65532, allowPrivilegeEscalation", "runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation")')" \
