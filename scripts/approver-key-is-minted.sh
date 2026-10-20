@@ -16,8 +16,8 @@
 #   4. manifests/10-planes.yaml is in one of two states, and this gate names which. v1.6.0: wardryx sets no
 #      WARDRYX_APPROVER_JWKS and mounts no JWK set, and TODO(approver-jwks) names the next step. v1.6.1: wardryx sets
 #      WARDRYX_APPROVER_JWKS, reads the ConfigMap wardryx-approver-jwks from a read-only mount that is not optional,
-#      carries no TODO(approver-jwks), and manifests/20-console.yaml pins genaryx-console:v1.6.0 by digest (the console
-#      that sends the statement). A mixed state fails. wardryx runs v2.4.0 or later pinned by digest in both states.
+#      carries no TODO(approver-jwks), and manifests/20-console.yaml pins genaryx-console v1.6.0 or later by digest
+#      (v1.6.0 is the first console that sends the statement; a later pin needs no edit here). A mixed state fails. wardryx runs v2.4.0 or later pinned by digest in both states.
 #   5. No live manifest, script or library sets WARDRYX_ALLOW_KEY_APPROVALS.
 #   6. Behaviour: approver_mint_settle, run with a stub kubectl, mints a PKCS#8 P-256 key and its JWK set when
 #      the cluster holds neither; keeps both without a create when it holds both; and refuses a half pair.
@@ -115,8 +115,10 @@ else:
     mount = re.search(r"\{ name: approver-jwks, mountPath: ([^,]+), readOnly: true \}", t)
     volume = re.search(r"- name: approver-jwks\n\s+configMap: \{ name: wardryx-approver-jwks \}", t)
     todo = "TODO(approver-jwks)" in m10
-    console_v160 = re.search(r"image: ghcr\.io/taipanbox/genaryx-console:v1\.6\.0@sha256:[0-9a-f]{64}",
-                             live(read(M20) or "")) is not None
+    cpin = re.search(r"image: ghcr\.io/taipanbox/genaryx-console:v(\d+)\.(\d+)\.(\d+)@sha256:[0-9a-f]{64}",
+                     live(read(M20) or ""))
+    console_v160 = cpin is not None and tuple(int(x) for x in cpin.groups()) >= (1, 6, 0)
+    console_pin = ("v" + ".".join(cpin.groups())) if cpin else "no digest pin"
     if env is None and mount is None and volume is None:
         STATE = "v1.6.0"
         if not todo:
@@ -128,7 +130,7 @@ else:
         if todo:
             bad.append(f"{M10}: wardryx reads the JWK set, but TODO(approver-jwks) still names it as pending: the TODO is stale")
         if not console_v160:
-            bad.append(f"{M10}: wardryx requires a console statement on every approval, and the console in {M20} is not genaryx-console:v1.6.0 by digest, so every approval would be refused")
+            bad.append(f"{M10}: wardryx requires a console statement on every approval, and the console in {M20} is not genaryx-console v1.6.0 or later by digest ({console_pin}), so every approval would be refused")
     else:
         STATE = "half"
         bad.append(f"{M10}: wardryx's approver wiring is half set: WARDRYX_APPROVER_JWKS, its read-only mount and the wardryx-approver-jwks volume must be present together, or absent together")
@@ -168,7 +170,7 @@ if STATE == "v1.6.0":
           "(TODO(approver-jwks), v1.6.1), so approvals are not bound to a console key in this state.")
 else:
     print(f"STATE {STATE}: wardryx reads the console's JWK set and requires a statement on every grant and denial; "
-          "the console pin is genaryx-console:v1.6.0 by digest.")
+          f"the console pin is genaryx-console {console_pin} by digest, v1.6.0 or later.")
 print("STATIC-OK")
 PY
 static_rc=$?
