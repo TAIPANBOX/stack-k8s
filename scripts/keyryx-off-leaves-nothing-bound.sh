@@ -22,7 +22,9 @@
 #                                                                           before the witness is
 #   down.sh   a bound seal that is running                                  let finish, not deleted
 #   down.sh   a bound seal still running when the wait ends                 deleted
-#   down.sh   a finished bound seal, an unbound seal, another CronJob's Job left alone
+#   down.sh   a finished bound seal, an unbound seal, and another CronJob's Job with the whole
+#             Keyryx wiring (only the owner check keeps it out)                left alone
+#   down.sh   a seal that signs through custody with no affinity to the witness deleted
 #   down.sh   a bound seal still there after the delete                     stops, nothing deleted
 #   down.sh   the Jobs cannot be read                                       stops, nothing deleted
 #   down.sh   a Deployment it waits on cannot be read                       stops, nothing deleted
@@ -89,11 +91,13 @@ BOUND_SPEC = {
     "containers": [{"name": "trailryx", "env": [{"name": "TRAILRYX_SIGNER", "value": "keyryx"}]}],
 }
 FREE_SPEC = {"containers": [{"name": "trailryx", "env": []}]}
+# Signs through custody, with no affinity to the witness: still Keyryx wiring the release must take off.
+SIGNER_SPEC = {"containers": [{"name": "trailryx", "env": [{"name": "TRAILRYX_SIGNER", "value": "keyryx"}]}]}
 
 def listing():
     items = []
     for j in st["jobs"]:
-        spec = BOUND_SPEC if j["bound"] else FREE_SPEC
+        spec = BOUND_SPEC if j["bound"] is True else SIGNER_SPEC if j["bound"] == "signer" else FREE_SPEC
         if j.get("finish_after") is not None and st.get("reads", 0) >= j["finish_after"]:
             j["done"] = True
             for p in j["pods"]:
@@ -233,16 +237,28 @@ if not ran_nothing(name, log):
     if at(log, "delete job record-seal-3") < 0:
         bad.append(f"{name}: the Job is still there when the wait ends")
 
-# 4. what is not bound, or is done, or is not the record-seal's, is left alone.
+# 4. what is not bound, or is done, or is not the record-seal's, is left alone. The other CronJob's
+# Job carries the whole Keyryx wiring, so only the owner check keeps it out.
 name = "down.sh: a finished seal, an unbound seal and another CronJob's Job"
 rc, out, log, st = run(4, {"jobs": [job("record-seal-4", phase="Succeeded", done=True),
                                      job("record-seal-5", bound=False),
-                                     job("crypto-trend-1", bound=False, owner="crypto-trend")]}, DOWN)
+                                     job("crypto-trend-1", owner="crypto-trend")]}, DOWN)
 if not ran_nothing(name, log):
     if rc != 0:
         bad.append(f"{name}: down.sh exited {rc}: {out.strip()[-300:]}")
-    if at(log, "delete job") >= 0:
+    if at(log, "delete job crypto-trend-1") >= 0:
+        bad.append(f"{name}: a Job another CronJob owns is deleted as a record seal: {log[at(log, 'delete job crypto-trend-1')]}")
+    elif at(log, "delete job") >= 0:
         bad.append(f"{name}: a Job that is not bound to the witness, or is finished, is deleted: {log[at(log, 'delete job')]}")
+
+# 4b. a seal that signs through custody with no affinity to the witness is still Keyryx wiring.
+name = "down.sh: a seal that signs through custody without the affinity"
+rc, out, log, st = run(12, {"jobs": [job("record-seal-9", bound="signer")]}, DOWN)
+if not ran_nothing(name, log):
+    if rc != 0:
+        bad.append(f"{name}: down.sh exited {rc}: {out.strip()[-300:]}")
+    if at(log, "delete job record-seal-9") < 0:
+        bad.append(f"{name}: a seal that signs through custody, which down.sh deletes, is left running unfinished")
 
 # 5. a bound seal still there after the delete stops down.sh before it deletes anything of Keyryx.
 name = "down.sh: a seal still bound after the delete"
@@ -320,5 +336,5 @@ if bad:
     print(f"{len(bad)} problem(s). See CLAUDE.md invariant 76.")
     sys.exit(1)
 print("OK: keyryx/down.sh and the opt-out leave no record-seal Job bound to the witness (a running seal is let finish,")
-print("    any other deleted before the witness, then checked), and a read they cannot make stops them; 11 cases.")
+print("    any other deleted before the witness, then checked), and a read they cannot make stops them; 12 cases.")
 PY
