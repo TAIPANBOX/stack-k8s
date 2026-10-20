@@ -3786,6 +3786,35 @@ run_case "add-site: a comment reworded beside the reader (must pass)" pass \
 	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
 	"$(py 'edit("hub/add-site.sh", "# The manifests pin the image as name:tag@sha256", "# The manifests pin the image, as name:tag@sha256")')"
 
+# tokenfuse v1.20.0 is pinned by digest, and the gateway and the MCP broker name every address they are reached at (CLAUDE.md invariant 74).
+run_case "tokenfuse-door-origins: the gateway is left on tokenfuse v1.19.0" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'p = "manifests/10-planes.yaml"; s = open(p).read(); s = s.replace("tokenfuse:v1.20.0@sha256:84f6", "tokenfuse:v1.19.0@sha256:84f6", 1); open(p, "w").write(s)')" \
+	"is not the release pin"
+run_case "tokenfuse-door-origins: the control plane digest is not the release pin" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "ab2510b3687455341fcc207361b8ed4801c4c7460f3ddc8b243603b6a982ca88", "ab2510b3687455341fcc207361b8ed4801c4c7460f3ddc8b243603b6a982ca89")')" \
+	"is not the release pin"
+run_case "tokenfuse-door-origins: the gateway drops its cluster-internal name" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", ",http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100\" }", "\" }")')" \
+	"must name exactly"
+run_case "tokenfuse-door-origins: an origin carries a path" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack", "value: \"http://tokenfuse-gateway:4100/tokenfuse,http://tokenfuse-gateway.agent-stack")')" \
+	"is not an origin"
+run_case "tokenfuse-door-origins: the broker's MCP proof origins are removed" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - { name: TOKENFUSE_MCP_PROOF_ORIGINS, value: \"http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\" }\n", "")')" \
+	"TOKENFUSE_MCP_PROOF_ORIGINS is not set"
+run_case "tokenfuse-door-origins: the gateway's origin list is taken away (measured nothing)" fail \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - { name: TOKENFUSE_DELEGATION_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100\" }\n", "")')" \
+	"measured NOTHING"
+run_case "tokenfuse-door-origins: a comment reworded beside the broker (must pass)" pass \
+	'./scripts/tokenfuse-door-origins.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "Every address the broker is reached at in the cluster (CLAUDE.md invariant 74)", "Every address the broker is reached at, in the cluster (CLAUDE.md invariant 74)")')"
+
 # The record-seal fails closed: a failed pack ends the run non-zero, and only the known empty case exits 0 (CLAUDE.md invariant 71).
 run_case "record-seal: a failed pack exits zero again (the old fallback)" fail \
 	'./scripts/record-seal-fails-closed.sh' \
