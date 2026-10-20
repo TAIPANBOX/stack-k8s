@@ -30,9 +30,10 @@
 #      by the table or by an IDRYX_STREAMS declaration. idryx refuses the lines
 #      otherwise, and `identity-sweep` would find an empty graph;
 #   3. the Keyryx witness's findings, a stream OFF the bus that heraldyx reads
-#      (CLAUDE.md invariant 75), under /var/lib/keyryx-alerts: its stem is one
+#      (CLAUDE.md invariant 75), under the witness's alerts/ and its readers' mount of
+#      it, /var/lib/keyryx-findings: its stem is one
 #      heraldyx accepts as the source the witness stamps, `keyryx`, and the heraldyx
-#      the manifests pin is v0.8.0 or later, the first whose table knows it;
+#      the manifests pin is v0.8.1 or later (v0.8.0 first knew it; v0.8.1 reads it only as a regular file);
 #   4. the table below is what heraldyx v0.3.0 and idryx v1.1.0 each carry (they
 #      each carry a copy and nothing holds the two equal; this is a third copy, so
 #      it is held to them by reading: internal/stream/stream.go in heraldyx,
@@ -71,7 +72,9 @@ ALLOWED["tokenfuse-mcp"] = {"tokenfuse"}
 # file only while it is a regular file (heraldyx invariant 33), never a link or a
 # directory planted at that name; the claim's root is group-writable, so a stem
 # here needs v0.8.1.
-ALERTS = "/var/lib/keyryx-alerts"
+# Where it is written (the witness, on its own state claim) and where its readers mount it (the
+# keyryx/*-findings-patch.yaml files, subPath alerts).
+ALERTS_DIRS = ["/var/lib/keyryx-witness/alerts", "/var/lib/keyryx-findings"]
 OFF_BUS = {"keyryx": {"keyryx": (0, 8, 1)}}
 
 
@@ -95,6 +98,7 @@ tracked = subprocess.run(["git", "ls-files", "typed", "delegation", "hub", "tunn
                          capture_output=True, text=True).stdout.split()
 files += [pathlib.Path(p) for p in tracked if p.endswith(".sh")]
 files += sorted(pathlib.Path("keyryx/manifests").glob("*.yaml"))
+files += sorted(pathlib.Path("keyryx").glob("*-findings-patch.yaml"))
 files = [f for f in files if f.name != "secrets.example.yaml"]
 if not files:
     print("FAIL: no manifest or script found, so this measured nothing about the bus file names.")
@@ -132,11 +136,11 @@ for f, stem in streams:
 
 off_bus = []
 for f, t in texts.items():
-    for m in re.finditer(re.escape(ALERTS) + r"/([A-Za-z0-9][A-Za-z0-9._-]*)\.ndjson", t):
+    for m in re.finditer("(?:" + "|".join(map(re.escape, ALERTS_DIRS)) + r")/([A-Za-z0-9][A-Za-z0-9._-]*)\.ndjson", t):
         off_bus.append((f, m.group(1)))
 for f, stem in sorted(set(off_bus)):
     if stem not in OFF_BUS:
-        problems.append(f"{f}: the witness's findings file {stem}.ndjson under {ALERTS} is named for no source "
+        problems.append(f"{f}: the witness's findings file {stem}.ndjson under {' or '.join(ALERTS_DIRS)} is named for no source "
                         "heraldyx reads from it; the witness stamps keyryx, so heraldyx would refuse every finding")
         continue
     least = OFF_BUS[stem]["keyryx"]

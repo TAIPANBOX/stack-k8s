@@ -86,10 +86,6 @@ spec:
             # image older than genaryx#72 ignores the name and falls back to
             # nothing, which is the state every cluster was in.
             - { name: GENARYX_STATE_DIR, value: "/var/lib/stack/genaryx" }
-            # The Keyryx witness's findings, a stream off the bus (CLAUDE.md invariant 75), read
-            # only beside the events directory. A console older than the one that reads
-            # GENARYX_EVENTS_EXTRA ignores it.
-            - { name: GENARYX_EVENTS_EXTRA, value: "/var/lib/keyryx-alerts/keyryx.ndjson" }
             # Scan the checked-out stack, not $HOME: pointing qryx at a home
             # directory is what made the Evidence tab hang on the box.
             - { name: GENARYX_SCAN_TARGET, value: "/srv/ui" }
@@ -146,8 +142,6 @@ spec:
           volumeMounts:
             - { name: state, mountPath: /var/lib/stack }
             - { name: events, mountPath: /var/lib/stack/events }
-            # Read only: the witness writes its findings, the console only reads them.
-            - { name: keyryx-alerts, mountPath: /var/lib/keyryx-alerts, readOnly: true }
             - { name: environment, mountPath: /etc/genaryx/taipan/environments, readOnly: true }
             - { name: approver, mountPath: /run/approver, readOnly: true }
           readinessProbe:
@@ -172,8 +166,6 @@ spec:
           persistentVolumeClaim: { claimName: console-state }
         - name: events
           persistentVolumeClaim: { claimName: stack-events }
-        - name: keyryx-alerts
-          persistentVolumeClaim: { claimName: keyryx-alerts, readOnly: true }
         # The descriptor, plus - when the operator has created it - the sibling
         # keyfile it references, projected into ONE directory because that is
         # how the console reads them: `<name>.json` and `<name>.keys.json` side

@@ -20,8 +20,7 @@
 #   2. each role mounts only its own state claim (keyryx-state for custody,
 #      keyryx-witness-state for the witness) and only its own root key Secret;
 #   3. the witness mounts the events claim stack-events with readOnly: true;
-#   4. the witness writes its alerts outside the events directory, on the claim
-#      keyryx-alerts, which custody never mounts (invariant 75);
+#   4. the witness writes its alerts outside the events directory;
 #   5. both Deployments set their own data directory and root key file.
 #
 # A subject that is absent is "measured NOTHING", never a pass.
@@ -82,11 +81,6 @@ for label, d in (("custody", custody), ("witness", witness)):
         claim = m.group(1)
         if claim == "trailryx-records" and label == "witness":
             # The one claim the witness adds, read only: the record it countersigns (CLAUDE.md invariant 70).
-            continue
-        if claim == "keyryx-alerts":
-            # The witness's findings (CLAUDE.md invariant 75): its own to write, never custody's.
-            if label == "custody":
-                bad.append("custody mounts the witness's findings claim keyryx-alerts")
             continue
         if claim not in ("keyryx-state", "keyryx-witness-state", "stack-events"):
             bad.append(f"{label} mounts an unexpected claim {claim}")

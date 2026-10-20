@@ -1,0 +1,23 @@
+# Reverses keyryx/console-findings-patch.yaml (CLAUDE.md invariant 75): the extra stream, the witness-state mount
+# and the pod affinity to the witness go. The kustomization's podAntiAffinity stays.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: genaryx-console
+  namespace: agent-stack
+spec:
+  template:
+    spec:
+      affinity:
+        podAffinity: null
+      containers:
+        - name: console
+          env:
+            - name: GENARYX_EVENTS_EXTRA
+              $patch: delete
+          volumeMounts:
+            - name: keyryx-findings
+              $patch: delete
+      volumes:
+        - name: keyryx-findings
+          $patch: delete

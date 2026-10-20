@@ -1,0 +1,44 @@
+# The console reads the Keyryx witness's findings (CLAUDE.md invariant 75). Applied by lib/keyryx-install.sh with
+# `kubectl patch --type strategic`, after `apply -k`: a patch leaves the last-applied annotation alone, so
+# manifests/20-console.yaml stays what the default install applies (invariant 24's mechanism).
+# keyryx/console-findings-unpatch.yaml reverses it.
+#
+# @decided 2026-10-20 (paraphrased): the findings reach their readers through the witness's own claim,
+# keyryx-witness-state, mounted read only through subPath alerts, with each reader placed on the witness's node; no
+# new volume is added. The claim is ReadWriteOnce (Longhorn), so the console is pod-affined to the witness, as the
+# record-seal is (invariant 70); podAffinity sits beside the kustomization's preferred podAntiAffinity, which this
+# patch leaves as it is. subPath alerts is the only part of the claim it sees: never data/, where the witness key
+# lives. The witness makes alerts/ 0750 and keyryx.ndjson 0640 in group 10001, and the console runs in group 10001.
+#
+# GENARYX_EVENTS_EXTRA names the file itself, never its directory: the console reads an extra stream only while it
+# is a regular file and stores a line from it only when it claims the source its name gives (genaryx#134).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: genaryx-console
+  namespace: agent-stack
+spec:
+  template:
+    spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: keyryx-witness
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: console
+          env:
+            - name: GENARYX_EVENTS_EXTRA
+              value: "/var/lib/keyryx-findings/keyryx.ndjson"
+          volumeMounts:
+            - name: keyryx-findings
+              mountPath: /var/lib/keyryx-findings
+              subPath: alerts
+              readOnly: true
+      volumes:
+        - name: keyryx-findings
+          persistentVolumeClaim:
+            claimName: keyryx-witness-state
+            readOnly: true

@@ -19,6 +19,17 @@ NS="${NS:-agent-stack}"
 kubectl -n "$NS" patch deployment wardryx --type strategic --patch-file "$HERE/wardryx-unpatch.yaml"
 kubectl -n "$NS" rollout status deployment/wardryx --timeout=300s
 
+# The witness's readers (CLAUDE.md invariant 75) come off before the witness goes: each is pod-affined to it and
+# mounts its claim, so a reader left patched could not be scheduled again once the witness is deleted.
+unpatch_reader() {
+  if kubectl -n "$NS" get deployment "$1" >/dev/null 2>&1; then
+    kubectl -n "$NS" patch deployment "$1" --type strategic --patch-file "$HERE/$2"
+    kubectl -n "$NS" rollout status "deployment/$1" --timeout=300s
+  fi
+}
+unpatch_reader genaryx-console console-findings-unpatch.yaml
+unpatch_reader heraldyx heraldyx-findings-unpatch.yaml
+
 kubectl -n "$NS" delete networkpolicy keyryx-custody-ingress keyryx-witness-ingress --ignore-not-found
 kubectl -n "$NS" delete service keyryx-custody keyryx-witness --ignore-not-found
 kubectl -n "$NS" delete deployment keyryx-custody keyryx-witness --ignore-not-found

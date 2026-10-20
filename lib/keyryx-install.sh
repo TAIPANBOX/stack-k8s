@@ -19,8 +19,11 @@
 #   wardryx: keyryx/wardryx-patch.yaml, strategic, after apply, rolled out (its image is the same pin)
 #   trailryx pin: custody's one ES384 key, by its kid, into the stack-wiring ConfigMap (keyryx_pin_trailryx_kid, invariant 73)
 #   record-seal: keyryx/record-seal-patch.yaml, strategic, after apply
+#   readers: keyryx/console-findings-patch.yaml and keyryx/heraldyx-findings-patch.yaml, strategic, each applied
+#     when its Deployment is there (heraldyx is opt-in), so the witness's findings reach them (invariant 75)
 #
-# WHAT keyryx_remove_settle DOES: the same two patches in reverse (wardryx-unpatch.yaml, record-seal-unpatch.yaml).
+# WHAT keyryx_remove_settle DOES: the same patches in reverse (wardryx-unpatch.yaml, record-seal-unpatch.yaml,
+# console-findings-unpatch.yaml, heraldyx-findings-unpatch.yaml).
 # It keeps custody, the witness, every key and the policy, because apply prunes nothing and no key is deleted on
 # this repository's own initiative.
 
@@ -109,6 +112,32 @@ keyryx_patch_record_seal() {
   printf '   record-seal: signs through keyryx (TRAILRYX_SIGNER=keyryx)\n'
 }
 
+# keyryx_patch_reader DEPLOYMENT FILE: one reader of the witness's findings (CLAUDE.md invariant 75), patched only
+# when its Deployment is there. heraldyx is opt-in and deploy.sh applies it after this settle, so deploy.sh calls
+# this again for heraldyx once it is applied. The reader mounts the witness's own claim through subPath alerts, read
+# only, and is pod-affined to the witness, so it rolls onto the witness's node.
+keyryx_patch_reader() {
+  local dep="$1" file="$2"
+  if ! k_ "-n $KEYRYX_NS get deployment $dep" >/dev/null 2>&1; then
+    printf '   %s: not installed, its findings patch waits until it is\n' "$dep"
+    return 0
+  fi
+  cat "$ROOT/keyryx/$file" \
+    | k_ "-n $KEYRYX_NS patch deployment $dep --type strategic --patch-file /dev/stdin" >/dev/null \
+    || die "could not patch $dep to read the Keyryx witness's findings"
+  k_ "-n $KEYRYX_NS rollout status deployment/$dep --timeout=300s" >/dev/null \
+    || die "$dep did not roll out beside the Keyryx witness"
+  printf '   %s: reads the witness findings, read only, beside the witness (rolled out)\n' "$dep"
+}
+
+# keyryx_unpatch_reader DEPLOYMENT FILE: the reverse, when the Deployment is there.
+keyryx_unpatch_reader() {
+  local dep="$1" file="$2"
+  k_ "-n $KEYRYX_NS get deployment $dep" >/dev/null 2>&1 \
+    && k_ "-n $KEYRYX_NS patch deployment $dep --type strategic --patch-file /dev/stdin" < "$ROOT/keyryx/$file" >/dev/null \
+    || true
+}
+
 keyryx_install_settle() {
   printf '\n>> Keyryx, on by default (--without-keyryx turns it off, the weaker setting)\n'
   keyryx_mint_root keyryx-root
@@ -121,6 +150,8 @@ keyryx_install_settle() {
   keyryx_patch_wardryx
   keyryx_pin_trailryx_kid
   keyryx_patch_record_seal
+  keyryx_patch_reader genaryx-console console-findings-patch.yaml
+  keyryx_patch_reader heraldyx heraldyx-findings-patch.yaml
   printf '   Keyryx is on. Custody keyryx-custody:4340, witness keyryx-witness:4341.\n'
 }
 
@@ -228,5 +259,7 @@ keyryx_remove_settle() {
   k_ "-n $KEYRYX_NS get cronjob record-seal" >/dev/null 2>&1 \
     && k_ "-n $KEYRYX_NS patch cronjob record-seal --type strategic --patch-file /dev/stdin" < "$ROOT/keyryx/record-seal-unpatch.yaml" >/dev/null \
     || true
-  printf '   wardryx and record-seal: Keyryx wiring removed. Custody and the witness stay until removed by hand.\n'
+  keyryx_unpatch_reader genaryx-console console-findings-unpatch.yaml
+  keyryx_unpatch_reader heraldyx heraldyx-findings-unpatch.yaml
+  printf '   wardryx, record-seal, the console and heraldyx: Keyryx wiring removed. Custody and the witness stay until removed by hand.\n'
 }

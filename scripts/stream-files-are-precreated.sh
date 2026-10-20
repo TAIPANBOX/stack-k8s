@@ -29,9 +29,9 @@
 #      as in the group when the pod-level securityContext has fsGroup 10001, supplementalGroups with
 #      10001, or runAsGroup 10001; a container-level runAsGroup is not counted (named limit).
 #
-# keyryx-witness is a writer here since invariant 75: its findings file is on the claim keyryx-alerts,
-# whose root is not the witness's, and the console and heraldyx read it, so it is made up front like
-# the bus files.
+# keyryx-witness is a writer here since invariant 75: its findings file, alerts/keyryx.ndjson on its own
+# claim keyryx-witness-state, is read by the console and heraldyx through a subPath mount of alerts/, so
+# the file and its directory are made up front, like the bus files, before either reader can mount them.
 #
 # A subject that is absent is "measured NOTHING", never a pass.
 set -uo pipefail
@@ -67,9 +67,9 @@ WRITERS = [
     ("45-heraldyx.yaml", "Deployment", "heraldyx", "/var/lib/stack/heraldyx/sent.ndjson", 65532, 65532, "state"),
     ("47-scopyx.yaml", "Deployment", "scopyx", "/var/lib/scopyx/events.ndjson", 65532, 65532, "journal"),
     ("48-scopyx-browser.yaml", "Deployment", "scopyx", "/var/lib/scopyx/events.ndjson", 65532, 65532, "journal"),
-    # The Keyryx witness's findings (CLAUDE.md invariant 75), on a claim of their own and not the bus; the
+    # The Keyryx witness's findings (CLAUDE.md invariant 75), on its own state claim and not the bus; the
     # console and heraldyx read it in group 10001.
-    ("keyryx/manifests/59-keyryx.yaml", "Deployment", "keyryx-witness", "/var/lib/keyryx-alerts/keyryx.ndjson", 20100, 10001, "keyryx-alerts"),
+    ("keyryx/manifests/59-keyryx.yaml", "Deployment", "keyryx-witness", "/var/lib/keyryx-witness/alerts/keyryx.ndjson", 20100, 10001, "keyryx-witness-state"),
 ]
 
 # Pods that mount the stack-events claim WITHOUT group 10001, each with the reason it does not need it.
@@ -223,8 +223,14 @@ for path, kind, name, target, uid, gid, vol in WRITERS:
         bad.append(f"{label}: the init container does not create the file in group {gid}")
     if not re.search(rf"name:\s*{re.escape(vol)}\b", entry):
         bad.append(f"{label}: the init container does not mount the volume {vol}")
-    if not re.search(rf"mountPath:\s*{re.escape(os.path.dirname(target))}\b", entry):
-        bad.append(f"{label}: the init container does not mount {os.path.dirname(target)}")
+    # The mount is the file's directory, or an ancestor of it when the init makes the directory itself
+    # (the Keyryx witness's alerts/, on its own state claim, invariant 75).
+    d = os.path.dirname(target)
+    mps = re.findall(r"mountPath:\s*(\S+)", entry)
+    exact = any(mp.rstrip("/") == d for mp in mps)
+    ancestor = any(d.startswith(mp.rstrip("/") + "/") for mp in mps) and re.search(rf"mkdir -p {re.escape(d)}(?![\w/.-])", entry)
+    if not (exact or ancestor):
+        bad.append(f"{label}: the init container does not mount {d}, nor an ancestor of it with a mkdir -p of {d}")
     m = re.search(r"runAsUser:\s*(\d+)", pod_sc or "")
     if m is None:
         if not (kind == "CronJob" and name == "drills"):

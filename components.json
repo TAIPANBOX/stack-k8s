@@ -71,7 +71,6 @@
           "console-state",
           "costcrew-state",
           "heraldyx-state",
-          "keyryx-alerts",
           "scopyx-events",
           "stack-events",
           "trailryx-records",
@@ -85,12 +84,8 @@
       },
       "declared": {
         "the_claims_are_metered": {
-          "value": "10 PersistentVolumeClaims in manifests/ (keyryx-alerts the newest, see keyryx_witness_findings_reach_readers)",
+          "value": "8 PersistentVolumeClaims",
           "why": "Each provisions a real disk and is billed from creation, whether or not anything writes to it; some providers round up to their own minimum, so the requested size is not always the billed size. Listed so adding one is a visible change to a reviewed file."
-        },
-        "keyryx_witness_findings_reach_readers": {
-          "value": "the claim keyryx-alerts (ReadWriteMany, stack-rwx, 1Gi), written by the keyryx witness alone and mounted read only by genaryx-console and heraldyx",
-          "why": "@decided 2026-10-20 (paraphrased): readers are given read-only access to the witness's own findings file, and the witness is never given write access to the bus it witnesses. @claude 2026-10-20: the witness wrote its findings on its own ReadWriteOnce state claim, which no reader on another node can mount, so they reached nobody; a claim of their own is the shape that keeps the bus read only for the witness and the readers read only for the findings. On the three launchers stack-rwx is Longhorn on the nodes' own disks (PORTABILITY.md: nothing beyond those disks), so it adds node disk and one Longhorn share-manager pod and no billed disk there; on a cluster whose stack-rwx is a managed RWX service it would be billed. As a new claim it waits for the operator's agreement. Held by scripts/keyryx-alerts-reach-readers.sh (CLAUDE.md invariant 75)."
         },
         "the_loadbalancer_is_excluded_on_purpose": {
           "value": "genaryx-console-lb",
