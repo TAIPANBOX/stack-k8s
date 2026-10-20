@@ -1003,9 +1003,9 @@ claim is ReadWriteOnce, as the record seal does. The wiring is two patches under
 `keyryx/` that the Keyryx install applies and `--without-keyryx` reverses; the default
 manifests do not change. Each reader reads the file only as a regular file, never
 through a link (heraldyx 0.8.1, pinned here, and the console from genaryx#134).
-heraldyx renders the seven `witness_*` types and mails the high ones. The console pinned here does not read
-`GENARYX_EVENTS_EXTRA` yet (TAIPANBOX/genaryx#134): until a console image built from
-that change is pinned, the findings reach the mail and not the console.
+heraldyx renders the seven `witness_*` types and mails the high ones. The console is pinned at
+`genaryx-console:v1.7.0`, built from TAIPANBOX/genaryx#134, which reads
+`GENARYX_EVENTS_EXTRA` and turns a high finding into an incident.
 
 Not wired yet: vouchryx and tokenfuse (their Keyryx releases are not published
 yet, so their pins stay where they are) and trailryx (its next release is later).

@@ -651,7 +651,7 @@ spec:
             - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: "http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200" }
             # The console's approver public keys (CLAUDE.md invariant 67). With WARDRYX_APPROVER_JWKS set, wardryx
             # requires a statement the console signed on every grant and denial, verified against this JWK set. The
-            # console is pinned to genaryx-console:v1.6.0, the first image that sends one. Never WARDRYX_ALLOW_KEY_APPROVALS.
+            # console is pinned to genaryx-console v1.6.0 or later (v1.7.0), v1.6.0 being the first image that sends one. Never WARDRYX_ALLOW_KEY_APPROVALS.
             - { name: WARDRYX_APPROVER_JWKS, value: "/etc/wardryx/approver/approver-jwks.json" }
           ports: [{ name: http, containerPort: 8090 }]
           # Stop taking traffic before stopping: the endpoint leaves the
