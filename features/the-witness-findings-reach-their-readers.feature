@@ -240,3 +240,16 @@ Feature: The Keyryx witness's findings reach the console and heraldyx, read only
     When the comment is reworded
     Then the round trip still passes
     # @teeth: keyryx-patches-round-trip: a comment in an unpatch (must pass)
+
+  Scenario: A patch the gate cannot read fails it
+    Given every keyryx/*-patch.yaml names one kind and one metadata.name
+    When a patch names no kind, or its object is never reversed because the gate could not read its name
+    Then the gate fails and names the patch, instead of skipping it
+    # @teeth: keyryx-alerts: a patch that names no kind
+    # @teeth: keyryx-alerts: a fifth patch, its name indented four spaces, is never reversed
+
+  Scenario: A reader unpatch reverses only a Deployment
+    Given keyryx_unpatch_reader always unpatches a Deployment
+    When a CronJob's patch is reversed through keyryx_unpatch_reader
+    Then the gate fails, because the kind is not optional
+    # @teeth: keyryx-alerts: a CronJob patch reversed as a Deployment reader

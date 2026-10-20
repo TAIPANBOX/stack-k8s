@@ -49,7 +49,9 @@
 #      unpatches both in keyryx_remove_settle, wardryx and the record-seal are reversed there through
 #      keyryx_unpatch too, and a refused unpatch stops it (keyryx_unpatch and keyryx_unpatch_reader end
 #      in die, never in `|| true`); every object a keyryx/*-patch.yaml names (wardryx, the
-#      record-seal, the console, heraldyx) is reversed by keyryx_remove_settle, keyryx/down.sh
+#      record-seal, the console, heraldyx) is reversed by keyryx_remove_settle, by keyryx_unpatch
+#      with its kind or, for a Deployment only, by keyryx_unpatch_reader; a patch whose one kind
+#      and one metadata.name this gate cannot read fails, it is never skipped; keyryx/down.sh
 #      runs keyryx_remove_settle before its first delete, and each deploy script patches
 #      heraldyx after it applies it;
 #   7. no file under manifests/ mounts keyryx-witness-state or names the findings
@@ -376,18 +378,48 @@ for patch, unpatch, _, dep, _, _ in READERS:
 
 # Every object a keyryx/*-patch.yaml names, which keyryx_install_settle applies, is reversed by
 # keyryx_remove_settle, and keyryx/down.sh runs keyryx_remove_settle before its first delete.
+# A patch whose kind or name this gate cannot read is a failure, never a skip: a skipped patch is an object
+# nothing checks is reversed.
+K8S_NAME = r"[a-z0-9]([-a-z0-9.]*[a-z0-9])?"
+
+
+def patch_target(t):
+    """(kind, name) of a one-document patch, or the reason it cannot be read."""
+    if len([d for d in re.split(r"\n---\s*\n", t) if d.strip()]) != 1:
+        return None, "it is not one YAML document"
+    kinds = re.findall(r"^kind:\s*[\"']?([A-Za-z]+)[\"']?\s*$", t, re.M)
+    if len(kinds) != 1:
+        return None, f"it names {len(kinds)} top-level kind(s), not one"
+    m = re.search(r"^metadata:[ \t]*\{([^}\n]*)\}\s*$", t, re.M)
+    if m:
+        names = [field("{" + m.group(1) + "}", "name")]
+    else:
+        m = re.search(r"^metadata:[ \t]*\n((?:[ \t]+.*\n?|[ \t]*\n)*)", t, re.M)
+        if not m:
+            return None, "it has no metadata block"
+        block = m.group(1)
+        ind = min((len(l) - len(l.lstrip(" ")) for l in block.split("\n") if l.strip()), default=0)
+        names = re.findall(rf"^ {{{ind}}}name:[ \t]*[\"']?([^\"'\s#]+)[\"']?[ \t]*(?:#.*)?$", block, re.M) if ind else []
+    if len(names) != 1 or not names[0] or not re.fullmatch(K8S_NAME, names[0]):
+        return None, "its metadata.name is not one plain Kubernetes name this gate can read"
+    return kinds[0].lower(), names[0]
+
+
 patched = []
 for f in sorted(x for x in files if x.startswith("keyryx/") and x.endswith("-patch.yaml")):
-    t = read(f) or ""
-    k = re.search(r"^kind:\s*(\S+)", t, re.M)
-    n = re.search(r"^  name:\s*(\S+)", t, re.M)
-    if not (k and n):
+    kind, name = patch_target(read(f) or "")
+    if kind is None:
+        bad.append(f"{f}: this gate cannot read which object the patch targets ({name}), so nothing checks that keyryx_remove_settle reverses it")
         continue
-    patched.append((k.group(1).lower(), n.group(1), posixpath.basename(f).replace("-patch.yaml", "-unpatch.yaml")))
-if not patched:
+    patched.append((kind, name, posixpath.basename(f).replace("-patch.yaml", "-unpatch.yaml")))
+if not patched and not bad:
     nothing("no keyryx/*-patch.yaml names an object")
 for kind, name, unf in patched:
-    if not re.search(rf"keyryx_unpatch(?:_reader)?\s+(?:{kind}\s+)?{re.escape(name)}\s+{re.escape(unf)}", rem):
+    # keyryx_unpatch names the kind; keyryx_unpatch_reader always unpatches a Deployment, so it counts only for one.
+    forms = [rf"keyryx_unpatch\s+{re.escape(kind)}\s+{re.escape(name)}\s+{re.escape(unf)}"]
+    if kind == "deployment":
+        forms.append(rf"keyryx_unpatch_reader\s+{re.escape(name)}\s+{re.escape(unf)}")
+    if not any(re.search(rf"^\s*{form}\s*$", rem, re.M) for form in forms):
         bad.append(f"lib/keyryx-install.sh: keyryx_remove_settle does not reverse {kind} {name} with {unf}")
 down = read("keyryx/down.sh")
 if down is None:

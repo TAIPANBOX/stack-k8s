@@ -415,6 +415,12 @@ jobs:
       - name: every Keyryx patch applies and its unpatch reverts it exactly (invariants 69, 70, 75)
         run: ./scripts/keyryx-patches-round-trip.sh
 
+      # Added 2026-10-20 with invariant 76. keyryx/down.sh and the opt-out leave no record-seal Job bound to the
+      # witness (a Job keeps the template it was made from, and a Pending one holds back every later seal), and a
+      # read they cannot make stops them. Run against a stand-in kubectl, no cluster.
+      - name: turning Keyryx off leaves no record-seal Job bound to the witness, and a failed read stops it (invariant 76)
+        run: ./scripts/keyryx-off-leaves-nothing-bound.sh
+
       # Added 2026-10-14 with invariant 44. A cost report that meets a machine type with no
       # rate exits non-zero and names it, instead of counting it as zero. See GOTCHAS 127.
       - name: a cost report refuses an unknown machine rate (invariant 44)

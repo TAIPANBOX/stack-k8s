@@ -31,10 +31,15 @@ k_() { eval "kubectl $*"; }
 # Every object lib/keyryx-install.sh patches is unpatched first, through the same keyryx_remove_settle the
 # opt-out runs (wardryx, the record-seal, the console, heraldyx), BEFORE anything is deleted: the record-seal and
 # the two readers are pod-affined to the witness, so one left patched could not be scheduled again once the
-# witness is gone, and the record-seal would still sign through a custody that is no longer there.
+# witness is gone, and the record-seal would still sign through a custody that is no longer there. The same step
+# lets a running record-seal Job finish and deletes any other one still bound to the witness, since a Job keeps the
+# template it was made from and a Pending one would hold back every later seal (concurrencyPolicy Forbid).
 keyryx_remove_settle
 for dep in wardryx genaryx-console heraldyx; do
-  if [ -n "$(kubectl -n "$NS" get deployment "$dep" --ignore-not-found -o name)" ]; then
+  # A failed read stops here: inside `[ -n "$(...)" ]` it would read as "not installed" and skip the wait.
+  found="$(kubectl -n "$NS" get deployment "$dep" --ignore-not-found -o name)" \
+    || die "could not read deployment $dep to wait for its rollout off Keyryx"
+  if [ -n "$found" ]; then
     kubectl -n "$NS" rollout status "deployment/$dep" --timeout=300s
   fi
 done
