@@ -994,16 +994,16 @@ custody; its bearer key is `keyryx-wardryx-client`. Only pods labelled
 `keyryx-consumer: "true"` may reach custody.
 
 **The witness's findings reach the console and the notifier.** The witness writes
-`keyryx.ndjson` on a claim of its own, `keyryx-alerts` (ReadWriteMany, `stack-rwx`,
-1Gi, in the default set), and mounts the event streams read only, so it never writes
-the bus it witnesses. The console (`GENARYX_EVENTS_EXTRA`) and heraldyx
-(`HERALDYX_EVENTS`) mount that claim read only and read the file, and each reads it
-only as a regular file, never through a link (heraldyx 0.8.1, pinned here, and the
-console from genaryx#134). heraldyx renders the seven `witness_*` types and mails the
-high ones. On the three launchers
-`stack-rwx` is Longhorn on the nodes' own disks, so the claim adds node disk and one
-Longhorn share-manager pod, not a billed disk; on a cluster whose `stack-rwx` is a
-managed RWX service it is billed. The console pinned here does not read
+`alerts/keyryx.ndjson` on its own state claim, `keyryx-witness-state`, and mounts the
+event streams read only, so it never writes the bus it witnesses. No new volume is
+added. The console (`GENARYX_EVENTS_EXTRA`) and heraldyx (`HERALDYX_EVENTS`) mount only
+`alerts/` of that claim (`subPath`), read only on the mount and on the claim, so they
+never see the witness key beside it, and each runs on the witness's node, because the
+claim is ReadWriteOnce, as the record seal does. The wiring is two patches under
+`keyryx/` that the Keyryx install applies and `--without-keyryx` reverses; the default
+manifests do not change. Each reader reads the file only as a regular file, never
+through a link (heraldyx 0.8.1, pinned here, and the console from genaryx#134).
+heraldyx renders the seven `witness_*` types and mails the high ones. The console pinned here does not read
 `GENARYX_EVENTS_EXTRA` yet (TAIPANBOX/genaryx#134): until a console image built from
 that change is pinned, the findings reach the mail and not the console.
 
