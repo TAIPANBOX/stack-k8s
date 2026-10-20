@@ -87,6 +87,10 @@
           "value": "8 PersistentVolumeClaims",
           "why": "Each provisions a real disk and is billed from creation, whether or not anything writes to it; some providers round up to their own minimum, so the requested size is not always the billed size. Listed so adding one is a visible change to a reviewed file."
         },
+        "keyryx_witness_findings_reach_readers": {
+          "value": "the witness writes alerts/keyryx.ndjson on its own claim keyryx-witness-state; genaryx-console and heraldyx mount only alerts/ of it (subPath), read only on the mount and the claim, pod-affined to the witness, through keyryx/console-findings-patch.yaml and keyryx/heraldyx-findings-patch.yaml",
+          "why": "@decided 2026-10-20 (paraphrased): readers are given read-only access to the witness's own findings file, and the witness is never given write access to the bus it witnesses; on a cluster the findings travel on the witness's own claim, mounted read only through a subPath with each reader on the witness's node, and no new volume is added. The patches are applied by lib/keyryx-install.sh and reversed with --without-keyryx, so the default manifests are unchanged. Held by scripts/keyryx-alerts-reach-readers.sh (CLAUDE.md invariant 75)."
+        },
         "the_loadbalancer_is_excluded_on_purpose": {
           "value": "genaryx-console-lb",
           "why": "A cloud load balancer is metered, so it sits outside the default kustomization and a default install never creates it. stack-single reaches the same place with caddy. estate-gates records this as a decision rather than a gap."

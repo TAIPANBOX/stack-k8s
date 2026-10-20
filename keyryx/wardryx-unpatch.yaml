@@ -23,8 +23,10 @@ spec:
               $patch: delete
             - name: WARDRYX_APPROVAL_V2_UNTIL
               $patch: delete
+          # A volumeMount is keyed by mountPath in a strategic merge, not by name: a delete
+          # by name is refused by the API server and reverts nothing (invariant 75's gate).
           volumeMounts:
-            - name: keyryx-client
+            - mountPath: /run/keyryx-client
               $patch: delete
       volumes:
         - name: keyryx-client

@@ -906,6 +906,11 @@ if [ -n "$ALERT_TO" ]; then
   k_ "apply -f /root/stack-k8s/manifests/45-heraldyx.yaml" >/dev/null \
     || die "the stack is up; only the notifier failed to apply."
   k_ "-n agent-stack rollout status deploy/heraldyx --timeout=180s" || true
+  # heraldyx is applied after the Keyryx settle, so its findings patch goes on here (CLAUDE.md invariant 75):
+  # a fresh apply of 45-heraldyx.yaml puts HERALDYX_EVENTS back to the bus alone.
+  if [ "$KEYRYX_INSTALL" = 1 ]; then
+    keyryx_patch_reader heraldyx heraldyx-findings-patch.yaml
+  fi
 
   # The test message, sent from INSIDE the pod, which is the point: it proves
   # the pod's own network path, its own egress policy and its own credentials,

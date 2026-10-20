@@ -185,7 +185,6 @@ spec:
             - -c
             - >-
               mkdir -p /var/lib/keyryx-witness/data && chmod 0700 /var/lib/keyryx-witness/data &&
-              mkdir -p /var/lib/keyryx-witness/alerts &&
               mkdir -p /var/lib/keyryx-witness/data/attestations && chmod 0750 /var/lib/keyryx-witness/data/attestations &&
               cp /in/root.key /run/keyryx/root.key && chmod 0400 /run/keyryx/root.key
           securityContext:
@@ -203,6 +202,24 @@ spec:
               mountPath: /var/lib/keyryx-witness
             - name: keyryx-key-tmp
               mountPath: /run/keyryx
+        # The witness's findings, made before the witness starts, by its own uid, in the bus group its readers
+        # share (CLAUDE.md invariants 59 and 75): the directory alerts/ 0750 and keyryx.ndjson 0640 (0660 after a later start, the kubelet's fsGroup) on its own
+        # state claim. heraldyx and the console mount only that directory, through subPath alerts, read only
+        # (keyryx/heraldyx-findings-patch.yaml, keyryx/console-findings-patch.yaml), so they never see data/,
+        # where the witness key lives.
+        - name: precreate-streams
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          command: ["sh", "-c", "umask 027 && mkdir -p /var/lib/keyryx-witness/alerts && chmod 0750 /var/lib/keyryx-witness/alerts && { [ -e /var/lib/keyryx-witness/alerts/keyryx.ndjson ] || : > /var/lib/keyryx-witness/alerts/keyryx.ndjson; }"]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 20100
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - name: keyryx-witness-state
+              mountPath: /var/lib/keyryx-witness
       containers:
         - name: keyryx-witness
           image: ghcr.io/taipanbox/keyryx:v0.1.2@sha256:9b6d4e0e8988076e90843d9d1625e50a7f248f6be531e144a6950ff9233f7683
@@ -214,6 +231,8 @@ spec:
               value: /run/keyryx/root.key
             - name: KEYRYX_WITNESS_EVENTS
               value: /var/lib/stack/events
+            # Its findings, off the bus it witnesses, on its own state claim (CLAUDE.md invariant 75): the
+            # console and heraldyx read this file through a read-only subPath mount of alerts/.
             - name: KEYRYX_WITNESS_ALERTS
               value: /var/lib/keyryx-witness/alerts/keyryx.ndjson
             - name: KEYRYX_WITNESS_ADDR
@@ -264,9 +283,12 @@ spec:
         - name: keyryx-witness-state
           persistentVolumeClaim:
             claimName: keyryx-witness-state
+        # Read only on the claim as well as on the mount (invariant 75): a
+        # container added later that mounts this volume cannot write the bus.
         - name: events
           persistentVolumeClaim:
             claimName: stack-events
+            readOnly: true
         - name: trailryx-records
           persistentVolumeClaim:
             claimName: trailryx-records
