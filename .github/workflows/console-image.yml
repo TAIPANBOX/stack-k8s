@@ -47,13 +47,14 @@ name: console image
 # one, and nobody has to know which they got.
 # The commits this image is built from, in one place (CLAUDE.md invariant 68). Each is the commit its release
 # tag names (read with git ls-remote, the peeled commit). genaryx has no tags, so it is the merge commit of
-# TAIPANBOX/genaryx#132, the approver-statement change. Move one by changing this block and nothing else.
+# TAIPANBOX/genaryx#134, the Keyryx witness's findings read as a read-only extra stream pinned to its own
+# source. Move one by changing this block and nothing else.
 env:
   QRYX_REF: e2e776d648aa28ffa9971bb21bc828335c86a89c      # qryx v1.1.0
   MOCKRYX_REF: 14c954dcf8dbcca40b2fa28c5cf202372b8480fc   # mockryx v0.3.0
   VERDRYX_REF: 42617d2268500e46b93302a93de7412522668e91   # verdryx v0.1.0
   ENGRAM_REF: b0b72a87bda73b8ec1287ee6d2450dd60290a0b3    # engram v3.0.0
-  GENARYX_REF: 03c6c88f6664bf6aa25300868ffd8f61d9ecaa31   # genaryx #132 merge commit
+  GENARYX_REF: 869c1ce52a9ba8e32d2637d37a1a6cfe50123d2f   # genaryx #134 merge commit
 
 on:
   push:
