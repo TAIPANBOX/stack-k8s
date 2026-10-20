@@ -287,10 +287,10 @@ spec:
             - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
             - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
             - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "https://vouchryx.agent-stack.invalid" }
-            # Every address the gateway is reached at in the cluster: its Service name and the cluster-internal name
-            # (CLAUDE.md invariant 74). A delegation proof addressed to either is accepted, and no other origin is.
+            # The four in-cluster origins every agent-proof door accepts (CLAUDE.md invariant 74): the gateway's and the
+            # broker's Service names and cluster-internal names. The same list is wardryx's agent-token door list below.
             - { name: TOKENFUSE_DELEGATION_URL, value: "http://tokenfuse-gateway:4100" }
-            - { name: TOKENFUSE_DELEGATION_ORIGINS, value: "http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100" }
+            - { name: TOKENFUSE_DELEGATION_ORIGINS, value: "http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS, value: "http://vouchryx:4310/v1/revocations" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS_INTERVAL_MS, value: "12000" }
             - { name: TOKENFUSE_DELEGATION_REVOCATIONS_FAILMODE, value: "closed" }
@@ -648,7 +648,7 @@ spec:
             - { name: WARDRYX_AGENT_TOKEN_AUDIENCES, value: "https://vouchryx.agent-stack.invalid" }
             - { name: WARDRYX_AGENT_TOKEN_JWKS_URL, value: "http://vouchryx:4310/.well-known/jwks.json" }
             - { name: WARDRYX_AGENT_TOKEN_REVOCATION_URL, value: "http://vouchryx:4310/v1/revocations" }
-            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: "http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200" }
+            - { name: WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: "http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200" }
             # The console's approver public keys (CLAUDE.md invariant 67). With WARDRYX_APPROVER_JWKS set, wardryx
             # requires a statement the console signed on every grant and denial, verified against this JWK set. The
             # console is pinned to genaryx-console:v1.6.0, the first image that sends one. Never WARDRYX_ALLOW_KEY_APPROVALS.
