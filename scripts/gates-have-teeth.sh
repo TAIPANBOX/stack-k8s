@@ -1208,7 +1208,7 @@ run_case "agent-tokens-are-required: the gateway drops the governed profile" fai
 
 run_case "agent-tokens-are-required: the gateway runs a tokenfuse that predates the governed profile" fail \
 	"$AGT" \
-	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.19\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
+	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.20\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
 	"predates the governed profile and the static-key list"
 
 TEETH_EDIT_27="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"\" }")')"
@@ -1392,7 +1392,7 @@ run_case "wardryx-verifies-agent-tokens: the proof is switched off" fail \
 	"$TEETH_EDIT_39" \
 	"proof is required by default and must not be switched off"
 
-TEETH_EDIT_40="$(py 'edit("manifests/10-planes.yaml", "value: \"http://tokenfuse-gateway:4100,http://tokenfuse-mcp-broker:4200\" }", "value: \"http://tokenfuse-mcp-broker:4200\" }")')"
+TEETH_EDIT_40="$(py 'edit("manifests/10-planes.yaml", "WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-gateway:4100,http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100,http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\" }", "WARDRYX_AGENT_TOKEN_DOOR_ORIGINS, value: \"http://tokenfuse-mcp-broker:4200,http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200\" }")')"
 run_case "wardryx-verifies-agent-tokens: the gateway's door origin is not named" fail \
 	"$WVA" \
 	"$TEETH_EDIT_40" \
