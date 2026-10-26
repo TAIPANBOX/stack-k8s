@@ -105,7 +105,7 @@ spec:
           volumeMounts: [{ name: state, mountPath: /var/lib/stack/heraldyx }]
       containers:
         - name: heraldyx
-          image: ghcr.io/taipanbox/heraldyx:v0.8.1@sha256:879211d785fc5edaae1ce88d09c82aa8258df31933bf16fb21a661abd28240d3
+          image: ghcr.io/taipanbox/heraldyx:v0.8.2@sha256:0866768529c5115b829bbf52c34e6d9a7ec442babbd222fe54a081533506da61
           imagePullPolicy: IfNotPresent
           env:
             # The deployment's own shape. What the OPERATOR chooses (who to

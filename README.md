@@ -538,7 +538,7 @@ How each mode behaves, because the defaults are deliberate:
 ship models for customers. A customer can fine-tune and calibrate their own model
 on their own data, and typryx gives them what they need to do it. Add
 `--typed-training` to any launcher, next to `--with-typed` or a `--typed-mode`,
-and typryx (v0.3.0 or later; `51-typryx.yaml` pins v0.4.1) keeps a local training
+and typryx (v0.3.0 or later; `51-typryx.yaml` pins v0.5.1) keeps a local training
 log: one line per answered question holding the state the template let through
 and the identity of the answer, never the backend's answer or its probabilities.
 You post what actually happened to `/v1/outcome`, and `typryx export --training`
@@ -975,7 +975,7 @@ kubectl -n agent-stack delete configmap gateway-identity-map
 
 ## Keyryx on the cluster (opt-in)
 
-Keyryx (`ghcr.io/taipanbox/keyryx:v0.1.2`) is the key custody service and the
+Keyryx (`ghcr.io/taipanbox/keyryx:v0.1.3`) is the key custody service and the
 independent witness of the record. Off by default: `kubectl apply -k manifests/`
 never applies it. `keyryx/up.sh` turns it on, `keyryx/down.sh` turns it off and
 keeps every key and claim.

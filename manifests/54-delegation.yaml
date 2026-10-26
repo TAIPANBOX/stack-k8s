@@ -87,7 +87,7 @@ spec:
           volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }, { name: delegation-state, mountPath: /var/lib/stack/delegation }]
       containers:
         - name: vouchryx
-          image: ghcr.io/taipanbox/vouchryx:v0.6.0@sha256:4a2b6b31be44b5391974785bdfca597a88bcc5ddd834d50830bd6b9537e9ab3d
+          image: ghcr.io/taipanbox/vouchryx:v0.6.1@sha256:be093cd2c03d1c890f3efa387a453fc702b23c80cebbe5f44fae303c51688159
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/vouchryx"]
           env:
