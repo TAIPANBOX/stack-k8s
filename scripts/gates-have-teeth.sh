@@ -774,7 +774,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.0@sha256:84f6856dcfe609410429774c965bbc531d063b29c640871dd44b1c34b07ba628\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.1@sha256:8de459eca2a10ae36a01d0249b91c3b0c62b50b47ad2c4a309e2ea02e0a460dd\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 # The gateway's declassify key (invariant 27). POST /v1/fuse/declassify lifts a
@@ -834,7 +834,7 @@ run_case "declassify-is-keyed: an installer never gives an existing Secret the k
 # Each must say it measured nothing, never OK.
 run_case "declassify-is-keyed: no gateway container left to judge" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.0@sha256:84f6856dcfe609410429774c965bbc531d063b29c640871dd44b1c34b07ba628\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.1@sha256:8de459eca2a10ae36a01d0249b91c3b0c62b50b47ad2c4a309e2ea02e0a460dd\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the declassify key"
 
 run_case "declassify-is-keyed: no installer left to read" fail \
@@ -1725,7 +1725,7 @@ run_case "run-budget-ceiling-is-set: a comment next to the ceiling changes" pass
 	'./scripts/run-budget-ceiling-is-set.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "# The operator\x27s ceiling on a run\x27s budget (tokenfuse v1.5.0,", "# The operator\x27s ceiling on the budget of a run (tokenfuse v1.5.0,")')"
 
-TEETH_EDIT_68="$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.0@sha256:84f6856dcfe609410429774c965bbc531d063b29c640871dd44b1c34b07ba628\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')"
+TEETH_EDIT_68="$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.1@sha256:8de459eca2a10ae36a01d0249b91c3b0c62b50b47ad2c4a309e2ea02e0a460dd\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')"
 run_case "run-budget-ceiling-is-set: no gateway container left to judge" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
 	"$TEETH_EDIT_68" \
@@ -3288,7 +3288,7 @@ run_case "broker-blocks-raw-secrets: the broker cannot reach wardryx" fail \
 
 run_case "broker-blocks-raw-secrets: the broker image cannot be pulled" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.0@sha256:84f6856dcfe609410429774c965bbc531d063b29c640871dd44b1c34b07ba628\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.1@sha256:8de459eca2a10ae36a01d0249b91c3b0c62b50b47ad2c4a309e2ea02e0a460dd\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
 	"could not pull ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag"
 
 run_case "broker-blocks-raw-secrets: no broker left to judge" fail \
@@ -4009,14 +4009,14 @@ run_case "add-site: a comment reworded beside the reader (must pass)" pass \
 	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
 	"$(py 'edit("hub/add-site.sh", "# The manifests pin the image as name:tag@sha256", "# The manifests pin the image, as name:tag@sha256")')"
 
-# tokenfuse v1.20.0 is pinned by digest; each tokenfuse door names only its own two origins, and wardryx's agent-token door names their union (CLAUDE.md invariant 74).
-run_case "tokenfuse-door-origins: the gateway is left on tokenfuse v1.19.0" fail \
+# tokenfuse v1.20.1 is pinned by digest; each tokenfuse door names only its own two origins, and wardryx's agent-token door names their union (CLAUDE.md invariant 74).
+run_case "tokenfuse-door-origins: the gateway is left on tokenfuse v1.20.0" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
-	"$(py 'p = "manifests/10-planes.yaml"; s = open(p).read(); s = s.replace("tokenfuse:v1.20.0@sha256:84f6", "tokenfuse:v1.19.0@sha256:84f6", 1); open(p, "w").write(s)')" \
+	"$(py 'p = "manifests/10-planes.yaml"; s = open(p).read(); s = s.replace("tokenfuse:v1.20.1@sha256:8de4", "tokenfuse:v1.20.0@sha256:8de4", 1); open(p, "w").write(s)')" \
 	"is not the release pin"
 run_case "tokenfuse-door-origins: the control plane digest is not the release pin" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "ab2510b3687455341fcc207361b8ed4801c4c7460f3ddc8b243603b6a982ca88", "ab2510b3687455341fcc207361b8ed4801c4c7460f3ddc8b243603b6a982ca89")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "157d5801367674e7af8625b391fba8e26e3b72fe95dcb5e435cebee5555fa92a", "157d5801367674e7af8625b391fba8e26e3b72fe95dcb5e435cebee5555fa92b")')" \
 	"is not the release pin"
 run_case "tokenfuse-door-origins: the gateway's list names the broker's origin" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
