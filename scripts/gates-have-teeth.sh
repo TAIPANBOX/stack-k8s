@@ -1208,7 +1208,7 @@ run_case "agent-tokens-are-required: the gateway drops the governed profile" fai
 
 run_case "agent-tokens-are-required: the gateway runs a tokenfuse that predates the governed profile" fail \
 	"$AGT" \
-	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.20\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
+	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.20\.1@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
 	"predates the governed profile and the static-key list"
 
 TEETH_EDIT_27="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"\" }")')"
