@@ -604,7 +604,7 @@ spec:
           volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v2.4.0@sha256:8a110dec235fd81c3907ed769d2c31a8e095767fbae4fa29316631eff5228e97
+          image: ghcr.io/taipanbox/wardryx:v2.4.1@sha256:a7ef8e2df49c96eee39094451094f825aa46abb519955c8f0f2a0ffc33dde4dc
           imagePullPolicy: IfNotPresent
           # Single-dash flags, exactly as up.sh calls it.
           args:
@@ -735,7 +735,7 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       containers:
         - name: idryx
-          image: ghcr.io/taipanbox/idryx:v1.3.0@sha256:aa1ee80aeafcb35beaf9fc115081570fcbd13507e1299541148527f4600dc96d
+          image: ghcr.io/taipanbox/idryx:v1.3.1@sha256:7333f5e9bef5dc924cfc05b5b24a9307db83e96dfdcc6fbfe32267f057f6efb9
           imagePullPolicy: IfNotPresent
           # Double-dash flags here, and :8081 because idryx's own default 8080
           # collides with the cloud plane. Both quirks are up.sh's, kept so the
