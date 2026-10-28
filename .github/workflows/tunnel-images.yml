@@ -64,16 +64,21 @@ on:
         description: "The immutable tag to publish under, e.g. v0.1.2. Required on a dispatch: without it the image would be named after the branch."
         required: true
         type: string
-  # build-pr below runs on a pull request that touches THIS file, and nothing
-  # else does: build and merge stay off (see their `if`), so a pull request
-  # proves both images build and their entrypoints run, and publishes
+  # build-pr below runs on a pull request that touches THIS file or a file the
+  # two images are built from (their Dockerfiles and images/uapi-proxy), and
+  # nothing else does: build and merge stay off (see their `if`), so a pull
+  # request proves both images build and their entrypoints run, and publishes
   # nothing. Added 2026-09-02 after tokenfuse's v0.4.2 failed on both Linux
   # runners the first time its own tag-only release.yml ever reached its musl
   # leg: a workflow gated on `push: tags: v*` alone is tested by exactly one
   # event in its whole life, and that event is the one where a mistake is
   # public.
   pull_request:
-    paths: [".github/workflows/tunnel-images.yml"]
+    paths:
+      - ".github/workflows/tunnel-images.yml"
+      - "images/wg.Dockerfile"
+      - "images/caddy.Dockerfile"
+      - "images/uapi-proxy/**"
 
 permissions:
   contents: read

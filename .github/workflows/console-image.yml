@@ -50,8 +50,8 @@ name: console image
 # TAIPANBOX/genaryx#134, the Keyryx witness's findings read as a read-only extra stream pinned to its own
 # source. Move one by changing this block and nothing else.
 env:
-  QRYX_REF: e2e776d648aa28ffa9971bb21bc828335c86a89c      # qryx v1.1.0
-  MOCKRYX_REF: 14c954dcf8dbcca40b2fa28c5cf202372b8480fc   # mockryx v0.3.0
+  QRYX_REF: 432f0502f8d68623fdcd1a58b5e59711618527d9      # qryx v1.1.1
+  MOCKRYX_REF: 81c78303a00eb74b50b783a40816be6110b4b64f   # mockryx v0.3.1
   VERDRYX_REF: 42617d2268500e46b93302a93de7412522668e91   # verdryx v0.1.0
   ENGRAM_REF: b0b72a87bda73b8ec1287ee6d2450dd60290a0b3    # engram v3.0.0
   GENARYX_REF: 869c1ce52a9ba8e32d2637d37a1a6cfe50123d2f   # genaryx #134 merge commit
@@ -65,16 +65,19 @@ on:
         description: "The immutable tag to publish under, e.g. v0.1.2. Required on a dispatch: without it the image would be named after the branch."
         required: true
         type: string
-  # build-pr below runs on a pull request that touches THIS file, and nothing
-  # else does: build and merge stay off (see their `if`), so a pull request
-  # proves the image builds and every bundled tool runs, and publishes
-  # nothing. Added 2026-09-02 after tokenfuse's v0.4.2 failed on both Linux
+  # build-pr below runs on a pull request that touches THIS file or
+  # images/console.Dockerfile, and nothing else does: build and merge stay off
+  # (see their `if`), so a pull request proves the image builds and every
+  # bundled tool runs, and publishes nothing. Added 2026-09-02 after
+  # tokenfuse's v0.4.2 failed on both Linux
   # runners the first time its own tag-only release.yml ever reached its musl
   # leg: a workflow gated on `push: tags: v*` alone is tested by exactly one
   # event in its whole life, and that event is the one where a mistake is
   # public.
   pull_request:
-    paths: [".github/workflows/console-image.yml"]
+    paths:
+      - ".github/workflows/console-image.yml"
+      - "images/console.Dockerfile"
 
 permissions:
   contents: read
