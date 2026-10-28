@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 # The gates run in two jobs. `fast-gates` holds every check below except the
-# teeth run; `teeth` runs that run in four shards at once; `gates` is the one
+# teeth run; `teeth` runs that run in six shards at once; `gates` is the one
 # required check, and it passes only when both succeeded.
 jobs:
   fast-gates:
@@ -321,8 +321,31 @@ jobs:
       # pinned: a tool that moves under the operator can start failing, or
       # stop catching something, on a run nobody triggered. If v0.8.0 is ever
       # removed, move to the newest tagged release and say so here.
+      # Built once by `go install` and restored from the cache after that: the compile is
+      # 10 to 15 s in every job, and this run has seven jobs. The key names the version of
+      # kubeconform and the Go that built it, and is the same in `teeth` below, so a bump of
+      # either rebuilds it and the jobs share one entry. A restored binary is checked
+      # against the pin before anything runs it.
+      - name: restore kubeconform
+        id: kubeconform
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/go/bin/kubeconform
+          key: kubeconform-v0.8.0-go1.27.3-${{ runner.os }}-${{ runner.arch }}
+
       - name: install kubeconform
+        if: steps.kubeconform.outputs.cache-hit != 'true'
         run: go install github.com/yannh/kubeconform/cmd/kubeconform@v0.8.0
+
+      # `kubeconform -v` of a binary made by `go install` does not print its version (the
+      # release build sets it with a linker flag), so the module and the Go that built it
+      # are read from the binary itself.
+      - name: kubeconform is the pinned version, built by the pinned Go
+        run: |
+          info="$(go version -m "$(go env GOPATH)/bin/kubeconform")"
+          printf '%s\n' "$info" | head -1
+          printf '%s\n' "$info" | grep -Eq '^[[:space:]]mod[[:space:]]github\.com/yannh/kubeconform[[:space:]]v0\.8\.0[[:space:]]'
+          printf '%s\n' "$info" | head -1 | grep -q ': go1\.27\.3$'
 
       - name: every manifest is a document Kubernetes would accept
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/manifests-valid.sh
@@ -426,23 +449,28 @@ jobs:
       - name: a cost report refuses an unknown machine rate (invariant 44)
         run: ./scripts/cost-live-refuses-unknown-rates.sh
 
-      # Invariant 49. The teeth run below is split into four shards, and a case
+      # Invariant 49. The teeth run below is split into six shards, and a case
       # that falls in no shard, or in two, changes no exit code. This lists the
       # whole run and each shard without running any case, and compares them.
       - name: the teeth shards cover every case once (invariant 49)
         run: ./scripts/teeth-shards-cover-every-case.sh
 
-  # The teeth run (invariant 9), split into four shards that run in parallel.
-  # Each shard runs the cases whose position is its own number mod 4; the cover
+  # The teeth run (invariant 9), split into six shards that run in parallel.
+  # Each shard runs the cases whose position is its own number mod 6; the cover
   # step above proves that together they run every case once. The setup is the
   # fast job's, because the cases run the gates above. Standard runners: the
   # repository is public.
+  #
+  # Six, from the measured case times of a quiet run (26 Oct 2026, 733 cases, 705 s
+  # in all): by position the shards come to 105 to 124 s each, within 6 % of an even
+  # split, so more shards shorten the run and no rebalancing is needed. Each shard
+  # adds about 20 s of setup (checkout, Go, the cached kubeconform).
   teeth:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -450,19 +478,42 @@ jobs:
         with:
           go-version: "1.27.3"
 
+      - name: restore kubeconform
+        id: kubeconform
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/go/bin/kubeconform
+          key: kubeconform-v0.8.0-go1.27.3-${{ runner.os }}-${{ runner.arch }}
+
       - name: install kubeconform
+        if: steps.kubeconform.outputs.cache-hit != 'true'
         run: go install github.com/yannh/kubeconform/cmd/kubeconform@v0.8.0
+
+      # `kubeconform -v` of a binary made by `go install` does not print its version (the
+      # release build sets it with a linker flag), so the module and the Go that built it
+      # are read from the binary itself.
+      - name: kubeconform is the pinned version, built by the pinned Go
+        run: |
+          info="$(go version -m "$(go env GOPATH)/bin/kubeconform")"
+          printf '%s\n' "$info" | head -1
+          printf '%s\n' "$info" | grep -Eq '^[[:space:]]mod[[:space:]]github\.com/yannh/kubeconform[[:space:]]v0\.8\.0[[:space:]]'
+          printf '%s\n' "$info" | head -1 | grep -q ': go1\.27\.3$'
 
       # Last inside each shard, because it mutates tracked files and restores
       # them. It needs a clean tree and says so plainly, so it also reports any
       # earlier step that starts writing into the checkout.
-      - name: the gates above can still fail (shard ${{ matrix.shard }} of 4)
+      - name: the gates above can still fail (shard ${{ matrix.shard }} of 6)
         env:
-          TEETH_SHARD: ${{ matrix.shard }}/4
+          TEETH_SHARD: ${{ matrix.shard }}/6
         run: ./scripts/gates-have-teeth.sh
 
   # The one required check, named `gates`. `if: always()` makes a needed job
   # that failed or was cancelled read as a red result here, not as a skip.
+  #
+  # No `concurrency: cancel-in-progress` on the workflow, on purpose. Measured on
+  # 2026-10-28 (GOTCHAS 157): the replacement run for a pushed pull request waited 109 s
+  # for the superseded run to finish cancelling, and that run's `always()` job needs a
+  # runner of its own to do it, so on a queue it waits there too.
   gates:
     needs: [fast-gates, teeth]
     if: always()
@@ -473,5 +524,5 @@ jobs:
           FAST: ${{ needs.fast-gates.result }}
           TEETH: ${{ needs.teeth.result }}
         run: |
-          echo "fast-gates: $FAST, teeth (all four shards): $TEETH"
+          echo "fast-gates: $FAST, teeth (all six shards): $TEETH"
           test "$FAST" = success && test "$TEETH" = success
