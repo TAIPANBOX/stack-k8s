@@ -28,7 +28,7 @@ fail() {
 
 [ -f "$wf" ] || fail "$wf is missing: measured nothing"
 
-# The teeth job's line, e.g. "TEETH_SHARD: ${{ matrix.shard }}/4".
+# The teeth job's line, e.g. "TEETH_SHARD: ${{ matrix.shard }}/6".
 n_lines="$(grep -E 'TEETH_SHARD: \$\{\{ matrix\.shard \}\}/[0-9]+' "$wf" | sed -E 's/.*\/([0-9]+).*/\1/')"
 count="$(printf '%s\n' "$n_lines" | grep -c .)"
 [ "$count" -ne 0 ] || fail "$wf has no sharded teeth job (TEETH_SHARD: \${{ matrix.shard }}/N): measured nothing"

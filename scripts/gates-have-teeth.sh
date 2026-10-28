@@ -99,8 +99,8 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 # Two switches, read before anything else. Unset, a run is exactly what it was.
 #
 # TEETH_SHARD=i/N runs only the cases whose position k (1-based, in the order
-# they are written) has (k - 1) % N == i - 1. CI runs the four shards in four
-# jobs; scripts/teeth-shards-cover-every-case.sh proves that together they run
+# they are written) has (k - 1) % N == i - 1. CI runs the shards as parallel
+# jobs, one each; scripts/teeth-shards-cover-every-case.sh proves that together they run
 # every case once.
 #
 # TEETH_LIST=1 prints each case name, one per line, and runs none of them. It
@@ -3109,9 +3109,9 @@ run_case "teeth-shards-cover-every-case: the listing prints nothing" fail \
 	"$TEETH_EDIT_161" \
 	"measured nothing"
 
-run_case "teeth-shards-cover-every-case: the CI matrix runs three shards" fail \
+run_case "teeth-shards-cover-every-case: the CI matrix leaves the last shard out" fail \
 	'./scripts/teeth-shards-cover-every-case.sh' \
-	"$(py 'edit(".github/workflows/gates.yml", "shard: [1, 2, 3, 4]", "shard: [1, 2, 3]")')" \
+	"$(py 'edit(".github/workflows/gates.yml", "shard: [1, 2, 3, 4, 5, 6]", "shard: [1, 2, 3, 4, 5]")')" \
 	"does not run every shard"
 
 # ---- metered-doors-require-keys (CLAUDE.md invariant 50): the gateway requires its client keys,
