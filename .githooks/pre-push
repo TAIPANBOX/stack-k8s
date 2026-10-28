@@ -100,7 +100,7 @@ step "Keyryx is installed by default, with --without-keyryx as the opt-out (inva
 step "the Keyryx witness reads the record and the record-seal reads attestations through shared volumes (invariant 70)" "./scripts/keyryx-witness-shares-the-record.sh"
 step "the record-seal fails closed: a failed pack ends the run non-zero (invariant 71)" "./scripts/record-seal-fails-closed.sh"
 step "the Keyryx images and the record seal's trailryx-node are the release pins (invariant 72)" "./scripts/keyryx-release-pins.sh"
-step "tokenfuse v1.20.1 is pinned by digest and the door origins name every address (invariant 74)" "./scripts/tokenfuse-door-origins.sh"
+step "tokenfuse v1.20.2 is pinned by digest and the door origins name every address (invariant 74)" "./scripts/tokenfuse-door-origins.sh"
 step "the record seal is pinned to custody's one ES384 key, kept on a re-run (invariant 73)" "./scripts/keyryx-kid-is-pinned.sh"
 step "a Keyryx root key never reaches a process as an environment value (invariant 55)" "./scripts/keyryx-root-is-not-in-env.sh"
 step "the Keyryx witness and custody share nothing but the image (invariant 56)" "./scripts/witness-is-separate.sh"

@@ -412,9 +412,9 @@ jobs:
       - name: the record seal is pinned to custody's one ES384 key, kept on a re-run (invariant 73)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/keyryx-kid-is-pinned.sh
 
-      # Added 2026-10-20 with invariant 74. tokenfuse v1.20.1 is pinned by digest, and the gateway and the MCP broker
+      # Added 2026-10-20 with invariant 74. tokenfuse v1.20.2 is pinned by digest, and the gateway and the MCP broker
       # name every address they are reached at as their door origins.
-      - name: tokenfuse v1.20.1 is pinned by digest and the door origins name every address (invariant 74)
+      - name: tokenfuse v1.20.2 is pinned by digest and the door origins name every address (invariant 74)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/tokenfuse-door-origins.sh
 
       # Added 2026-10-20. Invariants 55 to 57 named these three gates and no caller ran them, so they held
