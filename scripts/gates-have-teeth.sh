@@ -4704,6 +4704,103 @@ run_case "hostkeys-are-verified: the option named in a prose note is not a scrip
 	"$(py 'open("GOTCHAS.md", "a").write("\nNote: StrictHostKeyChecking=" + "no was the old setting of the image distribution.\n")')"
 
 # A listing is not a run. Stop before the verdict, which would count cases this
+# ---- scopyx-reads-go-through-the-broker (CLAUDE.md invariant 78, G2.1) ----
+# A read of the web passes the MCP broker, which labels the run from the act, and nothing else reaches scopyx.
+G21='./scripts/scopyx-reads-go-through-the-broker.sh'
+
+run_case "scopyx-broker: the broker's upstream list loses scopyx" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "value: \"typryx=http://typryx:4320/mcp,scopyx=http://scopyx:4300\"", "value: \"typryx=http://typryx:4320/mcp\"")')" \
+	"does not name scopyx=http://scopyx:4300"
+
+run_case "scopyx-broker: the broker stops labelling scopyx" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - { name: TOKENFUSE_MCP_UPSTREAM_LABELS, value: \"scopyx=web\" }\n", "")')" \
+	"TOKENFUSE_MCP_UPSTREAM_LABELS is not exactly scopyx=web"
+
+run_case "scopyx-broker: scopyx is labelled as something else" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "value: \"scopyx=web\"", "value: \"scopyx=search\"")')" \
+	"TOKENFUSE_MCP_UPSTREAM_LABELS is not exactly scopyx=web"
+
+run_case "scopyx-broker: the broker loses its taint gateway" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "name: TOKENFUSE_MCP_TAINT_GATEWAY, value: \"http://tokenfuse-gateway:4100\"", "name: TOKENFUSE_MCP_TAINT_GATEWAY, value: \"\"")')" \
+	"exits 2 on a classification with no taint gateway"
+
+run_case "scopyx-broker: a vault entry with no rule no longer stops the broker" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_MCP_REQUIRE_SECRET_SCOPES, value: \"1\"", "TOKENFUSE_MCP_REQUIRE_SECRET_SCOPES, value: \"0\"")')" \
+	"TOKENFUSE_MCP_REQUIRE_SECRET_SCOPES is not 1"
+
+run_case "scopyx-broker: the scopes are an env value of the Deployment again" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - { name: TOKENFUSE_MCP_REQUIRE_SECRET_SCOPES, value: \"1\" }\n", "            - { name: TOKENFUSE_MCP_REQUIRE_SECRET_SCOPES, value: \"1\" }\n            - { name: TOKENFUSE_MCP_SECRET_SCOPES, value: \"typryx_key=tools:ask\" }\n")')" \
+	"shadows the Secret"
+
+run_case "scopyx-broker: the broker cannot reach scopyx" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "  name: broker-egress-scopyx\n", "  name: broker-egress-nothing\n")')" \
+	"no NetworkPolicy broker-egress-scopyx"
+
+run_case "scopyx-broker: the broker reaches scopyx on another port" fail \
+	"$G21" \
+	"$(py 'import re
+p = "manifests/52-tokenfuse-mcp-broker.yaml"; s = open(p).read()
+i = s.index("  name: broker-egress-scopyx\n"); j = s.index("port: 4300", i)
+open(p, "w").write(s[:j] + "port: 4301" + s[j + len("port: 4300"):])')" \
+	"not scopyx on 4300 alone"
+
+run_case "scopyx-broker: scopyx stops taking the key in the call" fail \
+	"$G21" \
+	"$(py 'edit("manifests/47-scopyx.yaml", "            - { name: SCOPYX_ACCEPT_KEY_IN_META, value: \"1\" }\n", "")')" \
+	"manifests/47: scopyx does not take the key in params._meta"
+
+run_case "scopyx-broker: the browser stops taking the key in the call" fail \
+	"$G21" \
+	"$(py 'edit("manifests/48-scopyx-browser.yaml", "            - { name: SCOPYX_ACCEPT_KEY_IN_META, value: \"1\" }\n", "")')" \
+	"manifests/48: scopyx does not take the key in params._meta"
+
+run_case "scopyx-broker: the money plane reaches scopyx again" fail \
+	"$G21" \
+	"$(py 'edit("manifests/47-scopyx.yaml", "        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }\n      ports:\n        - { protocol: TCP, port: 4300 }", "        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }\n        - podSelector: { matchLabels: { plane: money } }\n      ports:\n        - { protocol: TCP, port: 4300 }")')" \
+	"not the MCP broker alone"
+
+run_case "scopyx-broker: the console reaches scopyx again" fail \
+	"$G21" \
+	"$(py 'edit("manifests/47-scopyx.yaml", "        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }\n      ports:\n        - { protocol: TCP, port: 4300 }", "        - podSelector: { matchLabels: { plane: console } }\n      ports:\n        - { protocol: TCP, port: 4300 }")')" \
+	"not the MCP broker alone"
+
+run_case "scopyx-broker: an agent pod cannot reach the broker" fail \
+	"$G21" \
+	"$(py 'edit("manifests/58-agent-tokens-network.yaml", "        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }\n      ports:\n        - { protocol: TCP, port: 4200 }\n---\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: vouchryx-ingress-agent-token-pods", "        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n      ports:\n        - { protocol: TCP, port: 4100 }\n---\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: vouchryx-ingress-agent-token-pods")')" \
+	"does not let an agent pod reach the broker on 4200"
+
+run_case "scopyx-broker: the broker does not admit an agent pod" fail \
+	"$G21" \
+	"$(py 'edit("manifests/58-agent-tokens-network.yaml", "  name: broker-ingress-agent-token-pods\n", "  name: broker-ingress-nobody\n")')" \
+	"no NetworkPolicy broker-ingress-agent-token-pods"
+
+run_case "scopyx-broker: another policy lets a pod reach scopyx" fail \
+	"$G21" \
+	"$(py 'p = "manifests/30-network-policy.yaml"; s = open(p).read(); open(p, "w").write(s + "\n---\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: probe-to-scopyx\n  namespace: agent-stack\nspec:\n  podSelector: { matchLabels: { app: some-agent } }\n  policyTypes: [\"Egress\"]\n  egress:\n    - to:\n        - podSelector: { matchLabels: { app: scopyx } }\n      ports:\n        - { protocol: TCP, port: 4300 }\n")')" \
+	"only the broker may"
+
+run_case "scopyx-broker: the broker is gone, so nothing was measured" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "kind: Deployment\nmetadata:\n  name: tokenfuse-mcp-broker\n", "kind: Deployment\nmetadata:\n  name: tokenfuse-mcp-gone\n")')" \
+	"measured NOTHING"
+
+run_case "scopyx-broker: a reworded comment is not a fault" pass \
+	"$G21" \
+	"$(py 'edit("manifests/47-scopyx.yaml", "# The MCP broker, and nothing else (G2.1).", "# The MCP broker alone (G2.1).")')" \
+	""
+
+run_case "typed-door-is-minted: the broker Secret made with no scope rule" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("typed/mode.sh", "\"TOKENFUSE_MCP_SECRETS=typryx_key=$bearer\" \"TOKENFUSE_MCP_SECRET_SCOPES=$DOOR_SCOPES\"\n    made=\"$DOOR_TYPRYX (identity", "\"TOKENFUSE_MCP_SECRETS=typryx_key=$bearer\"\n    made=\"$DOOR_TYPRYX (identity")')" \
+	"tokenfuse-mcp-broker-keys carries"
+
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then
 	exit 0

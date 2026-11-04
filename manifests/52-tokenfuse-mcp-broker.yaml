@@ -1,6 +1,7 @@
 # tokenfuse's MCP credential broker, fronting typryx (the typed-answer plane,
 # 51-typryx.yaml) so an agent reaches it through the money plane's own door
-# rather than with typryx's own key in hand.
+# rather than with typryx's own key in hand, and, where the operator runs it,
+# fronting scopyx (47-scopyx.yaml, 48-scopyx-browser.yaml) the same way (G2.1).
 #
 # NOT in kustomization.yaml, for 51-typryx.yaml's own reason: this plane is
 # reachable with no broker at all (the operator's tunnel, or
@@ -101,10 +102,47 @@
 #
 # Scoped to the three tools typryx actually exposes
 # (`tools:ask|ask_freeform|list_questions`) rather than left unscoped, so a
-# caller of a DIFFERENT upstream this broker might one day also front cannot
-# resolve typryx's key by naming a tool typryx never registered. This is
-# plain configuration, not a secret, and sits beside the env vars below
-# rather than in the Secret.
+# caller of a DIFFERENT upstream this broker fronts cannot resolve typryx's
+# key by naming a tool typryx never registered. Since G2.1 the rules are in the
+# SAME Secret as the keys they scope (`TOKENFUSE_MCP_SECRET_SCOPES`, minted by
+# `typed/mode.sh door-secrets` with the typryx rule), not in the env block
+# below: a rule for scopyx names an agent, and an agent is the operator's, so no
+# manifest can write it. `TOKENFUSE_MCP_REQUIRE_SECRET_SCOPES` is on, so a vault
+# entry with no rule stops the broker at start instead of being resolvable by
+# any agent for any tool. A `tokenfuse-mcp-broker-keys` made before G2.1 has no
+# rules and the broker will not start on it until the key is added:
+#
+#   kubectl -n agent-stack patch secret tokenfuse-mcp-broker-keys --type merge -p \
+#     '{"stringData":{"TOKENFUSE_MCP_SECRET_SCOPES":"typryx_key=tools:ask|ask_freeform|list_questions"}}'
+#
+#
+# ## scopyx behind the broker (G2.1)
+#
+# `47-scopyx.yaml` is applied by hand and so is this half. An agent reads the
+# web by calling THIS broker with `X-Fuse-Mcp-Upstream: scopyx`, the run it
+# belongs to in `x-fuse-run-id`, and its scopyx key as a handle:
+#
+#   "params": { "name": "fetch_url", "arguments": {"url": "https://example.com"},
+#               "_meta": {"scopyx/key": "{{secret:scopyx_key_<agent>}}"} }
+#
+# The broker fills the key in from its vault on the last hop; scopyx
+# (`SCOPYX_ACCEPT_KEY_IN_META`) reads it from `_meta` and removes it at its
+# door. The agent holds a handle and never the key, and scopyx admits nobody
+# but this broker (`scopyx-ingress`), so a read of the web cannot go round the
+# broker. That is what lets the broker label the run `web` from the fetch it
+# saw (`TOKENFUSE_MCP_UPSTREAM_LABELS`, tokenfuse invariant 143) and not from a
+# tool name the agent reported. One key per agent, three places that must
+# agree, for an agent `<id>` (the id on its agent token) and a name `<agent>`
+# (the last segment of `<id>`):
+#
+#   scopyx-keys          SCOPYX_KEYS                      <key>=<id>   (comma-separated)
+#   tokenfuse-mcp-broker-keys
+#                        TOKENFUSE_MCP_SECRETS            scopyx_key_<agent>=<key>
+#                        TOKENFUSE_MCP_SECRET_SCOPES      scopyx_key_<agent>=agents:<id>;tools:browse|fetch_url
+#
+# Append each to what the Secret already holds; the typryx entries stay.
+# `scopyx` is a named upstream here whether or not scopyx runs: with none, a
+# call that names it is refused when the connection fails.
 #
 #
 # ## The NetworkPolicies, narrower than the gateway's own
@@ -174,11 +212,16 @@ spec:
             # invariant 20).
             - { name: TOKENFUSE_MCP_ADDR, value: "0.0.0.0:4200" }
             - { name: TOKENFUSE_MCP_UPSTREAM, value: "http://typryx:4320/mcp" }
-            - { name: TOKENFUSE_MCP_UPSTREAMS, value: "typryx=http://typryx:4320/mcp" }
-            # Which tools the typryx secret may be resolved for; see the
-            # header. Configuration, not a credential, so it sits here rather
-            # than in the Secret.
-            - { name: TOKENFUSE_MCP_SECRET_SCOPES, value: "typryx_key=tools:ask|ask_freeform|list_questions" }
+            - { name: TOKENFUSE_MCP_UPSTREAMS, value: "typryx=http://typryx:4320/mcp,scopyx=http://scopyx:4300" }
+            # What scopyx's answers carry (tokenfuse v1.21.0, invariant 143): the web. The broker labels a
+            # run from the fetch it saw, through the taint gateway below, which is always set here. With
+            # this set a tools/call to scopyx must name its run in x-fuse-run-id, and an answer whose label
+            # the gateway did not take is withheld. scripts/scopyx-reads-go-through-the-broker.sh holds it.
+            - { name: TOKENFUSE_MCP_UPSTREAM_LABELS, value: "scopyx=web" }
+            # Which agent and tool may resolve which secret: TOKENFUSE_MCP_SECRET_SCOPES is in
+            # tokenfuse-mcp-broker-keys beside the vault it scopes (see the header), and a vault entry with
+            # no rule stops the broker at start.
+            - { name: TOKENFUSE_MCP_REQUIRE_SECRET_SCOPES, value: "1" }
             # The broker's own personal-data scanner, over tool arguments and tool responses.
             # shadow for the same reason as the gateway's: the call goes through, the count and
             # kinds are logged, never the text. On a tool response the broker marks _tokenfuse.dlp_pii with
@@ -295,6 +338,22 @@ spec:
         - podSelector: { matchLabels: { app: typryx } }
       ports:
         - { protocol: TCP, port: 4320 }
+---
+# The broker's outbound connection to scopyx (G2.1), the web-egress plane it fronts. The pod
+# selector is scopyx's, plain or with the browser (both keep `app: scopyx`).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: broker-egress-scopyx
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: scopyx } }
+      ports:
+        - { protocol: TCP, port: 4300 }
 ---
 # The broker's policy hook (CLAUDE.md invariant 51): it asks wardryx about every
 # tools/call. wardryx already admits this pod (`planes-ingress` in

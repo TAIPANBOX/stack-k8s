@@ -420,6 +420,11 @@ jobs:
       - name: tokenfuse v1.21.0 is pinned by digest and the door origins name every address (invariant 74)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/tokenfuse-door-origins.sh
 
+      # Added 2026-11-04 with invariant 78 (G2.1). A read of the web passes the MCP broker, which labels the run from
+      # the act, and nothing else reaches scopyx.
+      - name: a read of the web passes the MCP broker, which labels the run from the act (invariant 78)
+        run: ./scripts/scopyx-reads-go-through-the-broker.sh
+
       # Added 2026-10-20. Invariants 55 to 57 named these three gates and no caller ran them, so they held
       # nothing; they run here now, beside the gate of invariant 75, which the witness's findings need.
       - name: a Keyryx root key never reaches a process as an environment value (invariant 55)

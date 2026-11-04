@@ -6,6 +6,9 @@
 # else is added: the default-deny rules in 30-network-policy.yaml still hold for everything
 # this does not name, and DNS is already open to every pod.
 #
+# Since G2.1 it may also reach the MCP broker on 4200, the one door through which an agent reads
+# the web (the broker holds scopyx's key; scopyx admits nobody else).
+#
 # The last document below is the one other caller of the gateway this file names: the MCP
 # broker's tool-call check (CLAUDE.md invariant 51). It is not an agent pod and carries no
 # agent-token label, so the gateway's Ingress rule above does not admit it. planes-ingress in
@@ -27,6 +30,12 @@ spec:
         - podSelector: { matchLabels: { app: tokenfuse-gateway } }
       ports:
         - { protocol: TCP, port: 4100 }
+    # The MCP broker, where an agent reads the web (G2.1): the broker holds scopyx's key and an
+    # agent holds a handle. The ingress half is broker-ingress-agent-token-pods below.
+    - to:
+        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+      ports:
+        - { protocol: TCP, port: 4200 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -55,6 +64,23 @@ spec:
         - podSelector: { matchLabels: { taipanbox.dev/agent-token: "true" } }
       ports:
         - { protocol: TCP, port: 4100 }
+---
+# The broker admits an agent-token pod on its one port (G2.1). broker-ingress in 52 admits the console
+# and the money plane; an agent pod is neither, and this file must not depend on a rule it does not
+# name. The agent reaches scopyx only through here.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: broker-ingress-agent-token-pods
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { taipanbox.dev/agent-token: "true" } }
+      ports:
+        - { protocol: TCP, port: 4200 }
 ---
 # The MCP broker's tool-call check: the broker calls the gateway's /v1/fuse/check-tool-call on
 # port 4100 for every tools/call (the egress half is broker-egress-gateway in 52). The
