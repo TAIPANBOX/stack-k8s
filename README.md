@@ -83,11 +83,11 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | CronJob | `agent-conform`, the on-box chain verifier, every 15 minutes: it verifies the `prev_hash` chain of every stream on the shared bus and writes a `chain_broken` event to `agent-conform.ndjson` on the bus when one is broken. In the default apply; keeps its memory beside its output on `stack-events`, so it adds no disk. See "The on-box chain verifier" below | |
 | NetworkPolicy | default-deny for the pods of `agent-stack`, then exactly the paths above. It covers the stack's own pods, not agents that run outside the namespace: see "What the NetworkPolicy confines, and where your agents run" below | |
 | Deployment + PVC + NetworkPolicy | `heraldyx`, the notifier. **Not in the default apply**, see "Being told, rather than watching" below. No Service and no port: it reads the event log and sends mail, so nothing calls it | |
-| Deployment + PVC + Service + NetworkPolicy x4 | `47-scopyx.yaml`, the web-egress enforcement point. **Not in the default apply**: it opens 80 and 443 to the whole public internet on behalf of agents, which is the widest grant in the namespace and the one decision an operator most needs to have made themselves. Refuses to start without a credential, deliberately | |
+| Deployment + PVC + Service + NetworkPolicy x4 | `47-scopyx.yaml`, the web-egress enforcement point. **Not in the default apply**: it opens 80 and 443 to the whole public internet on behalf of agents, which is the widest grant in the namespace and the one decision an operator most needs to have made themselves. Refuses to start without a credential, deliberately. An agent reads the web through the MCP broker, which holds scopyx's key and is the only pod `scopyx-ingress` admits: see "How an agent reads the web" below | |
 | Deployment | `48-scopyx-browser.yaml`, the same plane with a real browser, for pages that assemble themselves. **Replaces 47's Deployment rather than running beside it**, so a cluster cannot round-robin an agent's fetches between a browser and a fetcher that runs no JavaScript. Costs 267 MB of pull against 3.5 MB. Read its header: PodSecurity `restricted` decides the sandbox question for you | |
 | Deployment + PVC + Service + CronJob + NetworkPolicy | `49-costcrew.yaml`, CostCrew, the FinOps plane: the console and its crew CronJob `costcrew-crew`. **Not in the default apply**, and **metered once cadence is on**: see "CostCrew, the FinOps plane" below | 8321 |
 | Deployment + PVC + Service | `51-typryx.yaml`, the typed-answer plane: a typed question answered with a probability, scored later against what actually happened. **Not in the default apply**: a whole plane somebody may simply not want. Backend is `stub` (free, no outbound call) unless a launcher is given `--typed-mode` (see "Typed answers: choose where your data goes"). Refuses to start without a credential, the same as scopyx. Its journal is on the shared `stack-events` bus | |
-| Deployment + Service + NetworkPolicy x4 | `52-tokenfuse-mcp-broker.yaml`, tokenfuse's own MCP credential broker fronting typryx. **Not in the default apply, applied by the same `--with-typed` flag as 51-typryx.yaml, right after it**. Free, reaches nowhere but typryx itself. Refuses to start without its own credential | |
+| Deployment + Service + NetworkPolicy x4 | `52-tokenfuse-mcp-broker.yaml`, tokenfuse's own MCP credential broker fronting typryx. **Not in the default apply, applied by the same `--with-typed` flag as 51-typryx.yaml, right after it**. Free, reaches nowhere but typryx itself, and scopyx where the operator runs it ("How an agent reads the web" below). Refuses to start without its own credential | |
 | Deployment + Service + NetworkPolicy x4 | `56-typryx-wardryx-proxy.yaml`, typryx's `wardryx-proxy`: between the MCP broker and wardryx, it adds the risk class of a pending tool call to the decision request, so a `hold_if_signal` policy can hold the call for a person. **Not in the default apply, rendered only by `--typed-risk-signal`** (off by default, refused when the typed mode is off). No claim, no journal, no ledger: it keeps no state. See "A typed risk signal" below | 4330 |
 | Deployment + Service + PVC + NetworkPolicy x4 | `54-delegation.yaml`, vouchryx, the agent-token service. **In the default apply**, agents-only: no identity provider, its keys and its first enrolled agent minted at deploy time (`lib/vouchryx-mint.sh`). Reachable from the gateway, the broker, wardryx and the console, and from agent pods. See "The delegation plane" below | |
 | Patch (Deployment) | `55-copilot-cloud.yaml`: a larger model for the console's copilot, Felyx (`claude-sonnet-5`), applied by hand; no deploy script applies it, and `--anthropic-key-file` leaves Felyx on its configured model (`claude-haiku-4-5`). A model switch only: Felyx already reaches Anthropic through this stack's own gateway (by its Service name, under `agent://<trust domain>/genaryx/felyx`, metered and policy-checked like any agent) with its own client key, and the gateway holds the provider key (see "The provider key" below). **Not in the default apply**: the deploy scripts apply it when they are given `--anthropic-key-file`, and every conversation is METERED on that key's account. See its own header before applying | |
@@ -433,6 +433,49 @@ The notifier's daily pulse and quiet hours are set in `manifests/45-heraldyx.yam
 - `HERALDYX_QUIET` (default empty): quiet hours as `HH:MM-HH:MM`; alerts below critical are held and reported when they end, and a critical is always sent.
 - `HERALDYX_TZ` (default empty): the IANA zone the quiet hours are read in, for example `Europe/London`.
 - `HERALDYX_SMTP_TLS` (default unset, which is `starttls`): how heraldyx 0.8.0 secures the mail connection. Unset, the server must offer STARTTLS, and a server that does not is refused, so mail is never sent in the clear to a remote host. Use `implicit` for a server on port 465, and `plain` only for a loopback relay. Set it in your environment before `./deploy.sh`, `cloud/aws/deploy-aws.sh` or `cloud/gcp/deploy-gcp.sh`: the script checks the word and writes it into the `heraldyx-mail` Secret, and the notifier reads it from there.
+
+### How an agent reads the web
+
+An agent does not call scopyx. It calls tokenfuse's MCP broker (`52-tokenfuse-mcp-broker.yaml`), which holds
+scopyx's key, and that is what lets the broker label the run `web` from the fetch it saw (tokenfuse v1.21.0,
+invariant 143) instead of from a tool name the agent reported. `scopyx-ingress` admits the broker and nothing
+else, and an agent-token pod (`58-agent-tokens-network.yaml`) reaches the broker on 4200. scopyx is applied by
+hand, as its header says; so is its key. For an agent whose token names `<id>` (for example
+`agent://acme.example/agents/operator`) and a name `<agent>` (its last segment, `operator`), one key in three
+places that must agree:
+
+| Where | Entry |
+|---|---|
+| `scopyx-keys`, `SCOPYX_KEYS` (comma-separated) | `<key>=<id>` |
+| `tokenfuse-mcp-broker-keys`, `TOKENFUSE_MCP_SECRETS` | `scopyx_key_<agent>=<key>` |
+| `tokenfuse-mcp-broker-keys`, `TOKENFUSE_MCP_SECRET_SCOPES` | `scopyx_key_<agent>=agents:<id>;tools:browse|fetch_url` |
+
+Append each to what the Secret already holds (the typryx entries stay), then roll scopyx and the broker. A call,
+from the agent's pod (the broker is `http://tokenfuse-mcp-broker:4200/mcp`):
+
+```
+POST /mcp
+Authorization: DPoP <the agent's token>        (and the DPoP proof, as for any call to the broker)
+X-Fuse-Mcp-Upstream: scopyx
+X-Fuse-Agent-Id: <id>
+x-fuse-run-id: <the run this fetch belongs to>
+
+{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+  "name": "fetch_url",
+  "arguments": {"url": "https://example.com"},
+  "_meta": {"scopyx/key": "{{secret:scopyx_key_operator}}"}
+}}
+```
+
+`x-fuse-run-id` is required for scopyx: taint belongs to a run, and the broker refuses a call to a classified
+upstream that names none. Use the id of the run whose model calls go through the gateway, so the label lands on
+the run that is judged. The broker replaces the handle with the key on the last hop and scopyx removes it at its
+door. An answer whose label the gateway did not take is withheld.
+
+**The scope rules are in the Secret now.** `TOKENFUSE_MCP_SECRET_SCOPES` moved from the broker's Deployment into
+`tokenfuse-mcp-broker-keys`, next to the keys it scopes, and the broker stops at start on a vault entry with no
+rule. A Secret minted by `--with-typed` carries the typryx rule. One made before this change has none: add it
+(the command is in the header of `52-tokenfuse-mcp-broker.yaml`) or the broker waits.
 
 ### The typed-answer plane
 

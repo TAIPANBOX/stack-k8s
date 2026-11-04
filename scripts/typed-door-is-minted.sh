@@ -131,6 +131,7 @@ def secret_docs(text):
 
 
 SECRET_RE = re.compile(r"^[A-Za-z0-9]{32,}$")
+TYPRYX_SCOPE = "typryx_key=tools:ask|ask_freeform|list_questions"
 BARE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
@@ -156,8 +157,8 @@ def check_neither(label, r, domain):
     if set(t) != {"TYPRYX_KEYS"}:
         bad(f"C {label}: typryx-keys carries {sorted(t)}, not exactly TYPRYX_KEYS")
         return None
-    if set(b) != {"TOKENFUSE_MCP_KEYS", "TOKENFUSE_MCP_SECRETS"}:
-        bad(f"C {label}: tokenfuse-mcp-broker-keys carries {sorted(b)}, not TOKENFUSE_MCP_KEYS and TOKENFUSE_MCP_SECRETS")
+    if set(b) != {"TOKENFUSE_MCP_KEYS", "TOKENFUSE_MCP_SECRETS", "TOKENFUSE_MCP_SECRET_SCOPES"}:
+        bad(f"C {label}: tokenfuse-mcp-broker-keys carries {sorted(b)}, not TOKENFUSE_MCP_KEYS, TOKENFUSE_MCP_SECRETS and TOKENFUSE_MCP_SECRET_SCOPES")
         return None
     bearer, sep, ident = t["TYPRYX_KEYS"].partition("=")
     if not sep or ident != f"agent://{domain}/typed-broker":
@@ -167,6 +168,8 @@ def check_neither(label, r, domain):
         bad(f"C {label}: TOKENFUSE_MCP_KEYS splits on its last colon into key id {key_id!r}, which is not a bare name (invariant 33)")
     if b["TOKENFUSE_MCP_SECRETS"] != f"typryx_key={bearer}":
         bad(f"C {label}: the broker's vault (TOKENFUSE_MCP_SECRETS) does not carry typryx's own bearer, so every call through the broker would be refused")
+    if b["TOKENFUSE_MCP_SECRET_SCOPES"] != TYPRYX_SCOPE:
+        bad(f"C {label}: the broker's scope rules (TOKENFUSE_MCP_SECRET_SCOPES) are not exactly typryx's, so the broker would stop at start (a vault entry with no rule) or leave typryx's key open to any tool")
     for what, v in (("typryx's bearer", bearer), ("the broker's key", secret)):
         if not SECRET_RE.match(v):
             bad(f"C {label}: {what} is {len(v)} character(s), not at least 32 of A-Za-z0-9")
@@ -218,6 +221,8 @@ else:
     b = ds[0]["data"]
     if b.get("TOKENFUSE_MCP_SECRETS") != f"typryx_key={EXISTING}":
         bad("C only typryx-keys: the broker's vault does not carry the bearer of the typryx-keys that exists")
+    if b.get("TOKENFUSE_MCP_SECRET_SCOPES") != TYPRYX_SCOPE:
+        bad("C only typryx-keys: the broker's Secret made beside the kept typryx-keys carries no scope rule for typryx's key")
     sec, colon, key_id = b.get("TOKENFUSE_MCP_KEYS", "").rpartition(":")
     if not colon or not BARE.match(key_id) or not SECRET_RE.match(sec):
         bad("C only typryx-keys: the broker's own key is not a fresh `<32+ characters>:<bare key id>`")
@@ -448,7 +453,9 @@ for p in launchers:
             continue
         t = json.loads(after["typryx-keys.json"])
         b = json.loads(after["tokenfuse-mcp-broker-keys.json"])
-        if set(t) != {"TYPRYX_KEYS"} or set(b) != {"TOKENFUSE_MCP_KEYS", "TOKENFUSE_MCP_SECRETS"}:
+        # An existing broker Secret is kept byte for byte, whatever shape it has; one made now carries the scope rule too.
+        want_b = {"TOKENFUSE_MCP_KEYS", "TOKENFUSE_MCP_SECRETS"} | (set() if state == "both" else {"TOKENFUSE_MCP_SECRET_SCOPES"})
+        if set(t) != {"TYPRYX_KEYS"} or set(b) != want_b:
             bad(f"{where}: the stand-in cluster holds typryx-keys with {sorted(t)} and the broker's with "
                 f"{sorted(b)}, not both door Secrets whole")
             continue

@@ -139,6 +139,11 @@ spec:
             # the first anybody hears of it is a bill or a rate-limit from the
             # site being fetched. Raise it deliberately.
             - { name: SCOPYX_MAX_FETCHES_PER_HOUR, value: "200" }
+            # The MCP broker forwards a call with nothing of the caller's, so the key arrives at
+            # params._meta["scopyx/key"], written by the agent as {{secret:scopyx_key_<agent>}} and filled in from
+            # the broker's vault on the last hop (scopyx v1.2.0). The door reads up to 1 MiB of the body to find it,
+            # which is why scopyx-ingress below admits the broker and nobody else (G2.1).
+            - { name: SCOPYX_ACCEPT_KEY_IN_META, value: "1" }
           envFrom:
             # NOT optional, unlike heraldyx's mail Secret. Missing here is not
             # an unconfigured feature, it is an open proxy, and the pod exits
@@ -275,15 +280,17 @@ spec:
 ---
 # Who may ask this plane to fetch.
 #
-# The broker in the money plane, and the console. NOT `podSelector: {}`: every
-# pod in the namespace being able to reach a fetch proxy would make the
-# credential the only control, and a credential in a Secret is readable by
-# anything with the service account to read Secrets.
+# The MCP broker, and nothing else (G2.1). NOT `podSelector: {}`, and NOT the
+# money or console plane as a whole: a pod that reaches this port with a key
+# reads the web without the broker, and a read the broker did not see is a read
+# the run is not labelled for (tokenfuse invariant 143). The key is in the
+# broker's vault and the agent holds a handle, so the broker is the one caller
+# that can open it; this rule is the other half, that nothing else can try.
 #
-# An agent running outside this namespace reaches scopyx through the broker,
-# which is the path the whole stack is arranged around. If you genuinely need a
-# workload in another namespace to call it directly, add a namespaceSelector
-# here rather than widening this to everything.
+# An agent reaches scopyx through the broker, which is the path the whole stack
+# is arranged around. If you genuinely need a workload in another namespace to
+# call it directly, add a namespaceSelector here rather than widening this to
+# everything, and know that its reads are not labelled.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -294,7 +301,6 @@ spec:
   policyTypes: ["Ingress"]
   ingress:
     - from:
-        - podSelector: { matchLabels: { plane: money } }
-        - podSelector: { matchLabels: { plane: console } }
+        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
       ports:
         - { protocol: TCP, port: 4300 }

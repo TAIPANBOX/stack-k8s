@@ -171,6 +171,8 @@ spec:
             # different amount of work and a different amount of somebody
             # else's bandwidth. Raise it deliberately.
             - { name: SCOPYX_MAX_FETCHES_PER_HOUR, value: "60" }
+            # As in 47: the MCP broker hands the key over in params._meta (scopyx v1.2.0, G2.1).
+            - { name: SCOPYX_ACCEPT_KEY_IN_META, value: "1" }
           envFrom:
             - secretRef: { name: scopyx-keys }
           ports: [{ name: mcp, containerPort: 4300 }]
