@@ -31,10 +31,15 @@ spec:
         # (genaryx invariant 40, CLAUDE.md invariant 79). From v2.5.1 wardryx writes the archive
         # 0750 for its directory and 0640 for its files, owner and owner's group only; the pod
         # runs as 65532:65532, so a file's group is 65532 and nothing else on the volume is in
-        # it. This joins that one group and no wider one, and read-only is what the mode gives:
-        # the console can open the files and cannot write or remove one. Files written before
-        # v2.5.1 are 0600 and read as "not archived", which the proof reports as that and never
-        # as a proof of nothing.
+        # it. This joins that one group and no wider one. Read-only is what the MODE gives, not
+        # a mount: the console can open an archive file and cannot change it or add or remove an
+        # entry in the archive directory, but it also mounts the whole events claim read-write
+        # below, and the bus directory above the archive is group-writable, so it could still
+        # rename or remove the archive directory as a whole. A read-only subPath of the archive
+        # would close that and is left out: with no live cluster to try it on, a directory that
+        # is not there yet would be made by kubelet as root and wardryx could not write it.
+        # Files written before v2.5.1 are 0600 and read as "not archived", which the proof
+        # reports as that and never as a proof of nothing.
         supplementalGroups: [65532]
         seccompProfile: { type: RuntimeDefault }
       # Leave a dead node in 30 s, not the default 300 s. This pod holds a
