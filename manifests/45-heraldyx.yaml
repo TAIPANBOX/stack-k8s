@@ -1,8 +1,8 @@
 # The notifier: the part of the box that writes to the operator.
 #
 # NOT in the default `apply -k` set, and the reason is the same shape as
-# 50-loadbalancer.yaml's: this is the one workload in the stack that is allowed
-# to open a connection to something outside the cluster. An install that grants
+# 50-loadbalancer.yaml's: this is the workload that opens a connection to a mail
+# server outside the cluster. An install that grants
 # that without being asked is a security decision made on somebody else's
 # behalf. `deploy.sh` applies this file when the operator answers the
 # notifications question, or apply it yourself:
@@ -203,7 +203,7 @@ spec:
         - name: state
           persistentVolumeClaim: { claimName: heraldyx-state }
 ---
-# The one hole in a default-deny egress, made as narrow as a NetworkPolicy can
+# The mail hole in a default-deny egress, made as narrow as a NetworkPolicy can
 # express, and stated plainly rather than hidden in a wide rule.
 #
 # What this permits: TCP to the three mail submission ports, to addresses that

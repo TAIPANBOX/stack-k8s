@@ -8,12 +8,11 @@
 # secrets.example.yaml holds placeholders, and applying placeholders is how a
 # cluster ends up authenticating with the word REPLACE_ME.
 #
-# 45-heraldyx.yaml is the notifier, and it carries the only egress rule in this
-# namespace that reaches past DNS: it is the one workload allowed to open a
-# connection to something outside the cluster. Granting that without asking is
-# the same class of decision as publishing the console, so it is the same kind
-# of opt-in. `deploy.sh` applies it when the operator answers the notifications
-# question; by hand it is:
+# 45-heraldyx.yaml is the notifier, and it carries the egress rule for mail: it is
+# the workload that opens a connection to a mail server outside the cluster.
+# Granting that without asking is the same class of decision as publishing the
+# console, so it is the same kind of opt-in. `deploy.sh` applies it when the
+# operator answers the notifications question; by hand it is:
 #
 #   kubectl apply -f manifests/45-heraldyx.yaml
 #
