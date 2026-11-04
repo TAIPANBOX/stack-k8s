@@ -10,7 +10,7 @@ about its architecture into the open, and both are load-bearing.
 
 <div align="center">
 
-<img src="assets/diagram.svg" alt="The planes couple through one ReadWriteMany event volume rather than through APIs, the console pod hosts five tools rather than being a client of four services, egress is denied by default, and heraldyx is the one hole: applied from its own manifest, permitted only TCP 587, 465, 2525 and 25, and only to addresses outside the cluster and the private network" width="960">
+<img src="assets/diagram.svg" alt="The planes couple through one ReadWriteMany event volume rather than through APIs, the console pod hosts five tools rather than being a client of four services, egress from the stack's own pods is denied by default, the agents a customer runs sit outside that namespace and are not confined by it, the gateway reaches the model provider on 443, and heraldyx, applied from its own manifest, is the mail hole: permitted only TCP 587, 465, 2525 and 25, and only to addresses outside the cluster and the private network" width="960">
 
 </div>
 
@@ -415,17 +415,16 @@ line: a budget gone, a policy denial, a run killed, an agent behaving unlike
 itself. The mail comes from the box, and it carries a link into your console,
 never a button that acts.
 
-Leave it blank and nothing is installed for it. This is the one workload in the
-stack allowed to open a connection to something outside the cluster, so it is
-opt-in the same way the load balancer is, and for the same kind of reason:
+Leave it blank and nothing is installed for it. This is the workload that opens a
+connection to a mail server outside the cluster, so it is opt-in the same way the
+load balancer is, and for the same kind of reason:
 
 ```bash
 kubectl apply -f manifests/45-heraldyx.yaml
 ```
 
-Read that file's header before you do. It carries the only egress rule in the
-namespace that reaches past DNS, it says exactly how narrow that rule is, and
-it says what it leaves open.
+Read that file's header before you do. It carries the egress rule for mail, it
+says exactly how narrow that rule is, and it says what it leaves open.
 
 The notifier's daily pulse and quiet hours are set in `manifests/45-heraldyx.yaml`, next to
 `HERALDYX_MIN_SEVERITY`:
