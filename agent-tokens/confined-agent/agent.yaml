@@ -1,0 +1,58 @@
+# The agent pod of a client that runs its agent INSIDE this cluster (CLAUDE.md invariant 77).
+#
+# It sits in the `agent-stack` namespace, which is where manifests/30-network-policy.yaml applies, and it
+# carries the label `taipanbox.dev/agent-token: "true"`, which is what manifests/58-agent-tokens-network.yaml
+# selects. Together they leave this pod exactly three ways out: DNS (30), vouchryx on 4310 and the gateway on
+# 4100 (58). Nothing else, and nothing may open a connection to it.
+#
+# The container is a STAND-IN: busybox, by the digest the stack's own init containers use, sleeping. Replace
+# the image, the command and the env with your agent's. With admission on, the stack refuses an image no policy
+# lists, so list yours first (policy/README.md, "Your own agent images"). The pod holds no key: its only
+# credential is the projected token below, bound to vouchryx and not to the Kubernetes API, and an agent
+# the registry knows (./agent-tokens/up.sh --registry, `workload:<issuer>#system:serviceaccount:agent-stack:agent-confined`)
+# exchanges it for the agent token the doors require (invariant 54).
+#
+# The label is the whole confinement. Delete it and 58 stops applying; only the default-deny of 30 is left.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-confined
+  namespace: agent-stack
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-confined
+  namespace: agent-stack
+  labels: { app: agent-confined }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: agent-confined } }
+  template:
+    metadata:
+      labels: { app: agent-confined, taipanbox.dev/agent-token: "true" }
+    spec:
+      serviceAccountName: agent-confined
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: agent
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          # Exits on SIGTERM, so the pod stops at once when it is deleted. sleep as PID 1 ignores SIGTERM and holds the pod
+          # for the whole grace period.
+          command: ["sh", "-c", "trap 'exit 0' TERM INT; while :; do sleep 1; done"]
+          env:
+            # The one audience vouchryx allows for an agent token (invariant 54, GOTCHAS 137).
+            - { name: VOUCHRYX_AGENT_RESOURCE, value: "https://vouchryx.agent-stack.invalid" }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          volumeMounts:
+            - { name: vouchryx-token, mountPath: /var/run/agent, readOnly: true }
+      volumes:
+        - name: vouchryx-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: "http://vouchryx:4310"
+                  expirationSeconds: 600
+                  path: token

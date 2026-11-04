@@ -196,6 +196,9 @@ jobs:
       # wardryx verifies the agent's token and its DPoP proof itself (invariant 63, decision D3(b)).
       - name: wardryx verifies agent tokens and proofs
         run: ./scripts/wardryx-verifies-agent-tokens.sh
+      # The NetworkPolicy states which side of the line it sits on, and the labels it names are the ones the cluster has (invariant 77).
+      - name: the NetworkPolicy says which side of the line it sits on, and its labels are the cluster's
+        run: ./scripts/network-policy-names-its-boundary.sh
 
       # Added 2026-10-04. heraldyx v0.3.0 and idryx v1.1.0 refuse an event whose
       # source is not allowed for the file it was read from, so a stream this

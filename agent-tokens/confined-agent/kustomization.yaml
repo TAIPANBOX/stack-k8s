@@ -1,0 +1,11 @@
+# OPTIONAL. A client's agent pod placed under the agent-pod network (CLAUDE.md invariant 77).
+# It is not in manifests/kustomization.yaml and no launcher applies it: an operator who runs an agent
+# inside this cluster applies it, after replacing the stand-in container (see README.md here).
+#
+#   kubectl apply -k agent-tokens/confined-agent
+#   ./agent-tokens/confine-check.sh --external 1.1.1.1:443      # proves what the label confines
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: agent-stack
+resources:
+  - agent.yaml
