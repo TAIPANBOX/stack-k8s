@@ -75,6 +75,7 @@ step "the provider key is held by the gateway from a file, and no other containe
 step "agent tokens are required at the doors, with one audience and a closed revocation list" "./scripts/agent-tokens-are-required.sh"
 step "a static client key is admitted only from the named lists" "./scripts/static-keys-are-named.sh"
 step "wardryx verifies agent tokens and proofs" "./scripts/wardryx-verifies-agent-tokens.sh"
+step "the NetworkPolicy says which side of the line it sits on, and the labels it names are the ones the cluster has (invariant 77)" "./scripts/network-policy-names-its-boundary.sh"
 step "every bus file is a name the readers accept" "./scripts/bus-names-match-the-source-rule.sh"
 step "the chain verifier watches the bus" "./scripts/chain-verifier-watches-the-bus.sh"
 step "every mounted key is readable by its pod" "./scripts/mounted-keys-are-readable.sh"

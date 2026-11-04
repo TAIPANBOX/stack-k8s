@@ -1315,6 +1315,114 @@ run_case "agent-tokens-are-required: the example agent is no longer a file" fail
 	"$(py 'import os; os.remove("agent-tokens/example-agent.yaml")')" \
 	"measured nothing"
 
+# The NetworkPolicy's stated boundary (CLAUDE.md invariant 77): the header of 30 and the README say which side of the
+# line the policy sits on, and what they say is the label, the ports and the files the cluster has. Each fault below is
+# one the gate names; the three pass cases are harmless changes it must not catch.
+NPB=./scripts/network-policy-names-its-boundary.sh
+
+run_case "network-policy-names-its-boundary: the header drops the boundary paragraph" fail \
+	"$NPB" \
+	"$(py 'edit("manifests/30-network-policy.yaml", "WHICH SIDE OF THE LINE THIS POLICY SITS ON", "WHICH SIDE")')" \
+	"the header does not say 'WHICH SIDE OF THE LINE THIS POLICY SITS ON'"
+
+run_case "network-policy-names-its-boundary: the old claim comes back into the header" fail \
+	"$NPB" \
+	"$(py 'edit("manifests/30-network-policy.yaml", "# Default-deny, then exactly the paths the stack actually uses.\n#\n", "# Default-deny, then exactly the paths the stack actually uses: the rule, enforced per packet.\n#\n")')" \
+	"carries the old claim 'enforced per packet'"
+
+run_case "network-policy-names-its-boundary: a harmless comment in the header is not a fault" pass \
+	"$NPB" \
+	"$(py 'edit("manifests/30-network-policy.yaml", "# Default-deny, then exactly the paths the stack actually uses.\n#\n", "# Default-deny, then exactly the paths the stack actually uses.\n# (A harmless added line that states nothing.)\n#\n")')"
+
+run_case "network-policy-names-its-boundary: the README section is gone" fail \
+	"$NPB" \
+	"$(py 'edit("README.md", "### What the NetworkPolicy confines, and where your agents run", "### Something else")')" \
+	"has no section 'What the NetworkPolicy confines, and where your agents run'"
+
+run_case "network-policy-names-its-boundary: the README drops the overlay" fail \
+	"$NPB" \
+	"$(py 'p = "README.md"; s = open(p).read(); assert "agent-tokens/confined-agent" in s; open(p, "w").write(s.replace("agent-tokens/confined-agent", "the overlay"))')" \
+	"does not say 'agent-tokens/confined-agent'"
+
+run_case "network-policy-names-its-boundary: the README states another port than 58 opens" fail \
+	"$NPB" \
+	"$(py 'import re; p = "README.md"; s = open(p).read(); i = s.index("### What the NetworkPolicy confines, and where your agents run"); j = s.index("\n### ", i + 10); sec = s[i:j]; assert "4310" in sec; open(p, "w").write(s[:i] + sec.replace("4310", "4311") + s[j:])')" \
+	"does not state vouchryx on port 4310"
+
+run_case "network-policy-names-its-boundary: the README names a file that does not exist" fail \
+	"$NPB" \
+	"$(py 'p = "README.md"; s = open(p).read(); assert "evidence/agent-confinement-k3d" in s; open(p, "w").write(s.replace("evidence/agent-confinement-k3d", "evidence/agent-confinement-kind"))')" \
+	"which does not exist"
+
+run_case "network-policy-names-its-boundary: another sentence in the README section is not a fault" pass \
+	"$NPB" \
+	"$(py 'edit("README.md", "### What the NetworkPolicy confines, and where your agents run\n", "### What the NetworkPolicy confines, and where your agents run\n\nA harmless added sentence that states nothing about the policy.\n")')"
+
+run_case "network-policy-names-its-boundary: 58 selects a renamed label" fail \
+	"$NPB" \
+	"$(py 'p = "manifests/58-agent-tokens-network.yaml"; s = open(p).read(); assert "taipanbox.dev/agent-token: \"true\"" in s; open(p, "w").write(s.replace("taipanbox.dev/agent-token: \"true\"", "taipanbox.dev/agent-tokens: \"true\""))')" \
+	"names a label taipanbox.dev/agent-token that manifests/58-agent-tokens-network.yaml does not select"
+
+run_case "network-policy-names-its-boundary: the overlay's pod loses the label" fail \
+	"$NPB" \
+	"$(py 'edit("agent-tokens/confined-agent/agent.yaml", "labels: \x7b app: agent-confined, taipanbox.dev/agent-token: \"true\" \x7d", "labels: \x7b app: agent-confined \x7d")')" \
+	"does not carry taipanbox.dev/agent-token=true"
+
+run_case "network-policy-names-its-boundary: the example pod carries another label" fail \
+	"$NPB" \
+	"$(py 'edit("agent-tokens/example-agent.yaml", "taipanbox.dev/agent-token: \"true\"", "taipanbox.dev/agent-tokn: \"true\"")')" \
+	"does not carry taipanbox.dev/agent-token=true"
+
+run_case "network-policy-names-its-boundary: the README names another label" fail \
+	"$NPB" \
+	"$(py 'p = "README.md"; s = open(p).read(); assert "taipanbox.dev/agent-token=true" in s; open(p, "w").write(s.replace("taipanbox.dev/agent-token=true", "taipanbox.dev/agent-tokn=true"))')" \
+	"names a label taipanbox.dev/agent-tokn"
+
+run_case "network-policy-names-its-boundary: the proof script names another label" fail \
+	"$NPB" \
+	"$(py 'p = "agent-tokens/confine-check.sh"; s = open(p).read(); assert "carry taipanbox.dev/agent-token=true" in s; open(p, "w").write(s.replace("carry taipanbox.dev/agent-token=true", "carry taipanbox.dev/agent-tokn=true"))')" \
+	"confine-check.sh names a label taipanbox.dev/agent-tokn"
+
+run_case "network-policy-names-its-boundary: 58 opens a path the proof script does not probe" fail \
+	"$NPB" \
+	"$(py 'edit("manifests/58-agent-tokens-network.yaml", "    - to:\n        - podSelector: \x7b matchLabels: \x7b app: tokenfuse-gateway \x7d \x7d\n", "    - to:\n        - podSelector: \x7b matchLabels: \x7b app: wardryx \x7d \x7d\n      ports:\n        - \x7b protocol: TCP, port: 8090 \x7d\n    - to:\n        - podSelector: \x7b matchLabels: \x7b app: tokenfuse-gateway \x7d \x7d\n")')" \
+	"has no open row for wardryx:8090"
+
+run_case "network-policy-names-its-boundary: the proof script drops the gateway row" fail \
+	"$NPB" \
+	"$(py 'edit("agent-tokens/confine-check.sh", "expect agent \"\x24NS\" \"\x24AGENT_POD\" tokenfuse-gateway 4100 open\n", "")')" \
+	"has no open row for tokenfuse-gateway:4100"
+
+run_case "network-policy-names-its-boundary: the overlay is added to the default apply set" fail \
+	"$NPB" \
+	"$(py 'edit("manifests/kustomization.yaml", "  - 58-agent-tokens-network.yaml\n", "  - 58-agent-tokens-network.yaml\n  - ../agent-tokens/confined-agent\n")')" \
+	"is in manifests/kustomization.yaml"
+
+run_case "network-policy-names-its-boundary: a launcher applies the overlay" fail \
+	"$NPB" \
+	"$(py 'p = "deploy.sh"; s = open(p).read(); open(p, "w").write(s + "\nkubectl apply -k agent-tokens/confined-agent\n")')" \
+	"applies or names agent-tokens/confined-agent"
+
+run_case "network-policy-names-its-boundary: the cited run recorded a failure" fail \
+	"$NPB" \
+	"$(py 'edit("evidence/agent-confinement-k3d/output-enforcing.txt", "RUN_EXIT=0", "RUN_EXIT=1")')" \
+	"does not end with RUN_EXIT=0"
+
+run_case "network-policy-names-its-boundary: the cited run is gone" fail \
+	"$NPB" \
+	"$(py 'import os; os.remove("evidence/agent-confinement-k3d/output-enforcing.txt")')" \
+	"output-enforcing.txt is missing"
+
+run_case "network-policy-names-its-boundary: the agent-pod network is gone" fail \
+	"$NPB" \
+	"$(py 'import os; os.remove("manifests/58-agent-tokens-network.yaml")')" \
+	"measured nothing"
+
+run_case "network-policy-names-its-boundary: the overlay is gone" fail \
+	"$NPB" \
+	"$(py 'import shutil; shutil.rmtree("agent-tokens/confined-agent")')" \
+	"measured nothing"
+
 # Static client keys (CLAUDE.md invariant 62): admitted only from the named lists, each with a reason, each
 # a minted key, and the operator's additions from a ConfigMap that is required, not optional.
 SKY=./scripts/static-keys-are-named.sh

@@ -81,7 +81,7 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | PersistentVolumeClaim | `verdryx.db`, `engram.engram` stores | |
 | CronJob | four of the six governance routines that `stack-up`'s `routines.sh` installs by default, as CronJobs: crypto trend, quality drift, identity sweep (`qryx-trend`, `verdryx-drift`, `idryx-detect`), plus the record seal (`trailryx-seal`, at 5:27, last because it seals what the others did). The fifth, the chain verification, is the row below. FinOps export (`focus-export`) cannot run as a CronJob here and does not: its data lives in a per-pod `emptyDir` (GOTCHAS 81), so since 2026-08-28 it runs as a SIDECAR in the `tokenfuse-gateway` pod, hourly, printing rather than storing. The alternative was a PersistentVolumeClaim for the trace directory, which is a billed disk and so a spending decision rather than a fix; `drills` (`mockryx-drill`) is separate: opt-in, suspended below | |
 | CronJob | `agent-conform`, the on-box chain verifier, every 15 minutes: it verifies the `prev_hash` chain of every stream on the shared bus and writes a `chain_broken` event to `agent-conform.ndjson` on the bus when one is broken. In the default apply; keeps its memory beside its output on `stack-events`, so it adds no disk. See "The on-box chain verifier" below | |
-| NetworkPolicy | default-deny, then exactly the paths above | |
+| NetworkPolicy | default-deny for the pods of `agent-stack`, then exactly the paths above. It covers the stack's own pods, not agents that run outside the namespace: see "What the NetworkPolicy confines, and where your agents run" below | |
 | Deployment + PVC + NetworkPolicy | `heraldyx`, the notifier. **Not in the default apply**, see "Being told, rather than watching" below. No Service and no port: it reads the event log and sends mail, so nothing calls it | |
 | Deployment + PVC + Service + NetworkPolicy x4 | `47-scopyx.yaml`, the web-egress enforcement point. **Not in the default apply**: it opens 80 and 443 to the whole public internet on behalf of agents, which is the widest grant in the namespace and the one decision an operator most needs to have made themselves. Refuses to start without a credential, deliberately | |
 | Deployment | `48-scopyx-browser.yaml`, the same plane with a real browser, for pages that assemble themselves. **Replaces 47's Deployment rather than running beside it**, so a cluster cannot round-robin an agent's fetches between a browser and a fetcher that runs no JavaScript. Costs 267 MB of pull against 3.5 MB. Read its header: PodSecurity `restricted` decides the sandbox question for you | |
@@ -92,6 +92,45 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | Deployment + Service + PVC + NetworkPolicy x4 | `54-delegation.yaml`, vouchryx, the agent-token service. **In the default apply**, agents-only: no identity provider, its keys and its first enrolled agent minted at deploy time (`lib/vouchryx-mint.sh`). Reachable from the gateway, the broker, wardryx and the console, and from agent pods. See "The delegation plane" below | |
 | Patch (Deployment) | `55-copilot-cloud.yaml`: a larger model for the console's copilot, Felyx (`claude-sonnet-5`), applied by hand; no deploy script applies it, and `--anthropic-key-file` leaves Felyx on its configured model (`claude-haiku-4-5`). A model switch only: Felyx already reaches Anthropic through this stack's own gateway (by its Service name, under `agent://<trust domain>/genaryx/felyx`, metered and policy-checked like any agent) with its own client key, and the gateway holds the provider key (see "The provider key" below). **Not in the default apply**: the deploy scripts apply it when they are given `--anthropic-key-file`, and every conversation is METERED on that key's account. See its own header before applying | |
 | Namespace labels + NetworkPolicy x2 | `60-harden-neighbours.yaml`: Pod Security `restricted` plus default-deny ingress and egress for the cluster's `default` namespace, i.e. hardening for a namespace this stack does not own (`security-tests.sh` check 12 reports on the gap this closes). **Not in the default apply**: it changes a namespace that belongs to whoever runs the cluster, and it WILL stop anything already running in `default`. Read its header before applying | |
+
+### What the NetworkPolicy confines, and where your agents run
+
+The NetworkPolicies in `manifests/30-network-policy.yaml` and `manifests/58-agent-tokens-network.yaml` apply to the pods of
+the `agent-stack` namespace and to nothing else. That namespace holds the stack's own planes and no agent workload.
+**Your agents are not in it.** They run on your machines, in other namespaces or in other clusters, and no policy in this
+repository confines them. What stands between an agent outside the namespace and the stack is the door it has to pass: the
+gateway and the MCP broker require an agent token (see "Agent tokens"), which is a check on each call and not a packet filter.
+
+What the policies do confine is the stack itself: the planes reach each other only by the paths in `30`, a pod of another
+namespace reaches none of them, and in the default install the gateway is the one pod allowed out to the internet, on 443.
+
+An agent you choose to run inside this cluster can be put under a policy written for it. Place it in `agent-stack` and label
+it `taipanbox.dev/agent-token=true`; `58` then leaves it DNS, vouchryx on 4310 and the gateway on 4100, and nothing else.
+`agent-tokens/confined-agent` is an optional overlay that does exactly that (it is in no default apply), and
+`agent-tokens/confine-check.sh` proves it on a live cluster:
+
+```sh
+kubectl apply -k agent-tokens/confined-agent
+./agent-tokens/confine-check.sh --external 1.1.1.1:443
+```
+
+Measured on k3d (`evidence/agent-confinement-k3d/`, k3d v5.9.0, k3s v1.35.5, 2026-11-04): the labelled pod opened vouchryx and
+the gateway and was refused by the stack's five other services (wardryx, idryx, tokenfuse-cloud, the policy store and the
+console), by a listener in a namespace with no policy, by the Kubernetes API and by an address outside the cluster, while a
+pod in a namespace with no policy reached the listener and the outside address and was itself refused by every service of the
+stack. The same check went red on a policy widened to all egress, on the namespace's egress isolation stripped out, on a policy
+without its gateway rule and on a missing policy, and it went red on a cluster whose policy controller was off. The stack's own pods in that
+run were stand-ins with the real labels and ports, generated from these manifests; no stack image ran there.
+
+What it does not confine, said plainly:
+
+- **An agent outside `agent-stack`**: another namespace, another cluster, a laptop. Nothing here applies to it.
+- **DNS**: every pod of the namespace, labelled or not, may query the cluster resolver, and in the run the labelled pod
+  resolved a name outside the cluster. A connection is refused; a lookup is not.
+- **The label is the pod's own claim.** Whoever can create pods in `agent-stack` chooses their labels (GOTCHAS 20), so the
+  namespace's RBAC is part of the boundary.
+- **A pod of `agent-stack` that carries no label** gets default-deny and DNS only. It reaches neither vouchryx nor the gateway,
+  so it is isolated and it is not an agent: nothing it could do here is allowed.
 
 ### CostCrew, the FinOps plane
 
