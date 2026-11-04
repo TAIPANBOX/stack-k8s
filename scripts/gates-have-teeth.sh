@@ -3034,8 +3034,8 @@ run_case "wardryx-key-is-pep: the migration writes the key on the command line" 
 
 run_case "wardryx-key-is-pep: a pin moves back to the old wardryx" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.5.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
-	"does not pin wardryx v2.5.0"
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.5.1", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
+	"does not pin wardryx v2.5.1"
 
 run_case "wardryx-key-is-pep: a reworded comment is not a fault" pass \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
@@ -3853,7 +3853,7 @@ run_case "verified-images: a policy's glob moved onto another repository's image
 	"covered by two policies"
 run_case "verified-images: a manifest names a TAIPANBOX image with no signer row" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.5.0@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.5.0@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.5.1@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.5.0@sha256:")')" \
 	"has no signer row in BINDINGS"
 run_case "verified-images: the default install stops turning admission on" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -3959,7 +3959,7 @@ run_case "keyryx: the custody policy grants trailryx nothing" fail \
 	"does not grant trailryx-node the sign operation"
 run_case "keyryx: the wardryx patch rolls wardryx back to v2.3.0" fail \
 	'./scripts/keyryx-is-default.sh' \
-	"$(py 'edit("keyryx/wardryx-patch.yaml", "ghcr.io/taipanbox/wardryx:v2.5.0@sha256:67470f6568cbbcec5c4b7c3bc4d52f7d86e98d6b166cd2ee6979d91f6e0c4779", "ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543")')" \
+	"$(py 'edit("keyryx/wardryx-patch.yaml", "ghcr.io/taipanbox/wardryx:v2.5.1@sha256:2d3c0c9c0798156d3f05b82d0e63cf5b38ee4b9875d6bdbac1829f219c26abf7", "ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543")')" \
 	"would roll wardryx back"
 run_case "keyryx: the witness is pointed at no stream directory" fail \
 	'./scripts/keyryx-is-default.sh' \
@@ -4090,7 +4090,7 @@ run_case "approver: WARDRYX_ALLOW_KEY_APPROVALS is set on wardryx" fail \
 	"sets WARDRYX_ALLOW_KEY_APPROVALS"
 run_case "approver: wardryx is pinned before the approver statements" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.5.0@sha256:", "wardryx:v2.3.0@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.5.1@sha256:", "wardryx:v2.3.0@sha256:")')" \
 	"before the approver statements"
 run_case "approver: the mint rewrites a kept pair" fail \
 	'./scripts/approver-key-is-minted.sh' \
