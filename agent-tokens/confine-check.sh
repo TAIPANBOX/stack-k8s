@@ -8,7 +8,7 @@
 # whether a TCP connection opened:
 #
 #   agent       the overlay's pod (agent-tokens/confined-agent): in agent-stack, labelled taipanbox.dev/agent-token=true.
-#               Expected: opens vouchryx:4310 and tokenfuse-gateway:4100, and nothing else.
+#               Expected: opens vouchryx:4310, tokenfuse-gateway:4100 and tokenfuse-mcp-broker:4200, and nothing else.
 #   unlabelled  a pod in agent-stack that carries no label. Expected: opens nothing (default-deny, DNS aside).
 #   outside     a pod in a scratch namespace that has no policy at all. Expected: opens the scratch listener and the
 #               external target, and none of the stack's services. It is the control: it shows the network is up, so a
@@ -65,9 +65,9 @@ if [ -n "$absent" ]; then
   printf 'FAIL: NetworkPolicy%s missing in %s (manifests/30-network-policy.yaml, manifests/58-agent-tokens-network.yaml), so an agent pod there is not confined.\n' "$absent" "$NS"
   exit 1
 fi
-for svc in vouchryx tokenfuse-gateway; do
+for svc in vouchryx tokenfuse-gateway tokenfuse-mcp-broker; do
   "$KUBECTL" -n "$NS" get service "$svc" >/dev/null 2>&1 \
-    || die "Service $svc is missing in $NS, so the two allowed paths have nothing to reach. Nothing was measured."
+    || die "Service $svc is missing in $NS, so the three allowed paths have nothing to reach. Nothing was measured."
 done
 if "$KUBECTL" get namespace "$SCRATCH" >/dev/null 2>&1; then
   die "namespace $SCRATCH exists and this script deletes it afterwards; remove it yourself first. Nothing was measured."
@@ -210,6 +210,7 @@ printf 'agent pod %s/%s, labelled taipanbox.dev/agent-token=true\n' "$NS" "$AGEN
 printf '  %-9s %-34s %-8s %s\n' probe target expected result
 expect agent "$NS" "$AGENT_POD" vouchryx 4310 open
 expect agent "$NS" "$AGENT_POD" tokenfuse-gateway 4100 open
+expect agent "$NS" "$AGENT_POD" tokenfuse-mcp-broker 4200 open
 for t in $PLANES; do expect agent "$NS" "$AGENT_POD" "${t%:*}" "${t#*:}" blocked; done
 expect agent "$NS" "$AGENT_POD" "${LISTENER%:*}" "${LISTENER##*:}" blocked
 expect agent "$NS" "$AGENT_POD" kubernetes.default.svc.cluster.local 443 blocked
@@ -218,6 +219,7 @@ expect agent "$NS" "$AGENT_POD" kubernetes.default.svc.cluster.local 443 blocked
 printf '\npod with no label, in %s\n' "$NS"
 expect unlabelled "$NS" confine-unlabelled vouchryx 4310 blocked
 expect unlabelled "$NS" confine-unlabelled tokenfuse-gateway 4100 blocked
+expect unlabelled "$NS" confine-unlabelled tokenfuse-mcp-broker 4200 blocked
 for t in $PLANES; do expect unlabelled "$NS" confine-unlabelled "${t%:*}" "${t#*:}" blocked; done
 expect unlabelled "$NS" confine-unlabelled "${LISTENER%:*}" "${LISTENER##*:}" blocked
 [ -n "$EXTERNAL" ] && expect unlabelled "$NS" confine-unlabelled "$EXT_HOST" "$EXT_PORT" blocked
@@ -227,6 +229,7 @@ expect outside "$SCRATCH" confine-outside "${LISTENER%:*}" "${LISTENER##*:}" ope
 [ -n "$EXTERNAL" ] && expect outside "$SCRATCH" confine-outside "$EXT_HOST" "$EXT_PORT" open
 expect outside "$SCRATCH" confine-outside "vouchryx.$NS.svc.cluster.local" 4310 blocked
 expect outside "$SCRATCH" confine-outside "tokenfuse-gateway.$NS.svc.cluster.local" 4100 blocked
+expect outside "$SCRATCH" confine-outside "tokenfuse-mcp-broker.$NS.svc.cluster.local" 4200 blocked
 for t in $PLANES; do expect outside "$SCRATCH" confine-outside "${t%:*}.$NS.svc.cluster.local" "${t#*:}" blocked; done
 
 # DNS is open to every pod of the namespace (allow-dns in 30): reported, never asserted, because whether a name

@@ -105,7 +105,7 @@ What the policies do confine is the stack itself: the planes reach each other on
 namespace reaches none of them, and in the default install the gateway is the one pod allowed out to the internet, on 443.
 
 An agent you choose to run inside this cluster can be put under a policy written for it. Place it in `agent-stack` and label
-it `taipanbox.dev/agent-token=true`; `58` then leaves it DNS, vouchryx on 4310 and the gateway on 4100, and nothing else.
+it `taipanbox.dev/agent-token=true`; `58` then leaves it DNS, vouchryx on 4310, the gateway on 4100 and the MCP broker (`tokenfuse-mcp-broker`) on 4200, and nothing else.
 `agent-tokens/confined-agent` is an optional overlay that does exactly that (it is in no default apply), and
 `agent-tokens/confine-check.sh` proves it on a live cluster:
 
