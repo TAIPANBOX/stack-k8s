@@ -382,6 +382,11 @@ jobs:
       - name: every workflow checkout of another repository is a full commit (invariant 68)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/workflow-checkouts-are-pinned.sh
 
+      # Added 2026-11-04 with invariant 79. The console's two proof engines (wardryx replay, tokenfuse backtest)
+      # are the images the stack runs, digest for digest. See CLAUDE.md invariant 79.
+      - name: the console's proof engines are the stack's own, digest for digest (invariant 79)
+        run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/console-engines-are-the-stacks.sh
+
       # Added 2026-10-19. hub/add-site.sh reads the Cloud's version from a name:tag@sha256 reference, the form
       # the manifests pin. v1.5.3 read the digest as the tag and refused every pinned install.
       - name: hub/add-site.sh reads a digest-pinned tokenfuse-cloud image
