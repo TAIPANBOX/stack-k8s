@@ -1040,7 +1040,7 @@ never see the witness key beside it, and each runs on the witness's node, becaus
 claim is ReadWriteOnce, as the record seal does. The wiring is two patches under
 `keyryx/` that the Keyryx install applies and `--without-keyryx` reverses; the default
 manifests do not change. Each reader reads the file only as a regular file, never
-through a link (heraldyx 0.8.1, pinned here, and the console from genaryx#134).
+through a link (heraldyx 0.9.0, pinned here, and the console from genaryx#134).
 heraldyx renders the seven `witness_*` types and mails the high ones. The console is pinned at
 `genaryx-console:v1.7.3`. Its v1.7.0 image was built from TAIPANBOX/genaryx#134, which reads
 `GENARYX_EVENTS_EXTRA` and turns a high finding into an incident.
