@@ -64,6 +64,14 @@ pods: they are binaries that must exist **inside the console image**. That is
 why `images/console.Dockerfile` is a four-language build (Rust console, Go
 qryx and mockryx, Python verdryx and engram) rather than four Deployments.
 
+Two more binaries sit in that image, and they are not tools in this table:
+`wardryx` (for `replay`) and `tokenfuse` (for `backtest`) are the engines of the
+console's policy and budget proofs, copied out of the very images the stack
+runs, by the same digests the manifests name, so the engine that replays a
+decision is the engine that took it (CLAUDE.md invariant 79). On a cluster the
+budget proof has no trace directory to read, because the gateway's traces are
+a pod-local `emptyDir` that no other pod can mount.
+
 Stated plainly because it is the opposite of the obvious guess, and getting it
 wrong produces a cluster where half the console's tabs are permanently empty.
 

@@ -27,6 +27,15 @@ spec:
         runAsUser: 10001
         runAsGroup: 10001
         fsGroup: 10001 # so the state volume is writable by the stack user
+        # wardryx's own group, so the console can READ the policy archive its proofs replay
+        # (genaryx invariant 40, CLAUDE.md invariant 79). From v2.5.1 wardryx writes the archive
+        # 0750 for its directory and 0640 for its files, owner and owner's group only; the pod
+        # runs as 65532:65532, so a file's group is 65532 and nothing else on the volume is in
+        # it. This joins that one group and no wider one, and read-only is what the mode gives:
+        # the console can open the files and cannot write or remove one. Files written before
+        # v2.5.1 are 0600 and read as "not archived", which the proof reports as that and never
+        # as a proof of nothing.
+        supplementalGroups: [65532]
         seccompProfile: { type: RuntimeDefault }
       # Leave a dead node in 30 s, not the default 300 s. This pod holds a
       # ReadWriteOnce claim; on Longhorn, once evicted, it is force-deleted and

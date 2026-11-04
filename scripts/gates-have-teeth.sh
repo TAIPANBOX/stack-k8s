@@ -4261,6 +4261,47 @@ run_case "workflow-checkouts: a comment reworded in the workflow (must pass)" pa
 	'./scripts/workflow-checkouts-are-pinned.sh' \
 	"$(py 'edit(".github/workflows/console-image.yml", "# The commits this image is built from, in one place", "# The commits this image is built from, pinned in one place")')"
 
+# The console's two proof engines are the stack's own, digest for digest (CLAUDE.md invariant 79).
+run_case "console-engines: the console's wardryx differs from the stack's" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("images/console.Dockerfile", "wardryx:v2.5.1@sha256:2d3c0c9c", "wardryx:v2.5.1@sha256:2d3c0c9d")')" \
+	"differs from the stack's"
+run_case "console-engines: the console's tokenfuse is an older tag than the stack's" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("images/console.Dockerfile", "tokenfuse:v1.21.0@sha256:5cc6", "tokenfuse:v1.20.3@sha256:5cc6")')" \
+	"differs from the stack's"
+run_case "console-engines: the manifests name two tokenfuse digests" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "ghcr.io/taipanbox/tokenfuse:v1.21.0@sha256:5cc6484d", "ghcr.io/taipanbox/tokenfuse:v1.21.0@sha256:5cc6484e")')" \
+	"names 2 different tokenfuse references"
+run_case "console-engines: an engine stage is named something the copy does not look for" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("images/console.Dockerfile", " AS tokenfuse-engine", " AS other")')" \
+	"is named 'other'"
+run_case "console-engines: the wardryx binary is no longer copied" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("images/console.Dockerfile", "COPY --from=wardryx-engine /usr/local/bin/service /usr/local/bin/wardryx\n", "")')" \
+	"does not copy the binary out of the wardryx-engine stage"
+run_case "console-engines: the tokenfuse label is gone" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("images/console.Dockerfile", "dev.taipanbox.engine.tokenfuse", "dev.taipanbox.engine.tokenfusx")')" \
+	"has no dev.taipanbox.engine.tokenfuse label"
+run_case "console-engines: a smoke loop stops running wardryx" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "verdryx wardryx \"tokenfuse constants\" genaryx-web; do", "verdryx \"tokenfuse constants\" genaryx-web; do")')" \
+	"does not run wardryx"
+run_case "console-engines: a smoke loop runs tokenfuse with no argument, which starts the gateway" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "wardryx \"tokenfuse constants\" genaryx-web; do", "wardryx tokenfuse genaryx-web; do")')" \
+	"does not run tokenfuse"
+run_case "console-engines: no engine stage at all measures nothing" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'p = "images/console.Dockerfile"; s = open(p).read(); open(p, "w").write("\n".join(l for l in s.split("\n") if not l.startswith("FROM ghcr.io/taipanbox/")))')" \
+	"this measured NOTHING"
+run_case "console-engines: a comment reworded in the Dockerfile (must pass)" pass \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("images/console.Dockerfile", "# --- the two engines the console\x27s proofs run", "# --- the two engines that the console\x27s proofs run")')"
+
 # The CostCrew run ceiling and the crew's schedule (CLAUDE.md invariant 66). No default ships, the
 # figure is validated before anything is installed, and the crew CronJob is suspended until an operator resumes it.
 run_case "costcrew-ceiling: the validator accepts three decimals" fail \
