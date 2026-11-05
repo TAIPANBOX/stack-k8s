@@ -27,6 +27,20 @@ spec:
         runAsUser: 10001
         runAsGroup: 10001
         fsGroup: 10001 # so the state volume is writable by the stack user
+        # wardryx's own group, so the console can READ the policy archive its proofs replay
+        # (genaryx invariant 40, CLAUDE.md invariant 79). From v2.5.1 wardryx writes the archive
+        # 0750 for its directory and 0640 for its files, owner and owner's group only; the pod
+        # runs as 65532:65532, so a file's group is 65532 and nothing else on the volume is in
+        # it. This joins that one group and no wider one. Read-only is what the MODE gives, not
+        # a mount: the console can open an archive file and cannot change it or add or remove an
+        # entry in the archive directory, but it also mounts the whole events claim read-write
+        # below, and the bus directory above the archive is group-writable, so it could still
+        # rename or remove the archive directory as a whole. A read-only subPath of the archive
+        # would close that and is left out: with no live cluster to try it on, a directory that
+        # is not there yet would be made by kubelet as root and wardryx could not write it.
+        # Files written before v2.5.1 are 0600 and read as "not archived", which the proof
+        # reports as that and never as a proof of nothing.
+        supplementalGroups: [65532]
         seccompProfile: { type: RuntimeDefault }
       # Leave a dead node in 30 s, not the default 300 s. This pod holds a
       # ReadWriteOnce claim; on Longhorn, once evicted, it is force-deleted and
@@ -45,7 +59,7 @@ spec:
           # five source commits are labels on it: `docker inspect` answers
           # "which qryx is in this console", and that is the question an
           # incident asks.
-          image: ghcr.io/taipanbox/genaryx-console:v1.7.3@sha256:0db4758c9f3dd2231184063af4f80bce491480f6d7238c02bcbac83abb8d708a
+          image: ghcr.io/taipanbox/genaryx-console:v1.7.5@sha256:d68952a3523e517b25bdec39e8515d107e72c009a3dfc89712d09a923f323da5
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef: { name: stack-wiring }

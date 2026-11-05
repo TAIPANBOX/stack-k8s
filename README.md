@@ -10,7 +10,7 @@ about its architecture into the open, and both are load-bearing.
 
 <div align="center">
 
-<img src="assets/diagram.svg" alt="The planes couple through one ReadWriteMany event volume rather than through APIs, the console pod hosts five tools rather than being a client of four services, egress is denied by default, and heraldyx is the one hole: applied from its own manifest, permitted only TCP 587, 465, 2525 and 25, and only to addresses outside the cluster and the private network" width="960">
+<img src="assets/diagram.svg" alt="The planes couple through one ReadWriteMany event volume rather than through APIs, the console pod hosts five tools rather than being a client of four services, egress from the stack's own pods is denied by default, the agents a customer runs sit outside that namespace and are not confined by it, the gateway reaches the model provider on 443, and heraldyx, applied from its own manifest, is the mail hole: permitted only TCP 587, 465, 2525 and 25, and only to addresses outside the cluster and the private network" width="960">
 
 </div>
 
@@ -64,6 +64,14 @@ pods: they are binaries that must exist **inside the console image**. That is
 why `images/console.Dockerfile` is a four-language build (Rust console, Go
 qryx and mockryx, Python verdryx and engram) rather than four Deployments.
 
+Two more binaries sit in that image, and they are not tools in this table:
+`wardryx` (for `replay`) and `tokenfuse` (for `backtest`) are the engines of the
+console's policy and budget proofs, copied out of the very images the stack
+runs, by the same digests the manifests name, so the engine that replays a
+decision is the engine that took it (CLAUDE.md invariant 79). On a cluster the
+budget proof has no trace directory to read, because the gateway's traces are
+a pod-local `emptyDir` that no other pod can mount.
+
 Stated plainly because it is the opposite of the obvious guess, and getting it
 wrong produces a cluster where half the console's tabs are permanently empty.
 
@@ -81,17 +89,56 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | PersistentVolumeClaim | `verdryx.db`, `engram.engram` stores | |
 | CronJob | four of the six governance routines that `stack-up`'s `routines.sh` installs by default, as CronJobs: crypto trend, quality drift, identity sweep (`qryx-trend`, `verdryx-drift`, `idryx-detect`), plus the record seal (`trailryx-seal`, at 5:27, last because it seals what the others did). The fifth, the chain verification, is the row below. FinOps export (`focus-export`) cannot run as a CronJob here and does not: its data lives in a per-pod `emptyDir` (GOTCHAS 81), so since 2026-08-28 it runs as a SIDECAR in the `tokenfuse-gateway` pod, hourly, printing rather than storing. The alternative was a PersistentVolumeClaim for the trace directory, which is a billed disk and so a spending decision rather than a fix; `drills` (`mockryx-drill`) is separate: opt-in, suspended below | |
 | CronJob | `agent-conform`, the on-box chain verifier, every 15 minutes: it verifies the `prev_hash` chain of every stream on the shared bus and writes a `chain_broken` event to `agent-conform.ndjson` on the bus when one is broken. In the default apply; keeps its memory beside its output on `stack-events`, so it adds no disk. See "The on-box chain verifier" below | |
-| NetworkPolicy | default-deny, then exactly the paths above | |
+| NetworkPolicy | default-deny for the pods of `agent-stack`, then exactly the paths above. It covers the stack's own pods, not agents that run outside the namespace: see "What the NetworkPolicy confines, and where your agents run" below | |
 | Deployment + PVC + NetworkPolicy | `heraldyx`, the notifier. **Not in the default apply**, see "Being told, rather than watching" below. No Service and no port: it reads the event log and sends mail, so nothing calls it | |
-| Deployment + PVC + Service + NetworkPolicy x4 | `47-scopyx.yaml`, the web-egress enforcement point. **Not in the default apply**: it opens 80 and 443 to the whole public internet on behalf of agents, which is the widest grant in the namespace and the one decision an operator most needs to have made themselves. Refuses to start without a credential, deliberately | |
+| Deployment + PVC + Service + NetworkPolicy x4 | `47-scopyx.yaml`, the web-egress enforcement point. **Not in the default apply**: it opens 80 and 443 to the whole public internet on behalf of agents, which is the widest grant in the namespace and the one decision an operator most needs to have made themselves. Refuses to start without a credential, deliberately. An agent reads the web through the MCP broker, which holds scopyx's key and is the only pod `scopyx-ingress` admits: see "How an agent reads the web" below | |
 | Deployment | `48-scopyx-browser.yaml`, the same plane with a real browser, for pages that assemble themselves. **Replaces 47's Deployment rather than running beside it**, so a cluster cannot round-robin an agent's fetches between a browser and a fetcher that runs no JavaScript. Costs 267 MB of pull against 3.5 MB. Read its header: PodSecurity `restricted` decides the sandbox question for you | |
 | Deployment + PVC + Service + CronJob + NetworkPolicy | `49-costcrew.yaml`, CostCrew, the FinOps plane: the console and its crew CronJob `costcrew-crew`. **Not in the default apply**, and **metered once cadence is on**: see "CostCrew, the FinOps plane" below | 8321 |
 | Deployment + PVC + Service | `51-typryx.yaml`, the typed-answer plane: a typed question answered with a probability, scored later against what actually happened. **Not in the default apply**: a whole plane somebody may simply not want. Backend is `stub` (free, no outbound call) unless a launcher is given `--typed-mode` (see "Typed answers: choose where your data goes"). Refuses to start without a credential, the same as scopyx. Its journal is on the shared `stack-events` bus | |
-| Deployment + Service + NetworkPolicy x4 | `52-tokenfuse-mcp-broker.yaml`, tokenfuse's own MCP credential broker fronting typryx. **Not in the default apply, applied by the same `--with-typed` flag as 51-typryx.yaml, right after it**. Free, reaches nowhere but typryx itself. Refuses to start without its own credential | |
+| Deployment + Service + NetworkPolicy x4 | `52-tokenfuse-mcp-broker.yaml`, tokenfuse's own MCP credential broker fronting typryx. **Not in the default apply, applied by the same `--with-typed` flag as 51-typryx.yaml, right after it**. Free, reaches nowhere but typryx itself, and scopyx where the operator runs it ("How an agent reads the web" below). Refuses to start without its own credential | |
 | Deployment + Service + NetworkPolicy x4 | `56-typryx-wardryx-proxy.yaml`, typryx's `wardryx-proxy`: between the MCP broker and wardryx, it adds the risk class of a pending tool call to the decision request, so a `hold_if_signal` policy can hold the call for a person. **Not in the default apply, rendered only by `--typed-risk-signal`** (off by default, refused when the typed mode is off). No claim, no journal, no ledger: it keeps no state. See "A typed risk signal" below | 4330 |
 | Deployment + Service + PVC + NetworkPolicy x4 | `54-delegation.yaml`, vouchryx, the agent-token service. **In the default apply**, agents-only: no identity provider, its keys and its first enrolled agent minted at deploy time (`lib/vouchryx-mint.sh`). Reachable from the gateway, the broker, wardryx and the console, and from agent pods. See "The delegation plane" below | |
 | Patch (Deployment) | `55-copilot-cloud.yaml`: a larger model for the console's copilot, Felyx (`claude-sonnet-5`), applied by hand; no deploy script applies it, and `--anthropic-key-file` leaves Felyx on its configured model (`claude-haiku-4-5`). A model switch only: Felyx already reaches Anthropic through this stack's own gateway (by its Service name, under `agent://<trust domain>/genaryx/felyx`, metered and policy-checked like any agent) with its own client key, and the gateway holds the provider key (see "The provider key" below). **Not in the default apply**: the deploy scripts apply it when they are given `--anthropic-key-file`, and every conversation is METERED on that key's account. See its own header before applying | |
 | Namespace labels + NetworkPolicy x2 | `60-harden-neighbours.yaml`: Pod Security `restricted` plus default-deny ingress and egress for the cluster's `default` namespace, i.e. hardening for a namespace this stack does not own (`security-tests.sh` check 12 reports on the gap this closes). **Not in the default apply**: it changes a namespace that belongs to whoever runs the cluster, and it WILL stop anything already running in `default`. Read its header before applying | |
+
+### What the NetworkPolicy confines, and where your agents run
+
+The NetworkPolicies in `manifests/30-network-policy.yaml` and `manifests/58-agent-tokens-network.yaml` apply to the pods of
+the `agent-stack` namespace and to nothing else. That namespace holds the stack's own planes and no agent workload.
+**Your agents are not in it.** They run on your machines, in other namespaces or in other clusters, and no policy in this
+repository confines them. What stands between an agent outside the namespace and the stack is the door it has to pass: the
+gateway and the MCP broker require an agent token (see "Agent tokens"), which is a check on each call and not a packet filter.
+
+What the policies do confine is the stack itself: the planes reach each other only by the paths in `30`, a pod of another
+namespace reaches none of them, and in the default install the gateway is the one pod allowed out to the internet, on 443.
+
+An agent you choose to run inside this cluster can be put under a policy written for it. Place it in `agent-stack` and label
+it `taipanbox.dev/agent-token=true`; `58` then leaves it DNS, vouchryx on 4310, the gateway on 4100 and the MCP broker (`tokenfuse-mcp-broker`) on 4200, and nothing else.
+`agent-tokens/confined-agent` is an optional overlay that does exactly that (it is in no default apply), and
+`agent-tokens/confine-check.sh` proves it on a live cluster:
+
+```sh
+kubectl apply -k agent-tokens/confined-agent
+./agent-tokens/confine-check.sh --external 1.1.1.1:443
+```
+
+Measured on k3d (`evidence/agent-confinement-k3d/`, k3d v5.9.0, k3s v1.35.5, 2026-11-04): the labelled pod opened vouchryx and
+the gateway and was refused by the stack's five other services (wardryx, idryx, tokenfuse-cloud, the policy store and the
+console), by a listener in a namespace with no policy, by the Kubernetes API and by an address outside the cluster, while a
+pod in a namespace with no policy reached the listener and the outside address and was itself refused by every service of the
+stack. The same check went red on a policy widened to all egress, on the namespace's egress isolation stripped out, on a policy
+without its gateway rule and on a missing policy, and it went red on a cluster whose policy controller was off. The stack's own pods in that
+run were stand-ins with the real labels and ports, generated from these manifests; no stack image ran there.
+
+What it does not confine, said plainly:
+
+- **An agent outside `agent-stack`**: another namespace, another cluster, a laptop. Nothing here applies to it.
+- **DNS**: every pod of the namespace, labelled or not, may query the cluster resolver, and in the run the labelled pod
+  resolved a name outside the cluster. A connection is refused; a lookup is not.
+- **The label is the pod's own claim.** Whoever can create pods in `agent-stack` chooses their labels (GOTCHAS 20), so the
+  namespace's RBAC is part of the boundary.
+- **A pod of `agent-stack` that carries no label** gets default-deny and DNS only. It reaches neither vouchryx nor the gateway,
+  so it is isolated and it is not an agent: nothing it could do here is allowed.
 
 ### CostCrew, the FinOps plane
 
@@ -376,17 +423,16 @@ line: a budget gone, a policy denial, a run killed, an agent behaving unlike
 itself. The mail comes from the box, and it carries a link into your console,
 never a button that acts.
 
-Leave it blank and nothing is installed for it. This is the one workload in the
-stack allowed to open a connection to something outside the cluster, so it is
-opt-in the same way the load balancer is, and for the same kind of reason:
+Leave it blank and nothing is installed for it. This is the workload that opens a
+connection to a mail server outside the cluster, so it is opt-in the same way the
+load balancer is, and for the same kind of reason:
 
 ```bash
 kubectl apply -f manifests/45-heraldyx.yaml
 ```
 
-Read that file's header before you do. It carries the only egress rule in the
-namespace that reaches past DNS, it says exactly how narrow that rule is, and
-it says what it leaves open.
+Read that file's header before you do. It carries the egress rule for mail, it
+says exactly how narrow that rule is, and it says what it leaves open.
 
 The notifier's daily pulse and quiet hours are set in `manifests/45-heraldyx.yaml`, next to
 `HERALDYX_MIN_SEVERITY`:
@@ -395,6 +441,49 @@ The notifier's daily pulse and quiet hours are set in `manifests/45-heraldyx.yam
 - `HERALDYX_QUIET` (default empty): quiet hours as `HH:MM-HH:MM`; alerts below critical are held and reported when they end, and a critical is always sent.
 - `HERALDYX_TZ` (default empty): the IANA zone the quiet hours are read in, for example `Europe/London`.
 - `HERALDYX_SMTP_TLS` (default unset, which is `starttls`): how heraldyx 0.8.0 secures the mail connection. Unset, the server must offer STARTTLS, and a server that does not is refused, so mail is never sent in the clear to a remote host. Use `implicit` for a server on port 465, and `plain` only for a loopback relay. Set it in your environment before `./deploy.sh`, `cloud/aws/deploy-aws.sh` or `cloud/gcp/deploy-gcp.sh`: the script checks the word and writes it into the `heraldyx-mail` Secret, and the notifier reads it from there.
+
+### How an agent reads the web
+
+An agent does not call scopyx. It calls tokenfuse's MCP broker (`52-tokenfuse-mcp-broker.yaml`), which holds
+scopyx's key, and that is what lets the broker label the run `web` from the fetch it saw (tokenfuse v1.21.0,
+invariant 143) instead of from a tool name the agent reported. `scopyx-ingress` admits the broker and nothing
+else, and an agent-token pod (`58-agent-tokens-network.yaml`) reaches the broker on 4200. scopyx is applied by
+hand, as its header says; so is its key. For an agent whose token names `<id>` (for example
+`agent://acme.example/agents/operator`) and a name `<agent>` (its last segment, `operator`), one key in three
+places that must agree:
+
+| Where | Entry |
+|---|---|
+| `scopyx-keys`, `SCOPYX_KEYS` (comma-separated) | `<key>=<id>` |
+| `tokenfuse-mcp-broker-keys`, `TOKENFUSE_MCP_SECRETS` | `scopyx_key_<agent>=<key>` |
+| `tokenfuse-mcp-broker-keys`, `TOKENFUSE_MCP_SECRET_SCOPES` | `scopyx_key_<agent>=agents:<id>;tools:browse|fetch_url` |
+
+Append each to what the Secret already holds (the typryx entries stay), then roll scopyx and the broker. A call,
+from the agent's pod (the broker is `http://tokenfuse-mcp-broker:4200/mcp`):
+
+```
+POST /mcp
+Authorization: DPoP <the agent's token>        (and the DPoP proof, as for any call to the broker)
+X-Fuse-Mcp-Upstream: scopyx
+X-Fuse-Agent-Id: <id>
+x-fuse-run-id: <the run this fetch belongs to>
+
+{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+  "name": "fetch_url",
+  "arguments": {"url": "https://example.com"},
+  "_meta": {"scopyx/key": "{{secret:scopyx_key_operator}}"}
+}}
+```
+
+`x-fuse-run-id` is required for scopyx: taint belongs to a run, and the broker refuses a call to a classified
+upstream that names none. Use the id of the run whose model calls go through the gateway, so the label lands on
+the run that is judged. The broker replaces the handle with the key on the last hop and scopyx removes it at its
+door. An answer whose label the gateway did not take is withheld.
+
+**The scope rules are in the Secret now.** `TOKENFUSE_MCP_SECRET_SCOPES` moved from the broker's Deployment into
+`tokenfuse-mcp-broker-keys`, next to the keys it scopes, and the broker stops at start on a vault entry with no
+rule. A Secret minted by `--with-typed` carries the typryx rule. One made before this change has none: add it
+(the command is in the header of `52-tokenfuse-mcp-broker.yaml`) or the broker waits.
 
 ### The typed-answer plane
 
@@ -1002,10 +1091,10 @@ never see the witness key beside it, and each runs on the witness's node, becaus
 claim is ReadWriteOnce, as the record seal does. The wiring is two patches under
 `keyryx/` that the Keyryx install applies and `--without-keyryx` reverses; the default
 manifests do not change. Each reader reads the file only as a regular file, never
-through a link (heraldyx 0.8.1, pinned here, and the console from genaryx#134).
+through a link (heraldyx 0.9.0, pinned here, and the console from genaryx#134).
 heraldyx renders the seven `witness_*` types and mails the high ones. The console is pinned at
-`genaryx-console:v1.7.3`. Its v1.7.0 image was built from TAIPANBOX/genaryx#134, which reads
-`GENARYX_EVENTS_EXTRA` and turns a high finding into an incident.
+`genaryx-console:v1.7.5`, and from v1.7.0 the image reads `GENARYX_EVENTS_EXTRA` and turns a
+high finding into an incident (TAIPANBOX/genaryx#134).
 
 Not wired yet: vouchryx and tokenfuse (their Keyryx releases are not published
 yet, so their pins stay where they are) and trailryx (its next release is later).

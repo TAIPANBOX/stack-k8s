@@ -521,6 +521,9 @@ DOOR_TYPRYX="typryx-keys"
 DOOR_BROKER="tokenfuse-mcp-broker-keys"
 DOOR_KEY_ID="broker-caller"
 DOOR_SUBJECT="typed-broker"
+# The scope rule of typryx's key in the broker's vault. It is in the Secret beside the keys it scopes (G2.1): a rule for
+# scopyx's key names an agent, which the operator chooses, so the rules cannot be written in the manifest.
+DOOR_SCOPES="typryx_key=tools:ask|ask_freeform|list_questions"
 
 b64_() { printf '%s' "$1" | base64 | tr -d '\n'; }
 
@@ -553,6 +556,7 @@ door_secrets() {
 
   if [ "$have_t" = 1 ] && [ "$have_b" = 1 ]; then
     printf 'typed: the door: %s and %s already exist and are kept as they are.\n' "$DOOR_TYPRYX" "$DOOR_BROKER" >&2
+    printf '       A %s made before G2.1 has no TOKENFUSE_MCP_SECRET_SCOPES, and the broker stops at start on a vault entry with no rule. Add it (manifests/52-tokenfuse-mcp-broker.yaml, "What TOKENFUSE_MCP_SECRET_SCOPES buys").\n' "$DOOR_BROKER" >&2
   elif [ "$have_b" = 1 ]; then
     refuse "$DOOR_BROKER exists and $DOOR_TYPRYX does not. A new typryx key would not be the typryx_key the broker's vault already holds, so every call through the broker would be refused, and the door never overwrites a Secret that exists. Create $DOOR_TYPRYX with the bearer that vault holds (manifests/51-typryx.yaml's header shows the command), or delete $DOOR_BROKER so both are minted, then run this again."
   elif [ "$have_t" = 1 ]; then
@@ -564,7 +568,7 @@ door_secrets() {
     fi
     broker_key="$(gen 40)" || refuse "could not mint the broker's key"
     door_secret "$DOOR_BROKER" tokenfuse-mcp-broker \
-      "TOKENFUSE_MCP_KEYS=$broker_key:$DOOR_KEY_ID" "TOKENFUSE_MCP_SECRETS=typryx_key=$bearer"
+      "TOKENFUSE_MCP_KEYS=$broker_key:$DOOR_KEY_ID" "TOKENFUSE_MCP_SECRETS=typryx_key=$bearer" "TOKENFUSE_MCP_SECRET_SCOPES=$DOOR_SCOPES"
     made="$DOOR_BROKER, its vault carrying the bearer of the $DOOR_TYPRYX that was already there, which is kept"
   else
     bearer="$(gen 40)" || refuse "could not mint typryx's key"
@@ -573,7 +577,7 @@ door_secrets() {
     door_secret "$DOOR_TYPRYX" typryx "TYPRYX_KEYS=$bearer=agent://$domain/$DOOR_SUBJECT"
     printf -- '---\n'
     door_secret "$DOOR_BROKER" tokenfuse-mcp-broker \
-      "TOKENFUSE_MCP_KEYS=$broker_key:$DOOR_KEY_ID" "TOKENFUSE_MCP_SECRETS=typryx_key=$bearer"
+      "TOKENFUSE_MCP_KEYS=$broker_key:$DOOR_KEY_ID" "TOKENFUSE_MCP_SECRETS=typryx_key=$bearer" "TOKENFUSE_MCP_SECRET_SCOPES=$DOOR_SCOPES"
     made="$DOOR_TYPRYX (identity agent://$domain/$DOOR_SUBJECT) and $DOOR_BROKER, the broker's vault carrying typryx's bearer"
   fi
   bearer=""; broker_key=""; spec=""; given=""

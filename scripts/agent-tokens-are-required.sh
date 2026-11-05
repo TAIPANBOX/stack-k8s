@@ -165,8 +165,9 @@ for doc in re.split(r"(?m)^---\s*$", live(net)):
         net_docs[nm.group(1)] = doc
 agent_net = "\n".join(d for n, d in net_docs.items() if n != BROKER_DOC)
 egress_targets = re.findall(r"app:\s*(\S+?)\s*\}", agent_net)
-if set(egress_targets) != {"tokenfuse-gateway", "vouchryx"}:
-    fail(f"{NET} selects {sorted(set(egress_targets))} as agent-pod peers, not exactly vouchryx and the gateway")
+# vouchryx, the gateway, and (G2.1, invariant 78) the MCP broker, where an agent reads the web.
+if set(egress_targets) != {"tokenfuse-gateway", "vouchryx", "tokenfuse-mcp-broker"}:
+    fail(f"{NET} selects {sorted(set(egress_targets))} as agent-pod peers, not exactly vouchryx, the gateway and the MCP broker")
 
 # 4b. the broker's own door into the gateway: its tool-call check (CLAUDE.md invariant 51) is a call from the
 #     MCP broker to the gateway's /v1/fuse/check-tool-call. The gateway's Ingress is restricted by this file

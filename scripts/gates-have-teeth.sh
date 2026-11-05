@@ -353,7 +353,7 @@ else:
 # with nothing noticing. Same fault, same gate, the other file it now reads.
 run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
 	'./scripts/pinned-images.sh' \
-	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.7.3@sha256:0db4758c9f3dd2231184063af4f80bce491480f6d7238c02bcbac83abb8d708a", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.7.5@sha256:d68952a3523e517b25bdec39e8515d107e72c009a3dfc89712d09a923f323da5", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
 	"moves: a pod can come back different"
 
 # The default apply set must not publish anything to the world, and must not
@@ -774,7 +774,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.3@sha256:2b82c87733a8165922f8f6c737a1d19bc0e0156335e88db6c190b17cc2a4a484\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.21.0@sha256:5cc6484d20249df3e57db34d19eea5b75c54c64bd9b9dab968136e988374ab2c\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 # The gateway's declassify key (invariant 27). POST /v1/fuse/declassify lifts a
@@ -834,7 +834,7 @@ run_case "declassify-is-keyed: an installer never gives an existing Secret the k
 # Each must say it measured nothing, never OK.
 run_case "declassify-is-keyed: no gateway container left to judge" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.3@sha256:2b82c87733a8165922f8f6c737a1d19bc0e0156335e88db6c190b17cc2a4a484\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.21.0@sha256:5cc6484d20249df3e57db34d19eea5b75c54c64bd9b9dab968136e988374ab2c\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the declassify key"
 
 run_case "declassify-is-keyed: no installer left to read" fail \
@@ -1208,7 +1208,7 @@ run_case "agent-tokens-are-required: the gateway drops the governed profile" fai
 
 run_case "agent-tokens-are-required: the gateway runs a tokenfuse that predates the governed profile" fail \
 	"$AGT" \
-	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.20\.3@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
+	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.21\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
 	"predates the governed profile and the static-key list"
 
 TEETH_EDIT_27="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"\" }")')"
@@ -1313,6 +1313,114 @@ run_case "agent-tokens-are-required: a comment naming the old switch in the gate
 run_case "agent-tokens-are-required: the example agent is no longer a file" fail \
 	"$AGT" \
 	"$(py 'import os; os.remove("agent-tokens/example-agent.yaml")')" \
+	"measured nothing"
+
+# The NetworkPolicy's stated boundary (CLAUDE.md invariant 77): the header of 30 and the README say which side of the
+# line the policy sits on, and what they say is the label, the ports and the files the cluster has. Each fault below is
+# one the gate names; the three pass cases are harmless changes it must not catch.
+NPB=./scripts/network-policy-names-its-boundary.sh
+
+run_case "network-policy-names-its-boundary: the header drops the boundary paragraph" fail \
+	"$NPB" \
+	"$(py 'edit("manifests/30-network-policy.yaml", "WHICH SIDE OF THE LINE THIS POLICY SITS ON", "WHICH SIDE")')" \
+	"the header does not say 'WHICH SIDE OF THE LINE THIS POLICY SITS ON'"
+
+run_case "network-policy-names-its-boundary: the old claim comes back into the header" fail \
+	"$NPB" \
+	"$(py 'edit("manifests/30-network-policy.yaml", "# Default-deny, then exactly the paths the stack actually uses.\n#\n", "# Default-deny, then exactly the paths the stack actually uses: the rule, enforced per packet.\n#\n")')" \
+	"carries the old claim 'enforced per packet'"
+
+run_case "network-policy-names-its-boundary: a harmless comment in the header is not a fault" pass \
+	"$NPB" \
+	"$(py 'edit("manifests/30-network-policy.yaml", "# Default-deny, then exactly the paths the stack actually uses.\n#\n", "# Default-deny, then exactly the paths the stack actually uses.\n# (A harmless added line that states nothing.)\n#\n")')"
+
+run_case "network-policy-names-its-boundary: the README section is gone" fail \
+	"$NPB" \
+	"$(py 'edit("README.md", "### What the NetworkPolicy confines, and where your agents run", "### Something else")')" \
+	"has no section 'What the NetworkPolicy confines, and where your agents run'"
+
+run_case "network-policy-names-its-boundary: the README drops the overlay" fail \
+	"$NPB" \
+	"$(py 'p = "README.md"; s = open(p).read(); assert "agent-tokens/confined-agent" in s; open(p, "w").write(s.replace("agent-tokens/confined-agent", "the overlay"))')" \
+	"does not say 'agent-tokens/confined-agent'"
+
+run_case "network-policy-names-its-boundary: the README states another port than 58 opens" fail \
+	"$NPB" \
+	"$(py 'import re; p = "README.md"; s = open(p).read(); i = s.index("### What the NetworkPolicy confines, and where your agents run"); j = s.index("\n### ", i + 10); sec = s[i:j]; assert "4310" in sec; open(p, "w").write(s[:i] + sec.replace("4310", "4311") + s[j:])')" \
+	"does not state vouchryx on port 4310"
+
+run_case "network-policy-names-its-boundary: the README names a file that does not exist" fail \
+	"$NPB" \
+	"$(py 'p = "README.md"; s = open(p).read(); assert "evidence/agent-confinement-k3d" in s; open(p, "w").write(s.replace("evidence/agent-confinement-k3d", "evidence/agent-confinement-kind"))')" \
+	"which does not exist"
+
+run_case "network-policy-names-its-boundary: another sentence in the README section is not a fault" pass \
+	"$NPB" \
+	"$(py 'edit("README.md", "### What the NetworkPolicy confines, and where your agents run\n", "### What the NetworkPolicy confines, and where your agents run\n\nA harmless added sentence that states nothing about the policy.\n")')"
+
+run_case "network-policy-names-its-boundary: 58 selects a renamed label" fail \
+	"$NPB" \
+	"$(py 'p = "manifests/58-agent-tokens-network.yaml"; s = open(p).read(); assert "taipanbox.dev/agent-token: \"true\"" in s; open(p, "w").write(s.replace("taipanbox.dev/agent-token: \"true\"", "taipanbox.dev/agent-tokens: \"true\""))')" \
+	"names a label taipanbox.dev/agent-token that manifests/58-agent-tokens-network.yaml does not select"
+
+run_case "network-policy-names-its-boundary: the overlay's pod loses the label" fail \
+	"$NPB" \
+	"$(py 'edit("agent-tokens/confined-agent/agent.yaml", "labels: \x7b app: agent-confined, taipanbox.dev/agent-token: \"true\" \x7d", "labels: \x7b app: agent-confined \x7d")')" \
+	"does not carry taipanbox.dev/agent-token=true"
+
+run_case "network-policy-names-its-boundary: the example pod carries another label" fail \
+	"$NPB" \
+	"$(py 'edit("agent-tokens/example-agent.yaml", "taipanbox.dev/agent-token: \"true\"", "taipanbox.dev/agent-tokn: \"true\"")')" \
+	"does not carry taipanbox.dev/agent-token=true"
+
+run_case "network-policy-names-its-boundary: the README names another label" fail \
+	"$NPB" \
+	"$(py 'p = "README.md"; s = open(p).read(); assert "taipanbox.dev/agent-token=true" in s; open(p, "w").write(s.replace("taipanbox.dev/agent-token=true", "taipanbox.dev/agent-tokn=true"))')" \
+	"names a label taipanbox.dev/agent-tokn"
+
+run_case "network-policy-names-its-boundary: the proof script names another label" fail \
+	"$NPB" \
+	"$(py 'p = "agent-tokens/confine-check.sh"; s = open(p).read(); assert "carry taipanbox.dev/agent-token=true" in s; open(p, "w").write(s.replace("carry taipanbox.dev/agent-token=true", "carry taipanbox.dev/agent-tokn=true"))')" \
+	"confine-check.sh names a label taipanbox.dev/agent-tokn"
+
+run_case "network-policy-names-its-boundary: 58 opens a path the proof script does not probe" fail \
+	"$NPB" \
+	"$(py 'edit("manifests/58-agent-tokens-network.yaml", "    - to:\n        - podSelector: \x7b matchLabels: \x7b app: tokenfuse-gateway \x7d \x7d\n", "    - to:\n        - podSelector: \x7b matchLabels: \x7b app: wardryx \x7d \x7d\n      ports:\n        - \x7b protocol: TCP, port: 8090 \x7d\n    - to:\n        - podSelector: \x7b matchLabels: \x7b app: tokenfuse-gateway \x7d \x7d\n")')" \
+	"has no open row for wardryx:8090"
+
+run_case "network-policy-names-its-boundary: the proof script drops the gateway row" fail \
+	"$NPB" \
+	"$(py 'edit("agent-tokens/confine-check.sh", "expect agent \"\x24NS\" \"\x24AGENT_POD\" tokenfuse-gateway 4100 open\n", "")')" \
+	"has no open row for tokenfuse-gateway:4100"
+
+run_case "network-policy-names-its-boundary: the overlay is added to the default apply set" fail \
+	"$NPB" \
+	"$(py 'edit("manifests/kustomization.yaml", "  - 58-agent-tokens-network.yaml\n", "  - 58-agent-tokens-network.yaml\n  - ../agent-tokens/confined-agent\n")')" \
+	"is in manifests/kustomization.yaml"
+
+run_case "network-policy-names-its-boundary: a launcher applies the overlay" fail \
+	"$NPB" \
+	"$(py 'p = "deploy.sh"; s = open(p).read(); open(p, "w").write(s + "\nkubectl apply -k agent-tokens/confined-agent\n")')" \
+	"applies or names agent-tokens/confined-agent"
+
+run_case "network-policy-names-its-boundary: the cited run recorded a failure" fail \
+	"$NPB" \
+	"$(py 'edit("evidence/agent-confinement-k3d/output-enforcing.txt", "RUN_EXIT=0", "RUN_EXIT=1")')" \
+	"does not end with RUN_EXIT=0"
+
+run_case "network-policy-names-its-boundary: the cited run is gone" fail \
+	"$NPB" \
+	"$(py 'import os; os.remove("evidence/agent-confinement-k3d/output-enforcing.txt")')" \
+	"output-enforcing.txt is missing"
+
+run_case "network-policy-names-its-boundary: the agent-pod network is gone" fail \
+	"$NPB" \
+	"$(py 'import os; os.remove("manifests/58-agent-tokens-network.yaml")')" \
+	"measured nothing"
+
+run_case "network-policy-names-its-boundary: the overlay is gone" fail \
+	"$NPB" \
+	"$(py 'import shutil; shutil.rmtree("agent-tokens/confined-agent")')" \
 	"measured nothing"
 
 # Static client keys (CLAUDE.md invariant 62): admitted only from the named lists, each with a reason, each
@@ -1725,7 +1833,7 @@ run_case "run-budget-ceiling-is-set: a comment next to the ceiling changes" pass
 	'./scripts/run-budget-ceiling-is-set.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "# The operator\x27s ceiling on a run\x27s budget (tokenfuse v1.5.0,", "# The operator\x27s ceiling on the budget of a run (tokenfuse v1.5.0,")')"
 
-TEETH_EDIT_68="$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.3@sha256:2b82c87733a8165922f8f6c737a1d19bc0e0156335e88db6c190b17cc2a4a484\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')"
+TEETH_EDIT_68="$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.21.0@sha256:5cc6484d20249df3e57db34d19eea5b75c54c64bd9b9dab968136e988374ab2c\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')"
 run_case "run-budget-ceiling-is-set: no gateway container left to judge" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
 	"$TEETH_EDIT_68" \
@@ -2190,8 +2298,8 @@ run_case "temp: the console's temp is mounted read-only" fail \
 
 run_case "temp: no container left that needs a temp" fail \
 	'./scripts/read-only-root-has-a-temp.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.10.0", "image: registry.invalid/costcrew:v0.6.0")
-edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.10.0", "image: registry.invalid/costcrew:v0.6.0")')" \
+	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.10.1", "image: registry.invalid/costcrew:v0.6.0")
+edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.10.1", "image: registry.invalid/costcrew:v0.6.0")')" \
 	"measured NOTHING"
 
 run_case "temp: TMPDIR inside the data volume instead of a /tmp mount" pass \
@@ -2926,8 +3034,8 @@ run_case "wardryx-key-is-pep: the migration writes the key on the command line" 
 
 run_case "wardryx-key-is-pep: a pin moves back to the old wardryx" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.4.1", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
-	"does not pin wardryx v2.4.1"
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.5.1", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
+	"does not pin wardryx v2.5.1"
 
 run_case "wardryx-key-is-pep: a reworded comment is not a fault" pass \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
@@ -3288,7 +3396,7 @@ run_case "broker-blocks-raw-secrets: the broker cannot reach wardryx" fail \
 
 run_case "broker-blocks-raw-secrets: the broker image cannot be pulled" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.20.3@sha256:2b82c87733a8165922f8f6c737a1d19bc0e0156335e88db6c190b17cc2a4a484\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.21.0@sha256:5cc6484d20249df3e57db34d19eea5b75c54c64bd9b9dab968136e988374ab2c\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
 	"could not pull ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag"
 
 run_case "broker-blocks-raw-secrets: no broker left to judge" fail \
@@ -3624,7 +3732,7 @@ run_case "bus-names: the witness's findings file loses its keyryx stem" fail \
 	"is named for no source heraldyx reads from it"
 run_case "bus-names: the heraldyx pin goes back before the findings are read safely" fail \
 	'./scripts/bus-names-match-the-source-rule.sh' \
-	"$(py 'edit("manifests/45-heraldyx.yaml", "ghcr.io/taipanbox/heraldyx:v0.8.2@", "ghcr.io/taipanbox/heraldyx:v0.8.0@")')" \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "ghcr.io/taipanbox/heraldyx:v0.9.0@", "ghcr.io/taipanbox/heraldyx:v0.8.0@")')" \
 	"older than v0.8.1"
 run_case "stream-files-are-precreated: the witness's findings file is not made before it starts" fail \
 	'./scripts/stream-files-are-precreated.sh' \
@@ -3660,7 +3768,7 @@ run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)"
 # edits one tracked file the gate reads; the gate's own baseline must be green first.
 run_case "verified-images: a TAIPANBOX image carries a tag only" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.7.3@sha256:0db4758c9f3dd2231184063af4f80bce491480f6d7238c02bcbac83abb8d708a", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.7.5@sha256:d68952a3523e517b25bdec39e8515d107e72c009a3dfc89712d09a923f323da5", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
 	"image not pinned by digest"
 run_case "verified-images: an upstream image nobody allowed" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -3745,7 +3853,7 @@ run_case "verified-images: a policy's glob moved onto another repository's image
 	"covered by two policies"
 run_case "verified-images: a manifest names a TAIPANBOX image with no signer row" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.4.1@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.4.1@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.5.1@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.5.0@sha256:")')" \
 	"has no signer row in BINDINGS"
 run_case "verified-images: the default install stops turning admission on" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -3851,7 +3959,7 @@ run_case "keyryx: the custody policy grants trailryx nothing" fail \
 	"does not grant trailryx-node the sign operation"
 run_case "keyryx: the wardryx patch rolls wardryx back to v2.3.0" fail \
 	'./scripts/keyryx-is-default.sh' \
-	"$(py 'edit("keyryx/wardryx-patch.yaml", "ghcr.io/taipanbox/wardryx:v2.4.1@sha256:a7ef8e2df49c96eee39094451094f825aa46abb519955c8f0f2a0ffc33dde4dc", "ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543")')" \
+	"$(py 'edit("keyryx/wardryx-patch.yaml", "ghcr.io/taipanbox/wardryx:v2.5.1@sha256:2d3c0c9c0798156d3f05b82d0e63cf5b38ee4b9875d6bdbac1829f219c26abf7", "ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543")')" \
 	"would roll wardryx back"
 run_case "keyryx: the witness is pointed at no stream directory" fail \
 	'./scripts/keyryx-is-default.sh' \
@@ -3962,7 +4070,7 @@ run_case "approver: wardryx reads the JWK set from another file" fail \
 	"but the JWK set is mounted at"
 run_case "approver: the console is left on v1.1.48 while wardryx reads the JWK set" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "genaryx-console:v1.7.3@sha256:0db4758c9f3dd2231184063af4f80bce491480f6d7238c02bcbac83abb8d708a", "genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
+	"$(py 'edit("manifests/20-console.yaml", "genaryx-console:v1.7.5@sha256:d68952a3523e517b25bdec39e8515d107e72c009a3dfc89712d09a923f323da5", "genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
 	"every approval would be refused"
 run_case "approver: a TODO is left in place after the wiring" fail \
 	'./scripts/approver-key-is-minted.sh' \
@@ -3982,7 +4090,7 @@ run_case "approver: WARDRYX_ALLOW_KEY_APPROVALS is set on wardryx" fail \
 	"sets WARDRYX_ALLOW_KEY_APPROVALS"
 run_case "approver: wardryx is pinned before the approver statements" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.4.1@sha256:", "wardryx:v2.3.0@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.5.1@sha256:", "wardryx:v2.3.0@sha256:")')" \
 	"before the approver statements"
 run_case "approver: the mint rewrites a kept pair" fail \
 	'./scripts/approver-key-is-minted.sh' \
@@ -4009,14 +4117,14 @@ run_case "add-site: a comment reworded beside the reader (must pass)" pass \
 	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
 	"$(py 'edit("hub/add-site.sh", "# The manifests pin the image as name:tag@sha256", "# The manifests pin the image, as name:tag@sha256")')"
 
-# tokenfuse v1.20.3 is pinned by digest; each tokenfuse door names only its own two origins, and wardryx's agent-token door names their union (CLAUDE.md invariant 74).
+# tokenfuse v1.21.0 is pinned by digest; each tokenfuse door names only its own two origins, and wardryx's agent-token door names their union (CLAUDE.md invariant 74).
 run_case "tokenfuse-door-origins: the gateway is left on tokenfuse v1.20.2" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
-	"$(py 'p = "manifests/10-planes.yaml"; s = open(p).read(); s = s.replace("tokenfuse:v1.20.3@sha256:2b82", "tokenfuse:v1.20.2@sha256:2b82", 1); open(p, "w").write(s)')" \
+	"$(py 'p = "manifests/10-planes.yaml"; s = open(p).read(); s = s.replace("tokenfuse:v1.21.0@sha256:5cc6", "tokenfuse:v1.20.3@sha256:5cc6", 1); open(p, "w").write(s)')" \
 	"is not the release pin"
 run_case "tokenfuse-door-origins: the control plane digest is not the release pin" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "64b9476edeced2c4436d4a5f5bfcbb78b0217f1d85c75af4ec045e21475fe07e", "64b9476edeced2c4436d4a5f5bfcbb78b0217f1d85c75af4ec045e21475fe07f")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "3f3b9831ec1c222d776ebfbf706e207a098aff80e550494f4c78b52c1784ed8d", "3f3b9831ec1c222d776ebfbf706e207a098aff80e550494f4c78b52c1784ed8e")')" \
 	"is not the release pin"
 run_case "tokenfuse-door-origins: the gateway's list names the broker's origin" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
@@ -4152,6 +4260,47 @@ run_case "workflow-checkouts: the env block that holds the commits is taken away
 run_case "workflow-checkouts: a comment reworded in the workflow (must pass)" pass \
 	'./scripts/workflow-checkouts-are-pinned.sh' \
 	"$(py 'edit(".github/workflows/console-image.yml", "# The commits this image is built from, in one place", "# The commits this image is built from, pinned in one place")')"
+
+# The console's two proof engines are the stack's own, digest for digest (CLAUDE.md invariant 79).
+run_case "console-engines: the console's wardryx differs from the stack's" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("images/console.Dockerfile", "wardryx:v2.5.1@sha256:2d3c0c9c", "wardryx:v2.5.1@sha256:2d3c0c9d")')" \
+	"differs from the stack's"
+run_case "console-engines: the console's tokenfuse is an older tag than the stack's" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("images/console.Dockerfile", "tokenfuse:v1.21.0@sha256:5cc6", "tokenfuse:v1.20.3@sha256:5cc6")')" \
+	"differs from the stack's"
+run_case "console-engines: the manifests name two tokenfuse digests" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "ghcr.io/taipanbox/tokenfuse:v1.21.0@sha256:5cc6484d", "ghcr.io/taipanbox/tokenfuse:v1.21.0@sha256:5cc6484e")')" \
+	"names 2 different tokenfuse references"
+run_case "console-engines: an engine stage is named something the copy does not look for" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("images/console.Dockerfile", " AS tokenfuse-engine", " AS other")')" \
+	"is named 'other'"
+run_case "console-engines: the wardryx binary is no longer copied" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("images/console.Dockerfile", "COPY --from=wardryx-engine /usr/local/bin/service /usr/local/bin/wardryx\n", "")')" \
+	"does not copy the binary out of the wardryx-engine stage"
+run_case "console-engines: the tokenfuse label is gone" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("images/console.Dockerfile", "dev.taipanbox.engine.tokenfuse", "dev.taipanbox.engine.tokenfusx")')" \
+	"has no dev.taipanbox.engine.tokenfuse label"
+run_case "console-engines: a smoke loop stops running wardryx" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "verdryx wardryx \"tokenfuse constants\" genaryx-web; do", "verdryx \"tokenfuse constants\" genaryx-web; do")')" \
+	"does not run wardryx"
+run_case "console-engines: a smoke loop runs tokenfuse with no argument, which starts the gateway" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit(".github/workflows/console-image.yml", "wardryx \"tokenfuse constants\" genaryx-web; do", "wardryx tokenfuse genaryx-web; do")')" \
+	"does not run tokenfuse"
+run_case "console-engines: no engine stage at all measures nothing" fail \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'p = "images/console.Dockerfile"; s = open(p).read(); open(p, "w").write("\n".join(l for l in s.split("\n") if not l.startswith("FROM ghcr.io/taipanbox/")))')" \
+	"this measured NOTHING"
+run_case "console-engines: a comment reworded in the Dockerfile (must pass)" pass \
+	'./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("images/console.Dockerfile", "# --- the two engines the console\x27s proofs run", "# --- the two engines that the console\x27s proofs run")')"
 
 # The CostCrew run ceiling and the crew's schedule (CLAUDE.md invariant 66). No default ships, the
 # figure is validated before anything is installed, and the crew CronJob is suspended until an operator resumes it.
@@ -4596,6 +4745,103 @@ run_case "hostkeys-are-verified: the option named in a prose note is not a scrip
 	"$(py 'open("GOTCHAS.md", "a").write("\nNote: StrictHostKeyChecking=" + "no was the old setting of the image distribution.\n")')"
 
 # A listing is not a run. Stop before the verdict, which would count cases this
+# ---- scopyx-reads-go-through-the-broker (CLAUDE.md invariant 78, G2.1) ----
+# A read of the web passes the MCP broker, which labels the run from the act, and nothing else reaches scopyx.
+G21='./scripts/scopyx-reads-go-through-the-broker.sh'
+
+run_case "scopyx-broker: the broker's upstream list loses scopyx" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "value: \"typryx=http://typryx:4320/mcp,scopyx=http://scopyx:4300\"", "value: \"typryx=http://typryx:4320/mcp\"")')" \
+	"does not name scopyx=http://scopyx:4300"
+
+run_case "scopyx-broker: the broker stops labelling scopyx" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - { name: TOKENFUSE_MCP_UPSTREAM_LABELS, value: \"scopyx=web\" }\n", "")')" \
+	"TOKENFUSE_MCP_UPSTREAM_LABELS is not exactly scopyx=web"
+
+run_case "scopyx-broker: scopyx is labelled as something else" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "value: \"scopyx=web\"", "value: \"scopyx=search\"")')" \
+	"TOKENFUSE_MCP_UPSTREAM_LABELS is not exactly scopyx=web"
+
+run_case "scopyx-broker: the broker loses its taint gateway" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "name: TOKENFUSE_MCP_TAINT_GATEWAY, value: \"http://tokenfuse-gateway:4100\"", "name: TOKENFUSE_MCP_TAINT_GATEWAY, value: \"\"")')" \
+	"exits 2 on a classification with no taint gateway"
+
+run_case "scopyx-broker: a vault entry with no rule no longer stops the broker" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_MCP_REQUIRE_SECRET_SCOPES, value: \"1\"", "TOKENFUSE_MCP_REQUIRE_SECRET_SCOPES, value: \"0\"")')" \
+	"TOKENFUSE_MCP_REQUIRE_SECRET_SCOPES is not 1"
+
+run_case "scopyx-broker: the scopes are an env value of the Deployment again" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - { name: TOKENFUSE_MCP_REQUIRE_SECRET_SCOPES, value: \"1\" }\n", "            - { name: TOKENFUSE_MCP_REQUIRE_SECRET_SCOPES, value: \"1\" }\n            - { name: TOKENFUSE_MCP_SECRET_SCOPES, value: \"typryx_key=tools:ask\" }\n")')" \
+	"shadows the Secret"
+
+run_case "scopyx-broker: the broker cannot reach scopyx" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "  name: broker-egress-scopyx\n", "  name: broker-egress-nothing\n")')" \
+	"no NetworkPolicy broker-egress-scopyx"
+
+run_case "scopyx-broker: the broker reaches scopyx on another port" fail \
+	"$G21" \
+	"$(py 'import re
+p = "manifests/52-tokenfuse-mcp-broker.yaml"; s = open(p).read()
+i = s.index("  name: broker-egress-scopyx\n"); j = s.index("port: 4300", i)
+open(p, "w").write(s[:j] + "port: 4301" + s[j + len("port: 4300"):])')" \
+	"not scopyx on 4300 alone"
+
+run_case "scopyx-broker: scopyx stops taking the key in the call" fail \
+	"$G21" \
+	"$(py 'edit("manifests/47-scopyx.yaml", "            - { name: SCOPYX_ACCEPT_KEY_IN_META, value: \"1\" }\n", "")')" \
+	"manifests/47: scopyx does not take the key in params._meta"
+
+run_case "scopyx-broker: the browser stops taking the key in the call" fail \
+	"$G21" \
+	"$(py 'edit("manifests/48-scopyx-browser.yaml", "            - { name: SCOPYX_ACCEPT_KEY_IN_META, value: \"1\" }\n", "")')" \
+	"manifests/48: scopyx does not take the key in params._meta"
+
+run_case "scopyx-broker: the money plane reaches scopyx again" fail \
+	"$G21" \
+	"$(py 'edit("manifests/47-scopyx.yaml", "        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }\n      ports:\n        - { protocol: TCP, port: 4300 }", "        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }\n        - podSelector: { matchLabels: { plane: money } }\n      ports:\n        - { protocol: TCP, port: 4300 }")')" \
+	"not the MCP broker alone"
+
+run_case "scopyx-broker: the console reaches scopyx again" fail \
+	"$G21" \
+	"$(py 'edit("manifests/47-scopyx.yaml", "        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }\n      ports:\n        - { protocol: TCP, port: 4300 }", "        - podSelector: { matchLabels: { plane: console } }\n      ports:\n        - { protocol: TCP, port: 4300 }")')" \
+	"not the MCP broker alone"
+
+run_case "scopyx-broker: an agent pod cannot reach the broker" fail \
+	"$G21" \
+	"$(py 'edit("manifests/58-agent-tokens-network.yaml", "        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }\n      ports:\n        - { protocol: TCP, port: 4200 }\n---\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: vouchryx-ingress-agent-token-pods", "        - podSelector: { matchLabels: { app: tokenfuse-gateway } }\n      ports:\n        - { protocol: TCP, port: 4100 }\n---\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: vouchryx-ingress-agent-token-pods")')" \
+	"does not let an agent pod reach the broker on 4200"
+
+run_case "scopyx-broker: the broker does not admit an agent pod" fail \
+	"$G21" \
+	"$(py 'edit("manifests/58-agent-tokens-network.yaml", "  name: broker-ingress-agent-token-pods\n", "  name: broker-ingress-nobody\n")')" \
+	"no NetworkPolicy broker-ingress-agent-token-pods"
+
+run_case "scopyx-broker: another policy lets a pod reach scopyx" fail \
+	"$G21" \
+	"$(py 'p = "manifests/30-network-policy.yaml"; s = open(p).read(); open(p, "w").write(s + "\n---\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: probe-to-scopyx\n  namespace: agent-stack\nspec:\n  podSelector: { matchLabels: { app: some-agent } }\n  policyTypes: [\"Egress\"]\n  egress:\n    - to:\n        - podSelector: { matchLabels: { app: scopyx } }\n      ports:\n        - { protocol: TCP, port: 4300 }\n")')" \
+	"only the broker may"
+
+run_case "scopyx-broker: the broker is gone, so nothing was measured" fail \
+	"$G21" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "kind: Deployment\nmetadata:\n  name: tokenfuse-mcp-broker\n", "kind: Deployment\nmetadata:\n  name: tokenfuse-mcp-gone\n")')" \
+	"measured NOTHING"
+
+run_case "scopyx-broker: a reworded comment is not a fault" pass \
+	"$G21" \
+	"$(py 'edit("manifests/47-scopyx.yaml", "# The MCP broker, and nothing else (G2.1).", "# The MCP broker alone (G2.1).")')" \
+	""
+
+run_case "typed-door-is-minted: the broker Secret made with no scope rule" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("typed/mode.sh", "\"TOKENFUSE_MCP_SECRETS=typryx_key=$bearer\" \"TOKENFUSE_MCP_SECRET_SCOPES=$DOOR_SCOPES\"\n    made=\"$DOOR_TYPRYX (identity", "\"TOKENFUSE_MCP_SECRETS=typryx_key=$bearer\"\n    made=\"$DOOR_TYPRYX (identity")')" \
+	"tokenfuse-mcp-broker-keys carries"
+
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then
 	exit 0

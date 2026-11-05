@@ -1,12 +1,36 @@
-# Default-deny, then exactly the paths the stack actually uses. This is the
-# governance story told at the network layer: the same "an agent may do only
-# what it was granted" rule the PDP enforces per call, enforced per packet.
+# Default-deny, then exactly the paths the stack actually uses.
 #
-# Requires a CNI that implements NetworkPolicy. k3s ships Flannel, which does
-# NOT, so a k3s cluster needs `--flannel-backend=none` with Calico or Cilium,
-# or these objects are accepted by the API server and quietly enforce nothing.
-# Said out loud because a policy that silently does nothing is worse than no
-# policy at all.
+# WHICH SIDE OF THE LINE THIS POLICY SITS ON (CLAUDE.md invariant 77)
+#
+# Every object in this file is a NetworkPolicy in the `agent-stack` namespace, so it
+# governs the pods of that namespace and of no other. That namespace holds the stack's
+# own planes (money, policy, identity, console, the policy store) and no agent workload.
+# The agents a customer runs are NOT in it: they run on the customer's own machines, in
+# other namespaces or in other clusters, and nothing in this file confines them. What
+# stands between such an agent and the stack is the door it has to pass, an agent token
+# at the gateway and the MCP broker (invariant 54): a check on each call, not a packet
+# filter. The per-call rule the policy plane enforces and this per-pod rule are two
+# layers, and only the second one is written here.
+#
+# What this file does confine is the stack itself. The planes reach each other only by
+# the paths below, a pod of another namespace reaches none of them because nothing here
+# admits it, and the gateway is the one pod of the default install allowed out to the
+# internet, on 443.
+#
+# An agent the operator chooses to run INSIDE this cluster can be put under a policy
+# written for it. Put it in `agent-stack` and label it taipanbox.dev/agent-token=true:
+# manifests/58-agent-tokens-network.yaml then leaves it DNS, vouchryx and the gateway
+# and nothing else. agent-tokens/confined-agent is the optional overlay that does it,
+# and agent-tokens/confine-check.sh proves it on a live cluster. A pod of `agent-stack`
+# with no label gets default-deny and DNS only; a pod of any other namespace gets nothing
+# from this file.
+#
+# Requires something that implements NetworkPolicy. The installers here run k3s with
+# Calico; k3s's own embedded policy controller enforced these objects too on k3d
+# (evidence/agent-confinement-k3d/). Where nothing enforces them the API server accepts
+# the objects and they quietly enforce nothing, and agent-tokens/confine-check.sh goes
+# red there (measured in the same directory). Said out loud because a policy that
+# silently does nothing is worse than no policy at all.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -134,10 +158,11 @@ spec:
       ports:
         - { protocol: TCP, port: 7420 }
 ---
-# The gateway is the ONLY pod allowed out of the cluster, and only on 443:
-# it is the metered path to the model provider. Everything else is sealed in,
-# which is what makes "no prompt leaves without being metered" a property of
-# the deployment rather than a promise in a README.
+# In the default install the gateway is the ONLY pod of this namespace allowed out
+# of the cluster, and only on 443: it is the metered path to the model provider.
+# Everything else in the namespace is sealed in, which makes "no prompt leaves
+# without being metered" a property of the deployment for the pods in it rather than
+# a promise in a README. An agent that runs outside the namespace is not one of them.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

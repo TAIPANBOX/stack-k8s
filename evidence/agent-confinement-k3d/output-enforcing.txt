@@ -1,0 +1,320 @@
+
+== tools
+k3d version v5.9.0
+k3s version v1.35.5-k3s1 (default)
+Client Version: v1.37.2
+Kustomize Version: v5.8.1
+docker server 26.1.5+dfsg1
+
+== files under test (sha256: compare with git show <commit>:<path> | sha256sum)
+41436d775e09f5fa14e784ca7ff0b47eecb8a17061547edc0c77a3d5ec586f57  manifests/30-network-policy.yaml
+9242bb39e30298f99ef2fc023d83feae200774c1ef674618ae30d080977eedce  manifests/58-agent-tokens-network.yaml
+031834c815e2f21905e58d58c9aa0a43aa01df5b7cab71c6d58f7000682670d2  agent-tokens/confine-check.sh
+645c3b6277d1d810411824f6f69042c4b7adca09f4c6291e1f3297d1a6f1d878  agent-tokens/confined-agent/agent.yaml
+e207a37f5992066dfff93ce1b988b56bd04172d5cc0ba0b03c0950526a95b4f1  agent-tokens/confined-agent/kustomization.yaml
+c1eb5b81fd0a88505e66fcd09795bade73e0eb2ad6114666c47ba61f786cefc2  evidence/agent-confinement-k3d/run.sh
+ba0ffeaf1f09aed76690babcbc3988fcb18385b33435ec19a7047fa4911dee5a  evidence/agent-confinement-k3d/standins.py
+
+== cluster g23-confine (k3d, one server, no load balancer, API on 127.0.0.1:6551, its own kubeconfig)
+NAME                       STATUS   ROLES           AGE   VERSION        INTERNAL-IP     EXTERNAL-IP   OS-IMAGE           KERNEL-VERSION         CONTAINER-RUNTIME
+k3d-g23-confine-server-0   Ready    control-plane   2s    v1.35.5+k3s1   192.168.176.2   <none>        K3s v1.35.5+k3s1   6.12.107+deb13-amd64   containerd://2.2.3-k3s1
+Waiting for deployment "coredns" rollout to finish: 0 of 1 updated replicas are available...
+deployment "coredns" successfully rolled out
+
+== namespace agent-stack, as manifests/00-base.yaml declares it (Pod Security restricted)
+namespace/agent-stack created
+
+== the rendered default apply set, converted to JSON (kubectl kustomize manifests/)
+20 NetworkPolicy objects in the default apply set: agent-token-pods-egress, allow-dns, broker-egress-vouchryx, console-egress, console-egress-vouchryx, console-ingress-lb, default-deny, drills-egress-gateway, gateway-egress-internet, gateway-egress-vouchryx, gateway-ingress-agent-token-pods, gateway-ingress-costcrew, gateway-ingress-drills, gateway-ingress-mcp-broker, planes-ingress, policy-stE1104 12:04:02.411806 3148663 reflector.go:227] "Failed to watch" err="failed to list *unstructured.Unstructured: Get \"https://127.0.0.1:6551/apis/apps/v1/namespaces/kube-system/deployments?fieldSelector=metadata.name%3Dcoredns&resourceVersion=374\": tls: failed to verify certificate: x509: certificate signed by unknown authority" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1104 12:04:59.290619 3148663 reflector.go:227] "Failed to watch" err="failed to list *unstructured.Unstructured: Get \"https://127.0.0.1:6551/apis/apps/v1/namespaces/kube-system/deployments?fieldSelector=metadata.name%3Dcoredns&resourceVersion=374\": tls: failed to verify certificate: x509: certificate signed by unknown authority" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1104 12:05:00.423253 3148663 reflector.go:227] "Failed to watch" err="failed to list *unstructured.Unstructured: Get \"https://127.0.0.1:6551/apis/apps/v1/namespaces/kube-system/deployments?fieldSelector=metadata.name%3Dcoredns&resourceVersion=374\": tls: failed to verify certificate: x509: certificate signed by unknown authority" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1104 12:05:02.361235 3148663 reflector.go:227] "Failed to watch" err="failed to list *unstructured.Unstructured: Get \"https://127.0.0.1:6551/apis/apps/v1/namespaces/kube-system/deployments?fieldSelector=metadata.name%3Dcoredns&resourceVersion=374\": tls: failed to verify certificate: x509: certificate signed by unknown authority" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1104 12:05:07.007391 3148663 reflector.go:227] "Failed to watch" err="failed to list *unstructured.Unstructured: Get \"https://127.0.0.1:6551/apis/apps/v1/namespaces/kube-system/deployments?fieldSelector=metadata.name%3Dcoredns&resourceVersion=374\": tls: failed to verify certificate: x509: certificate signed by unknown authority" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1104 12:05:18.016758 3148663 reflector.go:227] "Failed to watch" err="failed to list *unstructured.Unstructured: Get \"https://127.0.0.1:6551/apis/apps/v1/namespaces/kube-system/deployments?fieldSelector=metadata.name%3Dcoredns&resourceVersion=374\": tls: failed to verify certificate: x509: certificate signed by unknown authority" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+error: timed out waiting for the condition
+okenfuse-gateway:4100             open     ok
+  agent     wardryx:8090                       blocked  ok
+  agent     idryx:8081                         blocked  ok
+  agent     tokenfuse-cloud:8080               blocked  ok
+  agent     policy-db:5432                     blocked  ok
+  agent     genaryx-console:7420               blocked  ok
+  agent     confine-listener.agent-confine-scratch.svc.cluster.local:8080 blocked  ok
+  agent     kubernetes.default.svc.cluster.local:443 blocked  ok
+  agent     1.1.1.1:443                        blocked  ok
+
+pod with no label, in agent-stack
+  unlabelled vouchryx:4310                      blocked  ok
+  unlabelled tokenfuse-gateway:4100             blocked  ok
+  unlabelled wardryx:8090                       blocked  ok
+  unlabelled idryx:8081                         blocked  ok
+  unlabelled tokenfuse-cloud:8080               blocked  ok
+  unlabelled policy-db:5432                     blocked  ok
+  unlabelled genaryx-console:7420               blocked  ok
+  unlabelled confine-listener.agent-confine-scratch.svc.cluster.local:8080 blocked  ok
+  unlabelled 1.1.1.1:443                        blocked  ok
+
+control: pod in agent-confine-scratch, a namespace no policy applies to
+  outside   confine-listener.agent-confine-scratch.svc.cluster.local:8080 open     ok
+  outside   1.1.1.1:443                        open     ok
+  outside   vouchryx.agent-stack.svc.cluster.local:4310 blocked  ok
+  outside   tokenfuse-gateway.agent-stack.svc.cluster.local:4100 blocked  ok
+  outside   wardryx.agent-stack.svc.cluster.local:8090 blocked  ok
+  outside   idryx.agent-stack.svc.cluster.local:8081 blocked  ok
+  outside   tokenfuse-cloud.agent-stack.svc.cluster.local:8080 blocked  ok
+  outside   policy-db.agent-stack.svc.cluster.local:5432 blocked  ok
+  outside   genaryx-console.agent-stack.svc.cluster.local:7420 blocked  ok
+
+DNS (allow-dns opens port 53 to kube-system for every pod in agent-stack; reported, not asserted)
+  agent       vouchryx.agent-stack.svc.cluster.local       resolves
+  agent       example.com                                  resolves
+  unlabelled  vouchryx.agent-stack.svc.cluster.local       resolves
+  unlabelled  example.com                                  resolves
+
+OK: 28 of 28 rows as expected.
+   exit 0, as expected: every row as expected
+
+== fault A: the agent-pod egress policy widened to all egress (a rule that names no peer)
+
+== run 2: the same check against the widened policy
+agent pod agent-stack/agent-confined-5844947786-twz5j, labelled taipanbox.dev/agent-token=true
+  probe     target                             expected result
+  agent     vouchryx:4310                      open     ok
+  agent     tokenfuse-gateway:4100             open     ok
+  agent     wardryx:8090                       blocked  ok
+  agent     idryx:8081                         blocked  ok
+  agent     tokenfuse-cloud:8080               blocked  ok
+  agent     policy-db:5432                     blocked  ok
+  agent     genaryx-console:7420               blocked  ok
+  agent     confine-listener.agent-confine-scratch.svc.cluster.local:8080 blocked  FAIL    got open
+  agent     kubernetes.default.svc.cluster.local:443 blocked  FAIL    got open
+  agent     1.1.1.1:443                        blocked  FAIL    got open
+
+pod with no label, in agent-stack
+  unlabelled vouchryx:4310                      blocked  ok
+  unlabelled tokenfuse-gateway:4100             blocked  ok
+  unlabelled wardryx:8090                       blocked  ok
+  unlabelled idryx:8081                         blocked  ok
+  unlabelled tokenfuse-cloud:8080               blocked  ok
+  unlabelled policy-db:5432                     blocked  ok
+  unlabelled genaryx-console:7420               blocked  ok
+  unlabelled confine-listener.agent-confine-scratch.svc.cluster.local:8080 blocked  ok
+  unlabelled 1.1.1.1:443                        blocked  ok
+
+control: pod in agent-confine-scratch, a namespace no policy applies to
+  outside   confine-listener.agent-confine-scratch.svc.cluster.local:8080 open     ok
+  outside   1.1.1.1:443                        open     ok
+  outside   vouchryx.agent-stack.svc.cluster.local:4310 blocked  ok
+  outside   tokenfuse-gateway.agent-stack.svc.cluster.local:4100 blocked  ok
+  outside   wardryx.agent-stack.svc.cluster.local:8090 blocked  ok
+  outside   idryx.agent-stack.svc.cluster.local:8081 blocked  ok
+  outside   tokenfuse-cloud.agent-stack.svc.cluster.local:8080 blocked  ok
+  outside   policy-db.agent-stack.svc.cluster.local:5432 blocked  ok
+  outside   genaryx-console.agent-stack.svc.cluster.local:7420 blocked  ok
+
+DNS (allow-dns opens port 53 to kube-system for every pod in agent-stack; reported, not asserted)
+  agent       vouchryx.agent-stack.svc.cluster.local       resolves
+  agent       example.com                                  resolves
+  unlabelled  vouchryx.agent-stack.svc.cluster.local       resolves
+  unlabelled  example.com                                  resolves
+
+FAIL: 3 of 28 rows were not as expected.
+   exit 1, as expected: the check must go red
+
+== not a fault: default-deny stripped of its Egress type. allow-dns also selects every pod for egress, so a pod stays isolated
+
+== run 3: the check with default-deny on ingress only
+agent pod agent-stack/agent-confined-5844947786-wgl8j, labelled taipanbox.dev/agent-token=true
+  probe     target                             expected result
+  agent     vouchryx:4310                      open     ok
+  agent     tokenfuse-gateway:4100             open     ok
+  agent     wardryx:8090                       blocked  ok
+  agent     idryx:8081                         blocked  ok
+  agent     tokenfuse-cloud:8080               blocked  ok
+  agent     policy-db:5432                     blocked  ok
+  agent     genaryx-console:7420               blocked  ok
+  agent     confine-listener.agent-confine-scratch.svc.cluster.local:8080 blocked  ok
+  agent     kubernetes.default.svc.cluster.local:443 blocked  ok
+  agent     1.1.1.1:443                        blocked  ok
+
+pod with no label, in agent-stack
+  unlabelled vouchryx:4310                      blocked  ok
+  unlabelled tokenfuse-gateway:4100             blocked  ok
+  unlabelled wardryx:8090                       blocked  ok
+  unlabelled idryx:8081                         blocked  ok
+  unlabelled tokenfuse-cloud:8080               blocked  ok
+  unlabelled policy-db:5432                     blocked  ok
+  unlabelled genaryx-console:7420               blocked  ok
+  unlabelled confine-listener.agent-confine-scratch.svc.cluster.local:8080 blocked  ok
+  unlabelled 1.1.1.1:443                        blocked  ok
+
+control: pod in agent-confine-scratch, a namespace no policy applies to
+  outside   confine-listener.agent-confine-scratch.svc.cluster.local:8080 open     ok
+  outside   1.1.1.1:443                        open     ok
+  outside   vouchryx.agent-stack.svc.cluster.local:4310 blocked  ok
+  outside   tokenfuse-gateway.agent-stack.svc.cluster.local:4100 blocked  ok
+  outside   wardryx.agent-stack.svc.cluster.local:8090 blocked  ok
+  outside   idryx.agent-stack.svc.cluster.local:8081 blocked  ok
+  outside   tokenfuse-cloud.agent-stack.svc.cluster.local:8080 blocked  ok
+  outside   policy-db.agent-stack.svc.cluster.local:5432 blocked  ok
+  outside   genaryx-console.agent-stack.svc.cluster.local:7420 blocked  ok
+
+DNS (allow-dns opens port 53 to kube-system for every pod in agent-stack; reported, not asserted)
+  agent       vouchryx.agent-stack.svc.cluster.local       resolves
+  agent       example.com                                  resolves
+  unlabelled  vouchryx.agent-stack.svc.cluster.local       resolves
+  unlabelled  example.com                                  resolves
+
+OK: 28 of 28 rows as expected.
+   exit 0, as expected: every row still as expected: allow-dns isolates every pod for egress as well
+
+== fault B: default-deny and allow-dns both stripped of their Egress type, so a pod with no label is not isolated
+
+== run 4: the same check with no policy isolating the namespace's pods for egress
+agent pod agent-stack/agent-confined-5844947786-k7ldf, labelled taipanbox.dev/agent-token=true
+  probe     target                             expected result
+  agent     vouchryx:4310                      open     FAIL    got blocked
+  agent     tokenfuse-gateway:4100             open     FAIL    got blocked
+  agent     wardryx:8090                       blocked  ok
+  agent     idryx:8081                         blocked  ok
+  agent     tokenfuse-cloud:8080               blocked  ok
+  agent     policy-db:5432                     blocked  ok
+  agent     genaryx-console:7420               blocked  ok
+  agent     confine-listener.agent-confine-scratch.svc.cluster.local:8080 blocked  ok
+  agent     kubernetes.default.svc.cluster.local:443 blocked  ok
+  agent     1.1.1.1:443                        blocked  ok
+
+pod with no label, in agent-stack
+  unlabelled vouchryx:4310                      blocked  ok
+  unlabelled tokenfuse-gateway:4100             blocked  ok
+  unlabelled wardryx:8090                       blocked  ok
+  unlabelled idryx:8081                         blocked  ok
+  unlabelled tokenfuse-cloud:8080               blocked  ok
+  unlabelled policy-db:5432                     blocked  ok
+  unlabelled genaryx-console:7420               blocked  ok
+  unlabelled confine-listener.agent-confine-scratch.svc.cluster.local:8080 blocked  FAIL    got open
+  unlabelled 1.1.1.1:443                        blocked  FAIL    got open
+
+control: pod in agent-confine-scratch, a namespace no policy applies to
+  outside   confine-listener.agent-confine-scratch.svc.cluster.local:8080 open     ok
+  outside   1.1.1.1:443                        open     ok
+  outside   vouchryx.agent-stack.svc.cluster.local:4310 blocked  ok
+  outside   tokenfuse-gateway.agent-stack.svc.cluster.local:4100 blocked  ok
+  outside   wardryx.agent-stack.svc.cluster.local:8090 blocked  ok
+  outside   idryx.agent-stack.svc.cluster.local:8081 blocked  ok
+  outside   tokenfuse-cloud.agent-stack.svc.cluster.local:8080 blocked  ok
+  outside   policy-db.agent-stack.svc.cluster.local:5432 blocked  ok
+  outside   genaryx-console.agent-stack.svc.cluster.local:7420 blocked  ok
+
+DNS (allow-dns opens port 53 to kube-system for every pod in agent-stack; reported, not asserted)
+  agent       vouchryx.agent-stack.svc.cluster.local       does not resolve
+  agent       example.com                                  does not resolve
+  unlabelled  vouchryx.agent-stack.svc.cluster.local       resolves
+  unlabelled  example.com                                  resolves
+
+FAIL: 4 of 28 rows were not as expected.
+   exit 1, as expected: the check must go red
+
+== fault C: the agent-pod policy lacks its gateway rule (too narrow: an agent could not call the model)
+
+== run 5: the same check against the narrowed policy
+agent pod agent-stack/agent-confined-5844947786-6r52s, labelled taipanbox.dev/agent-token=true
+  probe     target                             expected result
+  agent     vouchryx:4310                      open     ok
+  agent     tokenfuse-gateway:4100             open     FAIL    got blocked
+  agent     wardryx:8090                       blocked  ok
+  agent     idryx:8081                         blocked  ok
+  agent     tokenfuse-cloud:8080               blocked  ok
+  agent     policy-db:5432                     blocked  ok
+  agent     genaryx-console:7420               blocked  ok
+  agent     confine-listener.agent-confine-scratch.svc.cluster.local:8080 blocked  ok
+  agent     kubernetes.default.svc.cluster.local:443 blocked  ok
+  agent     1.1.1.1:443                        blocked  ok
+
+pod with no label, in agent-stack
+  unlabelled vouchryx:4310                      blocked  ok
+  unlabelled tokenfuse-gateway:4100             blocked  ok
+  unlabelled wardryx:8090                       blocked  ok
+  unlabelled idryx:8081                         blocked  ok
+  unlabelled tokenfuse-cloud:8080               blocked  ok
+  unlabelled policy-db:5432                     blocked  ok
+  unlabelled genaryx-console:7420               blocked  ok
+  unlabelled confine-listener.agent-confine-scratch.svc.cluster.local:8080 blocked  ok
+  unlabelled 1.1.1.1:443                        blocked  ok
+
+control: pod in agent-confine-scratch, a namespace no policy applies to
+  outside   confine-listener.agent-confine-scratch.svc.cluster.local:8080 open     ok
+  outside   1.1.1.1:443                        open     ok
+  outside   vouchryx.agent-stack.svc.cluster.local:4310 blocked  ok
+  outside   tokenfuse-gateway.agent-stack.svc.cluster.local:4100 blocked  ok
+  outside   wardryx.agent-stack.svc.cluster.local:8090 blocked  ok
+  outside   idryx.agent-stack.svc.cluster.local:8081 blocked  ok
+  outside   tokenfuse-cloud.agent-stack.svc.cluster.local:8080 blocked  ok
+  outside   policy-db.agent-stack.svc.cluster.local:5432 blocked  ok
+  outside   genaryx-console.agent-stack.svc.cluster.local:7420 blocked  ok
+
+DNS (allow-dns opens port 53 to kube-system for every pod in agent-stack; reported, not asserted)
+  agent       vouchryx.agent-stack.svc.cluster.local       resolves
+  agent       example.com                                  resolves
+  unlabelled  vouchryx.agent-stack.svc.cluster.local       resolves
+  unlabelled  example.com                                  resolves
+
+FAIL: 1 of 28 rows were not as expected.
+   exit 1, as expected: the check must go red
+
+== fault D: the agent-pod policy deleted
+
+== run 6: the same check without the agent-pod policy
+FAIL: NetworkPolicy agent-token-pods-egress missing in agent-stack (manifests/30-network-policy.yaml, manifests/58-agent-tokens-network.yaml), so an agent pod there is not confined.
+   exit 1, as expected: the check must go red, and name the missing policy
+
+== run 7: policies as shipped again (the second run is the real test)
+agent pod agent-stack/agent-confined-5844947786-srvjx, labelled taipanbox.dev/agent-token=true
+  probe     target                             expected result
+  agent     vouchryx:4310                      open     ok
+  agent     tokenfuse-gateway:4100             open     ok
+  agent     wardryx:8090                       blocked  ok
+  agent     idryx:8081                         blocked  ok
+  agent     tokenfuse-cloud:8080               blocked  ok
+  agent     policy-db:5432                     blocked  ok
+  agent     genaryx-console:7420               blocked  ok
+  agent     confine-listener.agent-confine-scratch.svc.cluster.local:8080 blocked  ok
+  agent     kubernetes.default.svc.cluster.local:443 blocked  ok
+  agent     1.1.1.1:443                        blocked  ok
+
+pod with no label, in agent-stack
+  unlabelled vouchryx:4310                      blocked  ok
+  unlabelled tokenfuse-gateway:4100             blocked  ok
+  unlabelled wardryx:8090                       blocked  ok
+  unlabelled idryx:8081                         blocked  ok
+  unlabelled tokenfuse-cloud:8080               blocked  ok
+  unlabelled policy-db:5432                     blocked  ok
+  unlabelled genaryx-console:7420               blocked  ok
+  unlabelled confine-listener.agent-confine-scratch.svc.cluster.local:8080 blocked  ok
+  unlabelled 1.1.1.1:443                        blocked  ok
+
+control: pod in agent-confine-scratch, a namespace no policy applies to
+  outside   confine-listener.agent-confine-scratch.svc.cluster.local:8080 open     ok
+  outside   1.1.1.1:443                        open     ok
+  outside   vouchryx.agent-stack.svc.cluster.local:4310 blocked  ok
+  outside   tokenfuse-gateway.agent-stack.svc.cluster.local:4100 blocked  ok
+  outside   wardryx.agent-stack.svc.cluster.local:8090 blocked  ok
+  outside   idryx.agent-stack.svc.cluster.local:8081 blocked  ok
+  outside   tokenfuse-cloud.agent-stack.svc.cluster.local:8080 blocked  ok
+  outside   policy-db.agent-stack.svc.cluster.local:5432 blocked  ok
+  outside   genaryx-console.agent-stack.svc.cluster.local:7420 blocked  ok
+
+DNS (allow-dns opens port 53 to kube-system for every pod in agent-stack; reported, not asserted)
+  agent       vouchryx.agent-stack.svc.cluster.local       resolves
+  agent       example.com                                  resolves
+  unlabelled  vouchryx.agent-stack.svc.cluster.local       resolves
+  unlabelled  example.com                                  resolves
+
+OK: 28 of 28 rows as expected.
+   exit 0, as expected: every row as expected
+
+== leftovers of the check in the cluster
+Error from server (NotFound): namespaces "agent-confine-scratch" not found
+No resources found in agent-stack namespace.
+
+== result
+RUN_EXIT=0 (every run ended as expected)

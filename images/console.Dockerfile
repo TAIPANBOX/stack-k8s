@@ -1,4 +1,6 @@
-# The Genaryx console, plus the four tools it EXECUTES rather than calls.
+# The Genaryx console, plus the four tools it EXECUTES rather than calls, and the
+# two engines its proofs run (wardryx replay, tokenfuse backtest), copied from the
+# images the stack runs.
 #
 # This is a four-language build on purpose, not by accident. The console
 # reaches money, policy and identity over HTTP (those are Services), but it
@@ -52,6 +54,19 @@ COPY mockryx/ ./mockryx/
 RUN cd qryx    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/qryx    ./cmd/qryx \
  && cd ../mockryx && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/mockryx ./cmd/mockryx
 
+# --- the two engines the console's proofs run -------------------------------
+# The console proves a candidate policy by running `wardryx replay` over the
+# decisions already recorded, and a candidate budget by running `tokenfuse
+# backtest` over the calls already recorded (genaryx invariants 40 and 41). A
+# proof is only as good as the engine behind it, so these two binaries are
+# copied from the very images the stack runs, by the same digests the manifests
+# name: the engine that replays a decision is the engine that took it.
+# scripts/console-engines-are-the-stacks.sh holds the two references equal to
+# manifests/10-planes.yaml's (CLAUDE.md invariant 79), and moving one without
+# the other fails it. Pulled, not built: the node builds nothing it can pull.
+FROM ghcr.io/taipanbox/wardryx:v2.5.1@sha256:2d3c0c9c0798156d3f05b82d0e63cf5b38ee4b9875d6bdbac1829f219c26abf7 AS wardryx-engine
+FROM ghcr.io/taipanbox/tokenfuse:v1.21.0@sha256:5cc6484d20249df3e57db34d19eea5b75c54c64bd9b9dab968136e988374ab2c AS tokenfuse-engine
+
 # --- runtime ----------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim
 RUN apt-get update \
@@ -61,6 +76,10 @@ RUN apt-get update \
  && mkdir -p /var/lib/stack /var/lib/stack/events \
  && chown -R stack:stack /var/lib/stack
 LABEL org.opencontainers.image.title="genaryx-console"
+# Which engines the proofs run, readable from `docker inspect`: the question an
+# incident asks of a proof is which wardryx replayed it.
+LABEL dev.taipanbox.engine.wardryx="v2.5.1@sha256:2d3c0c9c0798156d3f05b82d0e63cf5b38ee4b9875d6bdbac1829f219c26abf7"
+LABEL dev.taipanbox.engine.tokenfuse="v1.21.0@sha256:5cc6484d20249df3e57db34d19eea5b75c54c64bd9b9dab968136e988374ab2c"
 
 # The two Python tools, installed as real console-invokable commands
 # (`verdryx`, `engram-mcp` - see their pyproject [project.scripts]).
@@ -71,6 +90,8 @@ RUN pip install --no-cache-dir /opt/verdryx /opt/engram \
 
 COPY --from=gotools /out/qryx    /usr/local/bin/qryx
 COPY --from=gotools /out/mockryx /usr/local/bin/mockryx
+COPY --from=wardryx-engine /usr/local/bin/service /usr/local/bin/wardryx
+COPY --from=tokenfuse-engine /usr/local/bin/tokenfuse /usr/local/bin/tokenfuse
 COPY --from=rust /src/target/release/genaryx-web /usr/local/bin/genaryx-web
 COPY --from=web  /w/dist /srv/ui
 

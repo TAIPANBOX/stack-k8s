@@ -153,7 +153,7 @@ spec:
           # at the same version has no browser in it and this pod would exit at
           # startup saying so, which is the intended failure rather than a
           # confusing one.
-          image: ghcr.io/taipanbox/scopyx:v1.1.1-chromium@sha256:b7da6b6d5418978735b23f4a00ef44f924e516630fe9caa585256889d050663a
+          image: ghcr.io/taipanbox/scopyx:v1.2.0-chromium@sha256:fb36a0635f4b88c3dc44a63b8bf3033140c66138e322051f6bf423ea6f73afbe
           imagePullPolicy: IfNotPresent
           env:
             - { name: SCOPYX_ADDR, value: "0.0.0.0:4300" }
@@ -171,6 +171,8 @@ spec:
             # different amount of work and a different amount of somebody
             # else's bandwidth. Raise it deliberately.
             - { name: SCOPYX_MAX_FETCHES_PER_HOUR, value: "60" }
+            # As in 47: the MCP broker hands the key over in params._meta (scopyx v1.2.0, G2.1).
+            - { name: SCOPYX_ACCEPT_KEY_IN_META, value: "1" }
           envFrom:
             - secretRef: { name: scopyx-keys }
           ports: [{ name: mcp, containerPort: 4300 }]
