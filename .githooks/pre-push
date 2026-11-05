@@ -96,6 +96,7 @@ step "the risk hold follows --typed-risk-signal (invariant 65)" "./scripts/risk-
 step "the CostCrew ceiling is validated and written after apply (invariant 66)" "./scripts/costcrew-ceiling-is-set.sh"
 step "every workflow checkout of another repository is a full commit (invariant 68)" "./scripts/workflow-checkouts-are-pinned.sh"
 step "the console's proof engines are the stack's own, digest for digest (invariant 79)" "./scripts/console-engines-are-the-stacks.sh"
+step "every image this repository builds from is pinned whole (invariant 80)" "./scripts/base-images-are-pinned.sh"
 step "hub/add-site.sh reads a digest-pinned tokenfuse-cloud image" "./scripts/hub-add-site-reads-the-pinned-image.sh"
 step "the console approver key is minted once and wardryx verifies with it (invariant 67)" "./scripts/approver-key-is-minted.sh"
 step "Keyryx is installed by default, with --without-keyryx as the opt-out (invariant 69)" "./scripts/keyryx-is-default.sh"

@@ -14,9 +14,7 @@
 # It is here for a source build: a trailryx checkout that is not released yet,
 # or a cluster that cannot reach ghcr.io. Using it means editing the image line
 # in the manifest, the same as any other `stack/*:dev` tag (pinned-images.sh).
-ARG RUST_VERSION=1.85
-
-FROM rust:${RUST_VERSION}-slim AS build
+FROM rust:1.85-slim@sha256:9f841bbe9e7d8e37ceb96ed907265a3a0df7f44e3737d0b100e7907a679acb36 AS build
 WORKDIR /src
 RUN apt-get update \
  && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates \
@@ -28,7 +26,7 @@ COPY . .
 # verifier.
 RUN cargo build --release --locked -p trailryx-node -p trailryx-verify
 
-FROM debian:12-slim
+FROM debian:12-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates libssl3 \
  && rm -rf /var/lib/apt/lists/* \

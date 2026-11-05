@@ -14,13 +14,8 @@
 #
 # Build context is the PARENT of the repos (~/Development), because this one
 # image legitimately spans five of them.
-ARG RUST_VERSION=1.85
-ARG GO_VERSION=1.27.3
-ARG PYTHON_VERSION=3.12
-ARG NODE_VERSION=22
-
 # --- the console's own web assets -------------------------------------------
-FROM node:${NODE_VERSION}-slim AS web
+FROM node:22-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS web
 WORKDIR /w
 COPY genaryx-a360/apps/web/package.json genaryx-a360/apps/web/pnpm-lock.yam[l] ./
 RUN corepack enable && (pnpm install --frozen-lockfile || npm install)
@@ -37,7 +32,7 @@ COPY genaryx-a360/apps/web/ ./
 RUN npx vite build --mode web
 
 # --- the console binary -----------------------------------------------------
-FROM rust:${RUST_VERSION}-slim AS rust
+FROM rust:1.85-slim@sha256:9f841bbe9e7d8e37ceb96ed907265a3a0df7f44e3737d0b100e7907a679acb36 AS rust
 WORKDIR /src
 RUN apt-get update \
  && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates \
@@ -46,7 +41,10 @@ COPY genaryx-a360/ ./
 RUN cargo build --release -p genaryx-web
 
 # --- the Go tools the console shells out to ---------------------------------
-FROM golang:${GO_VERSION}-alpine AS gotools
+FROM golang:1.27.3-alpine@sha256:dbaa054703263d06c8b49576667418473b6231f8c0fa69dee103207fdb8e3654 AS gotools
+# A digest outranks the tag beside it, so a bump that moved the tag alone would
+# keep the old Go under the new name. This line stops that build (invariant 80).
+RUN test "$(go env GOVERSION)" = go1.27.3
 ENV GOTOOLCHAIN=auto
 WORKDIR /src
 COPY qryx/ ./qryx/
@@ -68,7 +66,7 @@ FROM ghcr.io/taipanbox/wardryx:v2.5.1@sha256:2d3c0c9c0798156d3f05b82d0e63cf5b38e
 FROM ghcr.io/taipanbox/tokenfuse:v1.21.0@sha256:5cc6484d20249df3e57db34d19eea5b75c54c64bd9b9dab968136e988374ab2c AS tokenfuse-engine
 
 # --- runtime ----------------------------------------------------------------
-FROM python:${PYTHON_VERSION}-slim
+FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates libssl3 \
  && rm -rf /var/lib/apt/lists/* \
