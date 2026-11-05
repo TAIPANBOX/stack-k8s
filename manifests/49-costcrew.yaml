@@ -119,7 +119,7 @@ spec:
           volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
       containers:
         - name: costcrew
-          image: ghcr.io/taipanbox/costcrew:v0.10.0@sha256:26316b1c99706529a4589a328b2ddd3fc5f4db4cf0b5a46466e8be1ddd8f0de9
+          image: ghcr.io/taipanbox/costcrew:v0.10.1@sha256:2fb72d878eb11702141ce0822049a95a28feae8fec9001bc8d568d144ae43036
           imagePullPolicy: IfNotPresent
           # costcrew v0.10.0 refuses a console on a non-loopback -addr unless TLS is in front (-behind-tls) or plain
           # HTTP is named (-insecure-http). This launcher has no TLS proxy for the console, so -insecure-http is the
@@ -312,7 +312,7 @@ spec:
               volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
           containers:
             - name: crew
-              image: ghcr.io/taipanbox/costcrew:v0.10.0@sha256:26316b1c99706529a4589a328b2ddd3fc5f4db4cf0b5a46466e8be1ddd8f0de9
+              image: ghcr.io/taipanbox/costcrew:v0.10.1@sha256:2fb72d878eb11702141ce0822049a95a28feae8fec9001bc8d568d144ae43036
               imagePullPolicy: IfNotPresent
               # Overrides the image's ENTRYPOINT (the console server): this is
               # another binary in the same image (since v0.4.0 it carries five:
