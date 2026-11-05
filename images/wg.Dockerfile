@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 # REQUIRES BuildKit. The entrypoint below is written with a heredoc, which only
 # the BuildKit frontend understands. The legacy builder accepts the Dockerfile,
 # reports success, and produces an EMPTY entrypoint: the container then dies
@@ -20,7 +20,10 @@
 #
 # Nothing about the agents' own path goes through here.
 
-FROM golang:1.27.3-alpine AS build
+FROM golang:1.27.3-alpine@sha256:dbaa054703263d06c8b49576667418473b6231f8c0fa69dee103207fdb8e3654 AS build
+# A digest outranks the tag beside it, so a bump that moved the tag alone would
+# keep the old Go under the new name. This line stops that build (invariant 80).
+RUN test "$(go env GOVERSION)" = go1.27.3
 # `git` first: `go install` fetches this module over git and fails with a bare
 # exit 1 without it.
 RUN apk add --no-cache git
@@ -39,7 +42,7 @@ RUN go install golang.zx2c4.com/wireguard@v0.0.0-20260522210424-ecfc5a8d5446
 COPY images/uapi-proxy /src/uapi-proxy
 RUN cd /src/uapi-proxy && CGO_ENABLED=0 go build -ldflags='-s -w' -o /go/bin/uapi-proxy ./...
 
-FROM alpine:3.20
+FROM alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 # `wireguard-tools` for `wg`, which talks the same UAPI this image serves,
 # `iproute2` to give the interface its address, and `socat` for the console
 # relay (see the entrypoint: the real UAPI socket must stay 0700).

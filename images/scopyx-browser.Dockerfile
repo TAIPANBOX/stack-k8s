@@ -25,9 +25,10 @@
 # way. Where a container cannot give it the user namespaces it needs, the
 # DEPLOYMENT decides between relaxing the container's syscall filter and
 # setting SCOPYX_CHROMIUM_NO_SANDBOX=1, and scopyx's own error names both.
-ARG GO_VERSION=1.27.3
-
-FROM golang:${GO_VERSION}-alpine AS build
+FROM golang:1.27.3-alpine@sha256:dbaa054703263d06c8b49576667418473b6231f8c0fa69dee103207fdb8e3654 AS build
+# A digest outranks the tag beside it, so a bump that moved the tag alone would
+# keep the old Go under the new name. This line stops that build (invariant 80).
+RUN test "$(go env GOVERSION)" = go1.27.3
 ENV GOTOOLCHAIN=auto
 ARG SRC
 WORKDIR /src
@@ -37,7 +38,7 @@ COPY ${SRC}/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
       -o /out/service ./cmd/scopyx
 
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
 LABEL org.opencontainers.image.title="scopyx (with a browser)"
 LABEL org.opencontainers.image.source="https://github.com/TAIPANBOX/scopyx"
 

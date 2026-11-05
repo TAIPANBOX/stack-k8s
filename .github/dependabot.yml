@@ -10,3 +10,23 @@ updates:
     commit-message:
       prefix: "ci"
     open-pull-requests-limit: 5
+  # A digest nobody moves stops taking a base's security fixes, so every pin in images/*.Dockerfile
+  # (CLAUDE.md invariant 80) has a mover. A tag's own new digest and a patch release come here; a move of
+  # the toolchain itself (Rust, Node, Python) is a change somebody decides, so it does not. A golang or caddy
+  # patch PR is red until its one other line moves, the stage's assertion or the xcaddy build line, and
+  # scripts/base-images-are-pinned.sh names it. The console's two engines move with the manifests (invariant 79).
+  - package-ecosystem: docker
+    directory: /images
+    schedule:
+      interval: weekly
+    groups:
+      bases:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "taipanbox/*"
+      - dependency-name: "ghcr.io/taipanbox/*"
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    commit-message:
+      prefix: "ci"
+    open-pull-requests-limit: 5

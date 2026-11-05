@@ -387,6 +387,11 @@ jobs:
       - name: the console's proof engines are the stack's own, digest for digest (invariant 79)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/console-engines-are-the-stacks.sh
 
+      # Added 2026-11-05 with invariant 80. pinned-images.sh holds what the manifests name, this holds what a
+      # build reads: every base and the build frontend by digest, one Go, each Go stage asserting it.
+      - name: every image this repository builds from is pinned whole (invariant 80)
+        run: ./scripts/base-images-are-pinned.sh
+
       # Added 2026-10-19. hub/add-site.sh reads the Cloud's version from a name:tag@sha256 reference, the form
       # the manifests pin. v1.5.3 read the digest as the tag and refused every pinned install.
       - name: hub/add-site.sh reads a digest-pinned tokenfuse-cloud image

@@ -9,9 +9,7 @@
 # Note the gateway's binary is `tokenfuse` in the workspace and is installed as
 # `tokenfuse-gateway` by stack-up; both names are present here so a manifest can
 # use either without a surprise.
-ARG RUST_VERSION=1.85
-
-FROM rust:${RUST_VERSION}-slim AS build
+FROM rust:1.85-slim@sha256:9f841bbe9e7d8e37ceb96ed907265a3a0df7f44e3737d0b100e7907a679acb36 AS build
 WORKDIR /src
 RUN apt-get update \
  && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates \
@@ -21,7 +19,7 @@ RUN cargo build --release -p tokenfuse-gateway -p tokenfuse-cloud
 
 # Debian slim rather than distroless: these link against system OpenSSL, and
 # swapping that for rustls is a change to the stack, not to its packaging.
-FROM debian:12-slim
+FROM debian:12-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates libssl3 \
  && rm -rf /var/lib/apt/lists/* \

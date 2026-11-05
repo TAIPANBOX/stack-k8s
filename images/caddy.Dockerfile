@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 # REQUIRES BuildKit. The entrypoint below is written with a heredoc, which only
 # the BuildKit frontend understands. The legacy builder accepts the Dockerfile,
 # reports success, and produces an EMPTY entrypoint: the container then dies
@@ -27,12 +27,24 @@
 # the name points is the operator's business. It is how every "reach my private
 # thing by hostname" product works.
 
-FROM caddy:2-builder-alpine AS build
+# Built on the Go every other image here names, not on caddy's own builder image.
+# That image carries whichever Go it was cut with, so a Go advisory would wait on
+# its release, and `caddy:2-builder-alpine` moved under this file at every rebuild.
+# Go, xcaddy, Caddy and the plugin are each named, so a rebuild of one tag compiles
+# the same inputs (invariant 80). XCADDY_SETCAP is what the builder image set, and
+# the published binary carries it: cap_net_bind_service.
+FROM golang:1.27.3-alpine@sha256:dbaa054703263d06c8b49576667418473b6231f8c0fa69dee103207fdb8e3654 AS build
+# A digest outranks the tag beside it, so a bump that moved the tag alone would
+# keep the old Go under the new name. This line stops that build (invariant 80).
+RUN test "$(go env GOVERSION)" = go1.27.3
+RUN apk add --no-cache git libcap
+ENV XCADDY_SETCAP=1
+RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@v0.4.7
 # Cloudflare because that is where the zone this ships against is hosted. Any
 # other provider is a one-word change here plus the matching credential.
-RUN xcaddy build --with github.com/caddy-dns/cloudflare
+RUN xcaddy build v2.11.8 --with github.com/caddy-dns/cloudflare@v0.2.4 --output /usr/bin/caddy
 
-FROM caddy:2-alpine
+FROM caddy:2.11.8-alpine@sha256:f6228111e5fafa1a5238258d0858e103f10599b8d1659a146e7726681a002bb9
 COPY --from=build /usr/bin/caddy /usr/bin/caddy
 
 RUN cat > /usr/local/bin/caddy-entrypoint.sh <<'ENTRY' && chmod +x /usr/local/bin/caddy-entrypoint.sh

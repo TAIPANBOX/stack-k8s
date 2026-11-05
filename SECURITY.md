@@ -27,7 +27,7 @@ one is tagged.
 
 Every change passes the repository's gates before merge: `scripts/gotchas-classified.sh`,
 `scripts/closed-by-default.sh`, `scripts/portability-claims.sh`,
-`scripts/pinned-images.sh`, `scripts/manifests-valid.sh`,
+`scripts/pinned-images.sh`, `scripts/base-images-are-pinned.sh`, `scripts/manifests-valid.sh`,
 `scripts/manifest-is-true.sh`, `scripts/node-name-is-pinned.sh`,
 `scripts/deploy-flags-agree.sh`, `scripts/no-sa-token-by-default.sh`,
 `scripts/no-operator-files-tracked.sh` and `scripts/gates-have-teeth.sh`.

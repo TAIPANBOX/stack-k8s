@@ -4302,6 +4302,92 @@ run_case "console-engines: a comment reworded in the Dockerfile (must pass)" pas
 	'./scripts/console-engines-are-the-stacks.sh' \
 	"$(py 'edit("images/console.Dockerfile", "# --- the two engines the console\x27s proofs run", "# --- the two engines that the console\x27s proofs run")')"
 
+# Every image this repository builds from is pinned whole (CLAUDE.md invariant 80).
+run_case "base-images: a moving tag comes back on the runtime base" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/caddy.Dockerfile", "FROM caddy:2.11.8-alpine@sha256:f6228111e5fafa1a5238258d0858e103f10599b8d1659a146e7726681a002bb9", "FROM caddy:2.11.8-alpine")')" \
+	"has no digest"
+run_case "base-images: a digest one character short" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/wg.Dockerfile", "d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc", "d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6b")')" \
+	"has no digest"
+run_case "base-images: a variable comes back into a FROM" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/console.Dockerfile", "FROM rust:1.85-slim@", "FROM rust:${RUST_VERSION}-slim@")')" \
+	"has a variable"
+run_case "base-images: a digest with no version beside it" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/tokenfuse.Dockerfile", "FROM debian:12-slim@", "FROM debian@")')" \
+	"names no version"
+run_case "base-images: a digest beside latest" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/wg.Dockerfile", "FROM alpine:3.20@", "FROM alpine:latest@")')" \
+	"names no version"
+run_case "base-images: the build frontend floats" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/wg.Dockerfile", "dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e", "dockerfile:1.7")')" \
+	"has no digest"
+run_case "base-images: a new Dockerfile on a moving tag, found by discovery" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'open("images/new.Dockerfile", "w").write("FROM debian:12-slim\n")')" \
+	"has no digest"
+run_case "base-images: a lower-case from on a moving tag" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/console.Dockerfile", "FROM node:22-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d", "from node:22-slim")')" \
+	"has no digest"
+run_case "base-images: a COPY reaches for an image no stage names" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/go-service.Dockerfile", "COPY --from=build /out/service", "COPY --from=busybox:1 /bin/busybox /bin/busybox\nCOPY --from=build /out/service")')" \
+	"has no digest"
+run_case "base-images: one tag carries two digests" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/tokenfuse.Dockerfile", "debian:12-slim@sha256:734a", "debian:12-slim@sha256:734b")')" \
+	"carries 2 digests"
+run_case "base-images: one image moves to another Go alone" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/wg.Dockerfile", "FROM golang:1.27.3-alpine@", "FROM golang:1.27.4-alpine@"); edit("images/wg.Dockerfile", "= go1.27.3", "= go1.27.4")')" \
+	"more than one Go"
+run_case "base-images: a golang stage loses its assertion" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/go-service.Dockerfile", "RUN test \"$(go env GOVERSION)\" = go1.27.3\n", "")')" \
+	"does not start with"
+run_case "base-images: the tag moves and the digest and assertion stay" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/console.Dockerfile", "FROM golang:1.27.3-alpine@", "FROM golang:1.27.4-alpine@")')" \
+	"asserts go1.27.3 on a golang:1.27.4 base"
+run_case "base-images: xcaddy loses Caddy\x27s version" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/caddy.Dockerfile", "xcaddy build v2.11.8 --with", "xcaddy build --with")')" \
+	"names no Caddy version"
+run_case "base-images: the DNS plugin loses its version" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/caddy.Dockerfile", "cloudflare@v0.2.4", "cloudflare")')" \
+	"takes its latest"
+run_case "base-images: go install asks for latest" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/caddy.Dockerfile", "xcaddy@v0.4.7", "xcaddy@latest")')" \
+	"can install something else"
+run_case "base-images: the runtime base moves without the build" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/caddy.Dockerfile", "FROM caddy:2.11.8-alpine@", "FROM caddy:2.11.9-alpine@")')" \
+	"names two Caddies"
+run_case "base-images: every Dockerfile is gone, which must say it measured nothing" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'import glob, os
+for f in glob.glob("images/*Dockerfile*"):
+    os.remove(f)')" \
+	"measured NOTHING"
+run_case "base-images: no xcaddy build is left, which must say it measured nothing" fail \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/caddy.Dockerfile", "RUN xcaddy build v2.11.8 --with github.com/caddy-dns/cloudflare@v0.2.4 --output /usr/bin/caddy\n", "")')" \
+	"measured NOTHING"
+run_case "base-images: a later stage built on an earlier one (must pass)" pass \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/wg.Dockerfile", "RUN go install golang.zx2c4.com", "FROM build AS extra\nRUN go install golang.zx2c4.com")')"
+run_case "base-images: a comment reworded in a Dockerfile (must pass)" pass \
+	'./scripts/base-images-are-pinned.sh' \
+	"$(py 'edit("images/caddy.Dockerfile", "# Built on the Go every other image here names", "# Built on the one Go every other image here names")')"
+
 # The CostCrew run ceiling and the crew's schedule (CLAUDE.md invariant 66). No default ships, the
 # figure is validated before anything is installed, and the crew CronJob is suspended until an operator resumes it.
 run_case "costcrew-ceiling: the validator accepts three decimals" fail \
