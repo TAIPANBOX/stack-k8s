@@ -233,7 +233,7 @@ spec:
           volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
       containers:
         - name: typryx
-          image: ghcr.io/taipanbox/typryx:v0.5.1@sha256:4b29e110e91945c6324a1f16030d7fe9300f46a1f811fe14ecf7a4ce09a882fa
+          image: ghcr.io/taipanbox/typryx:v0.6.0@sha256:9ffe725c90a51297dca76940cd1e30e968cf323bfac2f61092f0db2acef0812b
           imagePullPolicy: IfNotPresent
           # ENTRYPOINT defaults to `serve`; TYPRYX_ADDR and TYPRYX_TEMPLATES
           # are baked into the image (0.0.0.0:4320, the three example

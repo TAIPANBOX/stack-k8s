@@ -624,11 +624,22 @@ How each mode behaves, because the defaults are deliberate:
   `tokenfuse-mcp-broker-keys` are minted by the deploy when absent and kept when
   present, whatever the mode, as above.
 
+A current OpenAI model behind `--typed-model-url` takes three more variables,
+because it refuses the request a local server takes. The launchers have no flag
+for them, so set them on both Deployments, and again after a later `apply`, which
+puts the manifests' environment back:
+
+```bash
+kubectl -n agent-stack set env deploy/typryx deploy/typryx-wardryx-proxy \
+  TYPRYX_OPENAI_TOP_LOGPROBS=5 TYPRYX_OPENAI_MAX_COMPLETION_TOKENS=16 \
+  TYPRYX_OPENAI_REASONING_EFFORT=none
+```
+
 **Training on your own data.** `@decided 2026-09-30`: we do not fine-tune or
 ship models for customers. A customer can fine-tune and calibrate their own model
 on their own data, and typryx gives them what they need to do it. Add
 `--typed-training` to any launcher, next to `--with-typed` or a `--typed-mode`,
-and typryx (v0.3.0 or later; `51-typryx.yaml` pins v0.5.1) keeps a local training
+and typryx (v0.3.0 or later; `51-typryx.yaml` pins v0.6.0) keeps a local training
 log: one line per answered question holding the state the template let through
 and the identity of the answer, never the backend's answer or its probabilities.
 You post what actually happened to `/v1/outcome`, and `typryx export --training`
