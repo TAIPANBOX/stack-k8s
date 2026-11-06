@@ -478,7 +478,8 @@ x-fuse-run-id: <the run this fetch belongs to>
 `x-fuse-run-id` is required for scopyx: taint belongs to a run, and the broker refuses a call to a classified
 upstream that names none. Use the id of the run whose model calls go through the gateway, so the label lands on
 the run that is judged. The broker replaces the handle with the key on the last hop and scopyx removes it at its
-door. An answer whose label the gateway did not take is withheld.
+door. An answer whose label the gateway did not take is withheld. The broker hands scopyx the same run id
+(tokenfuse v1.22.0) and scopyx records the fetch under it (scopyx v1.3.0), so the fetch and the label name one run.
 
 **The scope rules are in the Secret now.** `TOKENFUSE_MCP_SECRET_SCOPES` moved from the broker's Deployment into
 `tokenfuse-mcp-broker-keys`, next to the keys it scopes, and the broker stops at start on a vault entry with no
