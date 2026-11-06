@@ -40,7 +40,7 @@ case "$SITE" in
   [a-z0-9]*) ;;
   *) die "'$SITE' does not start with a lowercase letter or digit (tokenfuse's own rule: ^[a-z0-9][a-z0-9._-]{0,62}\$)" ;;
 esac
-if printf '%s' "$SITE" | grep -qE '[^a-z0-9._-]'; then
+if grep -qE '[^a-z0-9._-]' <<<"$SITE"; then
   die "'$SITE' has a character outside [a-z0-9._-] (tokenfuse's own rule: ^[a-z0-9][a-z0-9._-]{0,62}\$)"
 fi
 [ "${#SITE}" -le 63 ] || die "'$SITE' is ${#SITE} characters, over the 63-character limit"
@@ -55,7 +55,7 @@ IMAGE="$(kubectl -n "$NS" get deployment tokenfuse-cloud \
 REF="${IMAGE%%@*}"
 if [ "$REF" != "$IMAGE" ]; then
   DIGEST="${IMAGE#*@}"
-  printf '%s' "$DIGEST" | grep -qE '^sha256:[0-9a-f]{64}$' \
+  grep -qE '^sha256:[0-9a-f]{64}$' <<<"$DIGEST" \
     || die "tokenfuse-cloud's image ($IMAGE) carries a digest that is not a sha256 digest of 64 hex"
 fi
 LAST="${REF##*/}"
@@ -101,7 +101,8 @@ WARDRYX_KEYS_B64="$(kubectl -n "$NS" get secret stack-keys -o jsonpath='{.data.w
 CLOUD_KEYS="$(printf '%s' "$CLOUD_KEYS_B64" | b64dec)"
 WARDRYX_KEYS="$(printf '%s' "$WARDRYX_KEYS_B64" | b64dec)"
 
-if printf '%s' "$CLOUD_KEYS" | tr ',' '\n' | grep -qE "^[^:]+:default:ingest:${SITE}\$"; then
+# -c reads to the end (invariant 81), and the keys stay in the pipe: a here-string is a file on bash before 5.1.
+if printf '%s' "$CLOUD_KEYS" | tr ',' '\n' | grep -cE "^[^:]+:default:ingest:${SITE}\$" >/dev/null; then
   die "site '$SITE' already has a Cloud key in stack-keys. Refusing to mint a
    second one: this script never regenerates or drops an existing key. If the
    site lost its credentials, that is an operator decision (rotate by hand),

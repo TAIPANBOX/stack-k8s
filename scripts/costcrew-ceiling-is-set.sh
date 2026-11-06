@@ -48,7 +48,7 @@ for f in $LAUNCHERS; do
     continue
   fi
   live=$(grep -vE '^[[:space:]]*#' "$f")
-  if ! printf '%s\n' "$live" | grep -qE -- '--costcrew-ceiling\)'; then
+  if ! grep -qE -- '--costcrew-ceiling\)' <<<"$live"; then
     bad "$f does not parse --costcrew-ceiling"
   fi
   check_line=$(printf '%s\n' "$live" | grep -nE 'budget/costcrew-ceiling\.sh" check' | head -1 | cut -d: -f1)
@@ -67,7 +67,7 @@ for f in $LAUNCHERS; do
   elif [ -z "$last_apply" ] || [ "$patch_line" -lt "$last_apply" ]; then
     bad "$f writes COSTCREW_CEILING before its last apply -k, so the apply reverts or ignores it"
   fi
-  if ! printf '%s\n' "$live" | grep -qE 'if \[ -n "\$COSTCREW_CEILING_ARG" \]'; then
+  if ! grep -qE 'if \[ -n "\$COSTCREW_CEILING_ARG" \]' <<<"$live"; then
     bad "$f writes COSTCREW_CEILING without a guard on the value, so an empty flag would write an empty figure"
   fi
 done
@@ -77,11 +77,11 @@ if [ ! -f "$M49" ]; then
   bad "$M49 is absent: the crew's ceiling reference and suspension are measured NOTHING"
 else
   live=$(grep -vE '^[[:space:]]*#' "$M49")
-  if ! printf '%s\n' "$live" | grep -qE 'configMapKeyRef: \{ name: stack-wiring, key: COSTCREW_CEILING \}'; then
+  if ! grep -qE 'configMapKeyRef: \{ name: stack-wiring, key: COSTCREW_CEILING \}' <<<"$live"; then
     bad "$M49 does not read COSTCREW_CEILING from stack-wiring, or reads it optionally (no default ships; the pod must not start without a figure)"
   fi
   # The crew runs on its schedule (the 2026-09-03 decision); the cadence switch and the ceiling bound it.
-  if ! printf '%s\n' "$live" | grep -qE '^[[:space:]]*suspend:[[:space:]]*false[[:space:]]*$'; then
+  if ! grep -qE '^[[:space:]]*suspend:[[:space:]]*false[[:space:]]*$' <<<"$live"; then
     bad "$M49 does not run the crew on its schedule: the CronJob must set suspend: false (the 2026-09-03 decision)"
   fi
 fi

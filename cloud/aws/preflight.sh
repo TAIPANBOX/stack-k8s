@@ -85,7 +85,7 @@ elif IDENT="$(AWS_PROFILE="$PROFILE" aws sts get-caller-identity --output json 2
   note "$(echo "$IDENT" | jq -r .Arn)"
   # A run driven by an account root user is a run where one leaked key is the
   # whole account. Worth one line of warning, not a refusal.
-  echo "$IDENT" | jq -r .Arn | grep -q ':root$' && \
+  grep -q ':root$' <<<"$(echo "$IDENT" | jq -r .Arn)" && \
     note "WARNING: this is the account ROOT user. Prefer the IAM user from README step 2."
 else
   bad "profile '$PROFILE' has no working credentials"

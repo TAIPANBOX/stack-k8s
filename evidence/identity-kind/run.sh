@@ -167,8 +167,8 @@ k get secret gateway-client-keys >/dev/null 2>&1 && pass "Secret gateway-client-
 [ "$(k get secret gateway-client-keys -o jsonpath='{.metadata.annotations}')" = "" ] && pass "the Secret carries no last-applied copy" || fail "the Secret carries annotations: a second copy of the keys"
 [ "$(ann identity-map-sha256)" = "$(sha "$work/map.json")" ] && pass "the template carries the map's sha256" || fail "template map annotation '$(ann identity-map-sha256)'"
 [ "$(ann client-keys-version)" = "$(rv secret gateway-client-keys)" ] && pass "the template carries the Secret's resourceVersion" || fail "template keys annotation"
-gwlog | grep -q '^client auth: ON (2 key(s))' && pass "the new pod reports 2 client keys" || fail "the new pod does not report 2 keys"
-gwlog | grep -q '^identity map: ON (2 unit(s), 2 key binding(s))' && pass "the new pod reports the map" || fail "the new pod does not report the map"
+grep -q '^client auth: ON (2 key(s))' <<<"$(gwlog)" && pass "the new pod reports 2 client keys" || fail "the new pod does not report 2 keys"
+grep -q '^identity map: ON (2 unit(s), 2 key binding(s))' <<<"$(gwlog)" && pass "the new pod reports the map" || fail "the new pod does not report the map"
 [ "$(k exec "$p1" -c gateway -- cat /etc/tokenfuse/identity/identity.json | python3 -c 'import hashlib,sys;print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())')" = "$(sha "$work/map.json")" ] \
   && pass "the mounted map is the file given, byte for byte" || fail "the mounted map differs"
 [ "$(k exec "$p1" -c gateway -- sh -c 'ls /etc/tokenfuse/identity')" = "identity.json" ] && pass "the directory holds the map alone" || fail "the directory holds more than the map"
@@ -211,7 +211,7 @@ up --client-keys-file keys3.txt && pass "identity/up.sh ran" || fail "identity/u
 settle
 p3="$(gwpod)"
 [ "$p3" != "$p2" ] && pass "the gateway rolled" || fail "the gateway did not roll"
-gwlog | grep -q '^client auth: ON (3 key(s))' && pass "the new pod reports 3 client keys" || fail "the new pod does not report 3 keys"
+grep -q '^client auth: ON (3 key(s))' <<<"$(gwlog)" && pass "the new pod reports 3 client keys" || fail "the new pod does not report 3 keys"
 r="$(call "$K3" agent://bank.example/treasury/t3)"
 echo "      the new key as a treasury agent: $r"
 case "$r" in 401*) fail "the new key was refused 401: $r" ;; *) pass "the new key passes the door ($(cut -d' ' -f1-2 <<<"$r"))" ;; esac

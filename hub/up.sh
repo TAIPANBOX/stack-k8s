@@ -117,8 +117,8 @@ for _ in $(seq 1 60); do
   # in the log would report success before Let's Encrypt was even asked.
   # Caddy's structured log puts both on the one line that reports the event.
   ISSUED="$(printf '%s\n' "$LOG" | grep -F 'certificate obtained successfully' || true)"
-  if printf '%s' "$ISSUED" | grep -Fq "cloud.$HOST"; then ok_cloud=1; fi
-  if printf '%s' "$ISSUED" | grep -Fq "wardryx.$HOST"; then ok_wardryx=1; fi
+  if grep -Fq "cloud.$HOST" <<<"$ISSUED"; then ok_cloud=1; fi
+  if grep -Fq "wardryx.$HOST" <<<"$ISSUED"; then ok_wardryx=1; fi
   [ "$ok_cloud" = 1 ] && [ "$ok_wardryx" = 1 ] && break
   sleep 5
 done

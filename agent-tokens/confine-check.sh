@@ -47,7 +47,7 @@ while [ $# -gt 0 ]; do
     *) die "unknown argument: $1" ;;
   esac
 done
-if [ -n "$EXTERNAL" ] && ! printf '%s' "$EXTERNAL" | grep -Eq '^[A-Za-z0-9.-]+:[0-9]+$'; then
+if [ -n "$EXTERNAL" ] && ! grep -Eq '^[A-Za-z0-9.-]+:[0-9]+$' <<<"$EXTERNAL"; then
   die "--external must be HOST:PORT, not '$EXTERNAL'"
 fi
 

@@ -11,7 +11,7 @@ check() { # check <image-name> <hex digest> <repository> <workflow file>
   out=$(docker run --rm ghcr.io/sigstore/cosign/cosign:v3.1.3 verify --certificate-identity-regexp "$id" \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com "ghcr.io/taipanbox/${name}@${dig}" 2>&1)
   rc=$?
-  first=$(printf '%s\n' "$out" | grep -m1 -E 'Error|no signatures|Verification for|subject' | cut -c1-120)
+  first=$(grep -m1 -E 'Error|no signatures|Verification for|subject' <<<"$out" | cut -c1-120)
   printf '%-24s %-16s %-20s rc=%s %s\n' "$name" "$repo" "$wf" "$rc" "$first"
 }
 

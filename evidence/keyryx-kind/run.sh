@@ -27,7 +27,7 @@ BUSYBOX='busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a0144
 step() { printf '\n== %s\n' "$*"; }
 
 step "cluster $CLUSTER"
-if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
+if ! grep -qx "$CLUSTER" <<<"$(kind get clusters 2>/dev/null)"; then
   kind create cluster --name "$CLUSTER" --wait 120s || { echo "kind create failed"; exit 1; }
 fi
 # A private kubeconfig for this run: the operator's current context is not touched.
@@ -206,8 +206,8 @@ YAML
 done
 for who in none consumer witness-client; do kubectl -n "$NS" wait pod/np-$who --for=condition=Ready --timeout=120s >/dev/null; done
 for who in none consumer witness-client; do
-  c=$(kubectl -n "$NS" exec np-$who -- wget -T 5 -S -O /dev/null http://keyryx-custody.agent-stack.svc.cluster.local:4340/healthz 2>&1 | grep -m1 -oE 'HTTP/[0-9.]+ [0-9]+' || echo "no answer")
-  w=$(kubectl -n "$NS" exec np-$who -- wget -T 5 -S -O /dev/null http://keyryx-witness.agent-stack.svc.cluster.local:4341/v1/witness/head 2>&1 | grep -m1 -oE 'HTTP/[0-9.]+ [0-9]+' || echo "no answer")
+  c=$(grep -m1 -oE 'HTTP/[0-9.]+ [0-9]+' <<<"$(kubectl -n "$NS" exec np-$who -- wget -T 5 -S -O /dev/null http://keyryx-custody.agent-stack.svc.cluster.local:4340/healthz 2>&1)" || echo "no answer")
+  w=$(grep -m1 -oE 'HTTP/[0-9.]+ [0-9]+' <<<"$(kubectl -n "$NS" exec np-$who -- wget -T 5 -S -O /dev/null http://keyryx-witness.agent-stack.svc.cluster.local:4341/v1/witness/head 2>&1)" || echo "no answer")
   echo "label $who: custody=$c witness=$w"
 done
 kubectl -n "$NS" delete pod np-none np-consumer np-witness-client --ignore-not-found >/dev/null

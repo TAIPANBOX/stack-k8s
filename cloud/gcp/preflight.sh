@@ -194,7 +194,7 @@ if [ -n "$PROJECT" ]; then
   ENABLED="$(gcloud services list --enabled --project="$PROJECT" --format='value(config.name)' 2>/dev/null || true)"
   TO_ENABLE=""
   for a in $NEED_APIS; do
-    if printf '%s\n' "$ENABLED" | grep -qx "$a"; then ok "$a"; else
+    if grep -qx "$a" <<<"$ENABLED"; then ok "$a"; else
       if [ "$ENABLE_APIS" = 1 ]; then TO_ENABLE="$TO_ENABLE $a"; else
         bad "$a is not enabled"
         note "free to turn on. Re-run with --enable-apis, or: gcloud services enable $a --project=$PROJECT"
@@ -211,7 +211,7 @@ fi
 # ---- 6. quota, which is where a GCP run dies before it starts ---------------
 # Read from the region rather than assumed. The numbers this cluster needs are
 # derived from the same variables Terraform uses, so they cannot drift apart.
-if [ -n "$PROJECT" ] && printf '%s\n' "$ENABLED" | grep -qx compute.googleapis.com; then
+if [ -n "$PROJECT" ] && grep -qx compute.googleapis.com <<<"$ENABLED"; then
   say "quota in $REGION"
   NODES=$((SERVERS_WANTED + AGENTS_WANTED))
   VCPU_EACH="$(gcloud compute machine-types describe "$MACHINE_TYPE" --zone="$ZONE" --project="$PROJECT" \

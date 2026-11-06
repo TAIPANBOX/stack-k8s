@@ -252,11 +252,11 @@ for k in keys:
     die "custody's trailryx-root key set has no ES384 key: trailryx-node pins a P-384 key, and keyryx/policy.json.tmpl makes trailryx-root ES384"
   fi
   if [ -n "${KEYRYX_ROTATE_KID:-}" ]; then
-    printf '%s\n' "$es384" | grep -Fqx "$KEYRYX_ROTATE_KID" \
+    grep -Fqx "$KEYRYX_ROTATE_KID" <<<"$es384" \
       || die "KEYRYX_ROTATE_KID names no ES384 key in custody's trailryx-root set"
     kid="$KEYRYX_ROTATE_KID"
   elif [ -n "$current" ]; then
-    if printf '%s\n' "$es384" | grep -Fqx "$current"; then
+    if grep -Fqx "$current" <<<"$es384"; then
       printf '   trailryx-kid: kept (the record seal stays pinned to %s)\n' "$current"
       return 0
     fi
@@ -332,7 +332,7 @@ keyryx_release_seal() {
   deadline=$((SECONDS + ${KEYRYX_SEAL_WAIT:-300}))
   while :; do
     left="$(keyryx_seal_bound)" || die "could not read the record-seal Jobs to release them from the Keyryx witness"
-    printf '%s\n' "$left" | grep -q ' running$' || break
+    grep -q ' running$' <<<"$left" || break
     [ "$SECONDS" -lt "$deadline" ] || break
     sleep "${KEYRYX_SEAL_POLL:-5}"
   done

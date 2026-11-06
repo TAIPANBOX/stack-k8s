@@ -39,7 +39,7 @@ expect_total() {
 	run "$1" "$2"
 	if [ "$RC" -ne 0 ]; then
 		bad "$1 with $2 exited $RC; a known type must price and exit 0"
-	elif ! printf '%s\n' "$OUT" | grep -qE "^ +TOTAL +$3 USD/hour\$"; then
+	elif ! grep -qE "^ +TOTAL +$3 USD/hour\$" <<<"$OUT"; then
 		bad "$1 with $2 did not print TOTAL $3 USD/hour"
 	fi
 }
@@ -49,9 +49,9 @@ expect_refusal() {
 	run "$1" "$2"
 	if [ "$RC" -eq 0 ]; then
 		bad "$1 with unknown type $2 exited 0: a total is printed that counts it as zero"
-	elif ! printf '%s\n' "$OUT" | grep -qF "unknown rate for $2"; then
+	elif ! grep -qF "unknown rate for $2" <<<"$OUT"; then
 		bad "$1 with unknown type $2 does not say: unknown rate for $2"
-	elif printf '%s\n' "$OUT" | grep -qE '^ +TOTAL'; then
+	elif grep -qE '^ +TOTAL' <<<"$OUT"; then
 		bad "$1 with unknown type $2 still prints a TOTAL"
 	fi
 }

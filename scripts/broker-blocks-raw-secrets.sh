@@ -177,7 +177,7 @@ else
   else
     up=0
     for _ in $(seq 1 60); do
-      if docker logs "$ctr" 2>&1 | grep -q 'credential-broker listening'; then up=1; break; fi
+      if grep -q 'credential-broker listening' <<<"$(docker logs "$ctr" 2>&1)"; then up=1; break; fi
       [ "$(docker inspect -f '{{.State.Running}}' "$ctr" 2>/dev/null)" = true ] || break
       sleep 0.25
     done

@@ -210,16 +210,16 @@ chmod +x "$tmp/harness.sh"
 if ! out="$(bash "$tmp/harness.sh" "$PWD" fresh "$LOG" 2>&1)"; then
   printf 'FAIL the mint did not run on an empty cluster: %s\n' "$out"; exit 1
 fi
-if ! grep -q "BEGIN PRIVATE KEY" "$LOG" 2>/dev/null && ! printf '%s' "$(sed -n 's/^  approver.pem: //p' "$LOG" | base64 -d 2>/dev/null)" | grep -q "BEGIN PRIVATE KEY"; then
+if ! grep -q "BEGIN PRIVATE KEY" "$LOG" 2>/dev/null && ! grep -q "BEGIN PRIVATE KEY" <<<"$(sed -n 's/^  approver.pem: //p' "$LOG" | base64 -d 2>/dev/null)"; then
   printf 'FAIL the approver key is not a PKCS#8 "BEGIN PRIVATE KEY" document in the create input\n'; exit 1
 fi
-if sed -n 's/^  approver.pem: //p' "$LOG" | base64 -d 2>/dev/null | grep -q "EC PRIVATE KEY"; then
+if grep -q "EC PRIVATE KEY" <<<"$(sed -n 's/^  approver.pem: //p' "$LOG" | base64 -d 2>/dev/null)"; then
   printf 'FAIL the approver key is a SEC1 "EC PRIVATE KEY", not PKCS#8\n'; exit 1
 fi
-if ! printf '%s' "$out" | grep -q "approver key: minted"; then
+if ! grep -q "approver key: minted" <<<"$out"; then
   printf 'FAIL the mint did not report minting: %s\n' "$out"; exit 1
 fi
-if printf '%s' "$out" | grep -q "PRIVATE KEY"; then
+if grep -q "PRIVATE KEY" <<<"$out"; then
   printf 'FAIL the mint printed private key material\n'; exit 1
 fi
 jwks_line="$(grep -o 'approver-jwks.json: .*' "$LOG" | head -1)"
@@ -241,7 +241,7 @@ fi
 if [ -e "$LOG" ]; then
   printf 'FAIL a cluster with the pair received a create (the key would be rewritten)\n'; exit 1
 fi
-if ! printf '%s' "$out2" | grep -q "approver key: kept"; then
+if ! grep -q "approver key: kept" <<<"$out2"; then
   printf 'FAIL a kept pair is not reported as kept: %s\n' "$out2"; exit 1
 fi
 
@@ -253,7 +253,7 @@ fi
 if [ -e "$LOG" ]; then
   printf 'FAIL a half pair received a create\n'; exit 1
 fi
-if ! printf '%s' "$out3" | grep -q "not both in"; then
+if ! grep -q "not both in" <<<"$out3"; then
   printf 'FAIL a half pair is refused without saying why: %s\n' "$out3"; exit 1
 fi
 
