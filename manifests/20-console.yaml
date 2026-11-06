@@ -59,7 +59,7 @@ spec:
           # five source commits are labels on it: `docker inspect` answers
           # "which qryx is in this console", and that is the question an
           # incident asks.
-          image: ghcr.io/taipanbox/genaryx-console:v1.7.5@sha256:d68952a3523e517b25bdec39e8515d107e72c009a3dfc89712d09a923f323da5
+          image: ghcr.io/taipanbox/genaryx-console:v1.8.1@sha256:5d8392de2fbd63cbb60493bb71bc278293c601f7b6c81a69d3dc691c68e45834
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef: { name: stack-wiring }
