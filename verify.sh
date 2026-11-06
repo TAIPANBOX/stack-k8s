@@ -203,7 +203,7 @@ for n,u in [('cloud',   'http://tokenfuse-cloud:8080/healthz'),
         print(n, 'FAIL', e)
 ")"
 echo "$out" | sed 's/^/  /'
-echo "$out" | grep -q FAIL && bad "a plane did not answer" || ok "all five planes answer 200, and wardryx reaches its store"
+grep -q FAIL <<<"$out" && bad "a plane did not answer" || ok "all five planes answer 200, and wardryx reaches its store"
 
 head_ "the data the console governs"
 # Each plane with ITS OWN credential. The money plane and the policy plane do
@@ -250,7 +250,7 @@ if [ -z "$gov" ]; then
   bad "the console could not be asked what it governs at all: no output from the probe"
 else
   echo "$gov" | sed 's/^/  /' | sed 's/^  //'
-  if echo "$gov" | grep -q UNREACHABLE; then
+  if grep -q UNREACHABLE <<<"$gov"; then
     bad "the console cannot read one of the planes it governs"
   else
     ok "the console can read all three planes it governs"
@@ -266,9 +266,9 @@ fi
 console_log="$(kc logs deploy/genaryx-console --tail=200 2>/dev/null || true)"
 if [ -z "$console_log" ]; then
   bad "the console's log could not be read, so whether its bus is live is unknown"
-elif echo "$console_log" | grep -q 'bus startup failed'; then
+elif grep -q 'bus startup failed' <<<"$console_log"; then
   bad "the console's bus did not start: its Bus Explorer is empty (genaryx#71, #82; a console older than v1.1.1, or GENARYX_STATE_DIR not writable)"
-elif echo "$console_log" | grep -q 'bus LIVE'; then
+elif grep -q 'bus LIVE' <<<"$console_log"; then
   ok "the console's bus is live"
 else
   bad "the console's log carries neither 'bus LIVE' nor 'bus startup failed': the line this check reads has moved"
@@ -528,7 +528,7 @@ else
     if [ "$wired" = 0 ]; then
       case "$froms" in
         *stack-wiring*)
-          kc get configmap stack-wiring -o jsonpath='{.data}' 2>/dev/null | grep -q 'EVENTS_PATH' && wired=1 ;;
+          grep -q 'EVENTS_PATH' <<<"$(kc get configmap stack-wiring -o jsonpath='{.data}' 2>/dev/null)" && wired=1 ;;
       esac
     fi
     if [ "$wired" = 1 ]; then

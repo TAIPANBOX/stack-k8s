@@ -239,6 +239,12 @@ jobs:
       - name: a secret is minted from a bounded read (invariant 41)
         run: ./scripts/gen-is-bounded.sh
 
+      # Added 2026-11-06, in BOTH callers on the same commit. Under pipefail a pipe into grep -q
+      # fails when the writer is still writing, so a healthy tree went red at random on a loaded
+      # runner. See CLAUDE.md invariant 81 and GOTCHAS 160.
+      - name: no pipe ends in a grep that leaves early (invariant 81)
+        run: ./scripts/no-reader-leaves-a-pipe-early.sh
+
       # Added 2026-10-14, in BOTH callers on the same commit. k3s ships coredns with no
       # disruption budget; the installers add one of their own and never patch k3s's
       # Deployment. See CLAUDE.md invariant 45 and GOTCHAS 128.
@@ -347,8 +353,8 @@ jobs:
         run: |
           info="$(go version -m "$(go env GOPATH)/bin/kubeconform")"
           printf '%s\n' "$info" | head -1
-          printf '%s\n' "$info" | grep -Eq '^[[:space:]]mod[[:space:]]github\.com/yannh/kubeconform[[:space:]]v0\.8\.0[[:space:]]'
-          printf '%s\n' "$info" | head -1 | grep -q ': go1\.27\.3$'
+          grep -Eq '^[[:space:]]mod[[:space:]]github\.com/yannh/kubeconform[[:space:]]v0\.8\.0[[:space:]]' <<<"$info"
+          grep -q ': go1\.27\.3$' <<<"$(printf '%s\n' "$info" | head -1)"
 
       - name: every manifest is a document Kubernetes would accept
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/manifests-valid.sh
@@ -514,8 +520,8 @@ jobs:
         run: |
           info="$(go version -m "$(go env GOPATH)/bin/kubeconform")"
           printf '%s\n' "$info" | head -1
-          printf '%s\n' "$info" | grep -Eq '^[[:space:]]mod[[:space:]]github\.com/yannh/kubeconform[[:space:]]v0\.8\.0[[:space:]]'
-          printf '%s\n' "$info" | head -1 | grep -q ': go1\.27\.3$'
+          grep -Eq '^[[:space:]]mod[[:space:]]github\.com/yannh/kubeconform[[:space:]]v0\.8\.0[[:space:]]' <<<"$info"
+          grep -q ': go1\.27\.3$' <<<"$(printf '%s\n' "$info" | head -1)"
 
       # Last inside each shard, because it mutates tracked files and restores
       # them. It needs a clean tree and says so plainly, so it also reports any

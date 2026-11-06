@@ -49,27 +49,27 @@ run() { # run IMAGE: sets OUT (stdout and stderr)
 }
 
 run "ghcr.io/taipanbox/tokenfuse-control-plane:v1.19.0"
-if ! printf '%s\n' "$OUT" | grep -qF "tokenfuse-cloud is v1.19.0, at or above v1.2.0"; then
+if ! grep -qF "tokenfuse-cloud is v1.19.0, at or above v1.2.0" <<<"$OUT"; then
   bad "a bare name:tag is not read: $(printf '%s' "$OUT" | tail -1)"
 fi
 
 run "ghcr.io/taipanbox/tokenfuse-control-plane:v1.19.0@sha256:$DIGEST"
-if ! printf '%s\n' "$OUT" | grep -qF "tokenfuse-cloud is v1.19.0, at or above v1.2.0"; then
+if ! grep -qF "tokenfuse-cloud is v1.19.0, at or above v1.2.0" <<<"$OUT"; then
   bad "a name:tag@sha256:<64 hex> reference, the form the manifests pin, is not read: $(printf '%s' "$OUT" | tail -1)"
 fi
 
 run "localhost:5000/tokenfuse-control-plane:v1.19.0@sha256:$DIGEST"
-if ! printf '%s\n' "$OUT" | grep -qF "tokenfuse-cloud is v1.19.0, at or above v1.2.0"; then
+if ! grep -qF "tokenfuse-cloud is v1.19.0, at or above v1.2.0" <<<"$OUT"; then
   bad "a registry with a port is read as the tag: $(printf '%s' "$OUT" | tail -1)"
 fi
 
 run "ghcr.io/taipanbox/tokenfuse-control-plane@sha256:$DIGEST"
-if ! printf '%s\n' "$OUT" | grep -qF "has no vX.Y.Z tag this script can read"; then
+if ! grep -qF "has no vX.Y.Z tag this script can read" <<<"$OUT"; then
   bad "a digest with no tag is not refused: $(printf '%s' "$OUT" | tail -1)"
 fi
 
 run "ghcr.io/taipanbox/tokenfuse-control-plane:v1.19.0@sha256:abc123"
-if ! printf '%s\n' "$OUT" | grep -qF "is not a sha256 digest of 64 hex"; then
+if ! grep -qF "is not a sha256 digest of 64 hex" <<<"$OUT"; then
   bad "a short digest is not refused: $(printf '%s' "$OUT" | tail -1)"
 fi
 

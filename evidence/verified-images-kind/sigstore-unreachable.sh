@@ -162,7 +162,7 @@ echo "== 4a. Sigstore unreachable, controller NOT restarted: a NEW pod with the 
 webhook_before=$(kubectl -n "$CTRL" get pods -l role=webhook -o jsonpath='{.items[0].metadata.name}')
 echo "  the controller pod that verified the baseline: $webhook_before"
 out=$(pod sig-during-cut "$SIGNED"); echo "  $out"
-if echo "$out" | grep -q 'created'; then verdict_a=ADMITTED; else verdict_a=REFUSED; fi
+if grep -q 'created' <<<"$out"; then verdict_a=ADMITTED; else verdict_a=REFUSED; fi
 echo "  verdict (a): $verdict_a"
 sleep 2
 
@@ -174,19 +174,19 @@ kubectl -n "$CTRL" wait --for=delete pod/"$webhook_before" --timeout=240s 2>&1 |
 webhook_after=$(kubectl -n "$CTRL" get pods -l role=webhook -o jsonpath='{.items[0].metadata.name}')
 echo "  the only controller pod now: $webhook_after (the baseline pod is gone)"
 out=$(pod sig-after-restart "$SIGNED"); echo "  $out"
-if echo "$out" | grep -q 'created'; then verdict_b=ADMITTED; else verdict_b=REFUSED; fi
+if grep -q 'created' <<<"$out"; then verdict_b=ADMITTED; else verdict_b=REFUSED; fi
 echo "  verdict (b): $verdict_b"
 
 echo
 echo "== 4c. control: a signed digest this controller has never verified (tokenfuse-control-plane)"
 out=$(pod sig-fresh-control "ghcr.io/taipanbox/tokenfuse-control-plane:v1.18.0@sha256:c6160a8eed3d83d9caf42b426e82444cfe48a14027cb90ad4338340587a9d372"); echo "  $out"
-if echo "$out" | grep -q 'created'; then verdict_c=ADMITTED; else verdict_c=REFUSED; fi
+if grep -q 'created' <<<"$out"; then verdict_c=ADMITTED; else verdict_c=REFUSED; fi
 echo "  verdict (c): $verdict_c"
 
 echo
 echo "== 4d. control: an UNSIGNED TAIPANBOX image (the mockryx digest run.sh uses for its unsigned probe)"
 out=$(pod unsigned-control "ghcr.io/taipanbox/mockryx@sha256:758d31650f43b283762da81c8543e3c5dea000d7360a9fb4df8f408f1503c5c7"); echo "  $out"
-if echo "$out" | grep -q 'created'; then verdict_d=ADMITTED; else verdict_d=REFUSED; fi
+if grep -q 'created' <<<"$out"; then verdict_d=ADMITTED; else verdict_d=REFUSED; fi
 echo "  verdict (d): $verdict_d"
 
 echo

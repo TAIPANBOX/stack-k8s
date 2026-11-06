@@ -559,7 +559,7 @@ fi
 # Longhorn: on AWS the same failure appeared four minutes later as a Longhorn
 # webhook timeout that named nothing useful.
 say "cross-node pod traffic (the check the AWS run wished it had)"
-if k_ "get ippool default-ipv4-ippool -o jsonpath='{.spec.vxlanMode}'" 2>/dev/null | grep -q Always; then
+if grep -q Always <<<"$(k_ "get ippool default-ipv4-ippool -o jsonpath='{.spec.vxlanMode}'" 2>/dev/null)"; then
   echo "   vxlanMode=Always, so pod packets never leave a node unencapsulated"
 else
   echo "   WARNING: the IP pool is not in unconditional VXLAN mode. On GCE that means"

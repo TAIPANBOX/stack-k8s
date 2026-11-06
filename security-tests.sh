@@ -88,8 +88,7 @@ kcc()  { $KUBECTL -n "$CONSOLE_NS" "$@"; }
 PRIV_NS="${PRIV_NS:-}"
 if [ -z "$PRIV_NS" ]; then
   for cand in agent-tunnel agent-console "$NS"; do
-    if $KUBECTL -n "$cand" get deploy -o json 2>/dev/null \
-       | grep -q '"NET_ADMIN"'; then PRIV_NS="$cand"; break; fi
+    if grep -q '"NET_ADMIN"' <<<"$($KUBECTL -n "$cand" get deploy -o json 2>/dev/null)"; then PRIV_NS="$cand"; break; fi
   done
 fi
 
@@ -160,7 +159,7 @@ PY
     notify_out="$(kc exec -i sec-probe-notify -- python3 - < "${notify_out_file}" 2>/dev/null)"
     rm -f "${notify_out_file}"
     echo "$notify_out" | sed 's/^/    /'
-    if echo "$notify_out" | grep -q REACHED; then
+    if grep -q REACHED <<<"$notify_out"; then
       bad "a pod wearing the notifier's label reached inside the cluster: the egress rule points inward"
     else
       ok "the notifier's egress reaches nothing inside the cluster, on any port"
@@ -211,7 +210,7 @@ PY
   probe_out="$(kc exec -i sec-probe -- python3 - < "${probe_out_file}" 2>/dev/null)"
   rm -f "${probe_out_file}"
   echo "$probe_out" | sed 's/^/    /'
-  if echo "$probe_out" | grep -q REACHED; then
+  if grep -q REACHED <<<"$probe_out"; then
     bad "an unlabelled pod reached a plane: the namespace is acting as a trust boundary"
   else
     ok "an unlabelled pod in the namespace reached none of the six services"
@@ -243,13 +242,13 @@ SH
 gw="$(kc exec -i deploy/tokenfuse-gateway -- bash -s < "${gw_file}" 2>/dev/null)"
 rm -f "${gw_file}"
 echo "$gw" | sed 's/^/    /'
-echo "$gw" | grep -q "^open api.anthropic.com:443" \
+grep -q "^open api.anthropic.com:443" <<<"$gw" \
   && ok "gateway -> provider on 443 (the metered path is open)" \
   || bad "gateway cannot reach the provider on 443: the gateway is the only way out and it is shut"
-echo "$gw" | grep -q "^blocked api.anthropic.com:80" \
+grep -q "^blocked api.anthropic.com:80" <<<"$gw" \
   && ok "gateway -> provider on 80 is blocked (443 only)" \
   || bad "gateway reached port 80 outbound: the egress rule is wider than 443"
-echo "$gw" | grep -q "^blocked 10.10.0.2:6443" \
+grep -q "^blocked 10.10.0.2:6443" <<<"$gw" \
   && ok "gateway cannot turn around and hit the cluster's own API" \
   || bad "gateway reached the Kubernetes API: the 0.0.0.0/0 egress rule is missing its private-range exceptions"
 
@@ -273,7 +272,7 @@ spec:
 YAML
 rejected="$(cat < "${rejected_file}" | kc apply -f - 2>&1)"
 rm -f "${rejected_file}"
-if echo "$rejected" | grep -qi "forbidden\|violat\|denied"; then
+if grep -qi "forbidden\|violat\|denied" <<<"$rejected"; then
   ok "a privileged, hostNetwork, hostPath pod was REJECTED by admission"
   echo "$rejected" | tr ',' '\n' | grep -oiE "(privileged|hostNetwork|hostPID|hostPath|allowPrivilegeEscalation|runAsNonRoot|seccompProfile)[^,]*" | head -4 | sed 's/^/    /'
 else
@@ -569,12 +568,12 @@ FORGEDPROBE
   forged="$(kc exec -i sec-forged -- python3 - < "${forged_file}" 2>/dev/null)"
   rm -f "${forged_file}"
   echo "$forged" | sed 's/^/    /'
-  echo "$forged" | grep -q "inherited_credential=no" \
+  grep -q "inherited_credential=no" <<<"$forged" \
     && ok "the forged pod inherits no credential from the cluster" \
     || bad "the forged pod inherited an admin credential from its environment"
-  if echo "$forged" | grep -qE "read_policies=(200|201)|delete_freeze=(200|204)|read_fleet=200"; then
+  if grep -qE "read_policies=(200|201)|delete_freeze=(200|204)|read_fleet=200" <<<"$forged"; then
     bad "a self-labelled pod reached an admin API: a plane is accepting an unauthenticated or devkey bearer (GOTCHAS 20)"
-  elif echo "$forged" | grep -qE "gw_runs(_noauth)?=200|gw_keys(_noauth)?=200"; then
+  elif grep -qE "gw_runs(_noauth)?=200|gw_keys(_noauth)?=200" <<<"$forged"; then
     bad "a self-labelled pod reached the gateway's own admin routes: TOKENFUSE_ADMIN_KEYS is not enforcing on /v1/runs or /v1/keys (GOTCHAS 97)"
   else
     ok "every admin verb from the forged pod was refused, wardryx, tokenfuse-cloud and the gateway alike"

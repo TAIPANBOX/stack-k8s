@@ -153,7 +153,7 @@ created_keys() {
 	' "$f"
 }
 refs=$(manifest_refs | sort -u)
-if printf '%s\n' "$refs" | grep -q '^UNPARSED'; then
+if grep -q '^UNPARSED' <<<"$refs"; then
 	printf 'FAIL: a secretKeyRef this gate could not parse, so it cannot say what that pod reads:\n'
 	printf '%s\n' "$refs" | grep '^UNPARSED' | sed 's/^/      /'
 	exit 1
@@ -178,7 +178,7 @@ for f in $scripts; do
 		[ -n "$wanted" ] || continue
 		checked=$((checked + 1))
 		for key in $wanted; do
-			if ! printf '%s\n' "$made" | grep -qxF "$secret $key"; then
+			if ! grep -qxF "$secret $key" <<<"$made"; then
 				printf 'FAIL: %s creates Secret %s and does not create key %s, which a\n' "$f" "$secret" "$key"
 				printf '      manifest reads. A pod that reads it stays in CreateContainerConfigError.\n'
 				problems=$((problems + 1))

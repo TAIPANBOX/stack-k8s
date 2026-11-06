@@ -59,7 +59,8 @@ if kubectl -n "$NS" get deployment tokenfuse-mcp-broker >/dev/null 2>&1; then
   # The broker relays an agent token to the gateway's tool-call check with its own key (id `broker`, invariant 54).
   kubectl -n "$NS" get secret broker-taint-key >/dev/null 2>&1 \
     || die "the broker is deployed but Secret broker-taint-key is missing: deploy so it is minted with the gateway's keys (lib/identity-mint.sh). Nothing was written."
-  kubectl -n "$NS" get secret gateway-client-keys -o jsonpath='{.data.client_keys}' | base64 --decode | tr ',' '\n' | grep -q ':broker$' \
+  # -c reads to the end (invariant 81), and the keys stay in the pipe: a here-string is a file on bash before 5.1.
+  kubectl -n "$NS" get secret gateway-client-keys -o jsonpath='{.data.client_keys}' | base64 --decode | tr ',' '\n' | grep -c ':broker$' >/dev/null \
     || die "the gateway's client keys have no entry for the broker (key id broker): deploy to mint them. Nothing was written."
 fi
 
