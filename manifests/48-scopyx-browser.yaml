@@ -153,7 +153,7 @@ spec:
           # at the same version has no browser in it and this pod would exit at
           # startup saying so, which is the intended failure rather than a
           # confusing one.
-          image: ghcr.io/taipanbox/scopyx:v1.2.0-chromium@sha256:fb36a0635f4b88c3dc44a63b8bf3033140c66138e322051f6bf423ea6f73afbe
+          image: ghcr.io/taipanbox/scopyx:v1.3.0-chromium@sha256:3e5c28024deb462c06d5440414b2f453bfbb70ebd944d087888397367f4d9f99
           imagePullPolicy: IfNotPresent
           env:
             - { name: SCOPYX_ADDR, value: "0.0.0.0:4300" }
