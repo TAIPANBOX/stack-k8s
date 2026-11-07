@@ -378,6 +378,10 @@ jobs:
       - name: the risk hold follows --typed-risk-signal (invariant 65)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/risk-hold-follows-the-flag.sh
 
+      # Added 2026-11-07 with invariant 82. An agent whose error budget is spent is held for a person.
+      - name: an agent whose error budget is spent is held for a person (invariant 82)
+        run: ./scripts/slo-signal-is-wired.sh
+
       # Added 2026-10-19 with invariant 66. The CostCrew run ceiling is validated before any install and written
       # after the last apply, and the crew CronJob is suspended. See CLAUDE.md invariant 66.
       - name: the CostCrew ceiling is validated and written after apply (invariant 66)

@@ -774,6 +774,18 @@ for qwen2.5:7b on 8 vCPU), not measured on a cluster. The proxy binds the pod ad
 `TYPRYX_ALLOW_OPEN_BIND=1`, because the broker cannot send an `X-Typryx-Key`; its
 door is the one NetworkPolicy that admits the broker alone.
 
+### An agent whose error budget is spent waits for a person
+
+On by default. Every six hours a sidecar of the gateway's pod (`verdryx-slo`) measures each agent's error budget over the last 28 days of traffic. When a budget is spent, wardryx puts that agent's calls to a person, and the console shows them like any other hold. A granted approval lets that one call through.
+
+**What spends a budget.** A run that something had to stop, and a run that cost more than three times the fleet's median. So an agent you attack on purpose spends its budget, and so does one that does far heavier work than the rest of the fleet. A rehearsal identity is an agent too. To narrow it, change the target of `slo-burn-hold` in the `wardryx-policy` ConfigMap, and to measure and hold nobody, delete the rule. A hold itself spends nothing: an agent on hold can earn its budget back while it keeps working.
+
+**How it ends.** The sidecar writes a line while a budget is spent, and wardryx lets the agent go once the newest line is older than 48 hours (`WARDRYX_SIGNAL_EVENTS_MAX_AGE`). A bad spell stops counting once the window has passed it. The traces are the pod's `emptyDir`, so a gateway restart starts the measurement again.
+
+**What you can see.** wardryx's `/readyz` carries `"signal_events": "ok"`, `"unreadable"` or `"broken"`. Every decision records the signal, whether or not it held anything, and heraldyx alerts on each `slo_burn` line. A sidecar that cannot measure stops, and the pod shows it, because a routine that cannot measure must not look like a fleet with nothing to report.
+
+**What guards the file.** It is `verdryx.ndjson` on `stack-events`, under a uid nothing else runs as, so no other plane can write or truncate it. A file wardryx cannot believe holds nobody, on purpose: this signal can only add a hold, and every other control stands without it.
+
 ### The on-box chain verifier
 
 Every stream on the shared bus is a hash chain, and nothing on a box checked one
@@ -1105,7 +1117,7 @@ claim is ReadWriteOnce, as the record seal does. The wiring is two patches under
 manifests do not change. Each reader reads the file only as a regular file, never
 through a link (heraldyx 0.9.0, pinned here, and the console from genaryx#134).
 heraldyx renders the seven `witness_*` types and mails the high ones. The console is pinned at
-`genaryx-console:v1.8.1`, and from v1.7.0 the image reads `GENARYX_EVENTS_EXTRA` and turns a
+`genaryx-console:v1.8.4`, and from v1.7.0 the image reads `GENARYX_EVENTS_EXTRA` and turns a
 high finding into an incident (TAIPANBOX/genaryx#134).
 
 Not wired yet: vouchryx and tokenfuse (their Keyryx releases are not published

@@ -146,8 +146,11 @@ compare(
 # (agent-stack-go v1.1.0), a CronJob here and, in the other two launchers, a
 # compose service and a routine. The same situation, the same way out: this
 # repository knows it as a routine and C5's ROUTINE_KIND does not yet.
+#
+# `verdryx-slo` is the third, added 2026-11-07 (invariant 82): the error budget, a
+# sidecar here and a compose service in stack-single.
 ESTATE_ROUTINES = {
-    "focus-export", "qryx-trend", "verdryx-drift",
+    "focus-export", "qryx-trend", "verdryx-drift", "verdryx-slo",
     "idryx-detect", "mockryx-drill", "trailryx-seal",
     "costcrew-run", "agent-conform",
 }

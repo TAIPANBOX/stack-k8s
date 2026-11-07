@@ -522,6 +522,55 @@ spec:
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { memory: 256Mi }
+        # The error budget (CLAUDE.md invariant 82). A sidecar for the reason focus-export is one: the
+        # traces are this pod's emptyDir, and nothing outside the pod can read them. verdryx lives in
+        # the console's image, so this is that image with its entrypoint replaced. Every six hours it
+        # measures each agent's budget and appends an slo_burn line to its own file when one is spent.
+        #
+        # Its own uid, so no other plane can write or truncate the file wardryx stands on; the chain
+        # says a line was not edited, not who wrote it. The first run waits, which also keeps the old
+        # and the new pod of a rollout from appending to one chain at once.
+        #
+        # `--holds-spend-no-budget`: a held call is written to the trace, so without it the hold spends
+        # the budget that caused it. No `|| true`: a routine that cannot measure must not look like a
+        # fleet with nothing to report, so a failure stops the container and the pod shows it.
+        - name: verdryx-slo
+          image: ghcr.io/taipanbox/genaryx-console:v1.8.4@sha256:f018407dba47800acf3be54bb24fb85117c8dd14477b4a4f4dd9bae99376eb30
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              traces=/var/lib/stack/traces/gateway
+              # Made now, under this uid: wardryx reads an empty file as sound and a missing one as
+              # unreadable, and a healthy cluster must not report that until its first spent budget.
+              : >>"$VERDRYX_EVENTS_PATH"
+              while :; do
+                sleep "$ROUTINE_SLO_INTERVAL"
+                if [ -d "$traces" ]; then
+                  verdryx slo --traces "$traces" --window "$ROUTINE_SLO_WINDOW" --holds-spend-no-budget
+                else
+                  echo "verdryx-slo: skipped, no trace directory at $traces yet"
+                fi
+              done
+          env:
+            - name: VERDRYX_EVENTS_PATH
+              valueFrom: { configMapKeyRef: { name: stack-wiring, key: WARDRYX_SIGNAL_EVENTS } }
+            - { name: ROUTINE_SLO_INTERVAL, value: "21600" }
+            - { name: ROUTINE_SLO_WINDOW, value: "28d" }
+          volumeMounts:
+            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: traces, mountPath: /var/lib/stack/traces, readOnly: true }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 20020
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 10m, memory: 96Mi }
+            limits: { memory: 512Mi }
       volumes:
         - name: events
           persistentVolumeClaim: { claimName: stack-events }
@@ -641,6 +690,9 @@ spec:
             # (a replay routine, an operator) reads the same key.
             - name: WARDRYX_POLICY_ARCHIVE
               valueFrom: { configMapKeyRef: { name: stack-wiring, key: WARDRYX_POLICY_ARCHIVE } }
+            # The quality plane's stream, read for an agent's error budget (invariant 82).
+            - name: WARDRYX_SIGNAL_EVENTS
+              valueFrom: { configMapKeyRef: { name: stack-wiring, key: WARDRYX_SIGNAL_EVENTS } }
             # wardryx verifies the agent's own token and its DPoP proof itself (CLAUDE.md invariant 63, decision D3(b)),
             # instead of taking the enforcement point's word for which agent is calling. The five settings are read
             # together and checked by scripts/wardryx-verifies-agent-tokens.sh. The proof stays required (the default).

@@ -79,7 +79,8 @@
         ],
         "namespace": "agent-stack",
         "runs_as_sidecar": {
-          "focus-export": "tokenfuse-gateway"
+          "focus-export": "tokenfuse-gateway",
+          "verdryx-slo": "tokenfuse-gateway"
         }
       },
       "declared": {

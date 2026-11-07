@@ -136,6 +136,10 @@ data:
   # The loss is one-way: replay works forward from the day this is set and can
   # never be applied to decisions recorded before it.
   WARDRYX_POLICY_ARCHIVE: "/var/lib/stack/events/wardryx-policy-archive"
+  # The error budget (CLAUDE.md invariant 82). The file the verdryx-slo sidecar writes and wardryx
+  # reads, on the volume both already mount, so this costs no new storage. Unset, wardryx reads
+  # nothing. What the signal is worth is the policy's to say: slo-burn-hold, below.
+  WARDRYX_SIGNAL_EVENTS: "/var/lib/stack/events/verdryx.ndjson"
   # The drill harness writes here too, and until 2026-08-03 it did not write
   # anywhere. It ran, it found gaps, and `sim_finding` reached nothing: the
   # notifier has a sentence for that type and the operator was never going to
@@ -232,6 +236,16 @@ data:
       target: agent://mockryx.local/*
       deny_tool:
         - shell_exec
+    # An agent whose error budget is spent has its calls put to a person (CLAUDE.md invariant 82). It
+    # can add a hold and nothing else. No when_absent, on purpose: a file wardryx cannot believe holds
+    # nobody, because this signal can only add a hold and a broken file must not stop every tool call.
+    # Narrow the target to the agents you mean, or delete the rule to measure and hold nobody.
+    - name: slo-burn-hold
+      target: "agent://*"
+      hold_if_signal:
+        name: slo_burn
+        values: [exhausted, fast_burn]
+        min_probability: 1
     # The allow-list rehearsal: the one identity this policy matches may call only the listed
     # tool. The drill tries a renamed copy of that tool, which the list does not name, so it is
     # refused. Wardryx v1.3.0 reads allow_tool; a build older than v1.3.0 refuses this file at
