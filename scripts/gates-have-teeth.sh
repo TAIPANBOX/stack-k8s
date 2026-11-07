@@ -353,7 +353,7 @@ else:
 # with nothing noticing. Same fault, same gate, the other file it now reads.
 run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
 	'./scripts/pinned-images.sh' \
-	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.8.4@sha256:f018407dba47800acf3be54bb24fb85117c8dd14477b4a4f4dd9bae99376eb30", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.8.6@sha256:ca99cc8be803a143643b6da56aa898af32d9bab22b9c03d6cc59b12203081549", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
 	"moves: a pod can come back different"
 
 # The default apply set must not publish anything to the world, and must not
@@ -3818,7 +3818,7 @@ run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)"
 # edits one tracked file the gate reads; the gate's own baseline must be green first.
 run_case "verified-images: a TAIPANBOX image carries a tag only" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.8.4@sha256:f018407dba47800acf3be54bb24fb85117c8dd14477b4a4f4dd9bae99376eb30", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.8.6@sha256:ca99cc8be803a143643b6da56aa898af32d9bab22b9c03d6cc59b12203081549", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
 	"image not pinned by digest"
 run_case "verified-images: an upstream image nobody allowed" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -4120,7 +4120,7 @@ run_case "approver: wardryx reads the JWK set from another file" fail \
 	"but the JWK set is mounted at"
 run_case "approver: the console is left on v1.1.48 while wardryx reads the JWK set" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "genaryx-console:v1.8.4@sha256:f018407dba47800acf3be54bb24fb85117c8dd14477b4a4f4dd9bae99376eb30", "genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
+	"$(py 'edit("manifests/20-console.yaml", "genaryx-console:v1.8.6@sha256:ca99cc8be803a143643b6da56aa898af32d9bab22b9c03d6cc59b12203081549", "genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
 	"every approval would be refused"
 run_case "approver: a TODO is left in place after the wiring" fail \
 	'./scripts/approver-key-is-minted.sh' \
@@ -5073,6 +5073,195 @@ run_case "no-reader-leaves-a-pipe-early: no workflow step is read" fail \
 	'./scripts/no-reader-leaves-a-pipe-early.sh' \
 	"$(py 'edit("scripts/no-reader-leaves-a-pipe-early.sh", "elif path.startswith(\".github/workflows/\") and", "elif path.startswith(\".github/flows/\") and")')" \
 	'measured NOTHING'
+
+# A tool call nothing grants waits for a person, and a cluster with a history is asked first (CLAUDE.md invariant 83).
+run_case "tool-hold-is-seeded: the block is never written" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("deploy.sh", "\ntool_hold_settle\n", "\n")')" \
+	"never calls tool_hold_settle"
+run_case "tool-hold-is-seeded: a cloud launcher never writes the block" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "\ntool_hold_settle\n", "\n")')" \
+	"never calls tool_hold_settle"
+run_case "tool-hold-is-seeded: the floor narrows to agent ids with a scheme" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "    \x27  target: \"*\"\x27 \\\n", "    \x27  target: \"agent://*\"\x27 \\\n")')" \
+	"walks past it"
+run_case "tool-hold-is-seeded: the floor is written as a word wardryx refuses" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "\x27  when_no_grant: hold\x27", "\x27  when_no_grant: holds\x27")')" \
+	"does not say when_no_grant: hold"
+run_case "tool-hold-is-seeded: a seed grants every agent" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "\x27  target: agent://mockryx.local/*\x27", "\x27  target: \"*\"\x27")')" \
+	"grant-drills is not every tool"
+run_case "tool-hold-is-seeded: the drills lose their seed" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "    \x27- name: grant-drills\x27 \\\n    \x27  target: agent://mockryx.local/*\x27 \\\n    \x27  grant_tool: [\"*\"]\x27 \\\n", "")')" \
+	"grant-drills is not every tool"
+run_case "tool-hold-is-seeded: the install-check seed is gone" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "    \x27  when_no_grant: hold\x27 \\\n    \x27- name: grant-drills\x27 \\\n    \x27  target: agent://mockryx.local/*\x27 \\\n    \x27  grant_tool: [\"*\"]\x27 \\\n    \x27- name: grant-install-check\x27 \\\n    \x27  target: agent://local.invalid/install-check\x27 \\\n    \x27  grant_tool: [ask]\x27 \\\n    \x27  require_identity_source: [client-key]\x27 \\\n    \x27  deny_if_chain_unproven: true\x27\n", "    \x27  when_no_grant: hold\x27 \\\n    \x27- name: grant-drills\x27 \\\n    \x27  target: agent://mockryx.local/*\x27 \\\n    \x27  grant_tool: [\"*\"]\x27\n")')" \
+	"grant-install-check is not ask"
+run_case "tool-hold-is-seeded: the install-check seed asks for an agent token" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "\x27  require_identity_source: [client-key]\x27", "\x27  require_identity_source: [agent-token]\x27")')" \
+	"grant-install-check is not ask"
+run_case "tool-hold-is-seeded: the web grant denies scopyx's question" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "*) printf \x27agent-token, none\x27 ;;", "*) printf \x27agent-token\x27 ;;")')" \
+	"grant-operator-web is not fetch_url"
+run_case "tool-hold-is-seeded: the web grant lets a static key borrow the name" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "*) printf \x27agent-token, none\x27 ;;", "*) printf \x27agent-token, client-key, none\x27 ;;")')" \
+	"grant-operator-web is not fetch_url"
+run_case "tool-hold-is-seeded: the web grant is on every cluster" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "  [ -n \"$(k_ \"-n agent-stack get deployment scopyx --ignore-not-found -o name\" 2>/dev/null || true)\" ]\n", "  true\n")')" \
+	"the web grant is on a cluster with no scopyx"
+run_case "tool-hold-is-seeded: felyx gets a grant it does not need" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "\x27  deny_if_chain_unproven: true\x27\n  if tool_hold_web_wanted", "\x27  deny_if_chain_unproven: true\x27 \\\n    \x27- name: grant-felyx\x27 \\\n    \x27  target: agent://acme.example/genaryx/felyx\x27 \\\n    \x27  grant_tool: [ask]\x27\n  if tool_hold_web_wanted")')" \
+	"the block has rules other than"
+run_case "tool-hold-is-seeded: TOOL_HOLD=0 leaves the block" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "tool_hold_empty_document | k_ \"apply -f -\"", "tool_hold_block | tool_hold_document | k_ \"apply -f -\"")')" \
+	"TOOL_HOLD=0 leaves the block"
+run_case "tool-hold-is-seeded: TOOL_HOLD=0 keeps serving the block" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "    if [ \"$TOOL_HOLD_STATE\" = on ]; then\n      k_ \"-n agent-stack rollout restart", "    if false; then\n      k_ \"-n agent-stack rollout restart")')" \
+	"wardryx kept serving it"
+run_case "tool-hold-is-seeded: a cluster that said 0 is asked again" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "*) if [ \"$TOOL_HOLD_STATE\" = off ]; then TOOL_HOLD_ON=0; else TOOL_HOLD_ON=1; fi ;;", "*) TOOL_HOLD_ON=1 ;;")')" \
+	"a cluster that said 0"
+run_case "tool-hold-is-seeded: a misspelt switch reaches the cluster" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "    \x27\x27 | 0 | 1) return 0 ;;\n", "    x) return 0 ;;\n    *) return 0 ;;\n")')" \
+	"--tool-hold took the word"
+run_case "tool-hold-is-seeded: a launcher takes no switch" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "    --tool-hold) TOOL_HOLD=\"$2\"; shift 2 ;;\n", "")')" \
+	"does not parse --tool-hold"
+run_case "tool-hold-is-seeded: the block moves on every run" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "  if [ \"$TOOL_HOLD_STATE\" != absent ] && [ \"$(tool_hold_current)\" = \"$want\" ]; then return 0; fi\n", "")')" \
+	"a second run wrote something"
+run_case "tool-hold-is-seeded: a changed block does not restart wardryx" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "  k_ \"-n agent-stack rollout restart deployment/wardryx\" >/dev/null \\\n    || die \"could not restart wardryx to load the tool hold\"\n", "")')" \
+	"wardryx not restarted"
+run_case "tool-hold-is-seeded: the replay check is gone" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("deploy.sh", "\ntool_hold_guard      # CLAUDE.md", "\n# tool_hold_guard      # CLAUDE.md")')" \
+	"never calls tool_hold_guard"
+run_case "tool-hold-is-seeded: the lib no longer asks" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "  [ -n \"$(k_ \"-n agent-stack get deployment wardryx --ignore-not-found -o name\")\" ] || return 0\n", "  return 0\n")')" \
+	"the replay check is gone"
+run_case "tool-hold-is-seeded: the question comes after the apply" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'p = "deploy.sh"; s = open(p).read(); g = s[s.index("tool_hold_guard      #"):]; g = g[:g.index("\n") + 1]; a = "k_ \"apply -k /root/stack-k8s/manifests\"\n"; assert a in s; s = s.replace(g, "", 1).replace(a, a + g, 1); open(p, "w").write(s)')" \
+	"asks the question after the first apply"
+run_case "tool-hold-is-seeded: the question leaves its Job behind" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "2>\"$d/report.err\" || true\n  tool_hold_ask_clear\n", "2>\"$d/report.err\" || true\n")')" \
+	"leaves its Job or its ConfigMap behind"
+run_case "tool-hold-is-seeded: the question leaves the seeds out" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "  tool_hold_block | sed \x27s/^/    /\x27\n", "  printf \x27    - name: tool-hold\\n      target: \"*\"\\n      when_no_grant: hold\\n\x27\n")')" \
+	"the question leaves the seeds out"
+run_case "tool-hold-is-seeded: the question leaves the starter policy out" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "       on && !/^    / && !/^$/ \x7b exit \x7d\n", "       on && /deny-shell-exec/ \x7b exit \x7d\n")')" \
+	"stops short of the starter policy"
+run_case "tool-hold-is-seeded: unexamined decisions read as nothing to hold" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "if [ -z \"$rows\" ] && [ \"$unexamined\" = 0 ]; then", "if [ -z \"$rows\" ]; then")')" \
+	"unexamined decisions read as nothing to hold"
+run_case "tool-hold-is-seeded: a question nobody answered passes" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "  if tool_hold_ask \"$d\"; then\n    rows=", "  tool_hold_ask \"$d\" || return 0\n  if true; then\n    rows=")')" \
+	"a Job that left no report passed the question"
+run_case "tool-hold-is-seeded: a hostile id is printed to paste" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "      left=$((left + 1))\n      continue\n", "      left=$((left + 1))\n")')" \
+	"a hostile id is printed to paste"
+run_case "tool-hold-is-seeded: the store is left out of the question" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "if [ -n \"$stored\" ] && [ \"$stored\" != \"[]\" ]; then", "if false; then")')" \
+	"what agent-allow wrote is not in the question"
+run_case "tool-hold-is-seeded: an empty store breaks the question" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "if [ -n \"$stored\" ] && [ \"$stored\" != \"[]\" ]; then", "if [ -n \"$stored\" ]; then")')" \
+	"an empty store went in as a file"
+run_case "tool-hold-is-seeded: the Job can write the events it reads" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "mountPath: /var/lib/stack/events, readOnly: true", "mountPath: /var/lib/stack/events")')" \
+	"can write the events it reads"
+run_case "tool-hold-is-seeded: TOOL_HOLD=1 does not answer the list" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "  if [ \"$TOOL_HOLD_SAID\" = 1 ]; then\n", "  if false; then\n")')" \
+	"TOOL_HOLD=1 does not turn the hold on"
+run_case "tool-hold-is-seeded: the question runs another image" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "  image=\"$(tool_hold_image)\"\n", "  image=\"ghcr.io/taipanbox/wardryx:v2.5.1@sha256:2d3c0c9c0798156d3f05b82d0e63cf5b38ee4b9875d6bdbac1829f219c26abf7\"\n")')" \
+	"written down a second time"
+run_case "tool-hold-is-seeded: the pin goes below 2.6.0" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"wardryx:v\d+\.\d+\.\d+@sha256", "wardryx:v2.5.1@sha256", s); assert n == 1, n; open(p, "w").write(s)')" \
+	"older than 2.6.0"
+run_case "tool-hold-is-seeded: wardryx does not read the ConfigMap" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "              - configMap: \x7b name: wardryx-tool-hold, optional: true \x7d\n", "")')" \
+	"does not project the ConfigMap wardryx-tool-hold"
+run_case "tool-hold-is-seeded: the ConfigMap is required" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "wardryx-tool-hold, optional: true \x7d", "wardryx-tool-hold \x7d")')" \
+	"does not project the ConfigMap wardryx-tool-hold"
+run_case "tool-hold-is-seeded: a plain apply installs the floor" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("manifests/00-base.yaml", "  name: wardryx-policy\n", "  name: wardryx-tool-hold\n")')" \
+	"carries the floor"
+run_case "tool-hold-is-seeded: the console no longer holds the admin key" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "- name: WARDRYX_ADMIN_KEY\n", "- name: WARDRYX_ADMIN_KEYS\n")')" \
+	"does not hold WARDRYX_ADMIN_KEY"
+run_case "tool-hold-is-seeded: the admin key goes on a command line" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "-c console -- python3 - $*\"", "-c console -- env WARDRYX_ADMIN_KEY=$(k_ \"-n agent-stack get secret stack-keys\") python3 - $*\"")')" \
+	"the admin key reached a kubectl argument list"
+run_case "tool-hold-is-seeded: agent-allow goes on with no reason" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("tool-hold/agents.sh", "  why_ok \"$why\" \\\n    || die", "  true \\\n    || die")')" \
+	"went on with no --why"
+run_case "tool-hold-is-seeded: agent-allow takes a target with no trust domain" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("tool-hold/agents.sh", "[[ \"$agent\" =~ ^agent://[A-Za-z0-9._~-]+(:[0-9]+)?(/[A-Za-z0-9._~:/*-]*)?$ ]]", "[[ \"$agent\" =~ .+ ]]")')" \
+	"agent-allow took"
+run_case "tool-hold-is-seeded: a second grant replaces the first" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("tool-hold/wardryx.py", "tools = sorted(set(kept) | set(tools))", "tools = sorted(set(tools))")')" \
+	"a second grant keeps the first"
+run_case "tool-hold-is-seeded: a grant is written under a key wardryx refuses" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("tool-hold/wardryx.py", "\"grant_tool\": tools\x7d", "\"grant_tools\": tools\x7d")')" \
+	"agent-allow was refused"
+run_case "tool-hold-is-seeded: all gives no warning" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("tool-hold/agents.sh", "    if [ \"$granted\" = \x27*\x27 ]; then\n", "    if false; then\n")')" \
+	"prints no warning"
+run_case "tool-hold-is-seeded: a scenario names a case that is not there" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("features/a-tool-call-nothing-grants-waits-for-a-person.feature", "tool-hold-is-seeded: a hostile id is printed to paste", "tool-hold-is-seeded: a hostile id is shown to paste")')" \
+	"a scenario names a case that does not exist"
+run_case "tool-hold-is-seeded: no block measured nothing" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "tool_hold_block() \x7b\n", "tool_hold_blocks() \x7b\n")')" \
+	"measured NOTHING"
+run_case "tool-hold-is-seeded: a comment that names the hold is not a fault" pass \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("deploy.sh", "# ---- 1. the cluster ---", "# The tool hold is written by tool_hold_settle, further down.\n# ---- 1. the cluster ---")')"
 
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then

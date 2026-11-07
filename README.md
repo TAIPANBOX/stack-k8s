@@ -215,6 +215,8 @@ identity/       up.sh: the gateway's client keys and identity map, from files,
                 checked by the gateway image before the cluster is written;
                 mint.sh: the keys a deploy mints, for a cluster applied by hand.
                 See "Client keys and the identity map" below
+tool-hold/      agents.sh: give an agent a tool, take it back, list what is
+                granted. See "An agent's tool call waits for a person" below
 manifests/      plain YAML + a kustomization, applied with kubectl -k (no Helm).
                 Only the files listed in `kustomization.yaml` are in the default
                 apply. Every other manifest is opt-in, applied by a flag, a script
@@ -790,6 +792,57 @@ On by default. Every six hours a sidecar of the gateway's pod (`verdryx-slo`) me
 
 **What guards the file.** It is `verdryx.ndjson` on `stack-events`, under a uid nothing else runs as, so no other plane can write or truncate it. A file wardryx cannot believe holds nobody, on purpose: this signal can only add a hold, and every other control stands without it.
 
+### An agent's tool call waits for a person until something grants the tool
+
+On by default on a new cluster. When an agent calls a tool through the MCP broker and nothing grants it that tool, wardryx holds the call for a person: the agent gets a refusal (`-32004`, `requires approval`) and the console shows the hold. Model calls pass as they did, and so do scopyx's questions about where a fetch may go. A rule that only restricts an agent, a `deny_tool` or a `max_steps`, does not end the hold: a restriction is not a permission.
+
+**Give an agent a tool, in one command:**
+
+```bash
+./tool-hold/agents.sh agent-allow agent://acme.example/agents/billing lookup_invoice,send_reminder --why 'the monthly reminders'
+./tool-hold/agents.sh agent-allow agent://acme.example/agents/billing all --why 'a rehearsal'     # every tool, with a warning
+./tool-hold/agents.sh agent-deny  agent://acme.example/agents/billing send_reminder --why 'reminders stopped'
+./tool-hold/agents.sh agent-list
+```
+
+These are stack-single's `./install.sh agent-allow`, `agent-deny` and `agent-list`, for a cluster. The request runs in the console's pod through `kubectl exec`, so the admin key stays where the Secret `stack-keys` put it and is on no command line. `agent-allow` writes through `PUT /v1/policies`, so it is in force at once with no restart, it is on the record as `policy_updated`, and it survives a restart. The agent must name a trust domain, `agent://<domain>/...`, and a `*` may follow the domain. `--why` is required and goes in the policy's name beside the date. `agent-deny` takes the tool back, and the next call waits for a person again. `agent-list` shows whether the hold is on, what wardryx loaded, every grant and where it lives, and, with the hold off, what the hold would stop. On a node, `KUBECTL="k3s kubectl"` names the kubectl to use.
+
+A grant asks for an agent token, so a holder of a static key cannot borrow a granted name: the broker reports the static key, and the call is refused. An agent that really calls with a static key takes `--static-key`, and then its id is the caller's word. A grant also lists `none`, the source scopyx sends when it asks about the same agent's fetch.
+
+**What a new cluster comes with.** One block in the ConfigMap `wardryx-tool-hold`, which wardryx's policy directory projects beside `wardryx-policy`. It is a ConfigMap of its own because every launcher run applies `wardryx-policy` from this tree. The block is stack-single's, rule for rule:
+
+| Rule | What it is for |
+| --- | --- |
+| `tool-hold` | The floor: `target: "*"`, `when_no_grant: hold`. It lives in the file, and `PUT` refuses it, so a key cannot take it away |
+| `grant-drills` | Every tool for `agent://mockryx.local/*`, the fire drills. Their own deny rules still apply |
+| `grant-install-check` | `ask` for `agent://local.invalid/install-check`, under the broker's static key. Nothing here calls as that identity today, and the two stacks keep one block |
+| `grant-operator-web` | `fetch_url` and `browse` for `agent://<trust domain>/agents/operator`. Written when a scopyx runs and the trust domain is set; a cluster that adds scopyx after the install gets it on its next launcher run, or with `agent-allow` |
+
+Felyx and CostCrew get nothing: both make model calls only. `verify.sh` and `security-tests.sh` call nothing through the broker, and their probes of wardryx carry no tool call, so the floor does not judge them.
+
+A launcher writes this block, after it has asked the question below. `kubectl apply -k manifests/` by hand leaves the hold off: the projection is optional, and a floor nobody was asked about is what this design refuses.
+
+**An existing cluster stops the upgrade and applies nothing.** Before the first apply, a launcher runs `wardryx replay -policy <what this run would serve> -format json` over the cluster's own recorded decisions, as a Job of the wardryx image these manifests pin, with the events claim mounted read only. The candidate is this tree's starter policy, the block, and what is in the store. If a call of an agent outside the seeds would be held, the run stops: it prints the agent, the tool, how many calls and when last, and the commands to run. The Job and its ConfigMap are gone before it stops. The same goes for a history that could not be asked. A cluster that already carries the block is not asked again.
+
+A wardryx older than 2.6.0 cannot store a grant, so the cluster moves first, with the hold off:
+
+```bash
+TOOL_HOLD=0 ./deploy.sh <your flags>     # this release, no hold
+./tool-hold/agents.sh agent-allow <agent> <tools> --why 'what it is for'
+./tool-hold/agents.sh agent-list         # asks again: what would still wait
+TOOL_HOLD=1 ./deploy.sh <your flags>     # turns it on, and shows anything still on the list
+```
+
+| Switch | Default | What it does |
+| --- | --- | --- |
+| `TOOL_HOLD` or `--tool-hold`, on `deploy.sh`, `deploy-gcp.sh` and `deploy-aws.sh` | on | `0` takes the block and its grants out and leaves the ConfigMap empty, which is how the next run knows: a run that says nothing keeps it off. `1` turns the hold on over whatever the question found |
+
+**Going back.** `TOOL_HOLD=0` first, and only then an older tree or image. A wardryx older than 2.6.0 refuses `when_no_grant` and `grant_tool` at load, and with the doors failing closed that refuses every call. By hand: `kubectl -n agent-stack delete configmap wardryx-tool-hold`, then `kubectl -n agent-stack rollout restart deployment/wardryx`. Grants written through `agent-allow` can stay in the store: 2.5.1 reads past the key.
+
+**What a person can do about one call.** The console lists each hold with the tool and its target, not the arguments. An approval there mints a token for that one call, shown once, and the agent has to present it (`x-fuse-approval-token`), so a hold mostly ends by a grant. wardryx keeps one row per agent, run and call, and at most 20 waiting per agent (`WARDRYX_PENDING_PER_AGENT`), so an agent repeating a call does not flood the queue.
+
+**What it does not see.** A tool an agent reaches around the broker. On a cluster with no typed plane and no scopyx there is no broker, so no tool call reaches wardryx at all. An id with no `agent://` scheme is held and cannot be granted, so a person answers its calls one at a time.
+
 ### The on-box chain verifier
 
 Every stream on the shared bus is a hash chain, and nothing on a box checked one
@@ -920,7 +973,7 @@ sides use one secret, and it is off unless you turn it on:
 ```
 
 A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
-console v1.1.34 or later. The images pinned here are tokenfuse v1.23.0 and console v1.8.4,
+console v1.1.34 or later. The images pinned here are tokenfuse v1.23.0 and console v1.8.6,
 both later than those minimums; an older image
 ignores the setting.
 
@@ -1121,7 +1174,7 @@ claim is ReadWriteOnce, as the record seal does. The wiring is two patches under
 manifests do not change. Each reader reads the file only as a regular file, never
 through a link (heraldyx 0.9.0, pinned here, and the console from genaryx#134).
 heraldyx renders the seven `witness_*` types and mails the high ones. The console is pinned at
-`genaryx-console:v1.8.4`, and from v1.7.0 the image reads `GENARYX_EVENTS_EXTRA` and turns a
+`genaryx-console:v1.8.6`, and from v1.7.0 the image reads `GENARYX_EVENTS_EXTRA` and turns a
 high finding into an incident (TAIPANBOX/genaryx#134).
 
 Not wired yet: vouchryx and tokenfuse (their Keyryx releases are not published

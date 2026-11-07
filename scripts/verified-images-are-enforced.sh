@@ -296,6 +296,10 @@ ALLOW_UNPINNED = {
     # built on the host by the tunnel's own script, running in agent-tunnel, which is not opted in
     ("tunnel/tunnel-pod.yaml", "stack/wg:dev"): "built on the host, in agent-tunnel, not opted in",
     ("tunnel/tunnel-pod.yaml", "stack/caddy:dev"): "built on the host, in agent-tunnel, not opted in",
+    # the Job that asks what the tool hold would stop: tool_hold_image reads the image out of
+    # manifests/10-planes.yaml, so it has no pin of its own to judge, and tool-hold-is-seeded.sh holds
+    # the Job's image equal to that pin, digest and all (invariant 83)
+    ("lib/tool-hold.sh", "$image"): "read from manifests/10-planes.yaml at run time, held equal to that pin",
     # upstream cloud controllers, applied into kube-system by the cloud installers, pinned by version
     # from the installer's own variable; kube-system is not opted in, so the policy does not cover them
     ("cloud/aws/install-aws.sh", "registry.k8s.io/provider-aws/cloud-controller-manager:$CCM_VERSION"):
