@@ -1496,7 +1496,7 @@ run_case "slo-signal-is-wired: a hold spends the budget that caused it" fail \
 	"could never earn it back"
 run_case "slo-signal-is-wired: the sidecar keeps the console's entrypoint" fail \
 	'./scripts/slo-signal-is-wired.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          imagePullPolicy: IfNotPresent\n          command: [\"/bin/sh\", \"-c\"]\n          args:\n            - |\n              set -eu\n              traces=/var/lib/stack/traces/gateway\n              while :; do\n", "          imagePullPolicy: IfNotPresent\n          args:\n            - |\n              set -eu\n              traces=/var/lib/stack/traces/gateway\n              while :; do\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          imagePullPolicy: IfNotPresent\n          command: [\"/bin/sh\", \"-c\"]\n          args:\n            - |\n              set -eu\n              traces=/var/lib/stack/traces/gateway\n", "          imagePullPolicy: IfNotPresent\n          args:\n            - |\n              set -eu\n              traces=/var/lib/stack/traces/gateway\n")')" \
 	"refuses a shell as an argument"
 run_case "slo-signal-is-wired: the writer names another file" fail \
 	'./scripts/slo-signal-is-wired.sh' \
