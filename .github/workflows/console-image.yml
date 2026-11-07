@@ -52,7 +52,7 @@ name: console image
 env:
   QRYX_REF: 432f0502f8d68623fdcd1a58b5e59711618527d9      # qryx v1.1.1
   MOCKRYX_REF: 29933ad017991511368f53fc7146da93df9aa14b   # mockryx v0.4.0
-  VERDRYX_REF: 6003cf59a187149ac826f042e023280f008acfa8   # verdryx v0.2.0
+  VERDRYX_REF: ab61a745c5b3d920de3951674923fc59ac430ea8   # verdryx v0.3.0
   ENGRAM_REF: 28ad83f9a37f54e23797c833b40921033b04c334    # engram v3.1.0
   GENARYX_REF: 8d9831c387362fc6b370e4e84fd5bd5c3cf6b55b   # genaryx #147 merge commit
 
@@ -259,6 +259,13 @@ jobs:
                   echo "  $t: runs" ;;
               esac
             done
+            # Runs, not "is on PATH": `verdryx` answers with or without pyarrow, and `verdryx slo` over a
+            # trace does not. The error-budget routine stands on this (CLAUDE.md invariant 82).
+            if python3 -c "import pyarrow.parquet" 2>/dev/null; then
+              echo "  verdryx can read a Parquet trace"
+            else
+              echo "  verdryx slo cannot read a trace: pyarrow is not in this image"; fail=1
+            fi
             uname -m
             exit $fail
           '
