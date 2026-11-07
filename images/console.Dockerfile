@@ -83,7 +83,9 @@ LABEL dev.taipanbox.engine.tokenfuse="v1.22.0@sha256:48bc2eff2d00e76036b6b4f3eb6
 # (`verdryx`, `engram-mcp` - see their pyproject [project.scripts]).
 COPY verdryx/ /opt/verdryx/
 COPY engram/  /opt/engram/
-RUN pip install --no-cache-dir /opt/verdryx /opt/engram \
+# `[traces]` is pyarrow: `verdryx slo` reads the gateway's Parquet traces, and without it the
+# command stops at its first line. Pinned to the version verdryx's own lock tests.
+RUN pip install --no-cache-dir '/opt/verdryx[traces]' 'pyarrow==25.0.1' /opt/engram \
  && rm -rf /root/.cache
 
 COPY --from=gotools /out/qryx    /usr/local/bin/qryx
