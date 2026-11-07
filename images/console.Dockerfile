@@ -62,8 +62,8 @@ RUN cd qryx    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/qryx
 # scripts/console-engines-are-the-stacks.sh holds the two references equal to
 # manifests/10-planes.yaml's (CLAUDE.md invariant 79), and moving one without
 # the other fails it. Pulled, not built: the node builds nothing it can pull.
-FROM ghcr.io/taipanbox/wardryx:v2.5.1@sha256:2d3c0c9c0798156d3f05b82d0e63cf5b38ee4b9875d6bdbac1829f219c26abf7 AS wardryx-engine
-FROM ghcr.io/taipanbox/tokenfuse:v1.22.0@sha256:48bc2eff2d00e76036b6b4f3eb6bd09e29081a41468c7faf2093f8f46bc6c2ac AS tokenfuse-engine
+FROM ghcr.io/taipanbox/wardryx:v2.6.0@sha256:26113779c4b830d6b27e626874965c722fd8b41dc5d7085d226a3d903927af7b AS wardryx-engine
+FROM ghcr.io/taipanbox/tokenfuse:v1.23.0@sha256:192cfc7138eea6911d3c563427cdb996dac52c77e7f04f6ae71f84b6a6dc4535 AS tokenfuse-engine
 
 # --- runtime ----------------------------------------------------------------
 FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
@@ -76,8 +76,8 @@ RUN apt-get update \
 LABEL org.opencontainers.image.title="genaryx-console"
 # Which engines the proofs run, readable from `docker inspect`: the question an
 # incident asks of a proof is which wardryx replayed it.
-LABEL dev.taipanbox.engine.wardryx="v2.5.1@sha256:2d3c0c9c0798156d3f05b82d0e63cf5b38ee4b9875d6bdbac1829f219c26abf7"
-LABEL dev.taipanbox.engine.tokenfuse="v1.22.0@sha256:48bc2eff2d00e76036b6b4f3eb6bd09e29081a41468c7faf2093f8f46bc6c2ac"
+LABEL dev.taipanbox.engine.wardryx="v2.6.0@sha256:26113779c4b830d6b27e626874965c722fd8b41dc5d7085d226a3d903927af7b"
+LABEL dev.taipanbox.engine.tokenfuse="v1.23.0@sha256:192cfc7138eea6911d3c563427cdb996dac52c77e7f04f6ae71f84b6a6dc4535"
 
 # The two Python tools, installed as real console-invokable commands
 # (`verdryx`, `engram-mcp` - see their pyproject [project.scripts]).
