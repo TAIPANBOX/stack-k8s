@@ -351,7 +351,8 @@ declared tools carry an injection finding. Every gateway this launcher starts ru
   input. The starter policy names web, email, file and secret sources. A request is never
   refused for the text of a tool it declares: a declared tool with a high or critical finding
   labels the run `suspected_injection`, and the starter rule then applies to that run's later
-  calls.
+  calls. A page that hides text in Unicode tag characters or bidi isolates raises the same label
+  (tokenfuse v1.23.0), so a run that reads one can lose tools it had before.
 - **Changing it.** `--firewall enforce|shadow|off` on `deploy.sh`, `deploy-gcp.sh` and
   `deploy-aws.sh` (or `FIREWALL_MODE` in the environment). Any other word is refused before
   anything is installed. TokenFuse also refuses to start on a misspelt value (since v1.11.1), so
@@ -544,7 +545,10 @@ broker's scanner flags is refused rather than passed with a log line. It asks
 wardryx about every `tools/call`, so the policy judges tool calls as it judges
 model calls: a call with no `x-fuse-agent-id` is refused (it cannot be judged), a
 tool the policy denies is refused (`-32004`), and with wardryx unreachable the
-call is refused (fail closed, like the gateway). A `{{secret:NAME}}` handle is not
+call is refused (fail closed, like the gateway). A call the policy holds for a person
+says why, with the policy's own reason beside the approval id, and every refusal text is
+cleaned of control and hidden characters before a model reads it (tokenfuse v1.23.0).
+A `{{secret:NAME}}` handle is not
 a raw secret and resolves as before. Pinning tool definitions
 (`TOKENFUSE_MCP_LOCK`) needs a lock file you approved and is not set. The same
 settings were measured on stack-single's compose environment on 2026-10-17, not
@@ -916,7 +920,7 @@ sides use one secret, and it is off unless you turn it on:
 ```
 
 A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
-console v1.1.34 or later. The images pinned here are tokenfuse v1.16.0 and console v1.1.46,
+console v1.1.34 or later. The images pinned here are tokenfuse v1.23.0 and console v1.8.4,
 both later than those minimums; an older image
 ignores the setting.
 
