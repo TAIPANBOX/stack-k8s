@@ -353,7 +353,7 @@ else:
 # with nothing noticing. Same fault, same gate, the other file it now reads.
 run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
 	'./scripts/pinned-images.sh' \
-	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.8.6@sha256:ca99cc8be803a143643b6da56aa898af32d9bab22b9c03d6cc59b12203081549", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
 	"moves: a pod can come back different"
 
 # The default apply set must not publish anything to the world, and must not
@@ -3818,7 +3818,7 @@ run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)"
 # edits one tracked file the gate reads; the gate's own baseline must be green first.
 run_case "verified-images: a TAIPANBOX image carries a tag only" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.8.6@sha256:ca99cc8be803a143643b6da56aa898af32d9bab22b9c03d6cc59b12203081549", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
 	"image not pinned by digest"
 run_case "verified-images: an upstream image nobody allowed" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -4120,7 +4120,7 @@ run_case "approver: wardryx reads the JWK set from another file" fail \
 	"but the JWK set is mounted at"
 run_case "approver: the console is left on v1.1.48 while wardryx reads the JWK set" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "genaryx-console:v1.8.6@sha256:ca99cc8be803a143643b6da56aa898af32d9bab22b9c03d6cc59b12203081549", "genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
+	"$(py 'edit("manifests/20-console.yaml", "genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5", "genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
 	"every approval would be refused"
 run_case "approver: a TODO is left in place after the wiring" fail \
 	'./scripts/approver-key-is-minted.sh' \
