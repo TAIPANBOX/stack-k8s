@@ -516,9 +516,8 @@ case "\$*" in
   *"get deployment scopyx"*) printf 'deployment.apps/scopyx\n' ;;
   *"get secret stack-keys"*) printf '%s' "$ADMIN" ;;
   *"exec -i deploy/genaryx-console"*)
-    case "\$*" in *" - loaded"*) docker run --rm -v "${live}_events:/e:ro" "$BUSYBOX" cat /e/wardryx.ndjson >"$e/events.copy" ;; esac
     while [ "\$#" -gt 0 ] && [ "\$1" != python3 ]; do shift; done
-    WARDRYX_ADMIN_KEY="$ADMIN" TOOL_HOLD_WARDRYX_URL="http://127.0.0.1:$PORT" TOOL_HOLD_EVENTS="$e/events.copy" exec "\$@" ;;
+    WARDRYX_ADMIN_KEY="$ADMIN" TOOL_HOLD_WARDRYX_URL="http://127.0.0.1:$PORT" exec "\$@" ;;
   *"apply -f -") cat >"$e/asked.yaml" ;;
   *"get job"*) printf '1/' ;;
   *"logs job/"*)
@@ -547,6 +546,7 @@ PY
     docker run --rm --network none --read-only --cap-drop ALL --user 65532:65532 --group-add 10001 \
       -v "${live}_events:/var/lib/stack/events:ro" -v "$e/candidate:/candidate:ro" "$PIN" "\${args[@]}" 2>&1 ;;
   *"delete job"* | *"delete configmap"*) ;;
+  *"logs deploy/wardryx -c wardryx") docker logs "$live-wardryx" 2>&1 ;;
   *) printf 'UNKNOWN kubectl: %s\n' "\$*" >&2; exit 1 ;;
 esac
 SHIM
@@ -583,6 +583,14 @@ grep -qE '^ +tool hold: on, grants: 3 in the ConfigMap, 1 through agent-allow$' 
 grep -qF 'one more' <<<"$listed" || fail "E: agent-list does not show the reason in the grant's name"
 grep -q "$AG" <<<"$listed" || fail "E: agent-list does not show the grant"
 grep -q 'grant-drills' <<<"$listed" || fail "E: agent-list does not show the grants in the ConfigMap"
+# What wardryx loaded is its own start line (2.6.1 and later), read from its log: on here.
+loaded_now="$(env -i PATH="$PATH" ROOT="$ROOT" KUBECTL="$e/kubectl" bash -c 'k_() { eval "$KUBECTL $*"; }; . "$ROOT/lib/tool-hold.sh"; tool_hold_loaded' 2>&1)"
+[ "$loaded_now" = on ] || fail "E: what the running wardryx loaded does not read on from its own start line: '$loaded_now'"
+# A start record 2.6.0 left on the bus names an older start, so it must not decide: one with no floor,
+# planted after the real start, changes nothing in what agent-list says.
+docker run --rm -v "${live}_events:/e" "$BUSYBOX" sh -c 'printf "%s\n" "{\"type\":\"policy_loaded\",\"source\":\"wardryx\",\"data\":{\"no_grant_floors\":[]}}" >>/e/wardryx.ndjson'
+listed="$(agents agent-list)"
+grep -qE '^ +tool hold: on, grants: 3 in the ConfigMap, 1 through agent-allow$' <<<"$listed" || fail "E: a start record left on the bus by an older wardryx decides what the running one loaded: $listed"
 
 # The stop against the real replay: the agent with a stored grant is off the list, the stranger is on it.
 out="$(env -i PATH="$PATH" HOME="$e" TRUST_DOMAIN=acme.example ROOT="$ROOT" TOOL_HOLD_SECONDS=0 KUBECTL="$e/kubectl" bash -c "

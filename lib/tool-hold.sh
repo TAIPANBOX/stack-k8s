@@ -159,6 +159,16 @@ tool_hold_pod() { # VERB [BASE64]
   k_ "-n agent-stack exec -i deploy/genaryx-console -c console -- python3 - $*" <"$ROOT/tool-hold/wardryx.py"
 }
 tool_hold_b64() { base64 | tr -d '\n'; }
+# What wardryx said at its last start: from 2.6.1 it says the floors it loaded in one line of its own
+# log, `wardryx: policy set loaded ... no_grant_floors=[tool-hold] ...`, and no longer on the bus (SPEC
+# 6.2 lists no such type for it). The bus is not read: a policy_loaded record 2.6.0 left there names
+# an older start. Prints on, off, or nothing for a wardryx that said no such line.
+tool_hold_loaded() {
+  local line
+  line="$(k_ "-n agent-stack logs deploy/wardryx -c wardryx" 2>/dev/null | grep -F 'wardryx: policy set loaded ' | tail -n 1 || true)"
+  [ -n "$line" ] || return 0
+  if grep -qE 'no_grant_floors=\[[^]]*tool-hold' <<<"$line"; then printf on; else printf off; fi
+}
 tool_hold_ask_document() { # STORED_JSON: the candidate, then the Job that reads it
   local image stored="${1:-}"
   image="$(tool_hold_image)"
