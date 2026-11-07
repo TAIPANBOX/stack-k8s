@@ -3084,8 +3084,8 @@ run_case "wardryx-key-is-pep: the migration writes the key on the command line" 
 
 run_case "wardryx-key-is-pep: a pin moves back to the old wardryx" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.6.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
-	"does not pin wardryx v2.6.0"
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.6.1", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
+	"does not pin wardryx v2.6.1"
 
 run_case "wardryx-key-is-pep: a reworded comment is not a fault" pass \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
@@ -3903,7 +3903,7 @@ run_case "verified-images: a policy's glob moved onto another repository's image
 	"covered by two policies"
 run_case "verified-images: a manifest names a TAIPANBOX image with no signer row" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.6.0@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.5.0@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.6.1@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.5.0@sha256:")')" \
 	"has no signer row in BINDINGS"
 run_case "verified-images: the default install stops turning admission on" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -4009,7 +4009,7 @@ run_case "keyryx: the custody policy grants trailryx nothing" fail \
 	"does not grant trailryx-node the sign operation"
 run_case "keyryx: the wardryx patch rolls wardryx back to v2.3.0" fail \
 	'./scripts/keyryx-is-default.sh' \
-	"$(py 'edit("keyryx/wardryx-patch.yaml", "ghcr.io/taipanbox/wardryx:v2.6.0@sha256:26113779c4b830d6b27e626874965c722fd8b41dc5d7085d226a3d903927af7b", "ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543")')" \
+	"$(py 'edit("keyryx/wardryx-patch.yaml", "ghcr.io/taipanbox/wardryx:v2.6.1@sha256:2101d23bbe8ecb1b932a530611ffa02f1c7c9b82394c4fa8db238f7d0e7bd667", "ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543")')" \
 	"would roll wardryx back"
 run_case "keyryx: the witness is pointed at no stream directory" fail \
 	'./scripts/keyryx-is-default.sh' \
@@ -4065,9 +4065,9 @@ run_case "keyryx-kid: a comment reworded in the library (must pass)" pass \
 	"$(py 'edit("lib/keyryx-install.sh", "# keyryx_probe_jwks NAME: prints custody", "# keyryx_probe_jwks NAME: prints the custody")')"
 
 # The Keyryx images and the record seal's trailryx-node are the release pins, by tag and digest (CLAUDE.md invariant 72).
-run_case "keyryx-release-pins: the witness is left on keyryx v0.1.2" fail \
+run_case "keyryx-release-pins: the witness is left on keyryx v0.1.3" fail \
 	'./scripts/keyryx-release-pins.sh' \
-	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("keyryx:v0.1.3@sha256:26d5"); open(p, "w").write(s[:i] + "keyryx:v0.1.2@sha256:26d5" + s[i + len("keyryx:v0.1.3@sha256:26d5"):])')" \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("keyryx:v0.1.4@sha256:6597"); open(p, "w").write(s[:i] + "keyryx:v0.1.3@sha256:6597" + s[i + len("keyryx:v0.1.4@sha256:6597"):])')" \
 	"is not the release pin"
 run_case "keyryx-release-pins: the record seal is left on trailryx-node v1.4.0" fail \
 	'./scripts/keyryx-release-pins.sh' \
@@ -4075,7 +4075,7 @@ run_case "keyryx-release-pins: the record seal is left on trailryx-node v1.4.0" 
 	"is not the release pin"
 run_case "keyryx-release-pins: one keyryx digest is not the tag's" fail \
 	'./scripts/keyryx-release-pins.sh' \
-	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); s = s.replace("26d5d49cd4a67eb4", "26d5d49cd4a67eb5", 1); open(p, "w").write(s)')" \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); s = s.replace("659723319e28c6c8", "659723319e28c6c9", 1); open(p, "w").write(s)')" \
 	"is not the release pin"
 run_case "keyryx-release-pins: the record seal's image is absent (measured nothing)" fail \
 	'./scripts/keyryx-release-pins.sh' \
@@ -4140,7 +4140,7 @@ run_case "approver: WARDRYX_ALLOW_KEY_APPROVALS is set on wardryx" fail \
 	"sets WARDRYX_ALLOW_KEY_APPROVALS"
 run_case "approver: wardryx is pinned before the approver statements" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.6.0@sha256:", "wardryx:v2.3.0@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.6.1@sha256:", "wardryx:v2.3.0@sha256:")')" \
 	"before the approver statements"
 run_case "approver: the mint rewrites a kept pair" fail \
 	'./scripts/approver-key-is-minted.sh' \
@@ -4314,7 +4314,7 @@ run_case "workflow-checkouts: a comment reworded in the workflow (must pass)" pa
 # The console's two proof engines are the stack's own, digest for digest (CLAUDE.md invariant 79).
 run_case "console-engines: the console's wardryx differs from the stack's" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("images/console.Dockerfile", "wardryx:v2.6.0@sha256:26113779", "wardryx:v2.6.0@sha256:2611377a")')" \
+	"$(py 'edit("images/console.Dockerfile", "wardryx:v2.6.1@sha256:2101d23b", "wardryx:v2.6.1@sha256:2101d23c")')" \
 	"differs from the stack's"
 run_case "console-engines: the console's tokenfuse is an older tag than the stack's" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
@@ -5199,6 +5199,10 @@ run_case "tool-hold-is-seeded: the Job can write the events it reads" fail \
 	'./scripts/tool-hold-is-seeded.sh' \
 	"$(py 'edit("lib/tool-hold.sh", "mountPath: /var/lib/stack/events, readOnly: true", "mountPath: /var/lib/stack/events")')" \
 	"can write the events it reads"
+run_case "tool-hold-is-seeded: what wardryx loaded is looked for under the 2.6.0 record" fail \
+	'./scripts/tool-hold-is-seeded.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "grep -F \x27wardryx: policy set loaded \x27", "grep -F \x27\"policy_loaded\"\x27")')" \
+	"does not read on from its own start line"
 run_case "tool-hold-is-seeded: TOOL_HOLD=1 does not answer the list" fail \
 	'./scripts/tool-hold-is-seeded.sh' \
 	"$(py 'edit("lib/tool-hold.sh", "  if [ \"$TOOL_HOLD_SAID\" = 1 ]; then\n", "  if false; then\n")')" \

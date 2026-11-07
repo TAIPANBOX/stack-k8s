@@ -47,15 +47,15 @@ name: console image
 # one, and nobody has to know which they got.
 # The commits this image is built from, in one place (CLAUDE.md invariant 68). Each is the commit its release
 # tag names (read with git ls-remote, the peeled commit). genaryx has no release tags, so it is the merge commit of
-# TAIPANBOX/genaryx#151, a person's grant reaching the agent as the raw approval token, shown once in the console,
-# after the policy and budget proofs, the sealed case, the bench, the typed remedies and the demo's case finding the
+# TAIPANBOX/genaryx#152, "always allow" a tool for an agent from the approvals inbox, after the raw approval token
+# shown once (#151), the policy and budget proofs, the sealed case, the bench, the typed remedies and the demo's case finding the
 # incident it showed (#147). Move one by changing this block and nothing else.
 env:
   QRYX_REF: 432f0502f8d68623fdcd1a58b5e59711618527d9      # qryx v1.1.1
   MOCKRYX_REF: 29933ad017991511368f53fc7146da93df9aa14b   # mockryx v0.4.0
   VERDRYX_REF: ab61a745c5b3d920de3951674923fc59ac430ea8   # verdryx v0.3.0
   ENGRAM_REF: 28ad83f9a37f54e23797c833b40921033b04c334    # engram v3.1.0
-  GENARYX_REF: f38763cec8e82ab1e1d6e9d14a1f19065c0428c9   # genaryx #151 merge commit
+  GENARYX_REF: fd0710effa8889f41b9bf6da499888eb84a796ca   # genaryx #152 merge commit
 
 on:
   push:

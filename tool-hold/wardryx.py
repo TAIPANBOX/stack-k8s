@@ -4,7 +4,6 @@
 #
 #   python3 - store              the store, one JSON array, as a policy file reads it
 #   python3 - grants             the grants in the store: agent, tools, name, tab-separated
-#   python3 - loaded             on, off or nothing: what wardryx said at its last start
 #   python3 - allow <base64>     {"agent","tools","why","static","sources"}
 #   python3 - deny  <base64>     {"agent","tools","why"}
 #
@@ -21,7 +20,6 @@ import urllib.request
 
 URL = os.environ.get("TOOL_HOLD_WARDRYX_URL", "http://wardryx:8090")
 KEY = os.environ.get("WARDRYX_ADMIN_KEY", "")
-EVENTS = os.environ.get("TOOL_HOLD_EVENTS", "/var/lib/stack/events/wardryx.ndjson")
 
 
 def stop(text):
@@ -117,23 +115,9 @@ def deny(req):
         stop("wardryx did not take the grant away: HTTP %s %s" % (status, text[:300]))
 
 
-def loaded():
-    last = ""
-    try:
-        with open(EVENTS, encoding="utf-8", errors="replace") as stream:
-            for line in stream:
-                if '"policy_loaded"' in line:
-                    last = line
-    except OSError:
-        return
-    if not last:
-        return
-    print("on" if re.search(r'"no_grant_floors":\[[^\]]*"tool-hold"', last.replace(" ", "")) else "off")
-
-
 def main():
     verb = sys.argv[1] if len(sys.argv) > 1 else ""
-    if not KEY and verb != "loaded":
+    if not KEY:
         stop("this pod holds no WARDRYX_ADMIN_KEY, so wardryx cannot be asked. Nothing was changed.")
     if verb == "store":
         rows = [{k: v for k, v in row.items() if k not in ("id", "updated_at")} for row in stored()]
@@ -142,8 +126,6 @@ def main():
         for row in stored():
             if row.get("grant_tool"):
                 print("%s\t%s\t%s" % (row.get("target", ""), ",".join(row["grant_tool"]), row.get("name", "")))
-    elif verb == "loaded":
-        loaded()
     elif verb in ("allow", "deny"):
         req = json.loads(base64.b64decode(sys.argv[2]))
         (allow if verb == "allow" else deny)(req)

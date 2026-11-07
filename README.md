@@ -805,7 +805,7 @@ On by default on a new cluster. When an agent calls a tool through the MCP broke
 ./tool-hold/agents.sh agent-list
 ```
 
-These are stack-single's `./install.sh agent-allow`, `agent-deny` and `agent-list`, for a cluster. The request runs in the console's pod through `kubectl exec`, so the admin key stays where the Secret `stack-keys` put it and is on no command line. `agent-allow` writes through `PUT /v1/policies`, so it is in force at once with no restart, it is on the record as `policy_updated`, and it survives a restart. The agent must name a trust domain, `agent://<domain>/...`, and a `*` may follow the domain. `--why` is required and goes in the policy's name beside the date. `agent-deny` takes the tool back, and the next call waits for a person again. `agent-list` shows whether the hold is on, what wardryx loaded, every grant and where it lives, and, with the hold off, what the hold would stop. On a node, `KUBECTL="k3s kubectl"` names the kubectl to use.
+These are stack-single's `./install.sh agent-allow`, `agent-deny` and `agent-list`, for a cluster. The request runs in the console's pod through `kubectl exec`, so the admin key stays where the Secret `stack-keys` put it and is on no command line. `agent-allow` writes through `PUT /v1/policies`, so it is in force at once with no restart, it is on the record as `policy_updated`, and it survives a restart. The agent must name a trust domain, `agent://<domain>/...`, and a `*` may follow the domain. `--why` is required and goes in the policy's name beside the date. `agent-deny` takes the tool back, and the next call waits for a person again. `agent-list` shows whether the hold is on, what wardryx loaded (its own start line, read with `kubectl logs deploy/wardryx`: from 2.6.1 wardryx says it there and not on the bus), every grant and where it lives, and, with the hold off, what the hold would stop. On a node, `KUBECTL="k3s kubectl"` names the kubectl to use.
 
 A grant asks for an agent token, so a holder of a static key cannot borrow a granted name: the broker reports the static key, and the call is refused. An agent that really calls with a static key takes `--static-key`, and then its id is the caller's word. A grant also lists `none`, the source scopyx sends when it asks about the same agent's fetch.
 
@@ -1145,10 +1145,12 @@ kubectl -n agent-stack delete configmap gateway-identity-map
 
 ## Keyryx on the cluster (opt-in)
 
-Keyryx (`ghcr.io/taipanbox/keyryx:v0.1.3`) is the key custody service and the
+Keyryx (`ghcr.io/taipanbox/keyryx:v0.1.4`) is the key custody service and the
 independent witness of the record. Off by default: `kubectl apply -k manifests/`
 never applies it. `keyryx/up.sh` turns it on, `keyryx/down.sh` turns it off and
-keeps every key and claim.
+keeps every key and claim. v0.1.4 changes only delegated keys (at the bound of four
+live keys a new key retires its owner's oldest, keyryx#27). The policy here holds
+no delegated key, so custody on a cluster behaves as it did on v0.1.3.
 
 ```bash
 KUBECONFIG=./kubeconfig.yaml ./keyryx/up.sh

@@ -32,7 +32,7 @@ usage() {
 list_status() {
   local state loaded infile instore="not read" stored
   state="$(tool_hold_state)"
-  loaded="$(tool_hold_pod loaded 2>/dev/null || true)"
+  loaded="$(tool_hold_loaded)"
   infile="$(grep -cE '^ *grant_tool:' <<<"$(tool_hold_current 2>/dev/null || true)" || true)"
   if stored="$(tool_hold_pod grants 2>/dev/null)"; then instore="$(grep -c . <<<"$stored" || true)"; fi
   [ "$state" = on ] || state=off

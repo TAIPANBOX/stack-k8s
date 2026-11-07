@@ -154,3 +154,9 @@ Feature: A tool call nothing grants waits for a person
     And a scenario that names no case fails it
     # -> gates-have-teeth.sh "tool-hold-is-seeded: no block measured nothing"
     # -> gates-have-teeth.sh "tool-hold-is-seeded: a scenario names a case that is not there"
+
+  Scenario: agent-list reads what the running wardryx loaded from its own start line
+    Given wardryx 2.6.1 or later, which says the floors it loaded in its log and not on the bus
+    When an operator runs agent-list, even with a start record an older wardryx left on the bus
+    Then the line reads the running wardryx's start line, and the record on the bus decides nothing
+    # -> gates-have-teeth.sh "tool-hold-is-seeded: what wardryx loaded is looked for under the 2.6.0 record"
