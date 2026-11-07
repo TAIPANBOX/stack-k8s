@@ -1514,6 +1514,10 @@ run_case "slo-signal-is-wired: a failed measurement is swallowed" fail \
 	'./scripts/slo-signal-is-wired.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", " --holds-spend-no-budget\n", " --holds-spend-no-budget || true\n")')" \
 	"a fleet with nothing to report"
+run_case "slo-signal-is-wired: the file does not exist until the first spent budget" fail \
+	'./scripts/slo-signal-is-wired.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "              : >>\"$VERDRYX_EVENTS_PATH\"\n", "")')" \
+	"reports unreadable"
 run_case "slo-signal-is-wired: the policy carries no rule" fail \
 	'./scripts/slo-signal-is-wired.sh' \
 	"$(py 'edit("manifests/00-base.yaml", "    - name: slo-burn-hold\n      target: \"agent://*\"\n      hold_if_signal:\n        name: slo_burn\n        values: [exhausted, fast_burn]\n        min_probability: 1\n", "")')" \

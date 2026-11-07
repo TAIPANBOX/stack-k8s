@@ -33,6 +33,12 @@ Feature: an agent whose error budget is spent waits for a person
     Then no manifest gives that uid to another workload
     -> slo-signal-is-wired: the sidecar shares a uid
 
+  Scenario: a healthy cluster does not report the file as unreadable
+    Given no agent has spent its budget yet
+    Then the routine has already made the file, empty, under its own uid
+    And wardryx reads it as sound
+    -> slo-signal-is-wired: the file does not exist until the first spent budget
+
   Scenario: a routine that cannot measure does not look like a healthy fleet
     Given the routine fails to read the traces
     Then its container stops and the pod shows it

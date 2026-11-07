@@ -542,6 +542,9 @@ spec:
             - |
               set -eu
               traces=/var/lib/stack/traces/gateway
+              # Made now, under this uid: wardryx reads an empty file as sound and a missing one as
+              # unreadable, and a healthy cluster must not report that until its first spent budget.
+              : >>"$VERDRYX_EVENTS_PATH"
               while :; do
                 sleep "$ROUTINE_SLO_INTERVAL"
                 if [ -d "$traces" ]; then

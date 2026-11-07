@@ -67,6 +67,7 @@ wants = {
     'command: ["/bin/sh", "-c"]': "it does not replace the console image's entrypoint, which refuses a shell as an argument",
     "--holds-spend-no-budget": "a hold would spend the budget that caused it, and a working agent could never earn it back",
     "--window": "it names no window",
+    ': >>"$VERDRYX_EVENTS_PATH"': "it does not make the file at start, so a healthy cluster reports unreadable until its first spent budget",
     "name: VERDRYX_EVENTS_PATH": "it is not told where to write",
     "key: WARDRYX_SIGNAL_EVENTS": "its path is not the key wardryx reads, so the two can name different files",
     "{ name: traces, mountPath: /var/lib/stack/traces, readOnly: true }": "it can write the traces it reads",
