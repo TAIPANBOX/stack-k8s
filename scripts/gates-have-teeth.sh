@@ -1484,6 +1484,52 @@ run_case "static-keys-are-named: a comment naming the list is not a fault" pass 
 # wardryx verifies the agent's token and its proof itself (CLAUDE.md invariant 63, decision D3(b)).
 WVA=./scripts/wardryx-verifies-agent-tokens.sh
 
+# invariant 82: an agent whose error budget is spent is held for a person. Each half is
+# true on its own, so each one gone is a cluster that says ok and never holds anybody.
+run_case "slo-signal-is-wired: wardryx is not handed the file" fail \
+	'./scripts/slo-signal-is-wired.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - name: WARDRYX_SIGNAL_EVENTS\n              valueFrom: { configMapKeyRef: { name: stack-wiring, key: WARDRYX_SIGNAL_EVENTS } }\n", "")')" \
+	"nothing reads the budget"
+run_case "slo-signal-is-wired: a hold spends the budget that caused it" fail \
+	'./scripts/slo-signal-is-wired.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", " --holds-spend-no-budget\n", "\n")')" \
+	"could never earn it back"
+run_case "slo-signal-is-wired: the sidecar keeps the console's entrypoint" fail \
+	'./scripts/slo-signal-is-wired.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "          imagePullPolicy: IfNotPresent\n          command: [\"/bin/sh\", \"-c\"]\n          args:\n            - |\n              set -eu\n              traces=/var/lib/stack/traces/gateway\n              while :; do\n", "          imagePullPolicy: IfNotPresent\n          args:\n            - |\n              set -eu\n              traces=/var/lib/stack/traces/gateway\n              while :; do\n")')" \
+	"refuses a shell as an argument"
+run_case "slo-signal-is-wired: the writer names another file" fail \
+	'./scripts/slo-signal-is-wired.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - name: VERDRYX_EVENTS_PATH\n              valueFrom: { configMapKeyRef: { name: stack-wiring, key: WARDRYX_SIGNAL_EVENTS } }\n", "            - { name: VERDRYX_EVENTS_PATH, value: /var/lib/stack/events/other.ndjson }\n")')" \
+	"can name different files"
+run_case "slo-signal-is-wired: the sidecar shares a uid" fail \
+	'./scripts/slo-signal-is-wired.sh' \
+	"$(py 'edit("manifests/00-base.yaml", "data:\n  # The same starter policy", "data:\n  # runAsUser\n  # The same starter policy"); edit("manifests/20-console.yaml", "      containers:\n", "      securityContext: { runAsUser: 20020 }\n      containers:\n")')" \
+	"so the file is not the routine"
+run_case "slo-signal-is-wired: the sidecar runs an older console than the console" fail \
+	'./scripts/slo-signal-is-wired.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:", "image: ghcr.io/taipanbox/genaryx-console:x")')" \
+	"and the console runs"
+run_case "slo-signal-is-wired: a failed measurement is swallowed" fail \
+	'./scripts/slo-signal-is-wired.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", " --holds-spend-no-budget\n", " --holds-spend-no-budget || true\n")')" \
+	"a fleet with nothing to report"
+run_case "slo-signal-is-wired: the policy carries no rule" fail \
+	'./scripts/slo-signal-is-wired.sh' \
+	"$(py 'edit("manifests/00-base.yaml", "    - name: slo-burn-hold\n      target: \"agent://*\"\n      hold_if_signal:\n        name: slo_burn\n        values: [exhausted, fast_burn]\n        min_probability: 1\n", "")')" \
+	"holds nobody"
+run_case "slo-signal-is-wired: the rule holds on a broken file" fail \
+	'./scripts/slo-signal-is-wired.sh' \
+	"$(py 'edit("manifests/00-base.yaml", "        values: [exhausted, fast_burn]\n        min_probability: 1\n", "        values: [exhausted, fast_burn]\n        min_probability: 1\n        when_absent: hold\n")')" \
+	"would then hold every tool call"
+run_case "slo-signal-is-wired: the sidecar has left the gateway's pod" fail \
+	'./scripts/slo-signal-is-wired.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "        - name: verdryx-slo\n", "        - name: verdryx-sl\n")')" \
+	"measured NOTHING"
+run_case "slo-signal-is-wired: a comment naming the switch is not a fault" pass \
+	'./scripts/slo-signal-is-wired.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "        - name: verdryx-slo\n", "        # never || true here\n        - name: verdryx-slo\n")')"
+
 run_case "wardryx-verifies-agent-tokens: wardryx is pinned before the token check" fail \
 	"$WVA" \
 	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"wardryx:v\d+\.\d+\.\d+@sha256", "wardryx:v2.2.1@sha256", s); assert n == 1, n; open(p, "w").write(s)')" \
