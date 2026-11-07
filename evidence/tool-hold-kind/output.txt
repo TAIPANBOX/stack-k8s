@@ -1,0 +1,138 @@
+kind v0.33.0 go1.27.3 linux/amd64, Client Version: v1.37.2, on 2026-11-07
+tree c630786
+
+== a new cluster
+guard returned, state=absent on=1
+PASS  the guard on a cluster with no namespace: guard returned, state=absent on=1
+
+== a cluster on the last release, wardryx v2.5.1, with a history
+PASS  2.5.1 allows a tool call: allow
+PASS  2.5.1 allows a tool call: allow
+PASS  2.5.1 allows a tool call: allow
+PASS  2.5.1 allows the other tool: allow
+PASS  2.5.1 allows the drill's tool: allow
+PASS  the store has no pending_key yet: 0
+
+== this release, nothing said: the run stops with the list and applies nothing
+
+>> this cluster has a history: asking what the tool hold would stop, before anything is applied
+
+   With the tool hold on, these calls would wait for a person (0 of 5 decisions could not be asked):
+
+   CALLS   LAST SEEN             TOOL                      AGENT
+   3       2026-11-07T16:55:20Z  lookup_invoice            agent://acme.example/agents/billing
+   1       2026-11-07T16:55:20Z  send_reminder             agent://acme.example/agents/billing
+
+   To give each agent what it needs, move the cluster first, with the hold off, then grant, then turn it on:
+
+     TOOL_HOLD=0 <this launcher, as you ran it>
+     ./tool-hold/agents.sh agent-allow 'agent://acme.example/agents/billing' 'lookup_invoice,send_reminder' --why 'what it is for'
+     TOOL_HOLD=1 <this launcher, as you ran it>
+
+   A wardryx older than 2.6.0 cannot store a grant, which is why the cluster moves first. An agent that
+   calls with a static key adds --static-key. ./tool-hold/agents.sh agent-list asks again at any time.
+   Or leave the hold off: TOOL_HOLD=0 <this launcher, as you ran it>, and nothing more.
+
+!! the tool hold would stop what the agents above do today. Nothing was applied.
+PASS  the table names the agent, the tool and the count
+PASS  the stop prints the command to run
+PASS  the seeded drill is not on the list
+PASS  the stop says nothing was applied
+PASS  wardryx's image after the stop: ghcr.io/taipanbox/wardryx:v2.5.1@sha256:2d3c0c9c0798156d3f05b82d0e63cf5b38ee4b9875d6bdbac1829f219c26abf7
+PASS  wardryx's pod after the stop: 764cf67f-9537-447e-8f08-7f45312abc13
+PASS  the floor's ConfigMap after the stop: 
+PASS  the Job after the stop: 
+PASS  the candidate's ConfigMap after the stop: 
+
+== TOOL_HOLD=0: the cluster moves, with the hold off
+   tool hold: off, on your word. An agent's tool call passes unless a rule stops it, and the next run keeps this
+launcher finished: state was absent, hold 0
+PASS  the run went through
+PASS  wardryx's image: ghcr.io/taipanbox/wardryx:v2.6.0@sha256:26113779c4b830d6b27e626874965c722fd8b41dc5d7085d226a3d903927af7b
+PASS  the schema change at wardryx's first start: the column: 1
+PASS  the schema change at wardryx's first start: the two indexes: approvals_pending approvals_pending_call
+PASS  the ConfigMap keeps the word: no key in it: 
+PASS  with the hold off a stranger's tool call: allow
+
+== what the hold would stop, asked with it off, then a grant
+   tool hold: off, grants: 0 in the ConfigMap, 0 through agent-allow
+
+   AGENT                                         TOOLS                       WHERE
+
+   With the hold on, these calls would wait for a person:
+
+   CALLS   LAST SEEN             TOOL                      AGENT
+   3       2026-11-07T16:55:20Z  lookup_invoice            agent://acme.example/agents/billing
+   1       2026-11-07T16:55:20Z  send_reminder             agent://acme.example/agents/billing
+   1       2026-11-07T16:55:42Z  ask                       agent://acme.example/agents/stranger
+   granted lookup_invoice,send_reminder to agent://acme.example/agents/billing, in force now with no restart, and on the record as policy_updated
+   the tool hold is off on this cluster, so this grant lifts nothing yet
+PASS  agent-allow says the hold is off
+
+== a run that says nothing keeps the word
+launcher finished: state was off, hold 0
+PASS  the hold stays off, and nothing was asked
+
+== TOOL_HOLD=1: the operator's word over what is left on the list
+
+>> this cluster has a history: asking what the tool hold would stop, before anything is applied
+
+   With the tool hold on, these calls would wait for a person (0 of 6 decisions could not be asked):
+
+   CALLS   LAST SEEN             TOOL                      AGENT
+   1       2026-11-07T16:55:42Z  ask                       agent://acme.example/agents/stranger
+   TOOL_HOLD=1 was said, so the hold goes on over that: an agent above waits for a person until something grants its tool
+   tool hold: on. A tool call nothing grants waits for a person, and model calls pass. Give an agent a tool: ./tool-hold/agents.sh agent-allow <agent> <tool[,tool]|all> --why 'text'
+launcher finished: state was off, hold 1
+PASS  TOOL_HOLD=1 is the operator's word over the stranger on the list
+PASS  the run went through
+# tool-hold: begin (managed by lib/tool-hold.sh; TOOL_HOLD, invariant 83)
+- name: tool-hold
+  target: "*"
+  when_no_grant: hold
+- name: grant-drills
+  target: agent://mockryx.local/*
+  grant_tool: ["*"]
+- name: grant-install-check
+  target: agent://local.invalid/install-check
+  grant_tool: [ask]
+  require_identity_source: [client-key]
+  deny_if_chain_unproven: true
+# tool-hold: end
+
+PASS  a tool call of an agent nothing grants: hold
+PASS  a model call of that agent: allow
+PASS  an id with no scheme: hold
+PASS  a granted tool: allow
+PASS  the agent's tool nothing granted: hold
+PASS  the drill's tool: allow
+PASS  the drill's denied tool: deny
+PASS  the install check's tool: allow
+
+== one command ends a hold, with no restart
+   granted ask to agent://acme.example/agents/stranger, in force now with no restart, and on the record as policy_updated
+PASS  the stranger's tool, granted: allow
+PASS  wardryx's pod after the grant: d7aa04e9-511c-44ae-9302-7575c0c33322
+   tool hold: on, grants: 2 in the ConfigMap, 2 through agent-allow
+
+   AGENT                                         TOOLS                       WHERE
+   agent://mockryx.local/*                       *                           ConfigMap: grant-drills
+   agent://local.invalid/install-check           ask                         ConfigMap: grant-install-check
+   agent://acme.example/agents/billing           lookup_invoice,send_reminder  agent-allow: grant agent://acme.example/agents/billing 2026-11-07: the monthly reminders
+   agent://acme.example/agents/stranger          ask                         agent-allow: grant agent://acme.example/agents/stranger 2026-11-07: the kind run grants this
+   taken from agent://acme.example/agents/stranger: ask. Its next call waits for a person, in force now with no restart, and on the record as policy_updated
+PASS  the stranger's tool, taken back: hold
+PASS  the record of both: 1
+
+== a second run changes nothing
+launcher finished: state was on, hold 1
+PASS  the deployment's generation: 3
+PASS  wardryx's pod: d7aa04e9-511c-44ae-9302-7575c0c33322
+
+== TOOL_HOLD=0 takes it out again
+   tool hold: off, on your word. An agent's tool call passes unless a rule stops it, and the next run keeps this
+launcher finished: state was on, hold 0
+PASS  the ConfigMap holds no key: 
+PASS  with the hold out a stranger's tool call: allow
+
+42 passed, 0 failed

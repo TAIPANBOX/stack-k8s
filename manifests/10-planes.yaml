@@ -535,7 +535,7 @@ spec:
         # the budget that caused it. No `|| true`: a routine that cannot measure must not look like a
         # fleet with nothing to report, so a failure stops the container and the pod shows it.
         - name: verdryx-slo
-          image: ghcr.io/taipanbox/genaryx-console:v1.8.4@sha256:f018407dba47800acf3be54bb24fb85117c8dd14477b4a4f4dd9bae99376eb30
+          image: ghcr.io/taipanbox/genaryx-console:v1.8.6@sha256:ca99cc8be803a143643b6da56aa898af32d9bab22b9c03d6cc59b12203081549
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
@@ -737,13 +737,16 @@ spec:
         - name: events
           persistentVolumeClaim: { claimName: stack-events }
         # The policy directory. The starter ConfigMap is always there; the hold ConfigMap is optional, and
-        # the typed launcher creates it only with --typed-risk-signal (CLAUDE.md invariant 65). A projected
-        # volume is how two ConfigMaps become one directory.
+        # the typed launcher creates it only with --typed-risk-signal (CLAUDE.md invariant 65). The tool
+        # hold is optional here too: the launchers write it, after they asked what it would stop, and a
+        # plain `apply -k` leaves it out (CLAUDE.md invariant 83). A projected volume is how several
+        # ConfigMaps become one directory.
         - name: policy
           projected:
             sources:
               - configMap: { name: wardryx-policy }
               - configMap: { name: wardryx-typed-hold, optional: true }
+              - configMap: { name: wardryx-tool-hold, optional: true }
         # The console's approver public keys (CLAUDE.md invariant 67), minted by lib/approver-mint.sh. Not optional:
         # with WARDRYX_APPROVER_JWKS set, wardryx refuses to start on a file it cannot read, so the mint comes first.
         - name: approver-jwks

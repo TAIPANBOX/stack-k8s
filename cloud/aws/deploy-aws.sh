@@ -30,6 +30,10 @@
 # METERED on that key's account. `--copilot-key-file`
 # is the same flag under its older name.
 #
+# `--tool-hold <0|1>`, or TOOL_HOLD in the environment: an agent's tool call that nothing grants
+# waits for a person, on unless you say 0, and a cluster that said 0 keeps it. A cluster with a
+# history is asked first, and a call the hold would stop ends the run before anything is applied;
+# 1 turns it on over that. lib/tool-hold.sh, CLAUDE.md invariant 83.
 # `--firewall <enforce|shadow|off>` sets the agent firewall's mode on the gateway (TokenFuse
 # invariants 25 to 27 and 93). Without it the manifest's enforce stands. Checked by
 # firewall/mode.sh before anything is installed, applied after the kustomization, and the
@@ -165,6 +169,8 @@ KEYRYX_INSTALL="${KEYRYX_INSTALL:-1}"
 # before anything is installed and applied AFTER the kustomization, the only position where it
 # sticks (the same rule as the run-budget ceiling).
 FIREWALL_MODE="${FIREWALL_MODE:-}"
+# The tool hold (CLAUDE.md invariant 83). Empty is on, or what this cluster said before.
+TOOL_HOLD="${TOOL_HOLD:-}"
 # The PII scanners' mode on the gateway (TOKENFUSE_DLP_PII) and the MCP broker
 # (TOKENFUSE_MCP_DLP_PII), CLAUDE.md invariant 38. Empty leaves each manifest's shadow. Set, it is
 # checked by pii/mode.sh before anything is installed and applied AFTER the kustomization and the
@@ -210,6 +216,7 @@ while [ $# -gt 0 ]; do
     --costcrew-ceiling)   COSTCREW_CEILING_ARG="$2"; shift 2 ;;
     --without-keyryx)     KEYRYX_INSTALL=0; shift ;;
     --firewall) FIREWALL_MODE="$2"; shift 2 ;;
+    --tool-hold) TOOL_HOLD="$2"; shift 2 ;;
     --pii-mode) PII_MODE="$2"; shift 2 ;;
     --skip-install)  SKIP_INSTALL=1; shift ;;
     --skip-images)   SKIP_IMAGES=1; shift ;;
@@ -388,6 +395,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 . "$ROOT/lib/approver-mint.sh" || die "no lib/approver-mint.sh in $ROOT"
 . "$ROOT/lib/keyryx-install.sh" || die "no lib/keyryx-install.sh in $ROOT"
 . "$ROOT/lib/upstream-key.sh" || die "no lib/upstream-key.sh in $ROOT"
+. "$ROOT/lib/tool-hold.sh" || die "no lib/tool-hold.sh in $ROOT"
 
 # ---- the typed data mode, refused BEFORE anything is installed ---------------
 # typed/mode.sh is the one copy of this check (CLAUDE.md invariant 26). Run here
@@ -421,6 +429,9 @@ if [ -n "$COSTCREW_CEILING_ARG" ]; then
   "$ROOT/budget/costcrew-ceiling.sh" check "$COSTCREW_CEILING_ARG" \
     || die "the CostCrew ceiling was refused, so nothing has been installed yet."
 fi
+
+# ---- the tool hold's switch, refused BEFORE anything is installed (CLAUDE.md invariant 83) -------
+tool_hold_check "$TOOL_HOLD" || die "the tool hold's switch was refused, so nothing has been installed yet."
 
 # ---- the agent firewall's mode, refused BEFORE anything is installed -------------
 # firewall/mode.sh is the one copy of this check (CLAUDE.md invariant 37). TokenFuse reads
@@ -720,6 +731,7 @@ fi
 # ---- 3. the workload --------------------------------------------------------
 say "step 3/5: the workload"
 policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 129: refuse before anything is applied
+tool_hold_guard      # CLAUDE.md invariant 83: a call the hold would stop ends the run here, with the list
 tar -cz -C "$ROOT" manifests policy | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
 k_ "apply -k /root/stack-k8s/manifests"
 
@@ -864,6 +876,10 @@ if [ "$TYPED_RISK_SIGNAL" != 1 ]; then
       || die "could not restart wardryx after removing the hold rule"
   fi
 fi
+
+# The tool hold (CLAUDE.md invariant 83), after the kustomization and after the typed hold: both are
+# files wardryx reads at start, and it is restarted only when this one changed.
+tool_hold_settle
 
 # The PII scanners' mode, set AFTER the kustomization and after the typed render, for the same
 # reason as the firewall: the manifests declare shadow, and `apply` puts the declared value back over
