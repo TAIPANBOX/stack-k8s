@@ -4065,9 +4065,9 @@ run_case "keyryx-kid: a comment reworded in the library (must pass)" pass \
 	"$(py 'edit("lib/keyryx-install.sh", "# keyryx_probe_jwks NAME: prints custody", "# keyryx_probe_jwks NAME: prints the custody")')"
 
 # The Keyryx images and the record seal's trailryx-node are the release pins, by tag and digest (CLAUDE.md invariant 72).
-run_case "keyryx-release-pins: the witness is left on keyryx v0.1.2" fail \
+run_case "keyryx-release-pins: the witness is left on keyryx v0.1.3" fail \
 	'./scripts/keyryx-release-pins.sh' \
-	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("keyryx:v0.1.3@sha256:26d5"); open(p, "w").write(s[:i] + "keyryx:v0.1.2@sha256:26d5" + s[i + len("keyryx:v0.1.3@sha256:26d5"):])')" \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("keyryx:v0.1.4@sha256:6597"); open(p, "w").write(s[:i] + "keyryx:v0.1.3@sha256:6597" + s[i + len("keyryx:v0.1.4@sha256:6597"):])')" \
 	"is not the release pin"
 run_case "keyryx-release-pins: the record seal is left on trailryx-node v1.4.0" fail \
 	'./scripts/keyryx-release-pins.sh' \
@@ -4075,7 +4075,7 @@ run_case "keyryx-release-pins: the record seal is left on trailryx-node v1.4.0" 
 	"is not the release pin"
 run_case "keyryx-release-pins: one keyryx digest is not the tag's" fail \
 	'./scripts/keyryx-release-pins.sh' \
-	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); s = s.replace("26d5d49cd4a67eb4", "26d5d49cd4a67eb5", 1); open(p, "w").write(s)')" \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); s = s.replace("659723319e28c6c8", "659723319e28c6c9", 1); open(p, "w").write(s)')" \
 	"is not the release pin"
 run_case "keyryx-release-pins: the record seal's image is absent (measured nothing)" fail \
 	'./scripts/keyryx-release-pins.sh' \
