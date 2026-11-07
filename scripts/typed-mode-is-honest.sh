@@ -61,9 +61,9 @@
 #      NetworkPolicy edges broker -> proxy -> wardryx name exactly one peer on
 #      one port and nothing selects the proxy for ingress but the broker; the
 #      model egress policy selects the proxy too, and no wider; no
-#      hold_if_signal policy is seeded in the base manifests (the one hold is the flag's own document,
-#      CLAUDE.md invariant 65, held by scripts/risk-hold-follows-the-flag.sh); and every render validates
-#      strictly;
+#      hold on the risk signal is seeded in the base manifests (the one hold is the flag's own document,
+#      CLAUDE.md invariant 65, held by scripts/risk-hold-follows-the-flag.sh; slo-burn-hold reads another
+#      signal, invariant 82); and every render validates strictly;
 #  15. the flag is refused when typryx is not deployed, names itself, and says
 #      what it does when accepted; every launcher parses and forwards it.
 #
@@ -650,14 +650,15 @@ for label, args in risk_variants.items():
         check("14 jev key is a file in the proxy too", FAKE not in out and not any(x in out for x in b64s(FAKE)),
               "the jev key reached the render through the proxy")
 
-# nothing in the repository seeds a hold_if_signal policy
+# nothing in the repository seeds a hold on the risk signal. slo-burn-hold reads slo_burn and is held
+# by scripts/slo-signal-is-wired.sh (invariant 82).
 for path in subprocess.run(["git", "ls-files", "manifests"], capture_output=True, text=True).stdout.split():
     try:
         text = pathlib.Path(path).read_text()
     except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
         continue
-    check("14 nothing is held by default", "hold_if_signal" not in code_of(text),
-          f"{path} seeds a hold_if_signal policy; none is shipped, the operator writes it (README)")
+    check("14 nothing is held by default", "action.risk_class" not in code_of(text),
+          f"{path} seeds a hold_if_signal policy on action.risk_class; none is shipped, the operator writes it (README)")
 
 # the LLM gateway keeps asking wardryx directly, whatever the flag
 gw = [d for d in docs_of(M10.read_text()) if kind_name(d) == ("Deployment", "tokenfuse-gateway")]
