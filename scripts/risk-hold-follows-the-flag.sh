@@ -87,8 +87,7 @@ else:
         if "projected:" not in vtext or f"name: {CM}" not in vtext:
             bad.append(f"{M10}: the policy volume does not project the ConfigMap {CM}")
         if not re.search(rf"name: {CM}\s*\n\s*optional: true|name: {CM}, optional: true|optional: true[^\n]*\n?[^\n]*{CM}", vtext) and not re.search(rf"configMap: \{{ name: {CM}, optional: true \}}", vtext):
-            if "optional: true" not in vtext:
-                bad.append(f"{M10}: the projected {CM} is not optional, so the plane cannot start without a hold")
+            bad.append(f"{M10}: the projected {CM} is not optional, so the plane cannot start without a hold")
         if "name: wardryx-policy" not in vtext:
             bad.append(f"{M10}: the policy volume no longer projects the starter ConfigMap wardryx-policy")
 

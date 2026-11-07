@@ -652,7 +652,7 @@ run_case "secret-keys-agree: an installer writes a key nothing reads" pass \
 run_case "secret-keys-agree: no installer left to judge" fail \
 	'./scripts/secret-keys-agree.sh' \
 	"$(py 'import os
-for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh", "delegation/up.sh", "closure/up.sh", "evidence/identity-kind/run.sh", "evidence/require-agent-tokens-kind/run-v1.19.0.sh", "lib/vouchryx-mint.sh", "evidence/agent-tokens-kind/run-v1.18.0.sh", "evidence/identity-kind/mint.sh"):
+for f in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh", "delegation/up.sh", "closure/up.sh", "evidence/identity-kind/run.sh", "evidence/tool-hold-kind/run.sh", "evidence/require-agent-tokens-kind/run-v1.19.0.sh", "lib/vouchryx-mint.sh", "evidence/agent-tokens-kind/run-v1.18.0.sh", "evidence/identity-kind/mint.sh"):
     os.remove(f)')" \
 	"measured NOTHING"
 
