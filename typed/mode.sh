@@ -18,9 +18,17 @@
 #            mode         the effective mode: off, stub, jev or own-model
 #            door-secrets the door's two Secrets that do not exist yet, on stdout,
 #                         for piping into `kubectl create -f -` ONLY. Refuses a
-#                         terminal. Needs --have; reads typryx-keys' TYPRYX_KEYS,
-#                         base64 as `kubectl get -o jsonpath` prints it, on stdin
-#                         when --have names it. See THE DOOR below.
+#                         terminal. Needs --have; reads two lines on stdin, each
+#                         base64 as `kubectl get -o jsonpath` prints it: typryx-keys'
+#                         TYPRYX_KEYS (empty when it does not exist), then the
+#                         gateway's client keys (gateway-client-keys' client_keys).
+#                         See THE DOOR below.
+#            door-callers the broker's static callers, kept in step with the
+#                         gateway's: a merge patch for tokenfuse-mcp-broker-keys on
+#                         stdout, for `kubectl patch --patch-file /dev/stdin` ONLY,
+#                         or nothing when they agree. Reads two lines on stdin: the
+#                         broker's TOKENFUSE_MCP_KEYS, then the gateway's client keys,
+#                         each base64. See THE STATIC CALLERS below.
 #
 #   flags    --with-typed                 alone: the stub backend, exactly as
 #                                         before this file existed
@@ -103,6 +111,18 @@
 # Secret where `apply` would replace it, and `apply` would also keep a second copy
 # of every value in its last-applied annotation. On stderr this says what it kept
 # and minted and how to read a value back, never a value.
+#
+# THE STATIC CALLERS (CLAUDE.md invariant 85). The broker admits two static keys, the
+# typed door's `broker-caller` and the drills' `drills-broker`, and asks the gateway's
+# tool-call check about every tool call with the CALLER's own key (tokenfuse invariant
+# 118). A key the gateway does not hold is refused 401 there, and the broker refuses the
+# call closed. So each is one secret under one id at both doors, and the gateway's copy
+# is the one that counts: lib/identity-mint.sh mints both into gateway-client-keys (taking
+# a broker secret that already exists), and this file copies them from there. A broker
+# Secret minted here carries both. A kept one is patched by `door-callers`: an entry it
+# lacks is appended, every other entry stays byte for byte, and an entry whose secret is
+# not the gateway's stops the deploy, because a caller holding it would be refused at the
+# check and rewriting it would refuse every caller that holds it now.
 #
 # THE TRAINING LOG. `@decided 2026-09-30`: typryx keeps an opt-in local log of
 # the questions it answered, so a customer can fine-tune and calibrate a model of
@@ -207,8 +227,8 @@ while [ $# -gt 0 ]; do
 done
 
 case "$verb" in
-  check|render|hold|secrets|has-secrets|mode|door-secrets) ;;
-  *) refuse "usage: typed/mode.sh check|render|hold|secrets|has-secrets|mode|door-secrets [flags]" ;;
+  check|render|hold|secrets|has-secrets|mode|door-secrets|door-callers) ;;
+  *) refuse "usage: typed/mode.sh check|render|hold|secrets|has-secrets|mode|door-secrets|door-callers [flags]" ;;
 esac
 if [ "$verb" != door-secrets ] && { [ "$HAVE_GIVEN" = 1 ] || [ -n "$DOOR_DOMAIN" ]; }; then
   refuse "--have and --trust-domain only go with door-secrets"
@@ -520,6 +540,7 @@ has_secrets() {
 DOOR_TYPRYX="typryx-keys"
 DOOR_BROKER="tokenfuse-mcp-broker-keys"
 DOOR_KEY_ID="broker-caller"
+DOOR_DRILLS_ID="drills-broker"
 DOOR_SUBJECT="typed-broker"
 # The scope rule of typryx's key in the broker's vault. It is in the Secret beside the keys it scopes (G2.1): a rule for
 # scopyx's key names an agent, which the operator chooses, so the rules cannot be written in the manifest.
@@ -537,10 +558,84 @@ door_secret() { # name app then key=value pairs, each value base64 in the docume
   done
 }
 
+# N TEXT: line N (1 or 2) of TEXT, on stdout. Parameter expansion, not a here-string or sed:
+# bash before 5.1 backs a here-string with a file, and this text is key material.
+door_line() {
+  local first="${2%%$'\n'*}" rest
+  if [ "$1" = 1 ]; then printf '%s' "$first"; return 0; fi
+  [ "$first" != "$2" ] || return 0
+  rest="${2#*$'\n'}"
+  printf '%s' "${rest%%$'\n'*}"
+}
+
+# SPEC ID: the secret of SPEC's first `secret:ID` entry (split on the LAST colon, as tokenfuse
+# splits it), or nothing. A function: the secret is on no command line.
+door_entry() {
+  local rest="$1," entry
+  while [ -n "$rest" ]; do
+    entry="${rest%%,*}"
+    rest="${rest#*,}"
+    if [ "$entry" != "$2" ] && [ "${entry##*:}" = "$2" ]; then
+      printf '%s' "${entry%:*}"
+      return 0
+    fi
+  done
+}
+
+# GATEWAY_SPEC: the broker's TOKENFUSE_MCP_KEYS for a broker Secret minted now, the two static
+# callers with the gateway's own secrets (THE STATIC CALLERS above), on stdout. Refuses when the
+# gateway holds either not, since a broker given a fresh one would see every call through it
+# refused at the gateway's tool-call check.
+door_gateway_callers() {
+  local bc db
+  bc="$(door_entry "$1" "$DOOR_KEY_ID")"
+  db="$(door_entry "$1" "$DOOR_DRILLS_ID")"
+  if [ -z "$bc" ] || [ -z "$db" ]; then
+    bc=""; db=""
+    refuse "the gateway's client keys (gateway-client-keys) hold no $DOOR_KEY_ID or no $DOOR_DRILLS_ID entry, which the broker's door copies (CLAUDE.md invariant 85). The deploy mints both before the typed door; with your own keys, add both (docs/releases/v1.9.0.md, Upgrade item 1), then run this again."
+  fi
+  printf '%s:%s,%s:%s' "$bc" "$DOOR_KEY_ID" "$db" "$DOOR_DRILLS_ID"
+  bc=""; db=""
+}
+
+# THE STATIC CALLERS of a broker Secret that exists: stdin is the broker's TOKENFUSE_MCP_KEYS, then
+# the gateway's client keys, each base64 on its own line. Prints a merge patch that appends what the
+# broker lacks, or nothing; stops on an entry whose secret is not the gateway's.
+door_callers() {
+  [ "$EFFECTIVE" != off ] || refuse "door-callers is for a typryx that is deployed: add --with-typed, or choose --typed-mode jev or own-model"
+  local given="" bspec gw id gs bs out added=""
+  if [ ! -t 0 ]; then given="$(cat)"; fi
+  bspec="$(door_line 1 "$given" | tr -d ' \r\t' | base64 -d 2>/dev/null)" || bspec=""
+  gw="$(door_line 2 "$given" | tr -d ' \r\t' | base64 -d 2>/dev/null)" || gw=""
+  given=""
+  [ -n "$bspec" ] || refuse "no TOKENFUSE_MCP_KEYS could be read from $DOOR_BROKER, so its static callers cannot be checked. The broker would refuse every static key. Nothing was changed."
+  out="$bspec"
+  for id in "$DOOR_KEY_ID" "$DOOR_DRILLS_ID"; do
+    gs="$(door_entry "$gw" "$id")"
+    bs="$(door_entry "$bspec" "$id")"
+    if [ -z "$gs" ]; then
+      gs=""; bs=""; out=""; bspec=""; gw=""
+      refuse "the gateway's client keys hold no $id entry, so the broker's $id would be refused at the gateway's tool-call check (CLAUDE.md invariant 85). The deploy mints it before the typed door; with your own keys, add it (docs/releases/v1.9.0.md, Upgrade item 1). Nothing was changed."
+    fi
+    if [ -z "$bs" ]; then
+      out="$out,$gs:$id"
+      added="$added $id"
+    elif [ "$bs" != "$gs" ]; then
+      gs=""; bs=""; out=""; bspec=""; gw=""
+      refuse "$DOOR_BROKER holds a $id key that is not the gateway's $id, so every call with it would be refused at the gateway's tool-call check (CLAUDE.md invariant 85). Rewriting either would refuse whoever holds it now, so the deploy stops here. Put one secret in both: the entry ending :$id in gateway-client-keys' client_keys and in $DOOR_BROKER's TOKENFUSE_MCP_KEYS (docs/releases/v1.9.0.md, Upgrade item 1 shows the commands). Nothing was changed."
+    fi
+  done
+  if [ -n "$added" ]; then
+    printf '{"data":{"TOKENFUSE_MCP_KEYS":"%s"}}\n' "$(b64_ "$out")"
+    printf 'typed: the door: %s gets the static caller(s)%s, the gateway'"'"'s own secret under the same id; every entry it had is kept byte for byte (never printed).\n' "$DOOR_BROKER" "$added" >&2
+  fi
+  gs=""; bs=""; out=""; bspec=""; gw=""
+}
+
 door_secrets() {
   [ "$EFFECTIVE" != off ] || refuse "door-secrets is for a typryx that is deployed: add --with-typed, or choose --typed-mode jev or own-model"
   [ "$HAVE_GIVEN" = 1 ] || refuse "door-secrets needs --have: which of $DOOR_TYPRYX and $DOOR_BROKER exist (empty for neither)"
-  local have_t=0 have_b=0 tok domain="${DOOR_DOMAIN:-set-me.invalid}" given="" spec bearer broker_key made=""
+  local have_t=0 have_b=0 tok domain="${DOOR_DOMAIN:-set-me.invalid}" given="" given_t="" spec bearer broker_key made="" gw="" callers=""
   local domain_re bearer_re='^[^[:space:],]+$'
   for tok in $HAVE; do
     case "${tok#secret/}" in
@@ -553,6 +648,9 @@ door_secrets() {
   [[ "$domain" =~ $domain_re ]] || refuse "--trust-domain '$domain' is not a domain name"
   # Read stdin whole in every case, so the `kubectl get` feeding it never meets a closed pipe.
   if [ ! -t 0 ]; then given="$(cat)"; fi
+  given_t="$(door_line 1 "$given")"
+  gw="$(door_line 2 "$given" | tr -d ' \r\t' | base64 -d 2>/dev/null)" || gw=""
+  given=""
 
   if [ "$have_t" = 1 ] && [ "$have_b" = 1 ]; then
     printf 'typed: the door: %s and %s already exist and are kept as they are.\n' "$DOOR_TYPRYX" "$DOOR_BROKER" >&2
@@ -560,31 +658,32 @@ door_secrets() {
   elif [ "$have_b" = 1 ]; then
     refuse "$DOOR_BROKER exists and $DOOR_TYPRYX does not. A new typryx key would not be the typryx_key the broker's vault already holds, so every call through the broker would be refused, and the door never overwrites a Secret that exists. Create $DOOR_TYPRYX with the bearer that vault holds (manifests/51-typryx.yaml's header shows the command), or delete $DOOR_BROKER so both are minted, then run this again."
   elif [ "$have_t" = 1 ]; then
-    spec="$(printf '%s' "$given" | tr -d ' \n\r\t' | base64 -d 2>/dev/null)" || spec=""
+    spec="$(printf '%s' "$given_t" | tr -d ' \n\r\t' | base64 -d 2>/dev/null)" || spec=""
     bearer="${spec%%,*}"
     bearer="${bearer%%=*}"
     if [ -z "$bearer" ] || [ "$bearer" = "$spec" ] || ! [[ "$bearer" =~ $bearer_re ]]; then
       refuse "$DOOR_TYPRYX exists but no TYPRYX_KEYS bearer (\`bearer=agent://...\`) could be read from it, so the broker's vault cannot be given typryx's key. Create $DOOR_BROKER by hand (manifests/52-tokenfuse-mcp-broker.yaml's header shows the command), then run this again."
     fi
-    broker_key="$(gen 40)" || refuse "could not mint the broker's key"
+    callers="$(door_gateway_callers "$gw")" || exit 1
     door_secret "$DOOR_BROKER" tokenfuse-mcp-broker \
-      "TOKENFUSE_MCP_KEYS=$broker_key:$DOOR_KEY_ID" "TOKENFUSE_MCP_SECRETS=typryx_key=$bearer" "TOKENFUSE_MCP_SECRET_SCOPES=$DOOR_SCOPES"
-    made="$DOOR_BROKER, its vault carrying the bearer of the $DOOR_TYPRYX that was already there, which is kept"
+      "TOKENFUSE_MCP_KEYS=$callers" "TOKENFUSE_MCP_SECRETS=typryx_key=$bearer" "TOKENFUSE_MCP_SECRET_SCOPES=$DOOR_SCOPES"
+    made="$DOOR_BROKER, its vault carrying the bearer of the $DOOR_TYPRYX that was already there, which is kept, and its static callers the gateway's own"
   else
+    callers="$(door_gateway_callers "$gw")" || exit 1
     bearer="$(gen 40)" || refuse "could not mint typryx's key"
-    broker_key="$(gen 40)" || refuse "could not mint the broker's key"
+    broker_key="$(door_entry "$callers" "$DOOR_KEY_ID")"
     [ "$bearer" != "$broker_key" ] || refuse "the two door keys came out equal, which a random source does not do"
     door_secret "$DOOR_TYPRYX" typryx "TYPRYX_KEYS=$bearer=agent://$domain/$DOOR_SUBJECT"
     printf -- '---\n'
     door_secret "$DOOR_BROKER" tokenfuse-mcp-broker \
-      "TOKENFUSE_MCP_KEYS=$broker_key:$DOOR_KEY_ID" "TOKENFUSE_MCP_SECRETS=typryx_key=$bearer" "TOKENFUSE_MCP_SECRET_SCOPES=$DOOR_SCOPES"
-    made="$DOOR_TYPRYX (identity agent://$domain/$DOOR_SUBJECT) and $DOOR_BROKER, the broker's vault carrying typryx's bearer"
+      "TOKENFUSE_MCP_KEYS=$callers" "TOKENFUSE_MCP_SECRETS=typryx_key=$bearer" "TOKENFUSE_MCP_SECRET_SCOPES=$DOOR_SCOPES"
+    made="$DOOR_TYPRYX (identity agent://$domain/$DOOR_SUBJECT) and $DOOR_BROKER, the broker's vault carrying typryx's bearer and its static callers the gateway's own"
   fi
-  bearer=""; broker_key=""; spec=""; given=""
+  bearer=""; broker_key=""; spec=""; given_t=""; gw=""; callers=""
   if [ -n "$made" ]; then
     printf 'typed: the door: creating %s. A Secret that already exists is never overwritten, so on every later run both are kept.\n' "$made" >&2
   fi
-  printf '       Read a value back, never printed here: the broker'"'"'s caller key (`secret:%s`; an agent sends the secret as x-fuse-key), then typryx'"'"'s own (`bearer=agent://...`):\n' "$DOOR_KEY_ID" >&2
+  printf '       Read a value back, never printed here: the broker'"'"'s static callers (`secret:%s` for an agent, which sends the secret as x-fuse-key, and `secret:%s` for the drills), then typryx'"'"'s own (`bearer=agent://...`):\n' "$DOOR_KEY_ID" "$DOOR_DRILLS_ID" >&2
   printf "         kubectl -n %s get secret %s -o jsonpath='{.data.TOKENFUSE_MCP_KEYS}' | base64 -d\n" "$NS" "$DOOR_BROKER" >&2
   printf "         kubectl -n %s get secret %s -o jsonpath='{.data.TYPRYX_KEYS}' | base64 -d\n" "$NS" "$DOOR_TYPRYX" >&2
 }
@@ -625,4 +724,7 @@ case "$verb" in
   door-secrets)
     [ ! -t 1 ] || refuse "refusing to print a Secret to a terminal: pipe it into 'kubectl create -f -' and nowhere else"
     door_secrets ;;
+  door-callers)
+    [ ! -t 1 ] || refuse "refusing to print a Secret patch to a terminal: pipe it into 'kubectl patch --patch-file /dev/stdin' and nowhere else"
+    door_callers ;;
 esac

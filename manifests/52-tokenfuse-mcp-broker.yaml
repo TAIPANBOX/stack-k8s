@@ -70,13 +70,28 @@
 # know typryx's own key at all, which is the point of fronting it. The deploy
 # mints the two from separate reads, and its gate refuses them equal.
 #
-# Made by hand before a deploy, which still wins over minting:
+# Its two static callers, `broker-caller` (the typed door's caller) and `drills-broker` (the drills, the
+# CronJob at the end of this file), are gateway keys of the same ids and secrets (CLAUDE.md invariant 85):
+# the broker asks the gateway's tool-call check about every tool call with the CALLER's own key (tokenfuse
+# invariant 118), and a key the gateway does not hold is refused there with 401, so the broker refuses the
+# call closed. lib/identity-mint.sh mints both into gateway-client-keys, door-secrets copies them into a
+# broker Secret it mints, and `typed/mode.sh door-callers` appends one a kept broker Secret lacks, or stops
+# the deploy when one is not the gateway's. Measured on forge 2026-11-08 (scripts/broker-drills-pass.sh):
+# with `broker-caller` known to the broker alone, every call through the typed door was refused that way.
+#
+# Made by hand before a deploy, which still wins over minting, with the two callers copied from the gateway:
 #
 #   TYPRYX_KEY="$(kubectl -n agent-stack get secret typryx-keys \
 #     -o jsonpath='{.data.TYPRYX_KEYS}' | base64 -d | cut -d, -f1 | cut -d= -f1)"
 #   kubectl -n agent-stack create secret generic tokenfuse-mcp-broker-keys \
-#     --from-literal=TOKENFUSE_MCP_KEYS='pick-a-different-long-secret:broker-caller' \
-#     --from-literal=TOKENFUSE_MCP_SECRETS="typryx_key=${TYPRYX_KEY}"
+#     --from-literal=TOKENFUSE_MCP_KEYS="$(kubectl -n agent-stack get secret gateway-client-keys \
+#       -o jsonpath='{.data.client_keys}' | base64 -d | tr ',' '\n' | grep -E ':(broker-caller|drills-broker)$' | paste -sd, -)" \
+#     --from-literal=TOKENFUSE_MCP_SECRETS="typryx_key=${TYPRYX_KEY}" \
+#     --from-literal=TOKENFUSE_MCP_SECRET_SCOPES='typryx_key=tools:ask|ask_freeform|list_questions'
+#
+# Each entry is `secret:key_id`, so the value has this shape:
+#
+#   TOKENFUSE_MCP_KEYS=pick-a-different-long-secret:broker-caller,and-another-long-secret:drills-broker
 #
 # The key id (`broker-caller`) is a bare name, never an `agent://` id:
 # tokenfuse's `ClientKeys::from_spec` splits each entry on its LAST colon,
@@ -265,8 +280,11 @@ spec:
             # The door (invariant 54): an agent's own token bound to its DPoP proof. A static key is admitted only from the list below.
             - { name: TOKENFUSE_AGENT_TOKENS, value: "require" }
             # broker static key broker-caller: the typed-answer door's own caller key, minted with the door (typed/mode.sh). It does not sign a DPoP proof.
-            # It must also be in TOKENFUSE_MCP_KEYS, which the broker reads from tokenfuse-mcp-broker-keys; the broker refuses to start otherwise.
-            - { name: TOKENFUSE_MCP_AGENT_TOKENS_STATIC_KEYS, value: "broker-caller" }
+            # broker static key drills-broker: the scheduled mockryx drills' key for this broker (Secret drills-broker-key). mockryx does not sign. CLAUDE.md invariant 85.
+            # Each must also be in TOKENFUSE_MCP_KEYS, which the broker reads from tokenfuse-mcp-broker-keys; the broker refuses to start otherwise.
+            # And each is a gateway client key of the same id and secret, on the gateway's list too: the tool-call check below is asked with
+            # the caller's own key (tokenfuse invariant 118), and a key the gateway does not hold is refused 401 there, so the call is refused closed.
+            - { name: TOKENFUSE_MCP_AGENT_TOKENS_STATIC_KEYS, value: "broker-caller,drills-broker" }
             - { name: TOKENFUSE_DELEGATION_ISSUER, value: "http://vouchryx:4310" }
             - { name: TOKENFUSE_DELEGATION_JWKS, value: "/etc/tokenfuse/delegation/jwks.json" }
             - { name: TOKENFUSE_DELEGATION_AUDIENCE, value: "https://vouchryx.agent-stack.invalid" }
@@ -442,5 +460,112 @@ spec:
   egress:
     - to:
         - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+      ports:
+        - { protocol: TCP, port: 4200 }
+---
+# The broker drills (CLAUDE.md invariant 85): mockryx's three drills for this broker (`/scenarios/mcp` in the
+# image), a raw secret and personal data in tool arguments and the tool hold, fired at THIS broker with the
+# drills' own key. A CronJob of its own beside the broker, not a second container of `drills`
+# (40-routines-and-secrets.yaml): the broker exists only with the typed-answer door, and mockryx refuses a run
+# whose broker does not answer (exit 2), so a container in the gateway drills' pod would fail that Job on every
+# cluster without the door, and a Job retries a failed pod. Here it exists exactly where the broker does, and each
+# pod holds one key: the gateway's client key stays in `drills`, this broker's key in this one (mockryx refuses the
+# same secret for both).
+#
+# Suspended, like `drills`: run it with `kubectl -n agent-stack create job --from=cronjob/drills-broker drills-broker-now`.
+# The tool-hold drill opens one approval on wardryx per run (later runs ask the same question, and wardryx keeps one
+# pending row), and its second step needs an MCP server behind the broker that answers `search_notes` with a result:
+# none in this stack does (the broker's default upstream is typryx), so on a cluster that step reports a Finding.
+# scripts/broker-drills-pass.sh runs all three against this broker's own settings, in CI, with a stand-in server.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: drills-broker
+  namespace: agent-stack
+spec:
+  schedule: "30 5 * * 1"
+  suspend: true
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      # A drill that finds a gap exits 1. Running it again finds the same gap and opens nothing new.
+      backoffLimit: 0
+      template:
+        metadata:
+          # What broker-ingress-drills and drills-broker-egress below select on, and nothing else does.
+          labels: { role: drills-broker }
+        spec:
+          restartPolicy: Never
+          # No workload here talks to the Kubernetes API; see CLAUDE.md invariant 15.
+          automountServiceAccountToken: false
+          # fsGroup: the key below is a 0440 file, readable through the group fsGroup adds (CLAUDE.md invariant 32).
+          # mockryx v0.5.0 accepts a key file owned by root at 0640 or stricter.
+          securityContext: { runAsNonRoot: true, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+          # The stream file before the drill runs, as the drill image's uid, as `drills` does (CLAUDE.md invariant 59).
+          initContainers:
+            - name: precreate-streams
+              image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+              securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+              command: ["sh", "-c", "f=/var/lib/stack/events/mockryx.ndjson; if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; ls -ln /var/lib/stack/events"]
+              volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
+          containers:
+            - name: mockryx
+              image: ghcr.io/taipanbox/mockryx:v0.5.0@sha256:32e4e79cd3bf95d23aa240f925ca139726faf8a13cdcd3a1728ea3df633f08be
+              # mockryx requires --gateway; no step in /scenarios/mcp sends it anything, and this pod cannot reach it.
+              args: ["run", "--gateway", "http://tokenfuse-gateway:4100", "/scenarios/mcp"]
+              env:
+                - name: MOCKRYX_EVENTS_PATH
+                  valueFrom: { configMapKeyRef: { name: stack-wiring, key: MOCKRYX_EVENTS_PATH } }
+                # The broker as mockryx posts to it, and whose /healthz it probes at the same origin first.
+                - { name: MOCKRYX_MCP_BROKER, value: "http://tokenfuse-mcp-broker:4200/mcp" }
+                # The drills' key for this broker, sent as x-fuse-key on the JSON-RPC call alone. Minted by the deploy
+                # into gateway-client-keys as drills-broker and into the Secret drills-broker-key (lib/identity-mint.sh),
+                # and given to this broker under the same id (typed/mode.sh). Optional: the job is suspended, and a cluster
+                # applied by hand without the mint runs it keyless, which the broker refuses 401.
+                - { name: MOCKRYX_MCP_BROKER_KEY_FILE, value: "/run/drills-broker/broker_key" }
+              volumeMounts:
+                - { name: events, mountPath: /var/lib/stack/events }
+                - { name: drills-broker-key, mountPath: /run/drills-broker, readOnly: true }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { memory: 256Mi }
+          volumes:
+            - name: events
+              persistentVolumeClaim: { claimName: stack-events }
+            - name: drills-broker-key
+              secret: { secretName: drills-broker-key, optional: true, defaultMode: 0440, items: [{ key: broker_key, path: broker_key }] }
+---
+# The broker drills reach this broker on 4200 and nothing else (DNS aside, allow-dns in 30-network-policy.yaml).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: drills-broker-egress
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { role: drills-broker } }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+      ports:
+        - { protocol: TCP, port: 4200 }
+---
+# The broker's half: it accepts the broker drills on its one port. Not `role: drills`, the gateway drills' pod,
+# which holds the gateway's client key and has no reason to reach this broker.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: broker-ingress-drills
+  namespace: agent-stack
+spec:
+  podSelector: { matchLabels: { app: tokenfuse-mcp-broker } }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { role: drills-broker } }
       ports:
         - { protocol: TCP, port: 4200 }

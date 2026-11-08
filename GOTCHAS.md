@@ -4649,7 +4649,7 @@ Two traps for the next change. A registry that `agent-tokens/up.sh` writes repla
 
 **The stack's own contract.** With `TOKENFUSE_AGENT_TOKENS=require`, tokenfuse admits a static client key only when its key id is named in `TOKENFUSE_AGENT_TOKENS_STATIC_KEYS` (tokenfuse v1.19.0, invariant 138). A caller holding a valid key that is not on the list is refused `401 agent_token_required`, and the body does not say which list or why. The list is the decision: a key left off it is a client that now needs an agent token.
 
-Set on this launcher: `felyx`, `agents`, `drills`, `costcrew` and `broker` on the gateway, and `broker-caller` on the broker, each with its reason beside it in `manifests/10-planes.yaml` and `manifests/52-tokenfuse-mcp-broker.yaml`. The operator's own additions go in the ConfigMap `gateway-static-keys`, read at start, so they take effect on a rollout of the gateway. The gateway refuses to start if a listed id is not in its client keys (tokenfuse v1.19.0 Upgrade item 6), and the broker refuses the same way against `TOKENFUSE_MCP_KEYS`, which is why `agents` is not on the broker's list.
+Set on this launcher: `felyx`, `agents`, `drills`, `costcrew` and `broker` on the gateway, and `broker-caller` on the broker, each with its reason beside it in `manifests/10-planes.yaml` and `manifests/52-tokenfuse-mcp-broker.yaml`. The operator's own additions go in the ConfigMap `gateway-static-keys`, read at start, so they take effect on a rollout of the gateway. The gateway refuses to start if a listed id is not in its client keys (tokenfuse v1.19.0 Upgrade item 6), and the broker refuses the same way against `TOKENFUSE_MCP_KEYS`, which is why `agents` is not on the broker's list. Since invariant 85 the gateway also lists `drills-broker` and `broker-caller`, the broker lists `drills-broker` beside `broker-caller`, and each key on the broker's list is a gateway key of the same id (entry 163).
 
 The check that keeps this honest is `scripts/static-keys-are-named.sh`, which refuses a list id the stack does not mint and a listed id without a reason.
 
@@ -4825,3 +4825,25 @@ profile attaching to `/usr/lib/chromium/chromium`, and the image putting Chromiu
 moves, Chromium does not run unsandboxed: it refuses to start with `No usable sandbox!`, scopyx
 returns that sentence on every fetch, and the browser-sandbox workflow goes red on the next change
 to these files.
+
+## 163. A static key the MCP broker admits is refused at the gateway, so every tool call with it is refused closed
+
+**Ours, and fixed.** The MCP broker asks the gateway's tool-call check (`TOKENFUSE_MCP_TAINT_GATEWAY`, fail
+closed since invariant 54) about every `tools/call`, and for a static key it asks with the CALLER's own key:
+tokenfuse invariant 118, "the gateway answers a keyed caller only about its own runs", and the broker holds no
+key of its own for that question by design (its own key is used only to relay an agent token). So a key the
+broker admits and the gateway does not hold reaches the check and is refused 401, and the broker answers the
+caller `-32004 blocked: the taint gate answered 401`. A call that names no run is refused before that, with
+`blocked: the taint gate needs x-fuse-run-id`.
+
+**How it hid.** The broker starts, its door admits the key, the secret scan still refuses a raw secret
+(`-32002`, it runs before the check), and every gate here read text or ran the broker with no taint gateway.
+The typed door's own `broker-caller` had been refused this way on every call since the taint gateway was set,
+and the only run that crossed the check was an agent token's (invariant 54's kind evidence). Found on forge
+2026-11-08 by firing mockryx v0.5.0's broker drills at the broker on 52's settings with a real gateway behind
+it: the secret drill passed, and the PII drill and both steps of the tool-hold drill failed on that refusal.
+
+**Fixed by** making each key the broker admits a gateway key of the same id and secret, `broker-caller` and
+`drills-broker`, minted with the gateway's keys and copied into the broker's door (CLAUDE.md invariant 85).
+`scripts/broker-drills-pass.sh` runs the drills and an agent's `broker-caller` call against the pinned
+gateway, broker and wardryx, and fails when either key leaves the gateway's list.

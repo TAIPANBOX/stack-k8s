@@ -70,6 +70,7 @@ step "the PII scanners run in shadow by default" "./scripts/pii-is-shadow-by-def
 step "client keys and the identity map are checked first" "./scripts/identity-files-are-checked.sh"
 step "the gateway requires client keys, minted when none are given" "./scripts/metered-doors-require-keys.sh"
 step "the MCP broker blocks raw secrets and asks the policy plane" "./scripts/broker-blocks-raw-secrets.sh"
+step "the broker drills pass against the broker as configured, and its static callers are gateway keys" "./scripts/broker-drills-pass.sh"
 step "the gateway's policy-plane key is a pep, on a new cluster and on one installed again" "./scripts/wardryx-gateway-key-is-pep.sh"
 step "the provider key is held by the gateway from a file, and no other container holds one" "./scripts/no-provider-key-outside-the-gateway.sh"
 step "agent tokens are required at the doors, with one audience and a closed revocation list" "./scripts/agent-tokens-are-required.sh"

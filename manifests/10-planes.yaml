@@ -277,7 +277,9 @@ spec:
             # static key drills: the scheduled mockryx drills, which cannot sign a DPoP proof.
             # static key costcrew: the CostCrew analysts' calls through this gateway (costcrew v0.10.0), which do not sign.
             # static key broker: the MCP broker's own key, which it presents for its tool-call check against this gateway.
-            - { name: STACK_STATIC_KEY_IDS, value: "felyx,agents,drills,costcrew,broker" }
+            # static key drills-broker: the drills' key for the MCP broker, which the broker relays here for the tool-call check of each drill (tokenfuse invariant 118). mockryx does not sign. CLAUDE.md invariant 85.
+            # static key broker-caller: the typed door's caller key, which the broker relays here for the tool-call check of each call through that door (tokenfuse invariant 118). It does not sign. CLAUDE.md invariant 85.
+            - { name: STACK_STATIC_KEY_IDS, value: "felyx,agents,drills,costcrew,broker,drills-broker,broker-caller" }
             # The operator's own additions, from the ConfigMap gateway-static-keys (lib/static-keys.sh). Empty by default.
             - name: OPERATOR_STATIC_KEY_IDS
               valueFrom: { configMapKeyRef: { name: gateway-static-keys, key: operator_key_ids } }

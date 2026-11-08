@@ -179,6 +179,12 @@ jobs:
       - name: the MCP broker blocks raw secrets and asks the policy plane (invariant 51)
         run: ./scripts/broker-blocks-raw-secrets.sh
 
+      # The drills reach the MCP broker with a key of their own, the broker's static callers are gateway keys too,
+      # and mockryx's broker drills pass against the pinned broker, gateway and wardryx on networks with no route out.
+      # See CLAUDE.md invariant 85.
+      - name: the broker drills pass against the broker as configured, and its static callers are gateway keys (invariant 85)
+        run: ./scripts/broker-drills-pass.sh
+
       # The gateway's policy-plane key is a pep on a new cluster and on one installed again (invariant 52).
       - name: the gateway's policy-plane key is a pep, and an installed cluster is migrated from viewer
         run: ./scripts/wardryx-gateway-key-is-pep.sh

@@ -732,6 +732,7 @@ fi
 say "step 3/5: the workload"
 policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 129: refuse before anything is applied
 tool_hold_guard      # CLAUDE.md invariant 83: a call the hold would stop ends the run here, with the list
+identity_mint_guard  # CLAUDE.md invariant 85: the operator's own client keys must hold drills-broker and broker-caller first
 tar -cz -C "$ROOT" manifests policy | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
 k_ "apply -k /root/stack-k8s/manifests"
 
@@ -845,13 +846,26 @@ if [ "$TYPED_EFFECTIVE" != off ]; then
   say "typed: applying the typryx plane (mode $TYPED_EFFECTIVE) and tokenfuse's MCP broker in front of it"
   DOOR_HAVE="$(k_ "-n agent-stack get secret typryx-keys tokenfuse-mcp-broker-keys --ignore-not-found -o name" | tr '\n' ' ')" \
     || die "could not ask the cluster whether the typed-answer door's two Secrets exist"
-  DOOR_DOCS="$(k_ "-n agent-stack get secret typryx-keys --ignore-not-found -o jsonpath='{.data.TYPRYX_KEYS}'" \
+  # The broker's two static callers are the gateway's own keys (CLAUDE.md invariant 85), read once, base64, and
+  # handed to typed/mode.sh on stdin after typryx's bearer. Never printed, never on a command line.
+  DOOR_GW="$(k_ "-n agent-stack get secret gateway-client-keys -o jsonpath='{.data.client_keys}'")" \
+    || die "could not read the gateway's client keys, which the typed-answer door's static callers copy"
+  DOOR_DOCS="$( { k_ "-n agent-stack get secret typryx-keys --ignore-not-found -o jsonpath='{.data.TYPRYX_KEYS}'" && printf '\n%s\n' "$DOOR_GW"; } \
     | "$ROOT/typed/mode.sh" door-secrets ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} --have "$DOOR_HAVE" ${TRUST_DOMAIN:+--trust-domain "$TRUST_DOMAIN"})" \
     || die "the typed-answer door's Secrets were not settled (the reason is above), so the typed plane has not been applied."
   if [ -n "$DOOR_DOCS" ]; then
     printf '%s\n' "$DOOR_DOCS" | k_ "-n agent-stack create -f -" >/dev/null \
       || die "could not create the typed-answer door's Secrets"
   fi
+  # A broker Secret that was kept gets the static callers it lacks, and one whose caller is not the gateway's stops here.
+  DOOR_DOCS="$( { k_ "-n agent-stack get secret tokenfuse-mcp-broker-keys -o jsonpath='{.data.TOKENFUSE_MCP_KEYS}'" && printf '\n%s\n' "$DOOR_GW"; } \
+    | "$ROOT/typed/mode.sh" door-callers ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"})" \
+    || die "the typed-answer door's static callers are not the gateway's (the reason is above), so the typed plane has not been applied."
+  if [ -n "$DOOR_DOCS" ]; then
+    printf '%s\n' "$DOOR_DOCS" | k_ "-n agent-stack patch secret tokenfuse-mcp-broker-keys --type merge --patch-file /dev/stdin" >/dev/null \
+      || die "could not add the static callers to the typed-answer door's broker Secret"
+  fi
+  DOOR_GW=""
   DOOR_DOCS=""
   if [ "$("$ROOT/typed/mode.sh" has-secrets ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"})" = yes ]; then
     "$ROOT/typed/mode.sh" secrets ${TYPED_ARGS[@]+"${TYPED_ARGS[@]}"} | k_ "-n agent-stack apply -f -" >/dev/null \
