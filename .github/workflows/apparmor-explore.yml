@@ -32,6 +32,8 @@ jobs:
           ls /etc/apparmor.d | head -100
           sudo cat /etc/apparmor.d/unprivileged_userns 2>/dev/null || true
           sudo cat /etc/apparmor.d/runc 2>/dev/null || true
+          sudo cat /etc/apparmor.d/chromium 2>/dev/null || true
+          sudo cat /etc/apparmor.d/chrome 2>/dev/null || true
           cat /etc/apparmor/parser.conf 2>/dev/null | grep -v '^#' | grep . || true
           ls /usr/share/apparmor-features 2>/dev/null || true
           ls /var/lib/rancher/k3s/data/current/bin/ | head -40
@@ -104,6 +106,6 @@ jobs:
           kubectl -n lab wait --for=condition=Ready pod --all --timeout=300s || kubectl -n lab get pods -o wide
           for v in runtime tbx-default-userns tbx-abi4-userns tbx-abi4-plain tbx-unconfined-userns; do
             echo "=== $v"
-            kubectl -n lab exec "p-$v" -- sh -c 'cat /proc/1/attr/apparmor/current; for f in -Ur -Urm -Urn; do unshare $f true 2>/dev/null && echo "unshare $f allowed" || echo "unshare $f refused"; done; unshare -Ur cat /proc/self/attr/apparmor/current 2>&1; timeout 60 chromium --headless=new --no-first-run --disable-gpu --user-data-dir=/tmp/p$$ --dump-dom "data:text/html,<p>rendered-ok</p>" 2>/tmp/err.txt | grep -o rendered-ok; tail -3 /tmp/err.txt' 2>&1
+            kubectl -n lab exec "p-$v" -- sh -c 'cat /proc/1/attr/apparmor/current; for f in -Ur -Urm -Urn; do unshare $f true 2>/dev/null && echo "unshare $f allowed" || echo "unshare $f refused"; done; unshare -Ur cat /proc/self/attr/apparmor/current 2>&1; timeout 60 chromium --headless=new --no-first-run --disable-gpu --user-data-dir=/tmp/p$$ --dump-dom "data:text/html,<p>rendered-ok</p>" 2>/tmp/err.txt | grep -o rendered-ok; tail -3 /tmp/err.txt; (timeout 20 chromium --headless=new --no-first-run --disable-gpu --user-data-dir=/tmp/q$$ --remote-debugging-port=9222 "data:text/html,<p>x</p>" 2>/tmp/err2.txt &); sleep 6; for q in /proc/[0-9]*; do c="$(tr "\000" " " <$q/cmdline 2>/dev/null)"; case "$c" in *chromium*) echo "$(echo "$c" | grep -o -- "--type=[a-z-]*" | head -1) $(grep NSpid $q/status | tr -s "\t " " ") $(readlink $q/ns/user) $(grep Seccomp_filters $q/status | tr -s "\t " " ") $(cat $q/attr/apparmor/current)";; esac; done; grep -i sandbox /tmp/err2.txt | head -3' 2>&1
             sudo dmesg | grep DENIED | tail -3
           done

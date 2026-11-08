@@ -97,6 +97,8 @@ open(work + "/pvc.yaml", "w").write(doc("47-scopyx.yaml", "PersistentVolumeClaim
 m = re.search(r"^ +image: (ghcr\.io/taipanbox/wardryx:\S+@sha256:[0-9a-f]{64})$",
               open(root + "/manifests/10-planes.yaml").read(), re.M)
 open(work + "/wardryx-image", "w").write(m.group(1))
+m = re.search(r"^ +image: (busybox@sha256:[0-9a-f]{64})$", open(root + "/manifests/10-planes.yaml").read(), re.M)
+open(work + "/busybox-image", "w").write(m.group(1))
 PY
 [ -s "$work/ns.yaml" ] || die "could not cut the namespace and the claim out of the manifests"
 kubectl delete namespace "$NS" --wait=true >/dev/null 2>&1 || true
@@ -129,6 +131,13 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      # wardryx creates no stream file in a directory another uid owns (GOTCHAS 135), as in 10-planes.
+      initContainers:
+        - name: precreate-streams
+          image: $(cat "$work/busybox-image")
+          command: ["sh", "-c", ": > /tmp/e.ndjson"]
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
       containers:
         - name: wardryx
           image: $(cat "$work/wardryx-image")
@@ -254,22 +263,31 @@ PY
 
   # The renderer lives for a second or two, so it is watched from before the page is asked for.
   # Its own filter comes up a moment after it starts, which is why this waits for the second one.
+  # Every Chromium process seen on the way is listed too (its type, PID namespace, user namespace
+  # and AppArmor label), so a run that goes red says which process lost what.
   k exec "$POD" -c scopyx -- sh -c '
-    i=0; seen=""
+    i=0; seen=""; procs=""
     while [ "$i" -lt 900 ]; do
       for p in /proc/[0-9]*; do
         c="$(tr "\000" " " <"$p/cmdline" 2>/dev/null)"
-        case "$c" in *--type=renderer*) ;; *) continue ;; esac
+        case "$c" in *chromium*) ;; *) continue ;; esac
+        t="browser"
+        case "$c" in *--type=renderer*) t=renderer ;; *--type=zygote*) t=zygote ;; *--type=gpu-process*) t=gpu ;; *--type=utility*) t=utility ;; *--type=*) t=other ;; esac
+        n="$(grep -E "^NSpid:" "$p/status" 2>/dev/null | tr -s "\t " " ")"
+        a="$(cat "$p/attr/apparmor/current" 2>/dev/null || cat "$p/attr/current" 2>/dev/null)"
+        line="proc: $t $n userns=$(readlink "$p/ns/user" 2>/dev/null) apparmor=$a"
+        case "$procs" in *"$line"*) ;; *) procs="$procs$line
+" ;; esac
+        [ "$t" = renderer ] || continue
         s="$(grep -E "^(Seccomp|Seccomp_filters|NSpid):" "$p/status" 2>/dev/null | tr -s "\t " " " | tr "\n" ";")"
         m="$(tr -s " " <"$p/uid_map" 2>/dev/null | tr "\n" ";")"
-        a="$(cat "$p/attr/apparmor/current" 2>/dev/null || cat "$p/attr/current" 2>/dev/null)"
         [ -n "$s" ] || continue
         seen="$s uid_map:$m apparmor:$a"
-        case "$s" in *"Seccomp_filters: 1;"*) ;; *) echo "$seen"; exit 0 ;; esac
+        case "$s" in *"Seccomp_filters: 1;"*) ;; *) printf "%s" "$procs"; echo "$seen"; exit 0 ;; esac
       done
       i=$((i + 1)); sleep 0.1
     done
-    echo "$seen"' >"$work/renderer" 2>/dev/null &
+    printf "%s" "$procs"; echo "$seen"' >"$work/watch" 2>/dev/null &
   local watcher=$!
   sleep 0.5
   local code
@@ -289,7 +307,8 @@ print(f"PASS  browse rendered {url}: {len(text)} characters of HTML")
 PY
   then PASSES=$((PASSES + 1)); else FAILS=$((FAILS + 1)); bad=1; fi
   wait "$watcher" 2>/dev/null
-  renderer="$(cat "$work/renderer")"
+  grep "^proc: " "$work/watch" | sed "s/^/      /"
+  renderer="$(grep -v "^proc: " "$work/watch" | tail -1)"
   say "renderer: ${renderer:-none seen}"
   [ -n "$renderer" ] || { fail "no renderer was seen, so Chromium's sandbox was not read"; bad=1; }
   if [[ "$renderer" =~ NSpid:\ [0-9]+\ [0-9]+ ]]; then
