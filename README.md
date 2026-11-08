@@ -354,7 +354,7 @@ declared tools carry an injection finding. Every gateway this launcher starts ru
   refused for the text of a tool it declares: a declared tool with a high or critical finding
   labels the run `suspected_injection`, and the starter rule then applies to that run's later
   calls. A page that hides text in Unicode tag characters or bidi isolates raises the same label
-  (tokenfuse v1.23.0), so a run that reads one can lose tools it had before.
+  (since tokenfuse v1.23.0), so a run that reads one can lose tools it had before.
 - **Changing it.** `--firewall enforce|shadow|off` on `deploy.sh`, `deploy-gcp.sh` and
   `deploy-aws.sh` (or `FIREWALL_MODE` in the environment). Any other word is refused before
   anything is installed. TokenFuse also refuses to start on a misspelt value (since v1.11.1), so
@@ -542,7 +542,7 @@ kubectl -n agent-stack create secret generic tokenfuse-mcp-broker-keys \
 Each entry is `secret:key_id`, so the value has this shape:
 
 ```bash
-TOKENFUSE_MCP_KEYS=pick-a-different-long-secret:broker-caller,and-another-long-secret:drills-broker
+TOKENFUSE_MCP_KEYS='pick-a-different-long-secret:broker-caller,and-another-long-secret:drills-broker'
 ```
 
 The key id after the colon is a bare name, not an `agent://` id: tokenfuse
@@ -558,7 +558,10 @@ model calls: a call with no `x-fuse-agent-id` is refused (it cannot be judged), 
 tool the policy denies is refused (`-32004`), and with wardryx unreachable the
 call is refused (fail closed, like the gateway). A call the policy holds for a person
 says why, with the policy's own reason beside the approval id, and every refusal text is
-cleaned of control and hidden characters before a model reads it (tokenfuse v1.23.0).
+cleaned of control and hidden characters before a model reads it (since tokenfuse v1.23.0).
+An agent's `tools/list` through the broker leaves out the tools wardryx refuses that agent
+outright, a `deny_tool` or a tool outside an `allow_tool` list (tokenfuse v1.24.0), so a
+model is not offered a tool it can never call.
 A `{{secret:NAME}}` handle is not
 a raw secret and resolves as before. Pinning tool definitions
 (`TOKENFUSE_MCP_LOCK`) needs a lock file you approved and is not set. The same

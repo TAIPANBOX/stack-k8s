@@ -91,7 +91,7 @@
 #
 # Each entry is `secret:key_id`, so the value has this shape:
 #
-#   TOKENFUSE_MCP_KEYS=pick-a-different-long-secret:broker-caller,and-another-long-secret:drills-broker
+#   TOKENFUSE_MCP_KEYS='pick-a-different-long-secret:broker-caller,and-another-long-secret:drills-broker'
 #
 # The key id (`broker-caller`) is a bare name, never an `agent://` id:
 # tokenfuse's `ClientKeys::from_spec` splits each entry on its LAST colon,
