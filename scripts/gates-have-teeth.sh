@@ -5267,6 +5267,96 @@ run_case "tool-hold-is-seeded: a comment that names the hold is not a fault" pas
 	'./scripts/tool-hold-is-seeded.sh' \
 	"$(py 'edit("deploy.sh", "# ---- 1. the cluster ---", "# The tool hold is written by tool_hold_settle, further down.\n# ---- 1. the cluster ---")')"
 
+# invariant 84: Chromium keeps its own sandbox on a cluster, under the filter stack-single runs, in
+# the form a node reads, which every installer writes to every node before k3s starts there. Every
+# brace in these blocks is \x7b or \x7d and every single quote \x27, for the reason in the head.
+BKS='./scripts/browser-keeps-its-sandbox.sh'
+run_case "browser-keeps-its-sandbox: the sandbox is turned off again" fail \
+	"$BKS" \
+	"$(py 'edit("manifests/48-scopyx-browser.yaml", "            - \x7b name: SCOPYX_BACKEND, value: \"chromium\" \x7d\n", "            - \x7b name: SCOPYX_BACKEND, value: \"chromium\" \x7d\n            - \x7b name: SCOPYX_CHROMIUM_NO_SANDBOX, value: \"1\" \x7d\n")')" \
+	"turns Chromium's sandbox off"
+run_case "browser-keeps-its-sandbox: the browser falls back to the runtime's filter" fail \
+	"$BKS" \
+	"$(py 'edit("manifests/48-scopyx-browser.yaml", "seccompProfile: \x7b type: Localhost, localhostProfile: taipanbox/chromium-v1.json \x7d", "seccompProfile: \x7b type: RuntimeDefault \x7d")')" \
+	"not Localhost"
+run_case "browser-keeps-its-sandbox: the browser is left unconfined" fail \
+	"$BKS" \
+	"$(py 'edit("manifests/48-scopyx-browser.yaml", "        seccompProfile: \x7b type: RuntimeDefault \x7d\n", "        seccompProfile: \x7b type: Unconfined \x7d\n")')" \
+	"is Unconfined"
+run_case "browser-keeps-its-sandbox: the manifest names a profile nobody writes" fail \
+	"$BKS" \
+	"$(py 'edit("manifests/48-scopyx-browser.yaml", "localhostProfile: taipanbox/chromium-v1.json", "localhostProfile: taipanbox/chromium-v2.json")')" \
+	"the profile the installers write"
+run_case "browser-keeps-its-sandbox: the node file is Docker's format" fail \
+	"$BKS" \
+	"$(py 'open("seccomp/chromium-v1.json", "w").write(open("seccomp/chromium-v1.docker.json").read())')" \
+	"Docker's own keys"
+run_case "browser-keeps-its-sandbox: clone loses its mask" fail \
+	"$BKS" \
+	"$(py 'edit("seccomp/chromium-v1.json", "\"value\": 235012096,", "\"value\": 0,")')" \
+	"clone is not held to the mask"
+run_case "browser-keeps-its-sandbox: stack-single's file differs" fail \
+	"$BKS" \
+	"$(py 'edit("seccomp/chromium-v1.docker.json", "the zygote starts in its own", "the zygote now starts in its own")')" \
+	"not stack-single's chromium-v1.json byte for byte"
+run_case "browser-keeps-its-sandbox: the profile changes and keeps its name" fail \
+	"$BKS" \
+	"$(py 'import subprocess, sys
+edit("seccomp/resolve.py", "json.dumps(profile, indent=2)", "json.dumps(profile, indent=1)")
+out = subprocess.run([sys.executable, "-I", "seccomp/resolve.py", "seccomp/chromium-v1.docker.json"], capture_output=True, text=True, check=True).stdout
+open("seccomp/chromium-v1.json", "w").write(out)')" \
+	"changed and kept its name"
+run_case "browser-keeps-its-sandbox: mount is allowed without a condition" fail \
+	"$BKS" \
+	"$(py 'import hashlib, json
+p = json.load(open("seccomp/chromium-v1.json"))
+p["syscalls"][0]["names"].append("mount")
+body = json.dumps(p, indent=2) + "\n"
+open("seccomp/chromium-v1.json", "w").write(body)
+new = hashlib.sha256(body.encode()).hexdigest()
+edit("scripts/browser-keeps-its-sandbox.sh", "NODE_SHA = \"cc2644c8fd5c4dad925d4ead48f33aa681dc5555ef97b3ec616436d76c50a153\"", "NODE_SHA = \"" + new + "\"")')" \
+	"allows ['mount'] without a condition"
+run_case "browser-keeps-its-sandbox: an installer leaves its agents without the profile" fail \
+	"$BKS" \
+	"$(py 'p = "cloud/aws/install-aws.sh"
+s = open(p).read().split("\n")
+i = [k for k, l in enumerate(s) if ("sh -s - ag" + "ent") in l][0]
+j = [k for k in range(i - 3, i) if "browser_seccomp_put" in s[k]]
+assert j, "no profile write above the agent install"
+del s[j[0]]
+open(p, "w").write("\n".join(s))')" \
+	"without writing the browser's profile onto it just above"
+run_case "browser-keeps-its-sandbox: an installer writes the profile after k3s starts" fail \
+	"$BKS" \
+	"$(py 'line = "browser_seccomp_put sh_ \"$FIRST\" || die \"could not write the browser\x27s seccomp profile on $FIRST\"\n"
+edit("install.sh", line, "")
+p = "install.sh"
+open(p, "a").write(line)')" \
+	"installs k3s on \"\$FIRST\" without writing the browser's profile"
+run_case "browser-keeps-its-sandbox: an installer goes on when the write fails" fail \
+	"$BKS" \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "browser_seccomp_put su_ \"$FIRST\" || die \"could not write the browser\x27s seccomp profile on $FIRST\"\n", "browser_seccomp_put su_ \"$FIRST\" || true\n")')" \
+	"stopping if it cannot"
+run_case "browser-keeps-its-sandbox: the nodes are sent Docker's file" fail \
+	"$BKS" \
+	"$(py 'edit("lib/browser-seccomp.sh", "/seccomp/chromium-v1.json\"\n", "/seccomp/chromium-v1.docker.json\"\n")')" \
+	"not seccomp/chromium-v1.json, the profile resolved for a node"
+run_case "browser-keeps-its-sandbox: the profile lands outside the kubelet's directory" fail \
+	"$BKS" \
+	"$(py 'edit("lib/browser-seccomp.sh", "BROWSER_SECCOMP_ROOT=/var/lib/kubelet/seccomp\n", "BROWSER_SECCOMP_ROOT=/etc/kubernetes/seccomp\n")')" \
+	"not the kubelet's seccomp root"
+run_case "browser-keeps-its-sandbox: a recorded run failed" fail \
+	"$BKS" \
+	"$(py 'edit("evidence/browser-sandbox-k3s/output-ubuntu-26.04-amd64.txt", "\nRUN_EXIT=0", "\nRUN_EXIT=1")')" \
+	"did not end RUN_EXIT=0"
+run_case "browser-keeps-its-sandbox: no manifest runs the browser" fail \
+	"$BKS" \
+	"$(py 'edit("manifests/48-scopyx-browser.yaml", "-chromium@sha256:", "@sha256:")')" \
+	"measured NOTHING"
+run_case "browser-keeps-its-sandbox: a comment naming the switch" pass \
+	"$BKS" \
+	"$(py 'edit("manifests/48-scopyx-browser.yaml", "            - \x7b name: SCOPYX_BACKEND, value: \"chromium\" \x7d\n", "            - \x7b name: SCOPYX_BACKEND, value: \"chromium\" \x7d\n            # SCOPYX_CHROMIUM_NO_SANDBOX=1 is what this file set until 2026-11-08.\n")')"
+
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then
 	exit 0

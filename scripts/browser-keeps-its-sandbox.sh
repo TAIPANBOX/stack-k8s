@@ -73,7 +73,7 @@ else:
     lib = code(open(LIB).read())
     m = re.search(r"^BROWSER_SECCOMP_NAME=(\S+)$", lib, re.M); name = m and m.group(1)
     m = re.search(r"^BROWSER_SECCOMP_ROOT=(\S+)$", lib, re.M); root = m and m.group(1)
-    m = re.search(r'^BROWSER_SECCOMP_FILE="[^"]*/(seccomp/[^"/]+)"$', lib, re.M); src = m and m.group(1)
+    m = re.search(r'^BROWSER_SECCOMP_FILE=.*/(seccomp/[^"/]+)"$', lib, re.M); src = m and m.group(1)
     if not name:
         bad(f"{LIB} names no BROWSER_SECCOMP_NAME")
     if root != "/var/lib/kubelet/seccomp":
@@ -188,7 +188,7 @@ if not installers:
 for path in installers:
     lines = dict(code_lines(path))
     text = "\n".join(lines.values())
-    if not re.search(r'^\. "[^"\n]*/lib/browser-seccomp\.sh"$', text, re.M):
+    if not re.search(r'^\. .*/lib/browser-seccomp\.sh"$', text, re.M):
         bad(f"{path}: does not source {LIB}, so its nodes never get the browser's profile")
     installs = [(n, l) for n, l in lines.items()
                 if re.search(r'(?:sh_|su_) ("\$FIRST"|"\$n") "(INSTALL_K3S_VERSION=|sh -c \\"IFS= read -r K3S_TOKEN)', l)]

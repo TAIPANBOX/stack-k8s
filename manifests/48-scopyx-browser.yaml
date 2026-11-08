@@ -60,6 +60,24 @@
 # So the limit has real headroom and the 512Mi request is close to the true
 # peak, which is the sizing a reader would otherwise have to guess at.
 #
+# BOTH SANDBOXES ON A REAL NODE, 2026-11-08.
+#
+# k3s v1.36.2+k3s1 installed on GitHub's Ubuntu 26.04 runners, amd64 and
+# arm64, AppArmor on, this file applied unchanged under restricted
+# (`.github/workflows/browser-sandbox.yml`, `evidence/browser-sandbox-k3s/`):
+#
+#   the filter containerd built for the browser is the node file, rule for rule
+#   a real page rendered, the renderer in a PID and a user namespace of its
+#     own (NSpid 164 13 1, uid_map 65532 65532 1) under two seccomp filters,
+#     the container's and Chromium's
+#   AppArmor stayed at the runtime's default: the browser's processes ran as
+#     chromium//&cri-containerd.apparmor.d, Ubuntu's own profile for Chromium
+#     stacked with the runtime's, and a Localhost profile changed nothing
+#     (GOTCHAS 162)
+#   the version of this file before that date rendered with Chromium's
+#     sandbox off; the runtime's default filter refuses with "No usable
+#     sandbox!"; a node without the profile does not create the container
+#
 # Memory is the other cost, and it is not optional. A browser is not a 256 MiB
 # process. The limits below are for one page at a time, which is what
 # `replicas: 1` and a per-hour cap mean here.
@@ -196,9 +214,10 @@ spec:
             # once the file is there. Since this file replaces 47's Deployment,
             # that wait is an egress plane that is down, so check first.
             #
-            # AppArmor is left to the runtime's default, which `restricted`
-            # requires anyway (it refuses Unconfined there too); see the header
-            # for what was measured under it.
+            # AppArmor is left to the runtime's default, set nowhere: `restricted`
+            # refuses Unconfined there too, and on an Ubuntu node Chromium's user
+            # namespace gets through by Ubuntu's own profile for Chromium, which
+            # attaches to /usr/lib/chromium/chromium in this image (GOTCHAS 162).
             seccompProfile: { type: Localhost, localhostProfile: taipanbox/chromium-v1.json }
           resources:
             # Measured rather than guessed: 517 MiB peak across pages of up

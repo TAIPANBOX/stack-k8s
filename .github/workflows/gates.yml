@@ -386,6 +386,11 @@ jobs:
       - name: a tool call nothing grants waits for a person, and a cluster with a history is asked first (invariant 83)
         run: ./scripts/tool-hold-is-seeded.sh
 
+      # Added 2026-11-08 with invariant 84, in BOTH callers. The live half, a cluster rendering a page,
+      # is .github/workflows/browser-sandbox.yml; this holds the text it ran.
+      - name: Chromium keeps its own sandbox on a cluster, under the profile every installer writes (invariant 84)
+        run: ./scripts/browser-keeps-its-sandbox.sh
+
       # Added 2026-10-19 with invariant 66. The CostCrew run ceiling is validated before any install and written
       # after the last apply, and the crew CronJob is suspended. See CLAUDE.md invariant 66.
       - name: the CostCrew ceiling is validated and written after apply (invariant 66)

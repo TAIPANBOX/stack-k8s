@@ -114,6 +114,7 @@ step "only labelled consumers reach a Keyryx role, and neither has egress (invar
 step "the witness's findings reach the console and heraldyx read only, and the witness never writes the bus (invariant 75)" "./scripts/keyryx-alerts-reach-readers.sh"
 step "every Keyryx patch applies and its unpatch reverts it exactly, through kubectl patch --local (invariants 69, 70, 75)" "./scripts/keyryx-patches-round-trip.sh"
 step "turning Keyryx off leaves no record-seal Job bound to the witness, and a failed read stops it (invariant 76)" "./scripts/keyryx-off-leaves-nothing-bound.sh"
+step "Chromium keeps its own sandbox on a cluster, under the profile every installer writes (invariant 84)" "./scripts/browser-keeps-its-sandbox.sh"
 step "the teeth shards cover every case once" "./scripts/teeth-shards-cover-every-case.sh"
 
 echo

@@ -2830,6 +2830,10 @@ forbidding port 53. It was not: `allow-dns` in `30-network-policy.yaml` covers
 every pod in the namespace, and the test had not applied that file. A missing
 piece of the deployment reads exactly like a fault in the piece under test.
 
+**Since 2026-11-08 the file takes neither trade.** The browser runs under a
+`Localhost` profile with Chromium's sandbox on (CLAUDE.md invariant 84), and
+entries 161 and 162 are what that route met on a node.
+
 ## 85. The browser image could not render on a real node, and a local cluster had said it could
 
 **Ours, and fixed.** `48-scopyx-browser.yaml` was applied to a local kind
@@ -4765,3 +4769,59 @@ The header and the README now say which side of the line the policy sits on, and
 The negative form is the worse one: `! ... | grep -q bad` reads as clean when the 141 turns it around, so a refused line passes.
 
 `grep -q x <<<"$text"` has no pipe to leave. Where the writer's status has to count, or the text is a key and must not reach a file on bash before 5.1, `command | grep -c x >/dev/null` reads to the end. `grep >/dev/null` happens to read to the end on GNU grep, and `grep -l` leaves early on a Mac's grep and not on GNU's, so neither is a thing to lean on. `scripts/no-reader-leaves-a-pipe-early.sh` (CLAUDE.md invariant 81) reads every tracked shell file and workflow step for it.
+
+## 161. A seccomp profile in Docker's format loads on a Kubernetes node and silently loses every condition in it
+
+**Platform.** stack-single runs the browser under `seccomp/chromium-v1.json`, which is Docker's
+default profile plus three rules, in Docker's format. That format carries three keys the OCI runtime
+spec does not have: `archMap`, and on each rule `includes` and `excludes`, which Docker decides per
+container at start ("allow mount, setns and unshare of any namespace, but only with CAP_SYS_ADMIN").
+A Kubernetes node does not run Docker. containerd reads a `Localhost` profile with `json.Unmarshal`
+into the runtime spec's `LinuxSeccomp` (`contrib/seccomp/seccomp.go`, `WithProfile`), so the three
+keys are dropped without a word and every conditional rule applies to every container.
+
+**How it fails, which is not at all.** The file copied to the node as it is loads. The pod starts,
+the browser renders, and nothing anywhere says the filter is wider than the file reads. Not even
+the one place where two rules now contradict each other (clone3 allowed for CAP_SYS_ADMIN, refused
+with ENOSYS without it) stops it: libseccomp takes both. Measured 2026-11-08 by
+`evidence/browser-sandbox-k3s/run.sh` on k3s v1.36.2+k3s1 (containerd 2.3.2-k3s2, runc 1.4.2,
+libseccomp 2.6.0) on Ubuntu 26.04, amd64 and arm64: under the Docker-format file the seccomp section
+of the spec containerd built (`crictl inspect`) allows `bpf clone fsopen mount move_mount open_tree
+setns unshare` with no condition, to a container that holds no capability.
+
+**Fixed by** resolving the file the way Docker would for this container, and shipping that:
+`seccomp/resolve.py` keeps a rule that excludes a capability, drops one that includes a capability,
+keeps amd64 and arm64 with their sub-architectures, and writes plain OCI JSON. The node gets
+`seccomp/chromium-v1.json`; `seccomp/chromium-v1.docker.json` is stack-single's file byte for byte,
+kept so the gate can prove the first is the second resolved. `scripts/browser-keeps-its-sandbox.sh`
+fails on any of Docker's keys in the node file and on any call Docker allows only with
+CAP_SYS_ADMIN appearing there unconditionally.
+
+## 162. On an Ubuntu node every container is stacked with `unconfined`, and Chromium's user namespace gets through only because Ubuntu ships a profile for Chromium
+
+**Platform.** On an Ubuntu 26.04 node running k3s v1.36.2+k3s1, the runtime's default AppArmor
+profile reads `cri-containerd.apparmor.d//&unconfined (enforce)` on a container's PID 1: a stack of
+two, not the profile alone. Ubuntu sets `kernel.apparmor_restrict_unprivileged_userns=1`, and that
+restriction acts on the `unconfined` half. A process in the container that creates a user namespace
+is moved to the `unprivileged_userns` profile and loses its capabilities in it, so `unshare -Ur`
+from a shell in the browser's container fails writing its uid_map, and the kernel logs
+`apparmor="DENIED" operation="capable" profile="unprivileged_userns"`.
+
+Chromium is not refused, and the reason is the host, not the cluster. Ubuntu ships
+`/etc/apparmor.d/chromium`, `profile chromium /usr/lib/@{chromium}/@{chromium} flags=(unconfined)`
+with `userns,`, and that path is where Debian puts Chromium in the browser image. When the
+container executes it, the `unconfined` half of the stack attaches to Ubuntu's profile, the browser's
+processes run as `chromium//&cri-containerd.apparmor.d (mixed)`, and the renderer gets its user and
+PID namespaces with both seccomp filters on.
+
+**A Localhost AppArmor profile does not change this, so none is shipped.** The runtime's default
+profile with `userns,` added, loaded on the node and named in the pod, which `restricted` admits, is
+stacked the same way (`taipanbox-apparmor-probe//&unconfined`), and a shell's user namespace is still
+refused its capabilities. Measured 2026-11-08 by `evidence/browser-sandbox-k3s/run.sh`, amd64 and
+arm64, AppArmor parser 5.0.2, kernel 7.0.0-1019-azure.
+
+**What it costs to know.** The browser's sandbox on such a node rests on two paths agreeing: Ubuntu's
+profile attaching to `/usr/lib/chromium/chromium`, and the image putting Chromium there. If either
+moves, Chromium does not run unsandboxed: it refuses to start with `No usable sandbox!`, scopyx
+returns that sentence on every fetch, and the browser-sandbox workflow goes red on the next change
+to these files.
