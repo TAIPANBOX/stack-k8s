@@ -13,9 +13,9 @@ Feature: the drills reach the MCP broker with a key of their own, and pass
   typed door's caller key are therefore one secret under one id at both doors.
 
   Scenario: the drills run against the broker and pass
-    Given a broker, a gateway and wardryx as this repository pins and configures them
-    When the drills-broker job runs mockryx's broker drills with the drills' own key
-    Then a raw secret in tool arguments is refused, a tool call nothing grants is held, a drill identity goes through, and personal data reads as the PII mode makes it
+    Given a broker, a gateway and wardryx as this repository pins and configures them, and no MCP server behind the broker
+    When the drills-broker job runs as shipped, with the drills' own key and this cluster's tool-hold drill
+    Then a raw secret in tool arguments is refused, a tool call nothing grants is held, a drill identity gets past the hold and is refused by the vault, and personal data reads as the PII mode makes it
     # -> gates-have-teeth.sh "broker-drills-pass: the broker forwards raw secrets again (run)"
     # -> gates-have-teeth.sh "broker-drills-pass: the broker's door gets a fresh drills-broker, not the gateway's (run)"
 
@@ -82,3 +82,26 @@ Feature: the drills reach the MCP broker with a key of their own, and pass
     Then broker-drills-pass.sh fails
     # -> gates-have-teeth.sh "broker-drills-pass: a scenario names a case nothing runs"
     # -> gates-have-teeth.sh "broker-drills-pass: a case is named by no scenario"
+
+  Scenario: the tool-hold drill is never red by design on a cluster
+    Given no MCP server in this stack answers search_notes
+    When the drills-broker job runs the image's own tool-hold drill, whose second call asks for a result
+    Then broker-drills-pass.sh fails, because this cluster's copy must be mounted over it with a name of its own and a second call the vault refuses
+    # -> gates-have-teeth.sh "broker-drills-pass: the CronJob loses this cluster's tool-hold drill"
+    # -> gates-have-teeth.sh "broker-drills-pass: the ConfigMap with this cluster's drill is gone"
+    # -> gates-have-teeth.sh "broker-drills-pass: this cluster's drill takes mockryx's own name"
+    # -> gates-have-teeth.sh "broker-drills-pass: this cluster's drill asks its second call for a result"
+
+  Scenario: the second call stops inside the broker
+    Given the broker asks wardryx before it resolves a secret, and the vault scopes typryx_key to typryx's own tools
+    When the drill sends no vault handle, the rule lets typryx_key reach search_notes, or grant-drills goes missing
+    Then broker-drills-pass.sh fails
+    # -> gates-have-teeth.sh "broker-drills-pass: this cluster's drill sends no vault handle in its second call"
+    # -> gates-have-teeth.sh "broker-drills-pass: the vault lets typryx_key reach search_notes"
+    # -> gates-have-teeth.sh "broker-drills-pass: grant-drills goes missing from the tool hold (run)"
+
+  Scenario: a reworded comment in this cluster's drill is not a fault
+    Given this cluster's tool-hold drill
+    When a comment in it is reworded
+    Then broker-drills-pass.sh passes
+    # -> gates-have-teeth.sh "broker-drills-pass: a comment in this cluster's drill is reworded"

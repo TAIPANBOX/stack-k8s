@@ -580,11 +580,16 @@ kubectl -n agent-stack logs -f job/drills-broker-now
 It sends the drills' own key from `drills-broker-key` to the broker and to nothing else, and its
 pod reaches the broker on 4200 and no other address. With this stack's settings the secret drill
 passes, the PII drill reads `skipped_not_configured` (PII runs in shadow), and the tool-hold
-drill's first step is held for a person (one pending approval on wardryx, which later runs reuse).
-Its second step asks for a result from an MCP server behind the broker that answers
-`search_notes`, and no server in this stack does, so on a cluster that step reports a Finding.
-`scripts/broker-drills-pass.sh` runs all three in CI against the pinned broker, gateway and
-wardryx on this repository's settings, with a stand-in server, and requires every one to pass.
+drill passes with both its calls stopped inside the broker. That drill is the cluster's own copy,
+`mcp-ungranted-tool-held-on-this-cluster` (the ConfigMap `drills-broker-scenarios`, mounted over
+the image's file of that name): mockryx's own asks its second call for a result from an MCP server
+that answers `search_notes`, and no server in this stack does. The copy's first call, as an id no
+grant names, is held for a person (one pending approval on wardryx, which later runs reuse); its
+second, as a drill identity, gets past the hold and is refused by the broker's vault (`-32008`),
+because the `{{secret:typryx_key}}` handle it carries is scoped to typryx's own tools. Nothing is
+forwarded. `scripts/broker-drills-pass.sh` runs the job as shipped in CI against the pinned
+broker, gateway and wardryx on this repository's settings with no MCP server, and mockryx's
+original set against a stand-in server, and requires every drill to pass.
 
 `manifests/52-tokenfuse-mcp-broker.yaml` has the full story: why two Secrets
 rather than one, what its NetworkPolicies admit, and what was measured

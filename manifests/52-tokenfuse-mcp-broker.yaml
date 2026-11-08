@@ -473,10 +473,19 @@ spec:
 # same secret for both).
 #
 # Suspended, like `drills`: run it with `kubectl -n agent-stack create job --from=cronjob/drills-broker drills-broker-now`.
-# The tool-hold drill opens one approval on wardryx per run (later runs ask the same question, and wardryx keeps one
-# pending row), and its second step needs an MCP server behind the broker that answers `search_notes` with a result:
-# none in this stack does (the broker's default upstream is typryx), so on a cluster that step reports a Finding.
-# scripts/broker-drills-pass.sh runs all three against this broker's own settings, in CI, with a stand-in server.
+#
+# The tool-hold drill is this cluster's own copy (the ConfigMap drills-broker-scenarios below), mounted over the
+# image's /scenarios/mcp/mcp-ungranted-tool-held.yaml. mockryx's own asks its second call for a RESULT, so an MCP
+# server behind the broker would have to answer `search_notes`; none in this stack does (the broker's default
+# upstream is typryx), and a drill that is red on every cluster teaches its reader to skip red. The copy keeps the
+# first step and the two identities and makes both calls carry the vault handle `{{secret:typryx_key}}`, whose
+# scope rule (TOKENFUSE_MCP_SECRET_SCOPES, `typryx_key=tools:ask|ask_freeform|list_questions`, minted by
+# typed/mode.sh) does not reach search_notes. The broker asks wardryx before it resolves a secret, so the ungranted
+# id is held (-32004 naming when_no_grant) and the drill identity, which grant-drills lets past the hold, is refused
+# by the vault (-32008 "not scoped to agent"): both calls stop inside the broker, and nothing is forwarded. A broker
+# that held everybody answers the second -32004, a Finding. The run opens one approval on wardryx; later runs ask
+# the same question and wardryx keeps one pending row. scripts/broker-drills-pass.sh runs this job as shipped with no
+# MCP server at all, and mockryx's original set against a stand-in server.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -526,6 +535,9 @@ spec:
               volumeMounts:
                 - { name: events, mountPath: /var/lib/stack/events }
                 - { name: drills-broker-key, mountPath: /run/drills-broker, readOnly: true }
+                # This cluster's tool-hold drill over the image's own file of that name (see above); the other two
+                # broker drills run as the image ships them.
+                - { name: scenarios, mountPath: /scenarios/mcp/mcp-ungranted-tool-held.yaml, subPath: mcp-ungranted-tool-held.yaml, readOnly: true }
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
@@ -538,6 +550,61 @@ spec:
               persistentVolumeClaim: { claimName: stack-events }
             - name: drills-broker-key
               secret: { secretName: drills-broker-key, optional: true, defaultMode: 0440, items: [{ key: broker_key, path: broker_key }] }
+            - name: scenarios
+              configMap: { name: drills-broker-scenarios, defaultMode: 0444 }
+---
+# This cluster's own tool-hold drill for the broker (see the CronJob above), a mirror of stack-single's
+# drill-scenarios/mcp-ungranted-tool-held.yaml with a name of its own, so a report says which of the two ran.
+# scripts/broker-drills-pass.sh holds its fields: requires tool-hold, two steps, both search_notes with the
+# typryx_key handle, the first as an id no grant can name (-32004, when_no_grant), the second as a drill identity
+# (-32008, not scoped to agent).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: drills-broker-scenarios
+  namespace: agent-stack
+data:
+  mcp-ungranted-tool-held.yaml: |
+    # mcp-ungranted-tool-held, as this cluster runs it: a fire drill for the tool hold, the rule that a tool call
+    # nothing grants waits for a person (stack-k8s CLAUDE.md invariant 83). (OWASP Top 10 for LLM Applications 2025:
+    # LLM06:2025 Excessive Agency.) Defensive intent: it sends this cluster's OWN MCP broker the same harmless
+    # tools/call twice, as two identities, and reaches no MCP server: both calls stop inside the broker.
+    name: mcp-ungranted-tool-held-on-this-cluster
+    requires: tool-hold
+    description: >
+      An agent nothing grants calls an MCP tool through this cluster's broker. The broker should hold the call for a
+      person, with JSON-RPC error -32004 naming when_no_grant. The same call from a drill identity, which grant-drills
+      grants, should get past the hold and be refused by the broker's vault (-32008), because the secret handle it
+      carries is scoped to other tools; nothing reaches an MCP server.
+    steps:
+      - name: an-id-no-grant-can-name-is-held
+        mcp:
+          method: tools/call
+          params:
+            name: search_notes
+            arguments:
+              query: "fire drill: nothing to find"
+            _meta:
+              typryx/key: "{{secret:typryx_key}}"
+        headers:
+          agent_id: agent://ungranted.invalid/rehearsal/no-grant
+        expect:
+          error_code: -32004
+          error_contains: when_no_grant
+      - name: a-drill-identity-under-grant-drills-gets-past-the-hold
+        mcp:
+          method: tools/call
+          params:
+            name: search_notes
+            arguments:
+              query: "fire drill: nothing to find"
+            _meta:
+              typryx/key: "{{secret:typryx_key}}"
+        headers:
+          agent_id: agent://mockryx.local/rehearsal/tool-hold
+        expect:
+          error_code: -32008
+          error_contains: not scoped to agent
 ---
 # The broker drills reach this broker on 4200 and nothing else (DNS aside, allow-dns in 30-network-policy.yaml).
 apiVersion: networking.k8s.io/v1

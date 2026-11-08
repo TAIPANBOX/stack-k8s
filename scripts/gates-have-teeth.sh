@@ -5414,6 +5414,37 @@ run_case "broker-drills-pass: the CronJob is gone" fail \
 run_case "broker-drills-pass: a comment naming the gateway drills beside the broker's ingress" pass \
 	"$BDP" \
 	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "  name: broker-ingress-drills\n  namespace: agent-stack\nspec:\n", "  name: broker-ingress-drills\n  namespace: agent-stack\nspec:\n  # never { role: drills }, the gateway drills\x27 pod\n")')"
+run_case "broker-drills-pass: the CronJob loses this cluster's tool-hold drill" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "                - \x7b name: scenarios, mountPath: /scenarios/mcp/mcp-ungranted-tool-held.yaml, subPath: mcp-ungranted-tool-held.yaml, readOnly: true \x7d\n", "")')" \
+	"mounts nothing read only over /scenarios/mcp/mcp-ungranted-tool-held.yaml"
+run_case "broker-drills-pass: the ConfigMap with this cluster's drill is gone" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "kind: ConfigMap\nmetadata:\n  name: drills-broker-scenarios\n", "kind: ConfigMap\nmetadata:\n  name: drills-broker-scenario-files\n")')" \
+	"this cluster's tool-hold drill measured NOTHING"
+run_case "broker-drills-pass: this cluster's drill takes mockryx's own name" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "    name: mcp-ungranted-tool-held-on-this-cluster\n", "    name: mcp-ungranted-tool-held\n")')" \
+	"carries no name or mockryx's own"
+run_case "broker-drills-pass: this cluster's drill asks its second call for a result" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          error_code: -32008\n          error_contains: not scoped to agent\n", "          result: true\n")')" \
+	"asks for a result"
+run_case "broker-drills-pass: this cluster's drill sends no vault handle in its second call" fail \
+	"$BDP" \
+	"$(py 'p = "manifests/52-tokenfuse-mcp-broker.yaml"; s = open(p).read(); a = "            _meta:\n              typryx/key: \"\x7b\x7bsecret:typryx_key\x7d\x7d\"\n"; i = s.rindex(a); open(p, "w").write(s[:i] + s[i + len(a):])')" \
+	"step 2 carries no"
+run_case "broker-drills-pass: the vault lets typryx_key reach search_notes" fail \
+	"$BDP" \
+	"$(py 'edit("typed/mode.sh", "DOOR_SCOPES=\"typryx_key=tools:ask|ask_freeform|list_questions\"", "DOOR_SCOPES=\"typryx_key=tools:ask|ask_freeform|list_questions|search_notes\"")')" \
+	"which reaches search_notes"
+run_case "broker-drills-pass: grant-drills goes missing from the tool hold (run)" fail \
+	"$BDP" \
+	"$(py 'edit("lib/tool-hold.sh", "    \x27- name: grant-drills\x27 \\\n    \x27  target: agent://mockryx.local/*\x27 \\\n    \x27  grant_tool: [\"*\"]\x27 \\\n", "")')" \
+	"mcp-ungranted-tool-held-on-this-cluster came back"
+run_case "broker-drills-pass: a comment in this cluster's drill is reworded" pass \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "    # LLM06:2025 Excessive Agency.) Defensive intent:", "    # LLM06:2025 Excessive Agency). Defensive intent:")')"
 run_case "broker-drills-pass: a scenario names a case nothing runs" fail \
 	"$BDP" \
 	"$(py 'edit("features/the-drills-reach-the-broker-with-a-key-of-their-own.feature", "# -> gates-have-teeth.sh \"broker-drills-pass: the CronJob is gone\"", "# -> gates-have-teeth.sh \"broker-drills-pass: the CronJob went away\"")')" \
