@@ -86,6 +86,7 @@ esac
 SSH_OPTS=(-o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20)
 [ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/secret-doc.sh"
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/browser-seccomp.sh"
 sh_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "${@:2}"; }
 su_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "sudo ${*:2}"; }
 k_()  { su_ "$FIRST" "/usr/local/bin/k3s kubectl $*"; }
@@ -353,6 +354,7 @@ if [ -z "$K3S_TOKEN_VALUE" ]; then
   fi
 fi
 put_graceful_shutdown "$FIRST"
+browser_seccomp_put su_ "$FIRST" || die "could not write the browser's seccomp profile on $FIRST"
 { printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | su_ "$FIRST" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' sh -s - server \
     --cluster-init \
     --node-name '$FIRST_NODE_NAME' \
@@ -380,6 +382,7 @@ for n in "${SERVER_LIST[@]:1}"; do
   JOINED_NAME="$(node_name_of "$n")"
   [ -n "$JOINED_NAME" ] || die "could not read a host name from $n to pin --node-name to"
   put_graceful_shutdown "$n"
+  browser_seccomp_put su_ "$n" || die "could not write the browser's seccomp profile on $n"
   { printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | su_ "$n" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' sh -s - server \
       --server 'https://$FIRST_PRIV:6443' \
       --node-name '$JOINED_NAME' \
@@ -415,6 +418,7 @@ for n in ${AGENT_LIST[@]+"${AGENT_LIST[@]}"}; do
   AGENT_NAME="$(node_name_of "$n")"
   [ -n "$AGENT_NAME" ] || die "could not read a host name from $n to pin --node-name to"
   put_graceful_shutdown "$n"
+  browser_seccomp_put su_ "$n" || die "could not write the browser's seccomp profile on $n"
   { printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | su_ "$n" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' K3S_URL='https://$FIRST_PRIV:6443' sh -s - agent \
       --node-name '$AGENT_NAME' \
       --node-ip '$(priv_of "$n")' \

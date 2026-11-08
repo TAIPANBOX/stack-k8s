@@ -1,0 +1,79 @@
+# The browser keeps both sandboxes on a real node (CLAUDE.md invariant 84).
+#
+# k3s is installed on the runner itself, at the version the installers pin, so the node is an
+# Ubuntu 26.04 host with AppArmor on: the shape install.sh, install-gcp.sh and install-aws.sh build.
+# One job per architecture the browser image is published for, because one profile file serves both.
+# Public repository, GitHub's standard runners: nothing is billed.
+#
+# Not a gate, and in neither caller: it starts a cluster, pulls a 1 GB image and renders a real page
+# from the internet, so it runs when what it measures changes, and by hand. The gate that holds the
+# text is scripts/browser-keeps-its-sandbox.sh.
+name: browser-sandbox
+
+on:
+  pull_request:
+    paths:
+      - manifests/48-scopyx-browser.yaml
+      - seccomp/**
+      - lib/browser-seccomp.sh
+      - evidence/browser-sandbox-k3s/**
+      - .github/workflows/browser-sandbox.yml
+  push:
+    branches: [main]
+    paths:
+      - manifests/48-scopyx-browser.yaml
+      - seccomp/**
+      - lib/browser-seccomp.sh
+      - evidence/browser-sandbox-k3s/**
+      - .github/workflows/browser-sandbox.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-26.04, ubuntu-26.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    env:
+      KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      # The last commit whose 48 turned Chromium's sandbox off. The run applies that file too, and it
+      # has to go red on the same checks, or the checks prove nothing.
+      OLD48_REF: b6a98e6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: k3s on this runner, the version the installers pin
+        run: |
+          set -euo pipefail
+          v="$(sed -n 's/^K3S_VERSION="${K3S_VERSION:-\(v[^}]*\)}".*/\1/p' install.sh)"
+          [ -n "$v" ] || { echo "install.sh pins no k3s version"; exit 1; }
+          curl -sfL https://get.k3s.io -o "$RUNNER_TEMP/k3s-install.sh"
+          INSTALL_K3S_VERSION="$v" INSTALL_K3S_EXEC="server --disable=traefik --disable=servicelb --disable=metrics-server --write-kubeconfig-mode=0644" \
+            sh "$RUNNER_TEMP/k3s-install.sh"
+          for _ in $(seq 60); do
+            if kubectl get nodes >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          kubectl wait --for=condition=Ready node --all --timeout=180s
+          kubectl -n kube-system rollout status deploy/local-path-provisioner --timeout=180s
+          kubectl -n kube-system rollout status deploy/coredns --timeout=180s
+          kubectl get nodes -o wide
+
+      - name: what the node runs under
+        run: |
+          uname -a
+          sudo aa-status 2>/dev/null | head -5 || true
+          sudo grep -n -i apparmor /var/lib/rancher/k3s/agent/etc/containerd/config.toml* || echo "containerd config names no apparmor setting"
+
+      - name: the browser, both sandboxes, and every control
+        run: |
+          set -o pipefail
+          git show "$OLD48_REF:manifests/48-scopyx-browser.yaml" >"$RUNNER_TEMP/old48.yaml"
+          OLD48="$RUNNER_TEMP/old48.yaml" ./evidence/browser-sandbox-k3s/run.sh https://example.com/ 2>&1 | tee "$RUNNER_TEMP/output.txt"
