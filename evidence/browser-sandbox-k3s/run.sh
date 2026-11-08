@@ -379,7 +379,8 @@ fi
 if [ -n "${OLD48:-}" ]; then
   head_ "control: the older 48 ($OLD48) must go red on the same checks"
   if deploy "$OLD48"; then
-    if measure >"$work/old.out" 2>&1; then
+    # In a subshell: its own PASS and FAIL lines are the point here, and they are not this run's.
+    if (measure) >"$work/old.out" 2>&1; then
       sed 's/^/      | /' "$work/old.out"
       fail "the older file passed the sandbox checks"
     else
@@ -402,6 +403,69 @@ if deploy "$work/rd.yaml"; then
   esac
 else
   fail "the RuntimeDefault variation did not run"
+fi
+
+head_ "control: a Localhost AppArmor profile that allows a user namespace"
+# The runtime's default profile with `userns,` added, loaded on the node for this run only. It is
+# what a person would reach for when a user namespace is refused under AppArmor, and restricted
+# admits it. It is not shipped: the run shows it changes nothing for Chromium and nothing for a shell.
+if [ "$(node_sh 'cat /sys/module/apparmor/parameters/enabled 2>/dev/null')" = Y ] && node_sh 'command -v apparmor_parser' >/dev/null 2>&1; then
+  node_sh 'cat > /etc/apparmor.d/taipanbox-apparmor-probe && apparmor_parser -r -W /etc/apparmor.d/taipanbox-apparmor-probe' <<'AA'
+#include <tunables/global>
+profile taipanbox-apparmor-probe flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+  network,
+  capability,
+  file,
+  umount,
+  userns,
+  signal (receive) peer=unconfined,
+  signal (receive) peer=runc,
+  signal (receive) peer=crun,
+  signal (send,receive) peer=taipanbox-apparmor-probe,
+  deny @{PROC}/* w,
+  deny @{PROC}/{[^1-9],[^1-9][^0-9],[^1-9s][^0-9y][^0-9s],[^1-9][^0-9][^0-9][^0-9]*}/** w,
+  deny @{PROC}/sys/[^k]** w,
+  deny @{PROC}/sys/kernel/{?,??,[^s][^h][^m]**} w,
+  deny @{PROC}/sysrq-trigger rwklx,
+  deny @{PROC}/mem rwklx,
+  deny @{PROC}/kmem rwklx,
+  deny @{PROC}/kcore rwklx,
+  deny mount,
+  deny /sys/[^f]*/** wklx,
+  deny /sys/f[^s]*/** wklx,
+  deny /sys/fs/[^c]*/** wklx,
+  deny /sys/fs/c[^g]*/** wklx,
+  deny /sys/fs/cg[^r]*/** wklx,
+  deny /sys/firmware/** rwklx,
+  deny /sys/devices/virtual/powercap/** rwklx,
+  deny /sys/kernel/security/** rwklx,
+  ptrace (trace,tracedby,read,readby) peer=taipanbox-apparmor-probe,
+}
+AA
+  variant "$work/aa.yaml" "            $LOCALHOST" "            appArmorProfile: { type: Localhost, localhostProfile: taipanbox-apparmor-probe }
+            $LOCALHOST"
+  if deploy "$work/aa.yaml"; then
+    label="$(k exec "$POD" -c scopyx -- cat /proc/1/attr/apparmor/current 2>/dev/null)"
+    row="$(unshare_row)"
+    said="$(browse_says)"
+    say "PID 1: $label"
+    say "unshare from a shell: $row"
+    say "browse: $said"
+    case "$label" in
+      *"//&unconfined"*) pass "the runtime stacks a Localhost profile with unconfined as it does its own: $label" ;;
+      *) fail "a Localhost profile was not stacked with unconfined: $label" ;;
+    esac
+    case "$row" in
+      "-Ur:refused"*) pass "with userns allowed in the profile, a shell's user namespace is still refused its capabilities" ;;
+      *) fail "with the profile a shell's user namespace works, so AppArmor here is not what GOTCHAS 162 says: $row" ;;
+    esac
+  else
+    fail "the Localhost AppArmor variation did not run: $(waiting_reason)"
+  fi
+  node_sh 'apparmor_parser -R /etc/apparmor.d/taipanbox-apparmor-probe; rm -f /etc/apparmor.d/taipanbox-apparmor-probe'
+else
+  say "AppArmor is off on this node, so there is no profile to try"
 fi
 
 head_ "control: a profile the node does not have"
