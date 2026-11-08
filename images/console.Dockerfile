@@ -63,7 +63,7 @@ RUN cd qryx    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/qryx
 # manifests/10-planes.yaml's (CLAUDE.md invariant 79), and moving one without
 # the other fails it. Pulled, not built: the node builds nothing it can pull.
 FROM ghcr.io/taipanbox/wardryx:v2.6.1@sha256:2101d23bbe8ecb1b932a530611ffa02f1c7c9b82394c4fa8db238f7d0e7bd667 AS wardryx-engine
-FROM ghcr.io/taipanbox/tokenfuse:v1.23.0@sha256:192cfc7138eea6911d3c563427cdb996dac52c77e7f04f6ae71f84b6a6dc4535 AS tokenfuse-engine
+FROM ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b657bbb332f7c8a345beeaaa1e071f05f6af2ce46882d0601a153eb7c5 AS tokenfuse-engine
 
 # --- runtime ----------------------------------------------------------------
 FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
@@ -77,7 +77,7 @@ LABEL org.opencontainers.image.title="genaryx-console"
 # Which engines the proofs run, readable from `docker inspect`: the question an
 # incident asks of a proof is which wardryx replayed it.
 LABEL dev.taipanbox.engine.wardryx="v2.6.1@sha256:2101d23bbe8ecb1b932a530611ffa02f1c7c9b82394c4fa8db238f7d0e7bd667"
-LABEL dev.taipanbox.engine.tokenfuse="v1.23.0@sha256:192cfc7138eea6911d3c563427cdb996dac52c77e7f04f6ae71f84b6a6dc4535"
+LABEL dev.taipanbox.engine.tokenfuse="v1.24.0@sha256:bc9ee4b657bbb332f7c8a345beeaaa1e071f05f6af2ce46882d0601a153eb7c5"
 
 # The two Python tools, installed as real console-invokable commands
 # (`verdryx`, `engram-mcp` - see their pyproject [project.scripts]).

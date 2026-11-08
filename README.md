@@ -1003,7 +1003,7 @@ sides use one secret, and it is off unless you turn it on:
 ```
 
 A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
-console v1.1.34 or later. The images pinned here are tokenfuse v1.23.0 and console v1.8.8,
+console v1.1.34 or later. The images pinned here are tokenfuse v1.24.0 and console v1.8.8,
 both later than those minimums; an older image
 ignores the setting.
 

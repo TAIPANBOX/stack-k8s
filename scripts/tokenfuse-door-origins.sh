@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CLAUDE.md invariant 74. The stack runs tokenfuse v1.23.0, pinned by tag and digest, and each tokenfuse door accepts
+# CLAUDE.md invariant 74. The stack runs tokenfuse v1.24.0, pinned by tag and digest, and each tokenfuse door accepts
 # a proof only for the addresses that door is reached at (tokenfuse invariant 141). So each door names only its own
 # service's two origins, the Service name and the cluster-internal name. wardryx's agent-token door names all four,
 # because it verifies the proof of an agent calling either service. A proof minted for one door is therefore refused
@@ -27,8 +27,8 @@ import re
 import sys
 
 PINS = {
-    "tokenfuse": ("v1.23.0", "sha256:192cfc7138eea6911d3c563427cdb996dac52c77e7f04f6ae71f84b6a6dc4535"),
-    "tokenfuse-control-plane": ("v1.23.0", "sha256:14971e0aa3a3bdaf81d31de67bd50e8bbbbe7c2c64bb45a7fa480d075ed5e016"),
+    "tokenfuse": ("v1.24.0", "sha256:bc9ee4b657bbb332f7c8a345beeaaa1e071f05f6af2ce46882d0601a153eb7c5"),
+    "tokenfuse-control-plane": ("v1.24.0", "sha256:b05d3d12c61289006308cf94f3ab4edba958faf6575420eb50c93f973fc4a29a"),
 }
 GATEWAY = ["http://tokenfuse-gateway:4100", "http://tokenfuse-gateway.agent-stack.svc.cluster.local:4100"]
 BROKER = ["http://tokenfuse-mcp-broker:4200", "http://tokenfuse-mcp-broker.agent-stack.svc.cluster.local:4200"]
@@ -113,5 +113,5 @@ if bad:
         print("FAIL " + b)
     print(f"{len(bad)} problem(s). See CLAUDE.md invariant 74.")
     sys.exit(1)
-print("OK: the stack runs tokenfuse v1.23.0 by tag and digest; each tokenfuse door names only its own two origins, wardryx's agent-token door names their union, and every entry is an origin.")
+print("OK: the stack runs tokenfuse v1.24.0 by tag and digest; each tokenfuse door names only its own two origins, wardryx's agent-token door names their union, and every entry is an origin.")
 PY
