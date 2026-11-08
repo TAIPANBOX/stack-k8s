@@ -75,6 +75,7 @@ printf 'arch: %s\n' "$(node_sh 'uname -m')"
 say "AppArmor enabled: $(node_sh 'cat /sys/module/apparmor/parameters/enabled 2>/dev/null || echo absent')"
 say "kernel.apparmor_restrict_unprivileged_userns: $(node_sh 'sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || echo absent')"
 say "runtime default AppArmor profile loaded: $(node_sh 'grep -c cri-containerd /sys/kernel/security/apparmor/profiles 2>/dev/null || echo 0')"
+say "the host's own chromium profile: $(node_sh 'grep -E "^profile chromium |^ *userns," /etc/apparmor.d/chromium 2>/dev/null | tr -s " " | tr "\n" ";" || echo none')"
 
 browser_seccomp_put here_ node || die "could not write the profile onto the node"
 NODE_FILE="$BROWSER_SECCOMP_ROOT/$BROWSER_SECCOMP_NAME"
@@ -263,19 +264,21 @@ PY
 
   # The renderer lives for a second or two, so it is watched from before the page is asked for.
   # Its own filter comes up a moment after it starts, which is why this waits for the second one.
-  # Every Chromium process seen on the way is listed too (its type, PID namespace, user namespace
-  # and AppArmor label), so a run that goes red says which process lost what.
+  # Every Chromium process seen on the way is listed too (its type, PID namespace and AppArmor
+  # label), so a run that goes red says which process lost what. A process is Chromium by its
+  # argv[0]: this watcher's own command line names both "chromium" and "--type=renderer", and
+  # matching on the whole line once read the watcher itself as an unsandboxed renderer.
   k exec "$POD" -c scopyx -- sh -c '
     i=0; seen=""; procs=""
-    while [ "$i" -lt 900 ]; do
+    while [ "$i" -lt 600 ]; do
       for p in /proc/[0-9]*; do
         c="$(tr "\000" " " <"$p/cmdline" 2>/dev/null)"
-        case "$c" in *chromium*) ;; *) continue ;; esac
+        case "${c%% *}" in */chromium) ;; *) continue ;; esac
         t="browser"
         case "$c" in *--type=renderer*) t=renderer ;; *--type=zygote*) t=zygote ;; *--type=gpu-process*) t=gpu ;; *--type=utility*) t=utility ;; *--type=*) t=other ;; esac
         n="$(grep -E "^NSpid:" "$p/status" 2>/dev/null | tr -s "\t " " ")"
         a="$(cat "$p/attr/apparmor/current" 2>/dev/null || cat "$p/attr/current" 2>/dev/null)"
-        line="proc: $t $n userns=$(readlink "$p/ns/user" 2>/dev/null) apparmor=$a"
+        line="proc: $t $n apparmor=$a"
         case "$procs" in *"$line"*) ;; *) procs="$procs$line
 " ;; esac
         [ "$t" = renderer ] || continue
@@ -350,13 +353,11 @@ head_ "as shipped: manifests/48-scopyx-browser.yaml, unchanged, under PodSecurit
 if deploy "$ROOT/manifests/48-scopyx-browser.yaml"; then
   pass "admitted under restricted and running: $POD"
   if measure; then pass "both sandboxes were on while a real page rendered"; else fail "a sandbox was missing"; fi
-  row="$(unshare_row)"
-  say "unshare: $row"
-  if [ "$row" = "-Ur:allowed -Urm:refused -Urn:refused -Uri:refused -Uru:refused" ]; then
-    pass "the filter lets a process into a user namespace and refuses every other namespace"
-  else
-    fail "the filter's namespaces are not what the profile says: $row"
-  fi
+  # A shell in the same container, for contrast. On an Ubuntu node its user namespace loses its
+  # capabilities to AppArmor's unprivileged_userns (the kernel says so below), because the shell
+  # matches no host profile that allows one, and Chromium does: so this row is AppArmor's answer
+  # and the filter is judged from the spec containerd built, above.
+  say "unshare from a shell in the same container: $(unshare_row)"
   n=0
   for _ in 1 2 3 4 5; do case "$(browse_says)" in rendered*) n=$((n + 1)) ;; esac; done
   if [ "$n" = 5 ]; then pass "5 of 5 more fetches rendered"; else fail "$n of 5 more fetches rendered"; fi
@@ -416,38 +417,33 @@ esac
 if [ -n "$(pod_now)" ]; then fail "a browser pod is Running without its profile"; else pass "no browser pod runs without its profile"; fi
 
 head_ "control: stack-single's file in Docker's format, as a node would read it"
-# Twice: the file byte for byte, and the same file with the one rule that conflicts with another
-# once the conditions are gone (clone3 refused for a container without CAP_SYS_ADMIN, beside clone3
-# allowed for one with it), which is the edit a person makes to get it to load.
 docker_name="taipanbox/chromium-v1-docker-format.json"
-loaded_name="taipanbox/chromium-v1-docker-format-loaded.json"
 node_sh "cat > $BROWSER_SECCOMP_ROOT/$docker_name" <"$ROOT/seccomp/chromium-v1.docker.json"
-python3 - "$ROOT/seccomp/chromium-v1.docker.json" >"$work/loaded.json" <<'PY'
+variant "$work/docker.yaml" "localhostProfile: $BROWSER_SECCOMP_NAME" "localhostProfile: $docker_name"
+if deploy "$work/docker.yaml"; then
+  cid="$(k get pod "$POD" -o jsonpath='{.status.containerStatuses[?(@.name=="scopyx")].containerID}')"
+  node_sh "$CRICTL inspect ${cid#*://}" >"$work/docker-inspect.json" 2>/dev/null
+  if python3 - "$work/docker-inspect.json" <<'PY'
 import json, sys
-p = json.load(open(sys.argv[1]))
-before = len(p["syscalls"])
-p["syscalls"] = [r for r in p["syscalls"] if not (r["names"] == ["clone3"] and r["action"] == "SCMP_ACT_ERRNO")]
-assert len(p["syscalls"]) == before - 1
-print(json.dumps(p))
+spec = json.load(open(sys.argv[1]))["info"]["runtimeSpec"]["linux"]["seccomp"]
+loose = set()
+for r in spec.get("syscalls") or []:
+    if r["action"] == "SCMP_ACT_ALLOW" and not r.get("args"):
+        loose |= set(r["names"])
+want = {"mount", "setns", "unshare", "clone", "bpf", "fsopen", "open_tree", "move_mount"}
+got = sorted(want & loose)
+print("      the filter containerd built allows, with no condition: " + " ".join(got))
+print("      its keys: " + " ".join(sorted(spec)) + "; a rule's keys: " + " ".join(sorted({k for r in spec.get("syscalls", []) for k in r})))
+sys.exit(0 if {"mount", "setns", "unshare"} <= loose else 1)
 PY
-node_sh "cat > $BROWSER_SECCOMP_ROOT/$loaded_name" <"$work/loaded.json"
-for name in "$docker_name" "$loaded_name"; do
-  variant "$work/docker.yaml" "localhostProfile: $BROWSER_SECCOMP_NAME" "localhostProfile: $name"
-  if deploy "$work/docker.yaml"; then
-    row="$(unshare_row)"
-    say "$name: runs, unshare: $row"
-    case "$row" in
-      *"-Urm:allowed"*) pass "$name: containerd dropped Docker's conditions, and a mount namespace is allowed" ;;
-      "-Ur:allowed -Urm:refused -Urn:refused -Uri:refused -Uru:refused")
-        fail "$name: gave the same filter as the resolved file, so GOTCHAS 161 is wrong" ;;
-      *) pass "$name: not the filter Docker gives this container: $row" ;;
-    esac
-  else
-    why="$(waiting_reason)"
-    say "$name: does not run: $why"
-    pass "$name: not the filter Docker gives this container: the container does not start"
+  then pass "containerd loads the Docker-format file and drops its conditions: mount, setns and unshare of any namespace are allowed to a container with no capability"
+  else fail "the Docker-format file did not widen the filter as GOTCHAS 161 says"
   fi
-done
+else
+  why="$(waiting_reason)"
+  say "it does not run: $why"
+  fail "the Docker-format file did not start, which GOTCHAS 161 does not say"
+fi
 head_ "control: each call the profile adds, taken out"
 for gone in chroot clone unshare; do
   python3 - "$BROWSER_SECCOMP_FILE" "$ROOT/seccomp/chromium-v1.docker.json" "$gone" >"$work/without-$gone.json" <<'PY'
@@ -475,7 +471,7 @@ PY
     fail "the variation without $gone did not run"
   fi
 done
-node_sh "rm -f $BROWSER_SECCOMP_ROOT/$docker_name $BROWSER_SECCOMP_ROOT/$loaded_name $BROWSER_SECCOMP_ROOT/taipanbox/without-chroot.json $BROWSER_SECCOMP_ROOT/taipanbox/without-clone.json $BROWSER_SECCOMP_ROOT/taipanbox/without-unshare.json"
+node_sh "rm -f $BROWSER_SECCOMP_ROOT/$docker_name $BROWSER_SECCOMP_ROOT/taipanbox/without-chroot.json $BROWSER_SECCOMP_ROOT/taipanbox/without-clone.json $BROWSER_SECCOMP_ROOT/taipanbox/without-unshare.json"
 
 head_ "the kernel's own word on namespaces refused under AppArmor, if any"
 node_sh 'dmesg 2>/dev/null | grep -i "apparmor=\"DENIED\"" | grep -i userns | tail -3' | sed 's/^/      /'
