@@ -60,6 +60,24 @@
 # So the limit has real headroom and the 512Mi request is close to the true
 # peak, which is the sizing a reader would otherwise have to guess at.
 #
+# BOTH SANDBOXES ON A REAL NODE, 2026-11-08.
+#
+# k3s v1.36.2+k3s1 installed on GitHub's Ubuntu 26.04 runners, amd64 and
+# arm64, AppArmor on, this file applied unchanged under restricted
+# (`.github/workflows/browser-sandbox.yml`, `evidence/browser-sandbox-k3s/`):
+#
+#   the filter containerd built for the browser is the node file, rule for rule
+#   a real page rendered, the renderer in a PID and a user namespace of its
+#     own (three levels in NSpid, uid_map 65532 65532 1) under two seccomp filters,
+#     the container's and Chromium's
+#   AppArmor stayed at the runtime's default: the browser's processes ran as
+#     chromium//&cri-containerd.apparmor.d, Ubuntu's own profile for Chromium
+#     stacked with the runtime's, and a Localhost profile changed nothing
+#     (GOTCHAS 162)
+#   the version of this file before that date rendered with Chromium's
+#     sandbox off; the runtime's default filter refuses with "No usable
+#     sandbox!"; a node without the profile does not create the container
+#
 # Memory is the other cost, and it is not optional. A browser is not a 256 MiB
 # process. The limits below are for one page at a time, which is what
 # `replicas: 1` and a per-hour cap mean here.
@@ -92,9 +110,10 @@ spec:
         runAsUser: 65532
         runAsGroup: 65532
         fsGroup: 65532
-        # RuntimeDefault, and this line is the opposite of what the compose
-        # file on a single box chooses. The platform, not the preference,
-        # decided it.
+        # RuntimeDefault for every container in this pod but the browser,
+        # which names a filter of its own below. The init container runs
+        # busybox for one line and has no reason to hold the browser's wider
+        # filter.
         #
         # `00-base.yaml` puts this namespace at PodSecurity `restricted`, and
         # restricted FORBIDS `seccompProfile: Unconfined`. Not warns: the API
@@ -108,30 +127,10 @@ spec:
         #   cluster would have removed the working egress plane and left
         #   nothing, while the command that did it reported success.
         #
-        # Measured 2026-08-10 on a local kind cluster, which cost nothing and
-        # answered in four minutes what an AWS cluster was about to be spun up
-        # to answer.
-        #
-        # So the browser here runs WITHOUT its own renderer sandbox, and that
-        # is a real loss rather than a technicality: with it off, an exploit in
-        # a hostile page runs as this container's user and can open sockets
-        # directly, which is egress that never passes the proxy and never
-        # reaches the journal. What is left holding the line is the pod itself:
-        # non-root, no capabilities, no privilege escalation, a read-only root
-        # filesystem, RuntimeDefault seccomp, and the four NetworkPolicies from
-        # 47 that permit 80 and 443 to public addresses only.
-        #
-        # TWO WAYS TO KEEP CHROME'S SANDBOX, both real and both costing
-        # something this file will not spend on an operator's behalf:
-        #
-        #   1. A `Localhost` seccomp profile. `restricted` permits it, so the
-        #      namespace stays as it is. It needs a profile file placed on
-        #      every node under the kubelet's seccomp directory, which is node
-        #      configuration this repository does not currently do.
-        #   2. This workload in its own namespace at `baseline`, which permits
-        #      Unconfined. It keeps `agent-stack` restricted and costs a second
-        #      namespace, a copy of the NetworkPolicies, and cross-namespace
-        #      DNS for wardryx.
+        # Measured 2026-08-10 on a local kind cluster (GOTCHAS 84). From then
+        # until 2026-11-08 this file took the other trade the platform allowed,
+        # RuntimeDefault and the browser's own sandbox off, and now it takes
+        # neither: see the browser container's securityContext.
         seccompProfile: { type: RuntimeDefault }
       # Leave a dead node in 30 s, not the default 300 s. CLAUDE.md invariants 21
       # and 22: one replica, so the default would charge five minutes of outage
@@ -160,11 +159,6 @@ spec:
             - { name: SCOPYX_WARDRYX, value: "http://wardryx:8090" }
             - { name: SCOPYX_EVENTS, value: "/var/lib/scopyx/events.ndjson" }
             - { name: SCOPYX_BACKEND, value: "chromium" }
-            # Required here, and it is the consequence of the seccomp line
-            # above rather than a preference: under `restricted` the browser
-            # cannot have the user namespaces its sandbox needs, and without
-            # this it refuses to start and CrashLoops naming the sandbox.
-            - { name: SCOPYX_CHROMIUM_NO_SANDBOX, value: "1" }
             # Lower than 47's 200, and lower again than the code's 500. A
             # rendering fetch costs a browser launch, a page load and whatever
             # that page decides to fetch, so the same number here is a
@@ -195,6 +189,36 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
+            # The browser keeps its own renderer sandbox (CLAUDE.md invariant 84).
+            # A renderer is the process a hostile page runs in, and with its
+            # sandbox off an exploit there runs as this container's user and
+            # can open sockets directly: egress that never passes scopyx's
+            # proxy and never reaches its journal (GOTCHAS 83).
+            #
+            # The sandbox needs a user, pid and net namespace and a chroot,
+            # which the runtime's default filter refuses. `restricted` admits a
+            # `Localhost` profile, so this container runs the filter stack-single
+            # runs: Docker's default plus `chroot`, `clone` into a user, pid and
+            # net namespace and no other, and `unshare` into a user namespace
+            # and nothing else. The file is `seccomp/chromium-v1.json`, the form
+            # a node reads (`seccomp/resolve.py`, GOTCHAS 161), and every
+            # installer writes it to every node before k3s starts there
+            # (`lib/browser-seccomp.sh`), at
+            #
+            #   /var/lib/kubelet/seccomp/taipanbox/chromium-v1.json
+            #
+            # ON A CLUSTER NO INSTALLER HERE BUILT, put that file on every node
+            # first, byte for byte. Without it the pod does not start without
+            # the filter: it waits in CreateContainerError, saying
+            # `cannot load seccomp profile` and the path, and starts by itself
+            # once the file is there. Since this file replaces 47's Deployment,
+            # that wait is an egress plane that is down, so check first.
+            #
+            # AppArmor is left to the runtime's default, set nowhere: `restricted`
+            # refuses Unconfined there too, and on an Ubuntu node Chromium's user
+            # namespace gets through by Ubuntu's own profile for Chromium, which
+            # attaches to /usr/lib/chromium/chromium in this image (GOTCHAS 162).
+            seccompProfile: { type: Localhost, localhostProfile: taipanbox/chromium-v1.json }
           resources:
             # Measured rather than guessed: 517 MiB peak across pages of up
             # to 343 subresources, read from the cgroup's high-water mark on a

@@ -129,6 +129,26 @@ if [ -n "$shutdown_pods" ]; then
 fi
 # pods: end
 
+# The browser, where 48 is applied, keeps Chromium's own sandbox under a Localhost seccomp profile
+# that every installer writes to every node (CLAUDE.md invariant 84). A node without that file never
+# runs the browser without it: the container waits in CreateContainerError, which the count above
+# already reports as a pod not Running, and this says which file is missing and how it gets there.
+if . "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/browser-seccomp.sh" 2>/dev/null &&
+  [ -n "$(kc get deploy scopyx -l backend=chromium -o name 2>/dev/null)" ]; then
+  browser_waits="$(kc get pods -l app=scopyx -o jsonpath='{range .items[*]}{.status.containerStatuses[?(@.name=="scopyx")].state.waiting.message}{"\n"}{end}' 2>/dev/null)"
+  browser_profile="$(kc get deploy scopyx -o jsonpath='{.spec.template.spec.containers[?(@.name=="scopyx")].securityContext.seccompProfile.localhostProfile}' 2>/dev/null)"
+  browser_off="$(kc get deploy scopyx -o jsonpath='{.spec.template.spec.containers[?(@.name=="scopyx")].env[?(@.name=="SCOPYX_CHROMIUM_NO_SANDBOX")].value}' 2>/dev/null)"
+  if grep -q 'seccomp profile' <<<"$browser_waits"; then
+    bad "the browser cannot start: a node has no $BROWSER_SECCOMP_ROOT/$BROWSER_SECCOMP_NAME. Run the installer again, or put seccomp/chromium-v1.json there byte for byte on every node; the pod starts by itself once it is there"
+  elif [ -n "$browser_off" ]; then
+    bad "the browser runs with SCOPYX_CHROMIUM_NO_SANDBOX set, so Chromium's own sandbox is off"
+  elif [ "$browser_profile" = "$BROWSER_SECCOMP_NAME" ]; then
+    ok "the browser runs under its own seccomp profile, $BROWSER_SECCOMP_NAME, with Chromium's sandbox asked for"
+  else
+    bad "the browser does not run under $BROWSER_SECCOMP_NAME (it names '${browser_profile:-none}'), which is not what manifests/48-scopyx-browser.yaml ships"
+  fi
+fi
+
 # One node holding every pod is a five-node cluster with one node's worth of
 # resilience (GOTCHAS 17), so this is a check, not a cosmetic note.
 #
