@@ -71,6 +71,7 @@ head_ "the node"
 printf '      %s, kernel %s, %s\n' "$(node_sh '. /etc/os-release; printf %s "$PRETTY_NAME"')" \
   "$(node_sh 'uname -r')" "$(kubectl version 2>/dev/null | sed -n 's/^Server Version: /Kubernetes /p')"
 printf '      tree %s, on %s\n' "$(git rev-parse --short HEAD)" "$(date -u +%Y-%m-%d)"
+printf 'arch: %s\n' "$(node_sh 'uname -m')"
 say "AppArmor enabled: $(node_sh 'cat /sys/module/apparmor/parameters/enabled 2>/dev/null || echo absent')"
 say "kernel.apparmor_restrict_unprivileged_userns: $(node_sh 'sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || echo absent')"
 say "runtime default AppArmor profile loaded: $(node_sh 'grep -c cri-containerd /sys/kernel/security/apparmor/profiles 2>/dev/null || echo 0')"
@@ -131,7 +132,7 @@ spec:
       containers:
         - name: wardryx
           image: $(cat "$work/wardryx-image")
-          args: ["serve", "-addr", "0.0.0.0:8090", "-events", "/tmp/e.ndjson", "-policy", "/etc/wardryx/policy"]
+          args: ["serve", "-addr", "0.0.0.0:8090", "-events", "/tmp/e.ndjson", "-policy", "/etc/wardryx/policy/lab.yaml"]
           envFrom: [{ secretRef: { name: lab-wardryx } }]
           ports: [{ containerPort: 8090 }]
           securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
@@ -149,6 +150,17 @@ spec:
 YAML
 k apply -f "$work/wardryx.yaml" >/dev/null || die "the stand-in policy plane was not applied"
 k rollout status deploy/wardryx --timeout=240s >/dev/null || { k logs deploy/wardryx --tail=20; die "the stand-in policy plane did not start"; }
+# Ready once is not serving: the stand-in has to stay up and have an endpoint, or every fetch reads
+# as the policy plane refusing and nothing about the sandbox is measured.
+sleep 5
+if [ -z "$(k get endpoints wardryx -o jsonpath='{.subsets[*].addresses[*].ip}')" ] ||
+  [ "$(k get pod -l app=wardryx -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}')" != 0 ]; then
+  k get pod -l app=wardryx -o wide
+  k logs deploy/wardryx --tail=30
+  k logs deploy/wardryx --previous --tail=30 2>/dev/null
+  die "the stand-in policy plane does not stay up"
+fi
+say "stand-in policy plane: $(k logs deploy/wardryx --tail=3 2>&1 | tr '\n' ' ' | cut -c1-240)"
 
 # ---- helpers ---------------------------------------------------------------------------------
 # A variation of 48: the file as it stands, with one text replaced. Every edit must apply.

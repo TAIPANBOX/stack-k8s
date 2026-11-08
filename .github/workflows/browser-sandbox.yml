@@ -62,8 +62,14 @@ jobs:
             sleep 2
           done
           kubectl wait --for=condition=Ready node --all --timeout=180s
-          kubectl -n kube-system rollout status deploy/local-path-provisioner --timeout=180s
-          kubectl -n kube-system rollout status deploy/coredns --timeout=180s
+          # k3s applies its add-ons after the node is Ready, so each Deployment is waited for to exist first.
+          for d in local-path-provisioner coredns; do
+            for _ in $(seq 90); do
+              if kubectl -n kube-system get deploy "$d" >/dev/null 2>&1; then break; fi
+              sleep 2
+            done
+            kubectl -n kube-system rollout status "deploy/$d" --timeout=180s
+          done
           kubectl get nodes -o wide
 
       - name: what the node runs under
