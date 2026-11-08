@@ -68,7 +68,7 @@
 #
 #   the filter containerd built for the browser is the node file, rule for rule
 #   a real page rendered, the renderer in a PID and a user namespace of its
-#     own (NSpid 164 13 1, uid_map 65532 65532 1) under two seccomp filters,
+#     own (three levels in NSpid, uid_map 65532 65532 1) under two seccomp filters,
 #     the container's and Chromium's
 #   AppArmor stayed at the runtime's default: the browser's processes ran as
 #     chromium//&cri-containerd.apparmor.d, Ubuntu's own profile for Chromium

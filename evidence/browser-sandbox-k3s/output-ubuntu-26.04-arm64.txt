@@ -1,7 +1,7 @@
-# .github/workflows/browser-sandbox.yml, run 42454512800, job 128650565650 (ubuntu-26.04-arm), 2026-11-08
+# .github/workflows/browser-sandbox.yml, run 42454848068, job 128651570729 (ubuntu-26.04-arm), 2026-11-08
 == the node
       Ubuntu 26.04.1 LTS, kernel 7.0.0-1019-azure, Kubernetes v1.36.2+k3s1
-      tree 17105e6, on 2026-11-08
+      tree 20b25d0, on 2026-11-08
 arch: aarch64
       AppArmor enabled: Y
       kernel.apparmor_restrict_unprivileged_userns: 1
@@ -10,22 +10,22 @@ arch: aarch64
 PASS  lib/browser-seccomp.sh put seccomp/chromium-v1.json at /var/lib/kubelet/seccomp/taipanbox/chromium-v1.json, byte for byte
       namespace labels: {"kubernetes.io/metadata.name":"agent-stack","pod-security.kubernetes.io/enforce":"restricted","pod-security.kubernetes.io/enforce-version":"latest"}
 Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
-      stand-in policy plane: Defaulted container "wardryx" out of: wardryx, precreate-streams (init) wardryx: WARDRYX_POLICY_ARCHIVE is unset, so policy sets are not kept; decisions recorded by this process name a version nothing can produce later 2026/11/08 06:23:37 I
+      stand-in policy plane: Defaulted container "wardryx" out of: wardryx, precreate-streams (init) wardryx: WARDRYX_POLICY_ARCHIVE is unset, so policy sets are not kept; decisions recorded by this process name a version nothing can produce later 2026/11/08 06:29:49 I
 
 == as shipped: manifests/48-scopyx-browser.yaml, unchanged, under PodSecurity restricted
-PASS  admitted under restricted and running: scopyx-594dbd59d5-fjl72
+PASS  admitted under restricted and running: scopyx-594dbd59d5-9xmcs
 PASS  the filter containerd gave the container is the node file, 16 rules, rule for rule
 PASS  the container's filter is on: NoNewPrivs: 1 Seccomp: 2 cri-containerd.apparmor.d//&unconfined (enforce)
 PASS  browse rendered https://example.com/: 1974 characters of HTML
       proc: browser NSpid: 47 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      proc: gpu NSpid: 101 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      proc: utility NSpid: 103 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      proc: utility NSpid: 118 4 1 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
+      proc: gpu NSpid: 102 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
+      proc: utility NSpid: 104 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
+      proc: utility NSpid: 119 4 1 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
       proc: zygote NSpid: 76 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
       proc: zygote NSpid: 77 1 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
       proc: zygote NSpid: 79 3 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      proc: renderer NSpid: 196 14 1 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      renderer: NSpid: 196 14 1;Seccomp: 2;Seccomp_filters: 2; uid_map: 65532 65532 1; apparmor:chromium//&cri-containerd.apparmor.d (mixed)
+      proc: renderer NSpid: 190 14 1 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
+      renderer: NSpid: 190 14 1;Seccomp: 2;Seccomp_filters: 2; uid_map: 65532 65532 1; apparmor:chromium//&cri-containerd.apparmor.d (mixed)
 PASS  the renderer is in a PID namespace of its own
 PASS  the renderer runs under Chromium's own filter on top of the container's
 PASS  the renderer is in a user namespace of its own
@@ -38,25 +38,25 @@ PASS  a second apply changes nothing: generation 1, the same pod
       | FAIL  the filter containerd gave the container is not the node file
       | PASS  the container's filter is on: NoNewPrivs: 1 Seccomp: 2 cri-containerd.apparmor.d//&unconfined (enforce)
       | PASS  browse rendered https://example.com/: 1974 characters of HTML
-      |       proc: browser NSpid: 47 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      |       proc: utility NSpid: 115 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
+      |       proc: browser NSpid: 46 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
+      |       proc: utility NSpid: 112 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
+      |       proc: zygote NSpid: 74 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
       |       proc: zygote NSpid: 75 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      |       proc: zygote NSpid: 76 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      |       proc: gpu NSpid: 98 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      |       proc: utility NSpid: 99 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      |       proc: renderer NSpid: 155 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
+      |       proc: gpu NSpid: 95 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
+      |       proc: utility NSpid: 98 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
+      |       proc: renderer NSpid: 181 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
       |       proc: renderer NSpid: 195 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
       |       proc: renderer NSpid: 197 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      |       proc: renderer NSpid: 217 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      |       proc: renderer NSpid: 325 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
-      |       renderer: NSpid: 325;Seccomp: 2;Seccomp_filters: 1; uid_map: 0 0 4294967295; apparmor:chromium//&cri-containerd.apparmor.d (mixed)
+      |       proc: renderer NSpid: 215 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
+      |       proc: renderer NSpid: 327 apparmor=chromium//&cri-containerd.apparmor.d (mixed)
+      |       renderer: NSpid: 327;Seccomp: 2;Seccomp_filters: 1; uid_map: 0 0 4294967295; apparmor:chromium//&cri-containerd.apparmor.d (mixed)
       | FAIL  the renderer is in the container's PID namespace
       | FAIL  the renderer has one seccomp filter, the container's: Chromium's own is not on
       | FAIL  the renderer is in the container's user namespace
 PASS  the older file goes red: its browser renders with Chromium's sandbox off
 
 == control: the runtime's default filter, and the browser's sandbox asked for
-      refused: cdp: Target.createTarget: the browser closed the connection. The browser said: [16:16:1108/062523.479738:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:130] No usable sandbox! If this is a Debian system, please install the chromium-sandbox package to solve this problem. If you are runni
+      refused: cdp: Target.createTarget: the browser closed the connection. The browser said: [16:16:1108/063134.662721:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:130] No usable sandbox! If this is a Debian system, please install the chromium-sandbox package to solve this problem. If you are runni
 PASS  under RuntimeDefault the browser refuses to render and names the sandbox
 
 == control: a Localhost AppArmor profile that allows a user namespace
@@ -77,15 +77,14 @@ PASS  no browser pod runs without its profile
 PASS  containerd loads the Docker-format file and drops its conditions: mount, setns and unshare of any namespace are allowed to a container with no capability
 
 == control: each call the profile adds, taken out
-      without chroot: refused: cdp: Target.createTarget: the browser closed the connection. The browser said: [1108/062556.054953:ERROR:third_party/crashpad/crashpad/util/linux/scoped_ptrace_attach.cc:27] ptrace: Permission denied (13) | [1108/062556.055339:ERROR:third_party/crashpad/crashpad/handler/linux/exception_handler_serve
+      without chroot: refused: cdp: Target.createTarget: the browser closed the connection. The browser said: [1108/063202.253829:ERROR:third_party/crashpad/crashpad/util/linux/scoped_ptrace_attach.cc:27] ptrace: Permission denied (13) | [1108/063202.254008:ERROR:third_party/crashpad/crashpad/handler/linux/exception_handler_serve
 PASS  without chroot the browser does not render
-      without clone: refused: cdp: Target.createTarget: the browser closed the connection. The browser said: [16:16:1108/062604.463289:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:130] No usable sandbox! If this is a Debian system, please install the chromium-sandbox package to solve this problem. If you are runni
+      without clone: refused: cdp: Target.createTarget: the browser closed the connection. The browser said: [16:16:1108/063210.663602:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:130] No usable sandbox! If this is a Debian system, please install the chromium-sandbox package to solve this problem. If you are runni
 PASS  without clone the browser does not render
-      without unshare: refused: cdp: Target.createTarget: the browser closed the connection. The browser said: [17:17:1108/062607.473350:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:130] No usable sandbox! If this is a Debian system, please install the chromium-sandbox package to solve this problem. If you are runni
+      without unshare: refused: cdp: Target.createTarget: the browser closed the connection. The browser said: [16:16:1108/063213.641102:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:130] No usable sandbox! If this is a Debian system, please install the chromium-sandbox package to solve this problem. If you are runni
 PASS  without unshare the browser does not render
 
 == the kernel's own word on namespaces refused under AppArmor, if any
-      [ 1411.985795] audit: type=1400 audit(1794119126.594:727): apparmor="DENIED" operation="capable" class="cap" profile="unprivileged_userns" pid=12609 comm="unshare" capability=21  capname="sys_admin"
 
 21 passed, 0 failed
 RUN_EXIT=0
