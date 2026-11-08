@@ -37,9 +37,15 @@
 #        - a map with no keys, a minted Secret edited by hand and a domain that is
 #          not a name are refused with nothing written;
 #        - no secret is on any kubectl command line or in anything printed, and the
-#          closing note names the key file and the ids and never the key.
+#          closing note names the key file and the ids and never the key;
+#        - since invariant 85 the seven keys include drills-broker (kept in
+#          drills-broker-key too) and broker-caller, the MCP broker's two static
+#          callers, each bound to its own ids; a minted cluster from before them keeps
+#          its five and takes broker-caller from the broker's door Secret when one
+#          exists; and identity_mint_guard stops a run on the operator's keys that
+#          lack either, before anything is applied, writing nothing.
 #   C. THE GATEWAY IMAGE the manifest pins reads the minted pair, through
-#      identity/up.sh --check-only: two keys and the map, nothing refused.
+#      identity/up.sh --check-only: seven keys and the map, nothing refused.
 #   D. THE ORDER. Each deploy script sources the library and calls the mint after
 #      its `apply -k` and after its trust-domain patch, before it waits for
 #      rollouts, and prints the note at its end; identity/mint.sh does the same for
@@ -366,10 +372,18 @@ if [ "$mint_ok" = 1 ]; then
     spec="$(data_of "$S" secret/gateway-client-keys client_keys)"
     felyx="$(data_of "$S" secret/felyx-client-key client_key)"
     fs="$(tr ',' '\n' <<<"$spec" | grep ':felyx$')"; as="$(tr ',' '\n' <<<"$spec" | grep ':agents$')"
-    [[ "$spec" =~ ^[A-Za-z0-9]{40}:felyx,[A-Za-z0-9]{40}:agents,[A-Za-z0-9]{40}:drills,[A-Za-z0-9]{40}:broker,[A-Za-z0-9]{40}:costcrew$ ]] || fail "the minted Secret does not hold <40>:felyx,<40>:agents,<40>:drills,<40>:broker,<40>:costcrew"
+    [[ "$spec" =~ ^[A-Za-z0-9]{40}:felyx,[A-Za-z0-9]{40}:agents,[A-Za-z0-9]{40}:drills,[A-Za-z0-9]{40}:broker,[A-Za-z0-9]{40}:costcrew,[A-Za-z0-9]{40}:drills-broker,[A-Za-z0-9]{40}:broker-caller$ ]] || fail "the minted Secret does not hold <40>:felyx,<40>:agents,<40>:drills,<40>:broker,<40>:costcrew,<40>:drills-broker,<40>:broker-caller"
     ds="$(tr ',' '\n' <<<"$spec" | grep ':drills$')"
     bk="$(tr ',' '\n' <<<"$spec" | grep ':broker$')"
     cc="$(tr ',' '\n' <<<"$spec" | grep ':costcrew$')"
+    db="$(tr ',' '\n' <<<"$spec" | grep ':drills-broker$')"
+    bc="$(tr ',' '\n' <<<"$spec" | grep ':broker-caller$')"
+    for o in "$fs" "$as" "$ds" "$bk" "$cc"; do
+      [ "${db%:*}" != "${o%:*}" ] && [ "${bc%:*}" != "${o%:*}" ] || fail "drills-broker or broker-caller came out the same secret as another key"
+    done
+    [ "${db%:*}" != "${bc%:*}" ] || fail "drills-broker and broker-caller came out the same secret"
+    [ "$(data_of "$S" secret/drills-broker-key broker_key)" = "${db%:drills-broker}" ] \
+      || fail "drills-broker-key does not hold the key gateway-client-keys names drills-broker, so the broker drills would be refused at the gateway's tool-call check"
     [ "$ds" != "$fs" ] && [ "$ds" != "$as" ] && [ "$ds" != "$bk" ] && [ "$ds" != "$cc" ] || fail "the drills and another key came out the same secret"
     [ "$bk" != "$fs" ] && [ "$bk" != "$as" ] && [ "$bk" != "$cc" ] || fail "the broker and another key came out the same secret"
     [ "$cc" != "$fs" ] && [ "$cc" != "$as" ] || fail "the CostCrew crew and another key came out the same secret"
@@ -400,8 +414,12 @@ td = sys.argv[2]; felyx_id = "agent://%s/genaryx/felyx" % td
 units = {u.get("id") for u in m.get("units", [])}
 keys = {k.get("key_id"): k for k in m.get("keys", [])}
 bad = []
-if set(keys) != {"felyx", "agents", "drills", "broker", "costcrew"}:
-    bad.append("the minted map binds key ids %s, not felyx, agents, drills, broker and costcrew" % sorted(keys))
+if set(keys) != {"felyx", "agents", "drills", "broker", "costcrew", "drills-broker", "broker-caller"}:
+    bad.append("the minted map binds key ids %s, not felyx, agents, drills, broker, costcrew, drills-broker and broker-caller" % sorted(keys))
+elif (keys["drills-broker"].get("agents") or []) != ["agent://mockryx.local/*"] or keys["drills-broker"].get("unit") != "drills":
+    bad.append("the minted map binds drills-broker to %s in unit %s, not agent://mockryx.local/* in unit drills" % (keys["drills-broker"].get("agents"), keys["drills-broker"].get("unit")))
+elif (keys["broker-caller"].get("agents") or []) != ["agent://%s/typed-broker" % td] or keys["broker-caller"].get("unit") != "broker":
+    bad.append("the minted map binds broker-caller to %s in unit %s, not exactly agent://%s/typed-broker in unit broker" % (keys["broker-caller"].get("agents"), keys["broker-caller"].get("unit"), td))
 elif (keys["drills"].get("agents") or []) != ["agent://mockryx.local/*"] or keys["drills"].get("unit") != "drills":
     bad.append("the minted map binds the drills' key to %s in unit %s, not agent://mockryx.local/* in unit drills" % (keys["drills"].get("agents"), keys["drills"].get("unit")))
 elif (keys["broker"].get("agents") or []) != ["agent://%s/*" % td] or keys["broker"].get("unit") != "broker":
@@ -450,7 +468,7 @@ PY
     [ "$(data_of "$S" secret/gateway-client-keys client_keys)" = "$spec" ] || fail "a re-run minted a new secret over the kept one"
 
     # A deleted key file and a deleted felyx-client-key come back with the same secret.
-    rm -f "$KF"; drop "$S" secret/felyx-client-key; drop "$S" secret/drills-client-key; drop "$S" secret/broker-taint-key; drop "$S" secret/costcrew-client-key
+    rm -f "$KF"; drop "$S" secret/felyx-client-key; drop "$S" secret/drills-client-key; drop "$S" secret/broker-taint-key; drop "$S" secret/costcrew-client-key; drop "$S" secret/drills-broker-key
     out="$(settle "$S" "$KF")"
     [ "$(cat "$KF" 2>/dev/null)" = "${as%:agents}" ] || fail "a deleted agents' key file did not come back with the same key"
     [ "$(data_of "$S" secret/felyx-client-key client_key)" = "$felyx" ] || fail "a deleted felyx-client-key did not come back with the key the Secret binds to felyx"
@@ -458,6 +476,7 @@ PY
     [ "$(data_of "$S" secret/drills-client-key client_key)" = "${ds%:drills}" ] || fail "a deleted drills-client-key did not come back with the key the Secret binds to the drills"
     [ "$(data_of "$S" secret/broker-taint-key client_key)" = "${bk%:broker}" ] || fail "a deleted broker-taint-key did not come back with the key the Secret binds to the broker"
     [ "$(data_of "$S" secret/costcrew-client-key client_key)" = "${cc%:costcrew}" ] || fail "a deleted costcrew-client-key did not come back with the key the Secret binds to the CostCrew crew"
+    [ "$(data_of "$S" secret/drills-broker-key broker_key)" = "${db%:drills-broker}" ] || fail "a deleted drills-broker-key did not come back with the key the Secret names drills-broker"
 
     # A moved trust domain rewrites the map alone and rolls the gateway.
     setdomain "$S" other.example
@@ -506,10 +525,60 @@ PY
     fail "a minted cluster from before the drills key was refused by the mint: $(grep '^die' <<<"$out")"
   else
     m="$(data_of "$S" secret/gateway-client-keys client_keys)"
-    [[ "$m" == gate-aaaaaaaaaaaaaaaaaaaaaaaa:felyx,gate-bbbbbbbbbbbbbbbbbbbbbbbb:agents,*:drills,*:broker,*:costcrew ]] \
+    [[ "$m" == gate-aaaaaaaaaaaaaaaaaaaaaaaa:felyx,gate-bbbbbbbbbbbbbbbbbbbbbbbb:agents,*:drills,*:broker,*:costcrew,*:drills-broker,*:broker-caller ]] \
       || fail "the migration changed the Felyx or the agents key, so both would be refused 401: $m"
-    [[ "$m" =~ ,[A-Za-z0-9]{40}:drills,[A-Za-z0-9]{40}:broker,[A-Za-z0-9]{40}:costcrew$ ]] || fail "the migration did not add 40-character drills, broker and CostCrew keys"
+    [[ "$m" =~ ,[A-Za-z0-9]{40}:drills,[A-Za-z0-9]{40}:broker,[A-Za-z0-9]{40}:costcrew,[A-Za-z0-9]{40}:drills-broker,[A-Za-z0-9]{40}:broker-caller$ ]] || fail "the migration did not add 40-character drills, broker, CostCrew, drills-broker and broker-caller keys"
   fi
+
+  # A cluster minted before invariant 85 whose typed door already admits callers: the five keys it
+  # holds are kept byte for byte, broker-caller and drills-broker take the secrets the broker's door
+  # Secret already holds, so nothing that holds them is refused, and drills-broker-key is made.
+  S="$scratch/c7.json"; new_cluster "$S" acme.example
+  put_keys "$S" "gate-aaaaaaaaaaaaaaaaaaaaaaaa:felyx,gate-bbbbbbbbbbbbbbbbbbbbbbbb:agents,gate-cccccccccccccccccccccccc:drills,gate-dddddddddddddddddddddddd:broker,gate-eeeeeeeeeeeeeeeeeeeeeeee:costcrew" minted
+  put "$S" secret/tokenfuse-mcp-broker-keys "{\"kind\":\"Secret\",\"metadata\":{\"name\":\"tokenfuse-mcp-broker-keys\",\"resourceVersion\":\"7\"},\"data\":{\"TOKENFUSE_MCP_KEYS\":\"$(printf 'gate-kept-caller-ffffffffffffffff:broker-caller' | base64 | tr -d '\n')\"}}"
+  out="$(settle "$S" "$scratch/agent-key-7")"
+  if [ "$(rc_of "$out")" != 0 ]; then
+    fail "a minted cluster with a typed door from before invariant 85 was refused by the mint: $(grep '^die' <<<"$out")"
+  else
+    m="$(data_of "$S" secret/gateway-client-keys client_keys)"
+    [[ "$m" == gate-aaaaaaaaaaaaaaaaaaaaaaaa:felyx,gate-bbbbbbbbbbbbbbbbbbbbbbbb:agents,gate-cccccccccccccccccccccccc:drills,gate-dddddddddddddddddddddddd:broker,gate-eeeeeeeeeeeeeeeeeeeeeeee:costcrew,*:drills-broker,gate-kept-caller-ffffffffffffffff:broker-caller ]] \
+      || fail "the migration did not keep the five keys and take broker-caller from the broker's door Secret, so every caller of the typed door would be refused at the gateway's tool-call check"
+    db="$(tr ',' '\n' <<<"$m" | grep ':drills-broker$')"
+    [ -n "${db%:drills-broker}" ] && [ "$(data_of "$S" secret/drills-broker-key broker_key)" = "${db%:drills-broker}" ] \
+      || fail "the migration made no drills-broker-key holding the gateway's drills-broker"
+    if secret_in "$S" "$(cat "$S.calls")$out"; then fail "a key was on a kubectl command line or printed by the migration"; fi
+  fi
+
+  # The guard, before the first apply: the operator's own keys without the two the gateway's list
+  # names stop the run with what to add and write nothing; with them, a minted Secret, or none, it passes.
+  guard() { # STATE: identity_mint_guard on the stand-in; prints what it printed and rc=
+    ( env -i PATH="$PATH" HOME="$HOME" K_STATE="$1" K_CALLS="$1.calls" GEN="$GEN" MINT="$MINT" KP="$scratch/k.py" bash -c '
+        set -euo pipefail
+        die() { printf "die: %s\n" "$*"; exit 1; }
+        k_() { python3 "$KP" "$*"; }
+        eval "$GEN"; eval "$MINT"
+        identity_mint_guard' 2>&1
+      printf 'rc=%s\n' "$?" )
+  }
+  S="$scratch/g1.json"; new_cluster "$S" acme.example
+  put_keys "$S" "gate-operator-key-aaaaaaaaaaaaa:treasury,gate-operator-key-bbbbbbbbbbbbb:drills-broker" ""
+  out="$(guard "$S")"
+  if [ "$(rc_of "$out")" = 0 ]; then
+    fail "the guard let a run go on with the operator's keys holding no broker-caller, so its gateway would not start"
+  elif ! grep -q 'broker-caller' <<<"$out" || ! grep -q 'Upgrade item 1' <<<"$out"; then
+    fail "the guard stopped the run without naming the missing key and where the commands are: $(grep '^die' <<<"$out")"
+  fi
+  [ "$(nwrites "$S")" = 0 ] || fail "the guard wrote to the cluster"
+  grep -qF 'gate-operator-key' <<<"$out" && fail "the guard printed a key"
+  for state in "operator-both" "minted" "absent"; do
+    S="$scratch/g-$state.json"; new_cluster "$S" acme.example
+    case "$state" in
+      operator-both) put_keys "$S" "gate-operator-key-aaaaaaaaaaaaa:drills-broker,gate-operator-key-bbbbbbbbbbbbb:broker-caller" "" ;;
+      minted) put_keys "$S" "gate-aaaaaaaaaaaaaaaaaaaaaaaa:felyx,gate-bbbbbbbbbbbbbbbbbbbbbbbb:agents" minted ;;
+    esac
+    out="$(guard "$S")"
+    [ "$(rc_of "$out")" = 0 ] || fail "the guard stopped a run it has no reason to stop ($state): $(grep '^die' <<<"$out")"
+  done
 fi
 
 # ---- C. the gateway image reads the minted pair ---------------------------------------
@@ -524,8 +593,8 @@ if [ "$mint_ok" = 1 ] && [ -s "$scratch/c1.json" ] && [ -s "$scratch/map.json" ]
     if [ "$rc" != 0 ]; then
       fail "the pinned gateway image refused the pair the mint made: $(grep -v '^$' <<<"$out" | tail -n 2 | tr '\n' ' ')"
     else
-      grep -qF 'read 5 client key(s) and an identity map, and refused nothing' <<<"$out" \
-        || fail "the pinned gateway image did not read five keys and the map from the minted pair: $(tail -n 2 <<<"$out" | tr '\n' ' ')"
+      grep -qF 'read 7 client key(s) and an identity map, and refused nothing' <<<"$out" \
+        || fail "the pinned gateway image did not read seven keys and the map from the minted pair: $(tail -n 2 <<<"$out" | tr '\n' ' ')"
     fi
   fi
 fi
@@ -567,6 +636,6 @@ if [ "$problems" -gt 0 ]; then
   exit 1
 fi
 echo "OK: every gateway requires gateway-client-keys and runs strict, the console reads Felyx's own key, and a"
-echo "    deploy given no files mints the five keys, binds each to its own ids, keeps them on a re-run, rebinds"
+echo "    deploy given no files mints the seven keys, binds each to its own ids, keeps them on a re-run, rebinds"
 echo "    the map alone when the trust domain moves, leaves the operator's keys alone, writes the agents' key"
 echo "    to a 0600 file and names it, and the pinned gateway image reads the pair."

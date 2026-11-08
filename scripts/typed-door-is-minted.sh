@@ -44,12 +44,22 @@
 #      the broker's: a refusal and no document. Garbage in --have, an unreadable
 #      bearer, a bad domain, no --have, typed off, and --have given to another
 #      verb: refusals with no document.
+#   D. door-callers (CLAUDE.md invariant 85). The broker's two static callers are the
+#      gateway's own keys: a minted broker Secret carries broker-caller and drills-broker
+#      with the secrets gateway-client-keys holds; a kept one gets the caller it lacks
+#      appended, every entry it had byte for byte; a caller whose secret is not the
+#      gateway's, or a gateway that holds neither, is a refusal with no patch; and no
+#      value is on stderr.
 #   E. EVERY LAUNCHER'S DOOR BLOCK, RUN. The lines from DOOR_HAVE to the line that
 #      clears DOOR_DOCS are lifted from each launcher and run with a stand-in
 #      `k_` over a stand-in cluster, from each of the four starting states. Both
 #      Secrets end up present; one that existed is byte for byte what it was; the
 #      broker's vault carries typryx's bearer; only the broker's present stops the
-#      script; and no value appears on a k_ command line or in the output.
+#      script; and no value appears on a k_ command line or in the output. Since
+#      invariant 85 the block also reads the gateway's keys and runs door-callers: the
+#      broker's static callers end up the gateway's, a kept broker Secret keeps every
+#      entry and gains drills-broker, and one whose broker-caller is not the gateway's
+#      stops the block with the cluster unchanged.
 #
 # AND IT REFUSES TO REPORT OK ON NOTHING
 #
@@ -136,8 +146,19 @@ BARE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 # ---- C. door-secrets itself ----------------------------------------------------------
-def door(have, stdin="", extra=(), flags=("--with-typed",)):
-    return mode("door-secrets", *flags, *extra, "--have", have, stdin=stdin)
+GW_BC = "gatewaybrokercallerkey0from0the0mint0Q1"
+GW_DB = "gatewaydrillsbrokerkey0from0the0mint0W2"
+GW_SPEC = f"felyxkey0000000000000000000000000000000:felyx,{GW_BC}:broker-caller,{GW_DB}:drills-broker"
+WANT_KEYS = f"{GW_BC}:broker-caller,{GW_DB}:drills-broker"
+
+
+def door(have, stdin="", extra=(), flags=("--with-typed",), gw=GW_SPEC):
+    """door-secrets fed as a launcher feeds it: typryx's TYPRYX_KEYS, then the gateway's client keys."""
+    return mode("door-secrets", *flags, *extra, "--have", have, stdin=stdin + "\n" + b64(gw) + "\n")
+
+
+def callers(broker_spec, gw=GW_SPEC, flags=("--with-typed",)):
+    return mode("door-callers", *flags, stdin=b64(broker_spec) + "\n" + b64(gw) + "\n")
 
 
 def check_neither(label, r, domain):
@@ -163,14 +184,18 @@ def check_neither(label, r, domain):
     bearer, sep, ident = t["TYPRYX_KEYS"].partition("=")
     if not sep or ident != f"agent://{domain}/typed-broker":
         bad(f"C {label}: TYPRYX_KEYS is not `<bearer>=agent://{domain}/typed-broker` (identity {ident!r})")
-    secret, colon, key_id = b["TOKENFUSE_MCP_KEYS"].rpartition(":")
-    if not colon or not BARE.match(key_id):
-        bad(f"C {label}: TOKENFUSE_MCP_KEYS splits on its last colon into key id {key_id!r}, which is not a bare name (invariant 33)")
+    entries = b["TOKENFUSE_MCP_KEYS"].split(",")
+    for e in entries:
+        if not BARE.match(e.rpartition(":")[2]):
+            bad(f"C {label}: TOKENFUSE_MCP_KEYS has an entry whose key id {e.rpartition(':')[2]!r} is not a bare name (invariant 33)")
+    if b["TOKENFUSE_MCP_KEYS"] != WANT_KEYS:
+        bad(f"C {label}: TOKENFUSE_MCP_KEYS is not exactly the gateway's broker-caller and drills-broker, so a caller the broker admits is refused at the gateway's tool-call check (invariant 85)")
+    secret = entries[0].rpartition(":")[0]
     if b["TOKENFUSE_MCP_SECRETS"] != f"typryx_key={bearer}":
         bad(f"C {label}: the broker's vault (TOKENFUSE_MCP_SECRETS) does not carry typryx's own bearer, so every call through the broker would be refused")
     if b["TOKENFUSE_MCP_SECRET_SCOPES"] != TYPRYX_SCOPE:
         bad(f"C {label}: the broker's scope rules (TOKENFUSE_MCP_SECRET_SCOPES) are not exactly typryx's, so the broker would stop at start (a vault entry with no rule) or leave typryx's key open to any tool")
-    for what, v in (("typryx's bearer", bearer), ("the broker's key", secret)):
+    for what, v in (("typryx's bearer", bearer),):
         if not SECRET_RE.match(v):
             bad(f"C {label}: {what} is {len(v)} character(s), not at least 32 of A-Za-z0-9")
     if bearer == secret:
@@ -192,8 +217,17 @@ r1 = door("")
 first = check_neither("neither", r1, "set-me.invalid")
 r2 = door("")
 second = check_neither("neither, again", r2, "set-me.invalid")
-if first and second and (first[0] == second[0] or first[1] == second[1]):
-    bad("C neither: two runs minted the same value, which is not a secret")
+if first and second and first[0] == second[0]:
+    bad("C neither: two runs minted the same typryx bearer, which is not a secret")
+for label, gw in (("a gateway with no broker-caller", f"x0000000000000000000000000000000000000:felyx,{GW_DB}:drills-broker"),
+                  ("a gateway with no drills-broker", f"{GW_BC}:broker-caller"),
+                  ("no gateway keys at all", "")):
+    for have, st in (("", ""), ("secret/typryx-keys", b64("kept0bearer0from0an0earlier0run0Q7xV2m=agent://acme.example/typed-broker"))):
+        r = door(have, stdin=st, gw=gw)
+        if r.returncode == 0 or r.stdout.strip() or "gateway" not in r.stderr:
+            bad(f"C {label}, --have {have!r}: door-secrets exited {r.returncode} and printed {len(r.stdout)} byte(s); a broker given a caller the gateway does not hold refuses every call at the tool-call check, so it has to stop and say why")
+        if GW_BC in r.stderr or GW_DB in r.stderr:
+            bad(f"C {label}: a gateway key appears on stderr")
 check_neither("neither, with a trust domain", door("", extra=("--trust-domain", "acme.example")), "acme.example")
 door_names = [d["name"] for d in secret_docs(r1.stdout)]
 
@@ -223,10 +257,9 @@ else:
         bad("C only typryx-keys: the broker's vault does not carry the bearer of the typryx-keys that exists")
     if b.get("TOKENFUSE_MCP_SECRET_SCOPES") != TYPRYX_SCOPE:
         bad("C only typryx-keys: the broker's Secret made beside the kept typryx-keys carries no scope rule for typryx's key")
-    sec, colon, key_id = b.get("TOKENFUSE_MCP_KEYS", "").rpartition(":")
-    if not colon or not BARE.match(key_id) or not SECRET_RE.match(sec):
-        bad("C only typryx-keys: the broker's own key is not a fresh `<32+ characters>:<bare key id>`")
-    if EXISTING in r.stderr or (sec and sec in r.stderr):
+    if b.get("TOKENFUSE_MCP_KEYS") != WANT_KEYS:
+        bad("C only typryx-keys: the broker's static callers are not exactly the gateway's broker-caller and drills-broker")
+    if EXISTING in r.stderr or GW_BC in r.stderr or GW_DB in r.stderr:
         bad("C only typryx-keys: a value appears on stderr")
 
 for label, stdin in (("an empty bearer", ""), ("not base64", "%%% not base64 %%%"),
@@ -238,6 +271,38 @@ for label, stdin in (("an empty bearer", ""), ("not base64", "%%% not base64 %%%
 r = door("secret/tokenfuse-mcp-broker-keys")
 if r.returncode == 0 or r.stdout.strip() or "typryx-keys" not in r.stderr:
     bad(f"C only the broker's: door-secrets exited {r.returncode} and printed {len(r.stdout)} byte(s); a fresh typryx key would not match the broker's vault, so it has to stop and say why")
+
+
+# ---- D. door-callers ---------------------------------------------------------------------
+def patch_keys(r):
+    try:
+        return base64.b64decode(json.loads(r.stdout)["data"]["TOKENFUSE_MCP_KEYS"]).decode()
+    except Exception:
+        return None
+
+
+KEPT = f"{GW_BC}:broker-caller,operator0added0caller0key0000000000000:my-bot"
+r = callers(KEPT)
+got = patch_keys(r)
+if r.returncode != 0 or got != f"{KEPT},{GW_DB}:drills-broker":
+    bad(f"D a kept broker Secret without drills-broker: door-callers exited {r.returncode} and patched {got!r}; it has to append the gateway's drills-broker and keep every entry byte for byte")
+r = callers(f"{GW_DB}:drills-broker,{GW_BC}:broker-caller")
+if r.returncode != 0 or r.stdout.strip():
+    bad(f"D a broker Secret that agrees: door-callers exited {r.returncode} and printed {len(r.stdout)} byte(s); it has to print nothing")
+for label, bspec, gw in (
+    ("a broker-caller that is not the gateway's", "someone0elses0broker0caller0key00000000:broker-caller", GW_SPEC),
+    ("a drills-broker that is not the gateway's", f"{GW_BC}:broker-caller,another0drills0broker0key0000000000000:drills-broker", GW_SPEC),
+    ("a gateway that holds no drills-broker", f"{GW_BC}:broker-caller", f"{GW_BC}:broker-caller"),
+    ("an empty broker Secret", "", GW_SPEC),
+):
+    r = callers(bspec, gw=gw)
+    if r.returncode == 0 or r.stdout.strip():
+        bad(f"D {label}: door-callers exited {r.returncode} and printed {len(r.stdout)} byte(s); it has to refuse with no patch")
+    if any(v in r.stderr for v in (GW_BC, GW_DB, "someone0elses0broker0caller0key00000000")):
+        bad(f"D {label}: a key appears on stderr")
+r = callers(KEPT, flags=())
+if r.returncode == 0 or r.stdout.strip():
+    bad("D typed off: door-callers did not refuse")
 
 
 # ---- A. every Secret a typed manifest reads is made here -------------------------------
@@ -347,6 +412,22 @@ if cmd == "-n agent-stack get secret typryx-keys --ignore-not-found -o jsonpath=
     if exists("typryx-keys"):
         sys.stdout.write(json.load(open(path("typryx-keys")))["TYPRYX_KEYS"])
     sys.exit(0)
+if cmd == "-n agent-stack get secret gateway-client-keys -o jsonpath='{.data.client_keys}'":
+    sys.stdout.write(json.load(open(path("gateway-client-keys")))["client_keys"])
+    sys.exit(0)
+if cmd == "-n agent-stack get secret tokenfuse-mcp-broker-keys -o jsonpath='{.data.TOKENFUSE_MCP_KEYS}'":
+    if not exists("tokenfuse-mcp-broker-keys"):
+        sys.stderr.write('Error from server (NotFound): secrets "tokenfuse-mcp-broker-keys" not found\n')
+        sys.exit(1)
+    sys.stdout.write(json.load(open(path("tokenfuse-mcp-broker-keys")))["TOKENFUSE_MCP_KEYS"])
+    sys.exit(0)
+if cmd == "-n agent-stack patch secret tokenfuse-mcp-broker-keys --type merge --patch-file /dev/stdin":
+    body = json.load(sys.stdin)
+    cur = json.load(open(path("tokenfuse-mcp-broker-keys")))
+    cur.update(body["data"])
+    json.dump(cur, open(path("tokenfuse-mcp-broker-keys"), "w"))
+    print("secret/tokenfuse-mcp-broker-keys patched")
+    sys.exit(0)
 if cmd == "-n agent-stack create -f -":
     rc = 0
     for doc in re.split(r"(?m)^---\s*$", sys.stdin.read()):
@@ -409,15 +490,20 @@ for p in launchers:
         bad(f"E {p}: no door block from `DOOR_HAVE=\"$(k_` to `DOOR_DOCS=\"\"` to run")
         continue
     body = "\n".join(lines[s_i:e_i + 1])
-    for state in ("neither", "both", "only typryx-keys", "only the broker's"):
+    for state in ("neither", "both", "only typryx-keys", "only the broker's", "both, a caller not the gateway's"):
         cl = pathlib.Path(tempfile.mkdtemp(dir=tmp))
         log = cl / "argv.log"
         before = {}
-        if state in ("both", "only typryx-keys"):
+        kept_bc = "kept0broker0key0from0an0earlier0run0Zk3"
+        # The gateway's keys as lib/identity-mint.sh leaves them: a kept broker-caller is the one the door holds.
+        gwbc = GW_BC if state in ("neither", "only typryx-keys", "both, a caller not the gateway's") else kept_bc
+        gw_spec = f"felyxkey0000000000000000000000000000000:felyx,{gwbc}:broker-caller,{GW_DB}:drills-broker"
+        (cl / "gateway-client-keys.json").write_text(json.dumps({"client_keys": b64(gw_spec)}))
+        if state in ("both", "only typryx-keys", "both, a caller not the gateway's"):
             (cl / "typryx-keys.json").write_text(json.dumps({"TYPRYX_KEYS": b64(spec)}))
-        if state in ("both", "only the broker's"):
+        if state in ("both", "only the broker's", "both, a caller not the gateway's"):
             (cl / "tokenfuse-mcp-broker-keys.json").write_text(json.dumps({
-                "TOKENFUSE_MCP_KEYS": b64("kept0broker0key0from0an0earlier0run0Zk3:broker-caller"),
+                "TOKENFUSE_MCP_KEYS": b64(f"{kept_bc}:broker-caller"),
                 "TOKENFUSE_MCP_SECRETS": b64(f"typryx_key={EXISTING}")}))
         for f in cl.glob("*.json"):
             before[f.name] = f.read_bytes()
@@ -436,9 +522,9 @@ for p in launchers:
         where = f"E {p}, {state}"
         after = {f.name: f.read_bytes() for f in cl.glob("*.json")}
         argv = log.read_text() if log.exists() else ""
-        if state == "only the broker's":
+        if state in ("only the broker's", "both, a caller not the gateway's"):
             if r.returncode == 0 or "DOOR-BLOCK-DONE" in r.stdout or "die:" not in r.stderr:
-                bad(f"{where}: the block went on (exit {r.returncode}); with only the broker's Secret present it has to stop with the reason")
+                bad(f"{where}: the block went on (exit {r.returncode}); it has to stop with the reason")
             if after != before:
                 bad(f"{where}: the block changed the stand-in cluster although it had to stop")
             continue
@@ -446,9 +532,16 @@ for p in launchers:
             bad(f"{where}: the block stopped (exit {r.returncode}): {r.stderr.strip()[-300:]}")
             continue
         for n, v in before.items():
+            if n == "tokenfuse-mcp-broker-keys.json" and state == "both":
+                continue
             if after.get(n) != v:
                 bad(f"{where}: {n[:-5]} existed and is no longer byte for byte what it was")
-        if set(after) != {"typryx-keys.json", "tokenfuse-mcp-broker-keys.json"}:
+        if state == "both":
+            was, now = json.loads(before["tokenfuse-mcp-broker-keys.json"]), json.loads(after["tokenfuse-mcp-broker-keys.json"])
+            if now.get("TOKENFUSE_MCP_SECRETS") != was["TOKENFUSE_MCP_SECRETS"] or \
+                    dec(now.get("TOKENFUSE_MCP_KEYS", "")) != dec(was["TOKENFUSE_MCP_KEYS"]) + f",{GW_DB}:drills-broker":
+                bad(f"{where}: the kept broker Secret did not keep every entry byte for byte and gain the gateway's drills-broker")
+        if set(after) != {"typryx-keys.json", "tokenfuse-mcp-broker-keys.json", "gateway-client-keys.json"}:
             bad(f"{where}: the stand-in cluster holds {sorted(after)} after the block, not both door Secrets whole")
             continue
         t = json.loads(after["typryx-keys.json"])
@@ -466,7 +559,10 @@ for p in launchers:
             bad(f"{where}: the minted typryx identity is not in the launcher's trust domain")
         if state == "both" and "create -f -" in argv:
             bad(f"{where}: the block ran `create` with both Secrets present")
-        values = [bearer, dec(b["TOKENFUSE_MCP_KEYS"]).rpartition(":")[0]]
+        bk = dict((e.rpartition(":")[2], e.rpartition(":")[0]) for e in dec(b["TOKENFUSE_MCP_KEYS"]).split(","))
+        if bk.get("broker-caller") != gwbc or bk.get("drills-broker") != GW_DB:
+            bad(f"{where}: the broker's static callers are not the gateway's broker-caller and drills-broker after the block")
+        values = [bearer, gwbc, GW_DB]
         for v in values:
             if v and (v in argv or v in r.stdout or v in r.stderr):
                 bad(f"{where}: a door value appears on a k_ command line or in the output")
@@ -481,7 +577,8 @@ if problems:
 
 print(f"OK: {counted} Secret reference(s) in the typed manifests and {len(subjects) - len(TYPED)} renders, each made here;")
 print(f"    door-secrets mints {', '.join(door_names)} when neither exists, keeps both, derives the broker's from")
-print(f"    an existing typryx-keys, stops on the broker's alone, and prints no value;")
+print(f"    an existing typryx-keys, stops on the broker's alone, and prints no value; the broker's static callers")
+print(f"    are the gateway's, and door-callers keeps a kept broker Secret in step or stops;")
 print(f"    {len(launchers)} launcher(s) call it in the typed branch before the render, and their door blocks ran")
-print(f"    {ran} times over a stand-in cluster from all four starting states.")
+print(f"    {ran} times over a stand-in cluster from all five starting states.")
 PY

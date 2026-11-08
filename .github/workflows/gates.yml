@@ -179,6 +179,12 @@ jobs:
       - name: the MCP broker blocks raw secrets and asks the policy plane (invariant 51)
         run: ./scripts/broker-blocks-raw-secrets.sh
 
+      # The drills reach the MCP broker with a key of their own, the broker's static callers are gateway keys too,
+      # and mockryx's broker drills pass against the pinned broker, gateway and wardryx on networks with no route out.
+      # See CLAUDE.md invariant 85.
+      - name: the broker drills pass against the broker as configured, and its static callers are gateway keys (invariant 85)
+        run: ./scripts/broker-drills-pass.sh
+
       # The gateway's policy-plane key is a pep on a new cluster and on one installed again (invariant 52).
       - name: the gateway's policy-plane key is a pep, and an installed cluster is migrated from viewer
         run: ./scripts/wardryx-gateway-key-is-pep.sh
@@ -444,9 +450,9 @@ jobs:
       - name: the record seal is pinned to custody's one ES384 key, kept on a re-run (invariant 73)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/keyryx-kid-is-pinned.sh
 
-      # Added 2026-10-20 with invariant 74. tokenfuse v1.23.0 is pinned by digest, and the gateway and the MCP broker
+      # Added 2026-10-20 with invariant 74. tokenfuse v1.24.0 is pinned by digest, and the gateway and the MCP broker
       # name every address they are reached at as their door origins.
-      - name: tokenfuse v1.23.0 is pinned by digest and the door origins name every address (invariant 74)
+      - name: tokenfuse v1.24.0 is pinned by digest and the door origins name every address (invariant 74)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/tokenfuse-door-origins.sh
 
       # Added 2026-11-04 with invariant 78 (G2.1). A read of the web passes the MCP broker, which labels the run from

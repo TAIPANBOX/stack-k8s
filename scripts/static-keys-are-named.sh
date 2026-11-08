@@ -17,15 +17,17 @@
 # 1. The gateway's list is the stack's own list followed by the operator's: exactly
 #    `$(STACK_STATIC_KEY_IDS)$(OPERATOR_STATIC_KEY_IDS)` in manifests/10-planes.yaml.
 # 2. STACK_STATIC_KEY_IDS names only the key ids the mint produces (felyx, agents, drills, costcrew,
-#    broker), and each has a `# static key <id>: <reason>` line beside it.
+#    broker, and the broker's two static callers drills-broker and broker-caller, invariant 85), and
+#    each has a `# static key <id>: <reason>` line beside it.
 # 3. OPERATOR_STATIC_KEY_IDS reads the ConfigMap gateway-static-keys, key operator_key_ids, and that
 #    reference is not optional: a gateway with no operator list still starts, with an empty one.
-# 4. The MCP broker's list (manifests/52-tokenfuse-mcp-broker.yaml) names only broker-caller, the key
-#    the broker's own door mints (it must also be in TOKENFUSE_MCP_KEYS, or the broker refuses to start), with a reason.
+# 4. The MCP broker's list (manifests/52-tokenfuse-mcp-broker.yaml) names only broker-caller, the typed
+#    door's caller, and drills-broker, the drills' key (each must also be in TOKENFUSE_MCP_KEYS, or the
+#    broker refuses to start), each with a reason.
 # 5. No other manifest sets a static-key list.
 # 6. lib/static-keys.sh creates gateway-static-keys when it is absent, and never overwrites it, and
 #    the three deploy scripts call static_keys_settle.
-# 7. lib/identity-mint.sh mints each of the five stack keys.
+# 7. lib/identity-mint.sh mints each of the seven stack keys.
 #
 # A subject that is gone fails: a missing file measures nothing, and this gate says so.
 set -uo pipefail
@@ -44,8 +46,8 @@ STATIC = pathlib.Path("lib/static-keys.sh")
 MINT = pathlib.Path("lib/identity-mint.sh")
 DEPLOYS = [pathlib.Path(p) for p in ("deploy.sh", "cloud/gcp/deploy-gcp.sh", "cloud/aws/deploy-aws.sh")]
 
-STACK_IDS = {"felyx", "agents", "drills", "costcrew", "broker"}
-BROKER_IDS = {"broker-caller"}
+STACK_IDS = {"felyx", "agents", "drills", "costcrew", "broker", "drills-broker", "broker-caller"}
+BROKER_IDS = {"broker-caller", "drills-broker"}
 
 fails = []
 
@@ -138,7 +140,7 @@ for d in DEPLOYS:
         fail(f"{d} sources lib/static-keys.sh but never calls static_keys_settle")
 
 mt = MINT.read_text()
-for kid in ("felyx", "agents", "drills", "broker", "costcrew"):
+for kid in ("felyx", "agents", "drills", "broker", "costcrew", "drills-broker", "broker-caller"):
     if not re.search(r"\b" + kid + r"\b", mt):
         fail(f"{MINT} does not mint the {kid!r} client key, so the allow-list names a key no deploy makes")
 

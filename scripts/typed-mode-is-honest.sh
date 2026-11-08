@@ -186,8 +186,18 @@ check("4 jev key is a file, never a value", 'name: TYPRYX_BACKEND, value: "jev"'
       "the backend is not jev")
 m = re.search(r'name: TYPRYX_JEV_KEY_FILE, value: "([^"]+)"', ren)
 check("4 jev key is a file, never a value", m is not None, "TYPRYX_JEV_KEY_FILE is not set to a path")
-check("4 jev key is a file, never a value", "kind: ConfigMap" not in code,
-      "a ConfigMap is rendered; a key never belongs in one")
+# A ConfigMap a render carries is named here with its reason, and holds neither the key nor its base64.
+# drills-broker-scenarios: the cluster's own tool-hold drill for the broker drills (CLAUDE.md invariant 85), a
+# scenario file and no credential.
+RENDERED_CONFIGMAPS = {"drills-broker-scenarios"}
+for cmdoc in re.split(r"(?m)^---\s*$", ren):
+    if not re.search(r"(?m)^kind: ConfigMap\s*$", re.sub(r"(?m)^\s*#.*$", "", cmdoc)):
+        continue
+    cmn = re.search(r"(?m)^  name:\s*([\w.-]+)\s*$", cmdoc)
+    check("4 jev key is a file, never a value", cmn is not None and cmn.group(1) in RENDERED_CONFIGMAPS,
+          f"a ConfigMap is rendered that is not named here with its reason ({cmn.group(1) if cmn else 'no name'}); a key never belongs in one")
+    check("4 jev key is a file, never a value", not [x for x in [FAKE] + b64s(FAKE) if x in cmdoc],
+          f"the ConfigMap {cmn.group(1) if cmn else '?'} carries the key or its base64")
 for em in re.finditer(r"\{\s*name:\s*(\w*KEY\w*)\s*,\s*value:", code):
     check("4 jev key is a file, never a value",
           em.group(1).endswith("_KEY_FILE") or em.group(1) == "TYPRYX_ACCEPT_KEY_IN_META"

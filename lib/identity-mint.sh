@@ -18,6 +18,19 @@
 #   costcrew the scheduled CostCrew crew, bound to agent://<td>/costcrew/* (its
 #           analysts' ids), in unit `costcrew`; its secret is also in the Secret
 #           costcrew-client-key, which 49-costcrew.yaml reads (no provider key)
+#   drills-broker  the drills' key for the MCP broker, bound to agent://mockryx.local/*,
+#           in unit `drills`; its secret is also in the Secret drills-broker-key, which
+#           the drills read, and the typed door gives the broker the same entry
+#   broker-caller  the typed door's caller key, bound to exactly agent://<td>/typed-broker,
+#           in unit `broker`; the broker's door Secret holds the same entry
+#
+# Why the last two are gateway keys at all (CLAUDE.md invariant 85): the MCP broker asks
+# the gateway's tool-call check about every tool call, and for a static key it asks with
+# the CALLER's own key (tokenfuse invariant 118), so a key the broker admits and the
+# gateway does not know is refused there with 401, and the broker refuses the call
+# closed. One secret and one id at both doors. A cluster whose typed door was minted
+# before them keeps the broker's secret: a missing entry is taken from the broker's Secret
+# (or from drills-broker-key) before a new one is minted.
 #
 # <td> is TRAILRYX_TRUST_DOMAIN as stack-wiring holds it after the deploy's
 # --trust-domain patch, the domain the console already names Felyx in. The agents'
@@ -67,6 +80,10 @@ IDM_BROKER_KEY=client_key
 IDM_COSTCREW_SECRET=costcrew-client-key
 IDM_COSTCREW_KEY=client_key
 IDM_DRILLS_KEY=client_key
+IDM_DBROKER_SECRET=drills-broker-key
+IDM_DBROKER_KEY=broker_key
+IDM_DOOR_SECRET=tokenfuse-mcp-broker-keys
+IDM_DOOR_KEY=TOKENFUSE_MCP_KEYS
 IDM_CM=gateway-identity-map
 IDM_MAP_KEY=identity.json
 IDM_PATH_KEY=map_path
@@ -80,18 +97,84 @@ IDM_DOMAIN=""      # the trust domain the minted map names
 
 # DOMAIN: the map, one line, on stdout. No secret in it.
 identity_mint_map() {
-  printf '{"units":[{"id":"console","name":"Felyx, the console copilot"},{"id":"agents","name":"The operator agents"},{"id":"drills","name":"The scheduled drills"},{"id":"broker","name":"The MCP broker"},{"id":"costcrew","name":"The CostCrew crew"}],"keys":[{"key_id":"felyx","unit":"console","agents":["agent://%s/genaryx/felyx"]},{"key_id":"agents","unit":"agents","agents":["agent://%s/agents/*"]},{"key_id":"drills","unit":"drills","agents":["agent://mockryx.local/*"]},{"key_id":"broker","unit":"broker","agents":["agent://%s/*"]},{"key_id":"costcrew","unit":"costcrew","agents":["agent://%s/costcrew/*"]}]}' "$1" "$1" "$1" "$1"
+  printf '{"units":[{"id":"console","name":"Felyx, the console copilot"},{"id":"agents","name":"The operator agents"},{"id":"drills","name":"The scheduled drills"},{"id":"broker","name":"The MCP broker"},{"id":"costcrew","name":"The CostCrew crew"}],"keys":[{"key_id":"felyx","unit":"console","agents":["agent://%s/genaryx/felyx"]},{"key_id":"agents","unit":"agents","agents":["agent://%s/agents/*"]},{"key_id":"drills","unit":"drills","agents":["agent://mockryx.local/*"]},{"key_id":"broker","unit":"broker","agents":["agent://%s/*"]},{"key_id":"costcrew","unit":"costcrew","agents":["agent://%s/costcrew/*"]},{"key_id":"drills-broker","unit":"drills","agents":["agent://mockryx.local/*"]},{"key_id":"broker-caller","unit":"broker","agents":["agent://%s/typed-broker"]}]}' "$1" "$1" "$1" "$1" "$1"
 }
 
 identity_mint_sha() { # the sha256 of stdin, hex
   if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi
 }
 
+# SPEC ID: the secret of SPEC's first `secret:ID` entry, split on the LAST colon as tokenfuse
+# splits it, on stdout; nothing when SPEC has none. A function, so the secret is on no
+# process's command line.
+identity_mint_entry() {
+  local rest="$1," entry
+  while [ -n "$rest" ]; do
+    entry="${rest%%,*}"
+    rest="${rest#*,}"
+    if [ "$entry" != "$2" ] && [ "${entry##*:}" = "$2" ]; then
+      printf '%s' "${entry%:*}"
+      return 0
+    fi
+  done
+}
+
+# HAVE ID: the secret for a mirrored key (drills-broker, broker-caller) on a cluster whose
+# gateway lacks it: drills-broker-key for the drills' one, then the broker door's own entry
+# of that id (tokenfuse-mcp-broker-keys, from an earlier typed deploy), then a new one. So
+# a key the broker already admits keeps its secret, and nothing that holds it is refused.
+identity_mint_mirrored() {
+  local have="$1" id="$2" v="" door
+  if [ "$id" = drills-broker ]; then
+    case "$have" in
+      *"secret/$IDM_DBROKER_SECRET"*)
+        v="$(k_ "-n $IDM_NS get secret $IDM_DBROKER_SECRET -o jsonpath='{.data.$IDM_DBROKER_KEY}'" | base64 --decode)" \
+          || die "could not read Secret $IDM_DBROKER_SECRET" ;;
+    esac
+  fi
+  if [ -z "$v" ]; then
+    case "$have" in
+      *"secret/$IDM_DOOR_SECRET"*)
+        door="$(k_ "-n $IDM_NS get secret $IDM_DOOR_SECRET -o jsonpath='{.data.$IDM_DOOR_KEY}'" | base64 --decode)" \
+          || die "could not read Secret $IDM_DOOR_SECRET"
+        v="$(identity_mint_entry "$door" "$id")"
+        door="" ;;
+    esac
+  fi
+  if [ -z "$v" ]; then
+    v="$(gen 40)" || die "could not mint the $id client key"
+  fi
+  printf '%s' "$v"
+}
+
+# Before anything is applied (CLAUDE.md invariant 85). The gateway's static-key list names
+# drills-broker and broker-caller, and a gateway whose list names a key it does not hold
+# refuses to start. A minted Secret gets both from identity_mint_settle; the operator's own
+# Secret (identity/up.sh) is left alone by the mint, so a run that would leave its gateway
+# unable to start stops here, before the first apply, and says what to add.
+identity_mint_guard() {
+  local have label spec id missing=""
+  have="$(k_ "-n $IDM_NS get secret $IDM_SECRET --ignore-not-found -o name")" \
+    || die "could not ask the cluster whether the gateway's client keys exist, so nothing was applied"
+  [ -n "$have" ] || return 0
+  label="$(k_ "-n $IDM_NS get secret $IDM_SECRET -o jsonpath='{.metadata.labels.taipanbox\.dev/identity}'")" \
+    || die "could not read the labels of Secret $IDM_SECRET, so nothing was applied"
+  [ "$label" != minted ] || return 0
+  spec="$(k_ "-n $IDM_NS get secret $IDM_SECRET -o jsonpath='{.data.$IDM_SECRET_KEY}'" | base64 --decode)" \
+    || die "could not read Secret $IDM_SECRET, so nothing was applied"
+  for id in drills-broker broker-caller; do
+    [ -n "$(identity_mint_entry "$spec" "$id")" ] || missing="$missing $id"
+  done
+  spec=""
+  [ -z "$missing" ] && return 0
+  die "Secret $IDM_SECRET holds your own client keys (identity/up.sh), and none for:$missing. This release's gateway admits both as static keys (CLAUDE.md invariant 85), and a gateway whose static-key list names a key it does not hold refuses to start, so nothing was applied. Add each as a line '<secret>:<id>' to your keys file, bind it in your identity map (drills-broker to agent://mockryx.local/* in unit drills, broker-caller to agent://<trust domain>/typed-broker in unit broker), run identity/up.sh with both files, and deploy again. broker-caller's secret is the one your typed door already holds, when it has one. docs/releases/v1.9.0.md, Upgrade item 1, has the commands."
+}
+
 # KEYFILE: settle the gateway's client keys, then roll what reads them. Prints notes
 # and never a secret.
 identity_mint_settle() {
-  local keyfile="$1" have domain label spec felyx="" agents="" drills="" broker="" costcrew="" entry id rest want cur esc rv sha t frv
-  have="$(k_ "-n $IDM_NS get secret/$IDM_SECRET configmap/$IDM_CM secret/$IDM_FELYX_SECRET secret/$IDM_DRILLS_SECRET secret/$IDM_BROKER_SECRET secret/$IDM_COSTCREW_SECRET --ignore-not-found -o name")" \
+  local keyfile="$1" have domain label spec felyx="" agents="" drills="" broker="" costcrew="" dbroker="" bcaller="" entry id rest want cur esc rv sha t frv
+  have="$(k_ "-n $IDM_NS get secret/$IDM_SECRET configmap/$IDM_CM secret/$IDM_FELYX_SECRET secret/$IDM_DRILLS_SECRET secret/$IDM_BROKER_SECRET secret/$IDM_COSTCREW_SECRET secret/$IDM_DBROKER_SECRET secret/$IDM_DOOR_SECRET --ignore-not-found -o name")" \
     || die "could not ask the cluster whether the gateway's client keys exist, so the identity step did not run"
   domain="$(k_ "-n $IDM_NS get configmap stack-wiring -o jsonpath='{.data.TRAILRYX_TRUST_DOMAIN}'")" \
     || die "could not read TRAILRYX_TRUST_DOMAIN from stack-wiring, which the minted keys are bound to"
@@ -122,16 +205,19 @@ identity_mint_settle() {
           drills) [ -z "$drills" ] || drills=bad; [ "$drills" = bad ] || drills="${entry%:*}" ;;
           broker) [ -z "$broker" ] || broker=bad; [ "$broker" = bad ] || broker="${entry%:*}" ;;
           costcrew) [ -z "$costcrew" ] || costcrew=bad; [ "$costcrew" = bad ] || costcrew="${entry%:*}" ;;
+          drills-broker) [ -z "$dbroker" ] || dbroker=bad; [ "$dbroker" = bad ] || dbroker="${entry%:*}" ;;
+          broker-caller) [ -z "$bcaller" ] || bcaller=bad; [ "$bcaller" = bad ] || bcaller="${entry%:*}" ;;
           *) felyx=bad ;;
         esac
       done
-      if [ -z "$felyx" ] || [ -z "$agents" ] || [ "$felyx" = bad ] || [ "$agents" = bad ] || [ "$drills" = bad ] || [ "$broker" = bad ] || [ "$costcrew" = bad ]; then
-        die "Secret $IDM_SECRET is labelled $IDM_LABEL=minted and does not hold exactly the keys this deploy mints (felyx, agents, drills, broker and costcrew), so it was edited by hand. Remove the label to make it yours, or delete it and deploy again to mint new keys. Nothing was changed."
+      if [ -z "$felyx" ] || [ -z "$agents" ] || [ "$felyx" = bad ] || [ "$agents" = bad ] || [ "$drills" = bad ] || [ "$broker" = bad ] || [ "$costcrew" = bad ] || [ "$dbroker" = bad ] || [ "$bcaller" = bad ]; then
+        die "Secret $IDM_SECRET is labelled $IDM_LABEL=minted and does not hold exactly the keys this deploy mints (felyx, agents, drills, broker, costcrew, drills-broker and broker-caller), so it was edited by hand. Remove the label to make it yours, or delete it and deploy again to mint new keys. Nothing was changed."
       fi
-      if [ -z "$drills" ] || [ -z "$broker" ] || [ -z "$costcrew" ]; then
-        # A cluster minted before the drills key, the broker key or the CostCrew key: each missing key is made,
-        # or taken from its own Secret; the others are kept byte for byte, and the spec is
-        # patched on stdin.
+      if [ -z "$drills" ] || [ -z "$broker" ] || [ -z "$costcrew" ] || [ -z "$dbroker" ] || [ -z "$bcaller" ]; then
+        # A cluster minted before the drills key, the broker key, the CostCrew key or the two keys the
+        # MCP broker admits (invariant 85): each missing key is made, or taken from its own Secret (the
+        # broker's two also from the broker's door Secret); the others are kept byte for byte, and the
+        # spec is patched on stdin.
         if [ -z "$drills" ]; then
           case "$have" in
             *"secret/$IDM_DRILLS_SECRET"*)
@@ -156,10 +242,12 @@ identity_mint_settle() {
             *) costcrew="$(gen 40)" || die "could not mint the CostCrew crew's client key" ;;
           esac
         fi
-        printf '{"stringData":{"%s":"%s:felyx,%s:agents,%s:drills,%s:broker,%s:costcrew"}}\n' "$IDM_SECRET_KEY" "$felyx" "$agents" "$drills" "$broker" "$costcrew" \
+        if [ -z "$dbroker" ]; then dbroker="$(identity_mint_mirrored "$have" drills-broker)" || die "could not settle the drills-broker key"; fi
+        if [ -z "$bcaller" ]; then bcaller="$(identity_mint_mirrored "$have" broker-caller)" || die "could not settle the broker-caller key"; fi
+        printf '{"stringData":{"%s":"%s:felyx,%s:agents,%s:drills,%s:broker,%s:costcrew,%s:drills-broker,%s:broker-caller"}}\n' "$IDM_SECRET_KEY" "$felyx" "$agents" "$drills" "$broker" "$costcrew" "$dbroker" "$bcaller" \
           | k_ "-n $IDM_NS patch secret $IDM_SECRET --type merge --patch-file /dev/stdin" >/dev/null \
           || die "could not add the missing keys to Secret $IDM_SECRET"
-        note "client keys: keys for the scheduled drills, the MCP broker and the CostCrew crew added to Secret $IDM_SECRET (never printed)"
+        note "client keys: the keys this release mints that the cluster lacked were added to Secret $IDM_SECRET (never printed)"
       fi
       ;;
     *)
@@ -192,12 +280,18 @@ identity_mint_settle() {
             || die "could not read Secret $IDM_COSTCREW_SECRET" ;;
         *) costcrew="$(gen 40)" || die "could not mint the CostCrew crew's client key" ;;
       esac
+      dbroker="$(identity_mint_mirrored "$have" drills-broker)" || die "could not settle the drills-broker key"
+      bcaller="$(identity_mint_mirrored "$have" broker-caller)" || die "could not settle the broker-caller key"
+      [ "$dbroker" != "$bcaller" ] && [ "$dbroker" != "$felyx" ] && [ "$dbroker" != "$agents" ] && [ "$dbroker" != "$drills" ] \
+        && [ "$dbroker" != "$broker" ] && [ "$dbroker" != "$costcrew" ] && [ "$bcaller" != "$felyx" ] && [ "$bcaller" != "$agents" ] \
+        && [ "$bcaller" != "$drills" ] && [ "$bcaller" != "$broker" ] && [ "$bcaller" != "$costcrew" ] \
+        || die "two of the minted keys came out the same; deploy again"
       [ "$felyx" != "$agents" ] && [ "$felyx" != "$drills" ] && [ "$felyx" != "$broker" ] && [ "$felyx" != "$costcrew" ] \
         && [ "$agents" != "$drills" ] && [ "$agents" != "$broker" ] && [ "$agents" != "$costcrew" ] \
         && [ "$drills" != "$broker" ] && [ "$drills" != "$costcrew" ] && [ "$broker" != "$costcrew" ] \
         || die "two of the minted keys came out the same; deploy again"
-      printf '{"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"%s","namespace":"%s","labels":{"app.kubernetes.io/part-of":"agent-stack","%s":"minted"}},"stringData":{"%s":"%s:felyx,%s:agents,%s:drills,%s:broker,%s:costcrew"}}\n' \
-        "$IDM_SECRET" "$IDM_NS" "$IDM_LABEL" "$IDM_SECRET_KEY" "$felyx" "$agents" "$drills" "$broker" "$costcrew" \
+      printf '{"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"%s","namespace":"%s","labels":{"app.kubernetes.io/part-of":"agent-stack","%s":"minted"}},"stringData":{"%s":"%s:felyx,%s:agents,%s:drills,%s:broker,%s:costcrew,%s:drills-broker,%s:broker-caller"}}\n' \
+        "$IDM_SECRET" "$IDM_NS" "$IDM_LABEL" "$IDM_SECRET_KEY" "$felyx" "$agents" "$drills" "$broker" "$costcrew" "$dbroker" "$bcaller" \
         | k_ "-n $IDM_NS create -f -" >/dev/null \
         || die "could not create Secret $IDM_SECRET"
       note "client keys: minted for Felyx and for your agents, in Secret $IDM_SECRET (never printed)"
@@ -254,9 +348,24 @@ identity_mint_settle() {
         | k_ "-n $IDM_NS create -f -" >/dev/null \
         || die "could not create Secret $IDM_COSTCREW_SECRET" ;;
   esac
+  # The drills' key for the MCP broker (invariant 85), the one object the drill job reads it
+  # from. The typed door gives the broker the same entry, and a deleted one comes back with
+  # the same secret.
+  case "$have" in
+    *"secret/$IDM_DBROKER_SECRET"*)
+      [ "$(k_ "-n $IDM_NS get secret $IDM_DBROKER_SECRET -o jsonpath='{.data.$IDM_DBROKER_KEY}'" | base64 --decode)" = "$dbroker" ] \
+        || die "Secret $IDM_DBROKER_SECRET does not hold the key Secret $IDM_SECRET names drills-broker, so the broker drills would be refused at the gateway's tool-call check. Delete $IDM_DBROKER_SECRET and deploy again. Nothing was changed." ;;
+    *)
+      printf '{"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"%s","namespace":"%s","labels":{"app.kubernetes.io/part-of":"agent-stack","%s":"minted"}},"stringData":{"%s":"%s"}}\n' \
+        "$IDM_DBROKER_SECRET" "$IDM_NS" "$IDM_LABEL" "$IDM_DBROKER_KEY" "$dbroker" \
+        | k_ "-n $IDM_NS create -f -" >/dev/null \
+        || die "could not create Secret $IDM_DBROKER_SECRET" ;;
+  esac
   drills=""
   broker=""
   costcrew=""
+  dbroker=""
+  bcaller=""
 
   # The map, rebuilt from the trust domain on every run: the same bytes, unless the
   # domain moved. It holds no secret.
