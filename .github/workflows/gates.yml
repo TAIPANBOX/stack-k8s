@@ -417,6 +417,17 @@ jobs:
       - name: every image this repository builds from is pinned whole (invariant 80)
         run: ./scripts/base-images-are-pinned.sh
 
+      # Added 2026-11-11 with invariants 86 to 88, the supply-chain hygiene change. A binary committed from a
+      # Mac sat in this repository (images/uapi-proxy/uapi-proxy); the installers applied Longhorn, Calico and
+      # Hetzner's CCM by URL and piped get.k3s.io into a shell on every node; deploy.sh threw away the exit
+      # code of its own proof and printed Done. See CLAUDE.md invariants 86, 87 and 88.
+      - name: no tracked file is a compiled executable (invariant 86)
+        run: ./scripts/no-binary-is-tracked.sh
+      - name: nothing another project publishes is applied or run unverified (invariant 87)
+        run: ./scripts/remote-fetches-are-verified.sh
+      - name: a deploy whose own proof failed ends red (invariant 88)
+        run: ./scripts/deploy-ends-red-when-its-proof-fails.sh
+
       # Added 2026-10-19. hub/add-site.sh reads the Cloud's version from a name:tag@sha256 reference, the form
       # the manifests pin. v1.5.3 read the digest as the tag and refused every pinned install.
       - name: hub/add-site.sh reads a digest-pinned tokenfuse-cloud image
