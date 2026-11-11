@@ -360,7 +360,7 @@ jobs:
           info="$(go version -m "$(go env GOPATH)/bin/kubeconform")"
           printf '%s\n' "$info" | head -1
           grep -Eq '^[[:space:]]mod[[:space:]]github\.com/yannh/kubeconform[[:space:]]v0\.8\.0[[:space:]]' <<<"$info"
-          grep -q ': go1\.27\.3$' <<<"$(printf '%s\n' "$info" | head -1)"
+          grep -q ': go1\.27\.4$' <<<"$(printf '%s\n' "$info" | head -1)"
 
       - name: every manifest is a document Kubernetes would accept
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/manifests-valid.sh
@@ -551,7 +551,7 @@ jobs:
           info="$(go version -m "$(go env GOPATH)/bin/kubeconform")"
           printf '%s\n' "$info" | head -1
           grep -Eq '^[[:space:]]mod[[:space:]]github\.com/yannh/kubeconform[[:space:]]v0\.8\.0[[:space:]]' <<<"$info"
-          grep -q ': go1\.27\.3$' <<<"$(printf '%s\n' "$info" | head -1)"
+          grep -q ': go1\.27\.4$' <<<"$(printf '%s\n' "$info" | head -1)"
 
       # Last inside each shard, because it mutates tracked files and restores
       # them. It needs a clean tree and says so plainly, so it also reports any
