@@ -774,7 +774,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.23.0@sha256:192cfc7138eea6911d3c563427cdb996dac52c77e7f04f6ae71f84b6a6dc4535\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b657bbb332f7c8a345beeaaa1e071f05f6af2ce46882d0601a153eb7c5\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 # The gateway's declassify key (invariant 27). POST /v1/fuse/declassify lifts a
@@ -834,7 +834,7 @@ run_case "declassify-is-keyed: an installer never gives an existing Secret the k
 # Each must say it measured nothing, never OK.
 run_case "declassify-is-keyed: no gateway container left to judge" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.23.0@sha256:192cfc7138eea6911d3c563427cdb996dac52c77e7f04f6ae71f84b6a6dc4535\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b657bbb332f7c8a345beeaaa1e071f05f6af2ce46882d0601a153eb7c5\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the declassify key"
 
 run_case "declassify-is-keyed: no installer left to read" fail \
@@ -1208,7 +1208,7 @@ run_case "agent-tokens-are-required: the gateway drops the governed profile" fai
 
 run_case "agent-tokens-are-required: the gateway runs a tokenfuse that predates the governed profile" fail \
 	"$AGT" \
-	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.23\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
+	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.24\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
 	"predates the governed profile and the static-key list"
 
 TEETH_EDIT_27="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"\" }")')"
@@ -1432,7 +1432,7 @@ run_case "static-keys-are-named: the operator's list is read optionally" fail \
 	"$(py 'edit("manifests/10-planes.yaml", "              valueFrom: { configMapKeyRef: { name: gateway-static-keys, key: operator_key_ids } }", "              valueFrom: { configMapKeyRef: { name: gateway-static-keys, key: operator_key_ids, optional: true } }")')" \
 	"OPERATOR_STATIC_KEY_IDS is optional"
 
-TEETH_EDIT_34="$(py 'edit("manifests/10-planes.yaml", "value: \"felyx,agents,drills,costcrew,broker\" }", "value: \"felyx,agents,drills,costcrew,broker,stranger\" }")')"
+TEETH_EDIT_34="$(py 'edit("manifests/10-planes.yaml", "value: \"felyx,agents,drills,costcrew,broker,drills-broker,broker-caller\" }", "value: \"felyx,agents,drills,costcrew,broker,drills-broker,broker-caller,stranger\" }")')"
 run_case "static-keys-are-named: an id that the stack does not mint joins the list" fail \
 	"$SKY" \
 	"$TEETH_EDIT_34" \
@@ -1443,7 +1443,7 @@ run_case "static-keys-are-named: a listed id loses its reason" fail \
 	"$(py 'edit("manifests/10-planes.yaml", "            # static key drills: the scheduled mockryx drills, which cannot sign a DPoP proof.\n", "")')" \
 	"has no \`# static key drills: <reason>\` line"
 
-TEETH_EDIT_35="$(py 'edit("manifests/10-planes.yaml", "value: \"felyx,agents,drills,costcrew,broker\" }", "value: \"felyx,agents,drills,costcrew\" }")')"
+TEETH_EDIT_35="$(py 'edit("manifests/10-planes.yaml", "value: \"felyx,agents,drills,costcrew,broker,drills-broker,broker-caller\" }", "value: \"felyx,agents,drills,costcrew,drills-broker,broker-caller\" }")')"
 run_case "static-keys-are-named: a minted key is dropped from the list without a written reason" fail \
 	"$SKY" \
 	"$TEETH_EDIT_35" \
@@ -1455,11 +1455,11 @@ run_case "static-keys-are-named: the list is written as a literal instead of the
 	"$TEETH_EDIT_36" \
 	"TOKENFUSE_AGENT_TOKENS_STATIC_KEYS must be"
 
-TEETH_EDIT_37="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "{ name: TOKENFUSE_MCP_AGENT_TOKENS_STATIC_KEYS, value: \"broker-caller\" }", "{ name: TOKENFUSE_MCP_AGENT_TOKENS_STATIC_KEYS, value: \"broker-caller,agents\" }")')"
+TEETH_EDIT_37="$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "{ name: TOKENFUSE_MCP_AGENT_TOKENS_STATIC_KEYS, value: \"broker-caller,drills-broker\" }", "{ name: TOKENFUSE_MCP_AGENT_TOKENS_STATIC_KEYS, value: \"broker-caller,drills-broker,agents\" }")')"
 run_case "static-keys-are-named: the broker admits an id outside its own key list" fail \
 	"$SKY" \
 	"$TEETH_EDIT_37" \
-	"is not one of ['broker-caller']"
+	"is not one of ['broker-caller', 'drills-broker']"
 
 TEETH_EDIT_38="$(py 'edit("manifests/49-costcrew.yaml", "          env:\n            - name: TRAILRYX_TRUST_DOMAIN\n", "          env:\n            - { name: TOKENFUSE_AGENT_TOKENS_STATIC_KEYS, value: \"costcrew\" }\n            - name: TRAILRYX_TRUST_DOMAIN\n")')"
 run_case "static-keys-are-named: a costcrew manifest sets a second list" fail \
@@ -1883,7 +1883,7 @@ run_case "run-budget-ceiling-is-set: a comment next to the ceiling changes" pass
 	'./scripts/run-budget-ceiling-is-set.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "# The operator\x27s ceiling on a run\x27s budget (tokenfuse v1.5.0,", "# The operator\x27s ceiling on the budget of a run (tokenfuse v1.5.0,")')"
 
-TEETH_EDIT_68="$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.23.0@sha256:192cfc7138eea6911d3c563427cdb996dac52c77e7f04f6ae71f84b6a6dc4535\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')"
+TEETH_EDIT_68="$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b657bbb332f7c8a345beeaaa1e071f05f6af2ce46882d0601a153eb7c5\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')"
 run_case "run-budget-ceiling-is-set: no gateway container left to judge" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
 	"$TEETH_EDIT_68" \
@@ -2242,7 +2242,8 @@ run_case "mounted-keys: no typed render mounts a key" fail \
 	'./scripts/mounted-keys-are-readable.sh' \
 	"$(py 'edit("typed/mode.sh", "secret: \x7b secretName: typryx-jev-key, defaultMode: 0440 \x7d", "configMap: \x7b name: typryx-jev-key \x7d")
 edit("typed/mode.sh", "secret: \x7b secretName: typryx-model-key, defaultMode: 0440 \x7d", "configMap: \x7b name: typryx-model-key \x7d")
-edit("manifests/52-tokenfuse-mcp-broker.yaml", "secret: \x7b secretName: broker-taint-key, defaultMode: 0440, items: \x5b\x7b key: client_key, path: key \x7d\x5d \x7d", "configMap: \x7b name: broker-taint-key \x7d")')" \
+edit("manifests/52-tokenfuse-mcp-broker.yaml", "secret: \x7b secretName: broker-taint-key, defaultMode: 0440, items: \x5b\x7b key: client_key, path: key \x7d\x5d \x7d", "configMap: \x7b name: broker-taint-key \x7d")
+edit("manifests/52-tokenfuse-mcp-broker.yaml", "secret: \x7b secretName: drills-broker-key, optional: true, defaultMode: 0440, items: \x5b\x7b key: broker_key, path: broker_key \x7d\x5d \x7d", "configMap: \x7b name: drills-broker-key \x7d")')" \
 	"no typed render mounts a Secret"
 
 # Invariant 33. tokenfuse splits a client key entry on its LAST colon, so an
@@ -2251,12 +2252,12 @@ edit("manifests/52-tokenfuse-mcp-broker.yaml", "secret: \x7b secretName: broker-
 # the top.
 run_case "client-key-ids: the README example goes back to an agent:// key id" fail \
 	'./scripts/client-key-ids-are-bare.sh' \
-	"$(py 'edit("README.md", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:agent://acme.example/broker-caller\x27")')" \
+	"$(py 'edit("README.md", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller,and-another-long-secret:drills-broker\x27", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:agent://acme.example/broker-caller,and-another-long-secret:drills-broker\x27")')" \
 	"key id '//acme.example/broker-caller'"
 
 run_case "client-key-ids: the manifest 52 example goes back to an agent:// key id" fail \
 	'./scripts/client-key-ids-are-bare.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:agent://acme.example/broker-caller\x27")')" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller,and-another-long-secret:drills-broker\x27", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:agent://acme.example/broker-caller,and-another-long-secret:drills-broker\x27")')" \
 	"key id '//acme.example/broker-caller'"
 
 TEETH_EDIT_93="$(py 'open("README.md", "a").write("\n    env: [ \x7b name: TOKENFUSE_CLIENT_KEYS, value: \"sk-flow:agent://acme.example/flow\" \x7d ]\n")')"
@@ -2273,12 +2274,12 @@ run_case "client-key-ids: a YAML block env entry carries an agent:// key id" fai
 
 run_case "client-key-ids: a secret with colons and a bare key id (must pass)" pass \
 	'./scripts/client-key-ids-are-bare.sh' \
-	"$(py 'edit("README.md", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\x27sk-proj:abc:def:broker-caller,sk-two:research-agent\x27")')"
+	"$(py 'edit("README.md", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller,and-another-long-secret:drills-broker\x27", "TOKENFUSE_MCP_KEYS=\x27sk-proj:abc:def:broker-caller,sk-two:research-agent\x27")')"
 
 run_case "client-key-ids: no literal example left to judge" fail \
 	'./scripts/client-key-ids-are-bare.sh' \
-	"$(py 'edit("README.md", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\"$BROKER_KEYS\"")
-edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller\x27", "TOKENFUSE_MCP_KEYS=\"$BROKER_KEYS\"")')" \
+	"$(py 'edit("README.md", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller,and-another-long-secret:drills-broker\x27", "TOKENFUSE_MCP_KEYS=\"$BROKER_KEYS\"")
+edit("manifests/52-tokenfuse-mcp-broker.yaml", "TOKENFUSE_MCP_KEYS=\x27pick-a-different-long-secret:broker-caller,and-another-long-secret:drills-broker\x27", "TOKENFUSE_MCP_KEYS=\"$BROKER_KEYS\"")')" \
 	"measured nothing"
 
 # invariant 34: a public repository carries no quote of the owner, no owner
@@ -2989,9 +2990,9 @@ run_case "typed-door-is-minted: typryx and the broker get one key between them" 
 	'./scripts/typed-door-is-minted.sh' \
 	"$(py 'p = "typed/mode.sh"
 s = open(p).read()
-a = "    broker_key=\"$(gen 40)\" || refuse \"could not mint the broker\x27s key\"\n    [ \"$bearer\" != \"$broker_key\" ]"
+a = "    bearer=\"$(gen 40)\" || refuse \"could not mint typryx\x27s key\"\n    broker_key=\"$(door_entry \"$callers\" \"$DOOR_KEY_ID\")\"\n    [ \"$bearer\" != \"$broker_key\" ]"
 assert a in s
-open(p, "w").write(s.replace(a, "    broker_key=\"$bearer\"\n    [ -n \"$broker_key\" ]"))')" \
+open(p, "w").write(s.replace(a, "    broker_key=\"$(door_entry \"$callers\" \"$DOOR_KEY_ID\")\"\n    bearer=\"$broker_key\"\n    [ -n \"$broker_key\" ]"))')" \
 	"are the same"
 
 TEETH_EDIT_146="$(py 'edit("typed/mode.sh", "    bearer=\"$(gen 40)\" || refuse", "    bearer=\"$(gen 16)\" || refuse")')"
@@ -3004,7 +3005,7 @@ TEETH_EDIT_147="$(py 'edit("typed/mode.sh", "DOOR_KEY_ID=\"broker-caller\"", "DO
 run_case "typed-door-is-minted: the broker's key id is an agent URI" fail \
 	'./scripts/typed-door-is-minted.sh' \
 	"$TEETH_EDIT_147" \
-	"not a bare name"
+	"hold no agent://acme.example/broker-caller"
 
 TEETH_EDIT_148="$(py 'edit("typed/mode.sh", "    made=\"$DOOR_TYPRYX (identity", "    printf \x27%s\\n\x27 \"$bearer\" >&2\n    made=\"$DOOR_TYPRYX (identity")')"
 run_case "typed-door-is-minted: a minted value reaches stderr" fail \
@@ -3446,7 +3447,7 @@ run_case "broker-blocks-raw-secrets: the broker cannot reach wardryx" fail \
 
 run_case "broker-blocks-raw-secrets: the broker image cannot be pulled" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.23.0@sha256:192cfc7138eea6911d3c563427cdb996dac52c77e7f04f6ae71f84b6a6dc4535\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b657bbb332f7c8a345beeaaa1e071f05f6af2ce46882d0601a153eb7c5\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
 	"could not pull ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag"
 
 run_case "broker-blocks-raw-secrets: no broker left to judge" fail \
@@ -4167,14 +4168,14 @@ run_case "add-site: a comment reworded beside the reader (must pass)" pass \
 	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
 	"$(py 'edit("hub/add-site.sh", "# The manifests pin the image as name:tag@sha256", "# The manifests pin the image, as name:tag@sha256")')"
 
-# tokenfuse v1.23.0 is pinned by digest; each tokenfuse door names only its own two origins, and wardryx's agent-token door names their union (CLAUDE.md invariant 74).
+# tokenfuse v1.24.0 is pinned by digest; each tokenfuse door names only its own two origins, and wardryx's agent-token door names their union (CLAUDE.md invariant 74).
 run_case "tokenfuse-door-origins: the gateway is left on tokenfuse v1.22.0" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
-	"$(py 'p = "manifests/10-planes.yaml"; s = open(p).read(); s = s.replace("tokenfuse:v1.23.0@sha256:192c", "tokenfuse:v1.22.0@sha256:192c", 1); open(p, "w").write(s)')" \
+	"$(py 'p = "manifests/10-planes.yaml"; s = open(p).read(); s = s.replace("tokenfuse:v1.24.0@sha256:bc9e", "tokenfuse:v1.23.0@sha256:bc9e", 1); open(p, "w").write(s)')" \
 	"is not the release pin"
 run_case "tokenfuse-door-origins: the control plane digest is not the release pin" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "14971e0aa3a3bdaf81d31de67bd50e8bbbbe7c2c64bb45a7fa480d075ed5e016", "3f3b9831ec1c222d776ebfbf706e207a098aff80e550494f4c78b52c1784ed8e")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "b05d3d12c61289006308cf94f3ab4edba958faf6575420eb50c93f973fc4a29a", "3f3b9831ec1c222d776ebfbf706e207a098aff80e550494f4c78b52c1784ed8e")')" \
 	"is not the release pin"
 run_case "tokenfuse-door-origins: the gateway's list names the broker's origin" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
@@ -4318,11 +4319,11 @@ run_case "console-engines: the console's wardryx differs from the stack's" fail 
 	"differs from the stack's"
 run_case "console-engines: the console's tokenfuse is an older tag than the stack's" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("images/console.Dockerfile", "tokenfuse:v1.23.0@sha256:192c", "tokenfuse:v1.22.0@sha256:192c")')" \
+	"$(py 'edit("images/console.Dockerfile", "tokenfuse:v1.24.0@sha256:bc9e", "tokenfuse:v1.23.0@sha256:bc9e")')" \
 	"differs from the stack's"
 run_case "console-engines: the manifests name two tokenfuse digests" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "ghcr.io/taipanbox/tokenfuse:v1.23.0@sha256:192cfc71", "ghcr.io/taipanbox/tokenfuse:v1.23.0@sha256:192cfc72")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b6", "ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b2")')" \
 	"names 2 different tokenfuse references"
 run_case "console-engines: an engine stage is named something the copy does not look for" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
@@ -5356,6 +5357,136 @@ run_case "browser-keeps-its-sandbox: no manifest runs the browser" fail \
 run_case "browser-keeps-its-sandbox: a comment naming the switch" pass \
 	"$BKS" \
 	"$(py 'edit("manifests/48-scopyx-browser.yaml", "            - \x7b name: SCOPYX_BACKEND, value: \"chromium\" \x7d\n", "            - \x7b name: SCOPYX_BACKEND, value: \"chromium\" \x7d\n            # SCOPYX_CHROMIUM_NO_SANDBOX=1 is what this file set until 2026-11-08.\n")')"
+
+# ---- broker-drills-pass (CLAUDE.md invariant 85): the drills reach the MCP broker with a key of their own,
+# the broker's two static callers are gateway keys too, and the broker drills pass against the pinned images.
+BDP=./scripts/broker-drills-pass.sh
+run_case "broker-drills-pass: drills-broker leaves the gateway's list" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/10-planes.yaml", "value: \"felyx,agents,drills,costcrew,broker,drills-broker,broker-caller\" }", "value: \"felyx,agents,drills,costcrew,broker,broker-caller\" }")')" \
+	"does not name drills-broker: the broker asks the gateway"
+run_case "broker-drills-pass: broker-caller leaves the gateway's list (the typed door refused at the tool-call check)" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/10-planes.yaml", "value: \"felyx,agents,drills,costcrew,broker,drills-broker,broker-caller\" }", "value: \"felyx,agents,drills,costcrew,broker,drills-broker\" }")')" \
+	"does not name broker-caller: the broker asks the gateway"
+run_case "broker-drills-pass: the broker stops admitting drills-broker" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "value: \"broker-caller,drills-broker\" }", "value: \"broker-caller\" }")')" \
+	"does not name drills-broker, so the broker refuses it"
+run_case "broker-drills-pass: the CronJob runs the gateway drills" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "\"http://tokenfuse-gateway:4100\", \"/scenarios/mcp\"]", "\"http://tokenfuse-gateway:4100\", \"/scenarios\"]")')" \
+	"not \`run ... /scenarios/mcp\`"
+run_case "broker-drills-pass: the drill reads its key from a path nothing mounts" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "value: \"/run/drills-broker/broker_key\" }", "value: \"/run/drills/broker_key\" }")')" \
+	"mockryx would read no key"
+run_case "broker-drills-pass: the CronJob falls back to a mockryx with no broker key" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "mockryx:v0.5.0@sha256:", "mockryx:v0.4.0@sha256:")')" \
+	"older than v0.5.0"
+run_case "broker-drills-pass: the broker admits the gateway drills' pod" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "        - podSelector: \x7b matchLabels: \x7b role: drills-broker \x7d \x7d\n      ports:\n        - \x7b protocol: TCP, port: 4200 \x7d\n", "        - podSelector: \x7b matchLabels: \x7b role: drills-broker \x7d \x7d\n        - podSelector: \x7b matchLabels: \x7b role: drills \x7d \x7d\n      ports:\n        - \x7b protocol: TCP, port: 4200 \x7d\n")')" \
+	"admits the gateway drills"
+run_case "broker-drills-pass: the drill pod may reach the gateway too" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "      ports:\n        - \x7b protocol: TCP, port: 4200 \x7d\n---\n# The broker\x27s half", "      ports:\n        - \x7b protocol: TCP, port: 4200 \x7d\n        - \x7b protocol: TCP, port: 4100 \x7d\n---\n# The broker\x27s half")')" \
+	"to the broker on 4200 and nowhere else"
+run_case "broker-drills-pass: a launcher asks the operator's keys after the first apply" fail \
+	"$BDP" \
+	"$(py 's = open("deploy.sh").read()
+g = "identity_mint_guard  # CLAUDE.md invariant 85: the operator\x27s own client keys must hold drills-broker and broker-caller first\n"
+assert g in s
+s = s.replace(g, "")
+a = "static_keys_settle\n"
+assert a in s
+open("deploy.sh", "w").write(s.replace(a, a + g, 1))')" \
+	"deploy.sh does not call identity_mint_guard before its first apply"
+run_case "broker-drills-pass: a launcher never keeps a kept broker Secret in step" fail \
+	"$BDP" \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "\"$ROOT/typed/mode.sh\" door-callers", "\"$ROOT/typed/mode.sh\" door-secrets --check")')" \
+	"cloud/aws/deploy-aws.sh does not call typed/mode.sh door-callers"
+run_case "broker-drills-pass: the CronJob is gone" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "kind: CronJob\nmetadata:\n  name: drills-broker\n", "kind: CronJob\nmetadata:\n  name: drills-for-the-broker\n")')" \
+	"measure NOTHING"
+run_case "broker-drills-pass: a comment naming the gateway drills beside the broker's ingress" pass \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "  name: broker-ingress-drills\n  namespace: agent-stack\nspec:\n", "  name: broker-ingress-drills\n  namespace: agent-stack\nspec:\n  # never { role: drills }, the gateway drills\x27 pod\n")')"
+run_case "broker-drills-pass: the CronJob loses this cluster's tool-hold drill" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "                - \x7b name: scenarios, mountPath: /scenarios/mcp/mcp-ungranted-tool-held.yaml, subPath: mcp-ungranted-tool-held.yaml, readOnly: true \x7d\n", "")')" \
+	"mounts nothing read only over /scenarios/mcp/mcp-ungranted-tool-held.yaml"
+run_case "broker-drills-pass: the ConfigMap with this cluster's drill is gone" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "kind: ConfigMap\nmetadata:\n  name: drills-broker-scenarios\n", "kind: ConfigMap\nmetadata:\n  name: drills-broker-scenario-files\n")')" \
+	"this cluster's tool-hold drill measured NOTHING"
+run_case "broker-drills-pass: this cluster's drill takes mockryx's own name" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "    name: mcp-ungranted-tool-held-on-this-cluster\n", "    name: mcp-ungranted-tool-held\n")')" \
+	"carries no name or mockryx's own"
+run_case "broker-drills-pass: this cluster's drill asks its second call for a result" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          error_code: -32008\n          error_contains: not scoped to agent\n", "          result: true\n")')" \
+	"asks for a result"
+run_case "broker-drills-pass: this cluster's drill sends no vault handle in its second call" fail \
+	"$BDP" \
+	"$(py 'p = "manifests/52-tokenfuse-mcp-broker.yaml"; s = open(p).read(); a = "            _meta:\n              typryx/key: \"\x7b\x7bsecret:typryx_key\x7d\x7d\"\n"; i = s.rindex(a); open(p, "w").write(s[:i] + s[i + len(a):])')" \
+	"step 2 carries no"
+run_case "broker-drills-pass: the vault lets typryx_key reach search_notes" fail \
+	"$BDP" \
+	"$(py 'edit("typed/mode.sh", "DOOR_SCOPES=\"typryx_key=tools:ask|ask_freeform|list_questions\"", "DOOR_SCOPES=\"typryx_key=tools:ask|ask_freeform|list_questions|search_notes\"")')" \
+	"which reaches search_notes"
+run_case "broker-drills-pass: grant-drills goes missing from the tool hold (run)" fail \
+	"$BDP" \
+	"$(py 'edit("lib/tool-hold.sh", "    \x27- name: grant-drills\x27 \\\n    \x27  target: agent://mockryx.local/*\x27 \\\n    \x27  grant_tool: [\"*\"]\x27 \\\n", "")')" \
+	"mcp-ungranted-tool-held-on-this-cluster came back"
+run_case "broker-drills-pass: a comment in this cluster's drill is reworded" pass \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "    # LLM06:2025 Excessive Agency.) Defensive intent:", "    # LLM06:2025 Excessive Agency). Defensive intent:")')"
+run_case "broker-drills-pass: a scenario names a case nothing runs" fail \
+	"$BDP" \
+	"$(py 'edit("features/the-drills-reach-the-broker-with-a-key-of-their-own.feature", "# -> gates-have-teeth.sh \"broker-drills-pass: the CronJob is gone\"", "# -> gates-have-teeth.sh \"broker-drills-pass: the CronJob went away\"")')" \
+	"which scripts/gates-have-teeth.sh does not run"
+run_case "broker-drills-pass: a case is named by no scenario" fail \
+	"$BDP" \
+	"$(py 'edit("features/the-drills-reach-the-broker-with-a-key-of-their-own.feature", "    # -> gates-have-teeth.sh \"broker-drills-pass: the drill pod may reach the gateway too\"\n", "")')" \
+	"is named by no scenario"
+run_case "broker-drills-pass: the broker's door gets a fresh drills-broker, not the gateway's (run)" fail \
+	"$BDP" \
+	"$(py 'edit("typed/mode.sh", "  printf \x27%s:%s,%s:%s\x27 \"$bc\" \"$DOOR_KEY_ID\" \"$db\" \"$DOOR_DRILLS_ID\"", "  printf \x27%s:%s,%s:%s\x27 \"$bc\" \"$DOOR_KEY_ID\" \"$(gen 40)\" \"$DOOR_DRILLS_ID\"")')" \
+	"mcp-secret-in-arguments came back"
+run_case "broker-drills-pass: the broker forwards raw secrets again (run)" fail \
+	"$BDP" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "            - \x7b name: TOKENFUSE_MCP_DLP, value: \"block\" \x7d\n", "            - \x7b name: TOKENFUSE_MCP_DLP, value: \"shadow\" \x7d\n")')" \
+	"mcp-secret-in-arguments came back"
+
+# The broker's static callers in the door and the mint (CLAUDE.md invariant 85).
+run_case "typed-door-is-minted: door-callers rewrites a kept broker-caller instead of stopping" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("typed/mode.sh", "    elif [ \"$bs\" != \"$gs\" ]; then\n", "    elif [ \"$bs\" = \"$gs\" ] && false; then\n")')" \
+	"is not the gateway"
+run_case "typed-door-is-minted: door-callers drops what the broker Secret held" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("typed/mode.sh", "      out=\"$out,$gs:$id\"\n", "      out=\"$gs:$id\"\n")')" \
+	"keep every entry byte for byte"
+run_case "typed-door-is-minted: door-secrets mints the broker a caller the gateway does not hold" fail \
+	'./scripts/typed-door-is-minted.sh' \
+	"$(py 'edit("typed/mode.sh", "  bc=\"$(door_entry \"$1\" \"$DOOR_KEY_ID\")\"\n", "  bc=\"$(gen 40)\"\n")')" \
+	"not exactly the gateway"
+run_case "metered-doors-require-keys: the mint stops taking broker-caller from the broker's door" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "        v=\"$(identity_mint_entry \"$door\" \"$id\")\"\n", "        v=\"\"\n")')" \
+	"take broker-caller from the broker"
+run_case "metered-doors-require-keys: the guard lets the operator's keys through without broker-caller" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "  for id in drills-broker broker-caller; do\n    [ -n \"$(identity_mint_entry \"$spec\" \"$id\")\" ] || missing=\"$missing $id\"\n", "  for id in drills-broker; do\n    [ -n \"$(identity_mint_entry \"$spec\" \"$id\")\" ] || missing=\"$missing $id\"\n")')" \
+	"the guard let a run go on"
+run_case "metered-doors-require-keys: drills-broker-key is not made" fail \
+	'./scripts/metered-doors-require-keys.sh' \
+	"$(py 'edit("lib/identity-mint.sh", "        \"$IDM_DBROKER_SECRET\" \"$IDM_NS\" \"$IDM_LABEL\" \"$IDM_DBROKER_KEY\" \"$dbroker\" \\\n        | k_ \"-n $IDM_NS create -f -\" >/dev/null \\\n", "        \"$IDM_DBROKER_SECRET\" \"$IDM_NS\" \"$IDM_LABEL\" \"$IDM_DBROKER_KEY\" \"$dbroker\" \\\n        | cat >/dev/null \\\n")')" \
+	"drills-broker-key does not hold"
 
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then

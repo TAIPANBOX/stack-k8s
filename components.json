@@ -65,7 +65,9 @@
           "quality-drift": "verdryx-drift",
           "record-seal": "trailryx-seal"
         },
-        "manual_jobs": {},
+        "manual_jobs": {
+          "drills-broker": "mockryx's drills for the MCP broker (scenarios/mcp), with the drills' own broker key; shipped suspended beside the broker in manifests/52-tokenfuse-mcp-broker.yaml, so it exists only where the typed-answer door does, and run by a person with kubectl create job --from=cronjob/drills-broker. Not a second routine: the estate's mockryx-drill is the drills CronJob, and one routine maps to one CronJob (CLAUDE.md invariant 85)."
+        },
         "persistent_claims": [
           "cloud-state",
           "console-state",

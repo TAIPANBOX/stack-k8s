@@ -354,7 +354,7 @@ declared tools carry an injection finding. Every gateway this launcher starts ru
   refused for the text of a tool it declares: a declared tool with a high or critical finding
   labels the run `suspected_injection`, and the starter rule then applies to that run's later
   calls. A page that hides text in Unicode tag characters or bidi isolates raises the same label
-  (tokenfuse v1.23.0), so a run that reads one can lose tools it had before.
+  (since tokenfuse v1.23.0), so a run that reads one can lose tools it had before.
 - **Changing it.** `--firewall enforce|shadow|off` on `deploy.sh`, `deploy-gcp.sh` and
   `deploy-aws.sh` (or `FIREWALL_MODE` in the environment). Any other word is refused before
   anything is installed. TokenFuse also refuses to start on a misspelt value (since v1.11.1), so
@@ -526,14 +526,23 @@ place every other plane's history lives; the record plane's own mapper does
 not seal typryx's event types today regardless (`manifests/51-typryx.yaml`
 says why), so that is a place to read them, not a claim that they are sealed.
 
-tokenfuse's MCP broker fronts typryx by configuration since 2026-09-26. By
-hand, its Secret is
+tokenfuse's MCP broker fronts typryx by configuration since 2026-09-26. Its
+static callers, `broker-caller` and `drills-broker`, are the gateway's own keys of
+the same ids (CLAUDE.md invariant 85), so by hand its Secret copies them from
+`gateway-client-keys`:
 
 ```bash
 kubectl apply -f manifests/52-tokenfuse-mcp-broker.yaml
 kubectl -n agent-stack create secret generic tokenfuse-mcp-broker-keys \
-  --from-literal=TOKENFUSE_MCP_KEYS='pick-a-different-long-secret:broker-caller' \
-  --from-literal=TOKENFUSE_MCP_SECRETS="typryx_key=$(kubectl -n agent-stack get secret typryx-keys -o jsonpath='{.data.TYPRYX_KEYS}' | base64 -d | cut -d, -f1 | cut -d= -f1)"
+  --from-literal=TOKENFUSE_MCP_KEYS="$(kubectl -n agent-stack get secret gateway-client-keys -o jsonpath='{.data.client_keys}' | base64 -d | tr ',' '\n' | grep -E ':(broker-caller|drills-broker)$' | paste -sd, -)" \
+  --from-literal=TOKENFUSE_MCP_SECRETS="typryx_key=$(kubectl -n agent-stack get secret typryx-keys -o jsonpath='{.data.TYPRYX_KEYS}' | base64 -d | cut -d, -f1 | cut -d= -f1)" \
+  --from-literal=TOKENFUSE_MCP_SECRET_SCOPES='typryx_key=tools:ask|ask_freeform|list_questions'
+```
+
+Each entry is `secret:key_id`, so the value has this shape:
+
+```bash
+TOKENFUSE_MCP_KEYS='pick-a-different-long-secret:broker-caller,and-another-long-secret:drills-broker'
 ```
 
 The key id after the colon is a bare name, not an `agent://` id: tokenfuse
@@ -549,12 +558,38 @@ model calls: a call with no `x-fuse-agent-id` is refused (it cannot be judged), 
 tool the policy denies is refused (`-32004`), and with wardryx unreachable the
 call is refused (fail closed, like the gateway). A call the policy holds for a person
 says why, with the policy's own reason beside the approval id, and every refusal text is
-cleaned of control and hidden characters before a model reads it (tokenfuse v1.23.0).
+cleaned of control and hidden characters before a model reads it (since tokenfuse v1.23.0).
+An agent's `tools/list` through the broker leaves out the tools wardryx refuses that agent
+outright, a `deny_tool` or a tool outside an `allow_tool` list (tokenfuse v1.24.0), so a
+model is not offered a tool it can never call.
 A `{{secret:NAME}}` handle is not
 a raw secret and resolves as before. Pinning tool definitions
 (`TOKENFUSE_MCP_LOCK`) needs a lock file you approved and is not set. The same
 settings were measured on stack-single's compose environment on 2026-10-17, not
 on a cluster.
+
+**The broker drills.** mockryx's three drills for the broker (`/scenarios/mcp` in its image: a
+raw secret in tool arguments, personal data in tool arguments, and the tool hold) run as the
+suspended CronJob `drills-broker`, applied with the broker:
+
+```bash
+kubectl -n agent-stack create job --from=cronjob/drills-broker drills-broker-now
+kubectl -n agent-stack logs -f job/drills-broker-now
+```
+
+It sends the drills' own key from `drills-broker-key` to the broker and to nothing else, and its
+pod reaches the broker on 4200 and no other address. With this stack's settings the secret drill
+passes, the PII drill reads `skipped_not_configured` (PII runs in shadow), and the tool-hold
+drill passes with both its calls stopped inside the broker. That drill is the cluster's own copy,
+`mcp-ungranted-tool-held-on-this-cluster` (the ConfigMap `drills-broker-scenarios`, mounted over
+the image's file of that name): mockryx's own asks its second call for a result from an MCP server
+that answers `search_notes`, and no server in this stack does. The copy's first call, as an id no
+grant names, is held for a person (one pending approval on wardryx, which later runs reuse); its
+second, as a drill identity, gets past the hold and is refused by the broker's vault (`-32008`),
+because the `{{secret:typryx_key}}` handle it carries is scoped to typryx's own tools. Nothing is
+forwarded. `scripts/broker-drills-pass.sh` runs the job as shipped in CI against the pinned
+broker, gateway and wardryx on this repository's settings with no MCP server, and mockryx's
+original set against a stand-in server, and requires every drill to pass.
 
 `manifests/52-tokenfuse-mcp-broker.yaml` has the full story: why two Secrets
 rather than one, what its NetworkPolicies admit, and what was measured
@@ -973,7 +1008,7 @@ sides use one secret, and it is off unless you turn it on:
 ```
 
 A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
-console v1.1.34 or later. The images pinned here are tokenfuse v1.23.0 and console v1.8.8,
+console v1.1.34 or later. The images pinned here are tokenfuse v1.24.0 and console v1.8.8,
 both later than those minimums; an older image
 ignores the setting.
 
@@ -1042,8 +1077,8 @@ A stop is one call: `POST /v1/revoke` on vouchryx with `ban:true`. The gateway a
 revocation list every 12 s and refuse a list older than 60 s, so a stopped agent is refused at every door
 within one poll while vouchryx answers.
 
-**Static keys still admitted, by name.** The gateway's list is `felyx,agents,drills,costcrew,broker`, each with
-its reason in `manifests/10-planes.yaml`. `agents` is the operator's own key as it stood before this release, so
+**Static keys still admitted, by name.** The gateway's list is `felyx,agents,drills,costcrew,broker,drills-broker,broker-caller`, each with
+its reason in `manifests/10-planes.yaml`; the broker's is `broker-caller,drills-broker`, each a gateway key of the same id. `agents` is the operator's own key as it stood before this release, so
 an upgrade keeps it working; move each client to an agent token and take it off the list. The operator's
 additions go in the ConfigMap `gateway-static-keys` (key `operator_key_ids`, a comma list that begins with a
 comma), and the gateway reads them at start:
@@ -1062,7 +1097,7 @@ speak as another and take its policy and its budget. Its reference to the keys'
 Secret is not optional, so a gateway with no keys waits rather than starting
 open, and the map runs strict (`TOKENFUSE_IDENTITY_STRICT: enforce`).
 
-**Given no files, every deploy mints three keys** after it applies the manifests
+**Given no files, every deploy mints seven keys** after it applies the manifests
 (`lib/identity-mint.sh`), and binds each in a map:
 
 | Key id | Unit | May speak as | Its secret |
@@ -1070,7 +1105,14 @@ open, and the map runs strict (`TOKENFUSE_IDENTITY_STRICT: enforce`).
 | `felyx` | `console` | `agent://<trust domain>/genaryx/felyx`, exactly | the Secret `felyx-client-key`, which the console sends for Felyx |
 | `agents` | `agents` | `agent://<trust domain>/agents/*` | `agent-key` beside the deploy script, 0600, on the machine you deployed from |
 | `costcrew` | `costcrew` | `agent://<trust domain>/costcrew/*`, the crew's analysts (CostCrew v0.8.0) | the Secret `costcrew-client-key`, which the scheduled crew reads as its client key |
-| `drills` | `drills` | `agent://mockryx.local/*`, the drill's own namespace | the Secret `drills-client-key`, mounted into the suspended drill job. Mockryx reads it from its release that adds `--client-key-file` (M1); the pinned v0.2.1 sends no key yet, so the drill is refused 401 until that pin moves |
+| `drills` | `drills` | `agent://mockryx.local/*`, the drill's own namespace | the Secret `drills-client-key`, mounted into the suspended drill job, which sends it to the gateway |
+| `broker` | `broker` | `agent://<trust domain>/*` | the Secret `broker-taint-key`, which the MCP broker presents to the gateway's tool-call check when it relays an agent token |
+| `drills-broker` | `drills` | `agent://mockryx.local/*` | the Secret `drills-broker-key`, mounted into the suspended `drills-broker` job; the MCP broker admits the same secret under the same id |
+| `broker-caller` | `broker` | `agent://<trust domain>/typed-broker`, exactly | the typed door's caller key: the broker's `tokenfuse-mcp-broker-keys` holds the same secret under the same id |
+
+The last two are the MCP broker's two static callers. The broker asks the gateway's tool-call
+check about every tool call with the caller's own key, so a key the broker admits has to be a
+gateway key of the same id, or every call with it is refused there (CLAUDE.md invariant 85).
 
 The trust domain is the one `--trust-domain` sets. The deploy prints the key
 file's path and the ids, never the key. Your agents then send, on every call,
@@ -1131,8 +1173,14 @@ manifests, so a later deploy keeps both.
 Every agent sends `x-fuse-key: <its secret>`, and an `x-fuse-agent-id` its key
 may speak as, on every call. Felyx sends the key in `felyx-client-key`; with your
 own files, give it a line in the keys file, a binding to its id, and the same
-secret in that Secret. The drills cannot send a key (mockryx has no setting for
-one yet), so a drill is refused 401 (not run).
+secret in that Secret. The drills send the key in `drills-client-key`, and the broker
+drills the key in `drills-broker-key`: give each a line and a binding in the same way.
+Your keys file also needs `<secret>:drills-broker` and `<secret>:broker-caller`, the
+broker's two static callers, because the gateway's list names both and a gateway whose
+list names a key it does not hold refuses to start; a deploy on your keys without them
+stops before it applies anything and says so. `broker-caller`'s secret is the one your
+typed door already holds, when it has one. `docs/releases/v1.9.0.md`, Upgrade item 1,
+has the commands.
 
 The map can be turned off: delete its ConfigMap and run `up.sh` with no file,
 which rolls the gateway without it. The keys cannot: the gateway requires them,
