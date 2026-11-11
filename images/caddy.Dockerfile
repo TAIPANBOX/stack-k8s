@@ -33,10 +33,10 @@
 # Go, xcaddy, Caddy and the plugin are each named, so a rebuild of one tag compiles
 # the same inputs (invariant 80). XCADDY_SETCAP is what the builder image set, and
 # the published binary carries it: cap_net_bind_service.
-FROM golang:1.27.3-alpine@sha256:dbaa054703263d06c8b49576667418473b6231f8c0fa69dee103207fdb8e3654 AS build
+FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS build
 # A digest outranks the tag beside it, so a bump that moved the tag alone would
 # keep the old Go under the new name. This line stops that build (invariant 80).
-RUN test "$(go env GOVERSION)" = go1.27.3
+RUN test "$(go env GOVERSION)" = go1.27.4
 RUN apk add --no-cache git libcap
 ENV XCADDY_SETCAP=1
 RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@v0.4.7

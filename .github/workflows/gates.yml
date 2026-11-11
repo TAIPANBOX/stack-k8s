@@ -306,7 +306,7 @@ jobs:
       # way to learn the runner image changed under you.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
 
       # uapi-proxy is Go source in this repository, built into the wg image and
       # run beside the WireGuard daemon, where it is the thing standing between
@@ -346,7 +346,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/go/bin/kubeconform
-          key: kubeconform-v0.8.0-go1.27.3-${{ runner.os }}-${{ runner.arch }}
+          key: kubeconform-v0.8.0-go1.27.4-${{ runner.os }}-${{ runner.arch }}
 
       - name: install kubeconform
         if: steps.kubeconform.outputs.cache-hit != 'true'
@@ -519,14 +519,14 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
 
       - name: restore kubeconform
         id: kubeconform
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/go/bin/kubeconform
-          key: kubeconform-v0.8.0-go1.27.3-${{ runner.os }}-${{ runner.arch }}
+          key: kubeconform-v0.8.0-go1.27.4-${{ runner.os }}-${{ runner.arch }}
 
       - name: install kubeconform
         if: steps.kubeconform.outputs.cache-hit != 'true'

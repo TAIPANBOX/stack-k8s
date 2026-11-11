@@ -4396,16 +4396,16 @@ run_case "base-images: one tag carries two digests" fail \
 	"carries 2 digests"
 run_case "base-images: one image moves to another Go alone" fail \
 	'./scripts/base-images-are-pinned.sh' \
-	"$(py 'edit("images/wg.Dockerfile", "FROM golang:1.27.3-alpine@", "FROM golang:1.27.4-alpine@"); edit("images/wg.Dockerfile", "= go1.27.3", "= go1.27.4")')" \
+	"$(py 'edit("images/wg.Dockerfile", "FROM golang:1.27.4-alpine@", "FROM golang:1.27.5-alpine@"); edit("images/wg.Dockerfile", "= go1.27.4", "= go1.27.5")')" \
 	"more than one Go"
 run_case "base-images: a golang stage loses its assertion" fail \
 	'./scripts/base-images-are-pinned.sh' \
-	"$(py 'edit("images/go-service.Dockerfile", "RUN test \"$(go env GOVERSION)\" = go1.27.3\n", "")')" \
+	"$(py 'edit("images/go-service.Dockerfile", "RUN test \"$(go env GOVERSION)\" = go1.27.4\n", "")')" \
 	"does not start with"
 run_case "base-images: the tag moves and the digest and assertion stay" fail \
 	'./scripts/base-images-are-pinned.sh' \
-	"$(py 'edit("images/console.Dockerfile", "FROM golang:1.27.3-alpine@", "FROM golang:1.27.4-alpine@")')" \
-	"asserts go1.27.3 on a golang:1.27.4 base"
+	"$(py 'edit("images/console.Dockerfile", "FROM golang:1.27.4-alpine@", "FROM golang:1.27.5-alpine@")')" \
+	"asserts go1.27.4 on a golang:1.27.5 base"
 run_case "base-images: xcaddy loses Caddy\x27s version" fail \
 	'./scripts/base-images-are-pinned.sh' \
 	"$(py 'edit("images/caddy.Dockerfile", "xcaddy build v2.11.8 --with", "xcaddy build --with")')" \
