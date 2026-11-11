@@ -947,10 +947,12 @@ fi
 
 # ---- 4 and 5. proof, not vibes ---------------------------------------------
 tar -cz -C "$ROOT" verify.sh security-tests.sh | su_ "$FIRST" 'tar -xz -C /root/stack-k8s'
+VERIFY_RC=0
+SECTEST_RC=0
 say "step 4/5: is it running"
-su_ "$FIRST" 'KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/verify.sh' || true
+su_ "$FIRST" 'KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/verify.sh' || VERIFY_RC=$?
 say "step 5/5: is it contained"
-su_ "$FIRST" 'KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/security-tests.sh' || true
+su_ "$FIRST" 'KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/security-tests.sh' || SECTEST_RC=$?
 
 CONSOLE_NODE="$(k_ "-n agent-stack get pod -l app=genaryx-console -o jsonpath='{.items[0].spec.nodeName}'" 2>/dev/null || true)"
 CONSOLE_IP="$(k_ "-n agent-stack get svc genaryx-console -o jsonpath='{.spec.clusterIP}'" 2>/dev/null || true)"
@@ -999,10 +1001,25 @@ if [ -n "$CONSOLE_NODE" ]; then
   [ -n "$CONSOLE_ADDR" ] || CONSOLE_ADDR="$CONSOLE_PRIV"
 fi
 
+# CLAUDE.md invariant 88: the two proofs keep their exit codes. Everything after them still runs (an
+# operator needs the way in to fix what failed), but the summary names what failed and the deploy
+# exits non-zero, so a red verify.sh or security-tests.sh is not a green deploy.
+PROOF_FAILED_BLOCK=""
+DONE_HEADLINE="Done."
+if [ "$VERIFY_RC" -ne 0 ] || [ "$SECTEST_RC" -ne 0 ]; then
+  DONE_HEADLINE="Finished, but this deploy ends RED: a check failed."
+  PROOF_FAILED_BLOCK=$'\n'
+  [ "$VERIFY_RC" -eq 0 ] || PROOF_FAILED_BLOCK="${PROOF_FAILED_BLOCK}  FAILED  verify.sh (is it running), exit $VERIFY_RC"$'\n'
+  [ "$SECTEST_RC" -eq 0 ] || PROOF_FAILED_BLOCK="${PROOF_FAILED_BLOCK}  FAILED  security-tests.sh (is it contained), exit $SECTEST_RC"$'\n'
+  PROOF_FAILED_BLOCK="${PROOF_FAILED_BLOCK}  Read the lines above, fix what they name, and re-run the check (command below).
+  This script exits non-zero because of it.
+"
+fi
+
 cat <<EOF
 
-$(printf '\033[1m')Done.$(printf '\033[0m')
-
+$(printf '\033[1m')${DONE_HEADLINE}$(printf '\033[0m')
+${PROOF_FAILED_BLOCK}
 ${CONSOLE_PASSWORD:+  Your console sign-in, shown once and stored nowhere:
 
       user      $CONSOLE_USER
@@ -1028,3 +1045,9 @@ ${CONSOLE_PASSWORD:+  Your console sign-in, shown once and stored nowhere:
 EOF
 # Where the agents' key is and what an agent sends now; the key itself is not printed.
 identity_mint_note "$ROOT/agent-key"
+# CLAUDE.md invariant 88: a deploy whose own proof failed ends red, after everything the operator
+# needs (the way in, the re-check commands, the key note) has been printed.
+if [ "$VERIFY_RC" -ne 0 ] || [ "$SECTEST_RC" -ne 0 ]; then
+  EXPLAINED=1
+  exit 1
+fi
