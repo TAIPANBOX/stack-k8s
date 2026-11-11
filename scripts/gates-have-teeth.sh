@@ -5001,7 +5001,7 @@ run_case "no-reader-leaves-a-pipe-early: a sourced library reads through the pip
 
 run_case "no-reader-leaves-a-pipe-early: a workflow step reads through the pipe" fail \
 	'./scripts/no-reader-leaves-a-pipe-early.sh' \
-	"$(py 'edit(".github/workflows/gates.yml", "grep -q \x27: go1\\.27\\.3$\x27 <<<\"$(printf \x27%s\\n\x27 \"$info\" | head -1)\"", "printf \x27%s\\n\x27 \"$info\" | head -1 | grep -q \x27: go1\\.27\\.3$\x27")')" \
+	"$(py 'edit(".github/workflows/gates.yml", "grep -q \x27: go1\\.27\\.4$\x27 <<<\"$(printf \x27%s\\n\x27 \"$info\" | head -1)\"", "printf \x27%s\\n\x27 \"$info\" | head -1 | grep -q \x27: go1\\.27\\.4$\x27")')" \
 	'.github/workflows/gates.yml:'
 
 run_case "no-reader-leaves-a-pipe-early: the words are only in a comment" pass \
