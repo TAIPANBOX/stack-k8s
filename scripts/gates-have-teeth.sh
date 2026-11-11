@@ -5496,7 +5496,7 @@ run_case "no-binary-is-tracked: a Mach-O executable gets tracked" fail \
 	"$(py 'import subprocess
 p = "images/uapi-proxy/uapi-proxy"
 open(p, "wb").write(b"\xcf\xfa\xed\xfe" + b"\x00" * 64)
-subprocess.run(["git", "add", p], check=True)')" \
+subprocess.run(["git", "add", "-f", p], check=True)')" \
 	"is a tracked Mach-O executable"
 run_case "no-binary-is-tracked: an ELF executable is tracked under a text name" fail \
 	'./scripts/no-binary-is-tracked.sh' \
@@ -5571,7 +5571,7 @@ s = open(p).read()
 open(p, "w").write(s + "\ncurl -fsSL https://example.invalid/a.tar -o /tmp/a.tar\necho \"a pipe such as curl ... | bash is what the installers refuse\"\n")')"
 run_case "remote-fetches-are-verified: an installer stops sourcing the library" fail \
 	'./scripts/remote-fetches-are-verified.sh' \
-	"$(py 'edit("install.sh", ". \"$(dirname \"\x7bBASH_SOURCE[0]:-$0\x7d\")/lib/verified-fetch.sh\"\n", "")')" \
+	"$(py 'edit("install.sh", ". \"$(dirname \"$\x7bBASH_SOURCE[0]:-$0\x7d\")/lib/verified-fetch.sh\"\n", "")')" \
 	"does not source lib/verified-fetch.sh"
 run_case "remote-fetches-are-verified: an installer stops fetching the k3s script through the library" fail \
 	'./scripts/remote-fetches-are-verified.sh' \
@@ -5579,7 +5579,7 @@ run_case "remote-fetches-are-verified: an installer stops fetching the k3s scrip
 	"never fetches the k3s install script through vf_file"
 run_case "remote-fetches-are-verified: a default version is moved and no hash is pinned for it" fail \
 	'./scripts/remote-fetches-are-verified.sh' \
-	"$(py 'edit("install.sh", "LONGHORN_VERSION=\"\x7bLONGHORN_VERSION:-v1.7.2\x7d\"", "LONGHORN_VERSION=\"\x7bLONGHORN_VERSION:-v1.7.3\x7d\"")')" \
+	"$(py 'edit("install.sh", "LONGHORN_VERSION=\"$\x7bLONGHORN_VERSION:-v1.7.2\x7d\"", "LONGHORN_VERSION=\"$\x7bLONGHORN_VERSION:-v1.7.3\x7d\"")')" \
 	"has no row LONGHORN_SHA256@v1.7.3"
 run_case "remote-fetches-are-verified: the library stops comparing hashes" fail \
 	'./scripts/remote-fetches-are-verified.sh' \
