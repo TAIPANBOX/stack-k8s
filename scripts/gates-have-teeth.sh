@@ -4396,16 +4396,16 @@ run_case "base-images: one tag carries two digests" fail \
 	"carries 2 digests"
 run_case "base-images: one image moves to another Go alone" fail \
 	'./scripts/base-images-are-pinned.sh' \
-	"$(py 'edit("images/wg.Dockerfile", "FROM golang:1.27.3-alpine@", "FROM golang:1.27.4-alpine@"); edit("images/wg.Dockerfile", "= go1.27.3", "= go1.27.4")')" \
+	"$(py 'edit("images/wg.Dockerfile", "FROM golang:1.27.4-alpine@", "FROM golang:1.27.5-alpine@"); edit("images/wg.Dockerfile", "= go1.27.4", "= go1.27.5")')" \
 	"more than one Go"
 run_case "base-images: a golang stage loses its assertion" fail \
 	'./scripts/base-images-are-pinned.sh' \
-	"$(py 'edit("images/go-service.Dockerfile", "RUN test \"$(go env GOVERSION)\" = go1.27.3\n", "")')" \
+	"$(py 'edit("images/go-service.Dockerfile", "RUN test \"$(go env GOVERSION)\" = go1.27.4\n", "")')" \
 	"does not start with"
 run_case "base-images: the tag moves and the digest and assertion stay" fail \
 	'./scripts/base-images-are-pinned.sh' \
-	"$(py 'edit("images/console.Dockerfile", "FROM golang:1.27.3-alpine@", "FROM golang:1.27.4-alpine@")')" \
-	"asserts go1.27.3 on a golang:1.27.4 base"
+	"$(py 'edit("images/console.Dockerfile", "FROM golang:1.27.4-alpine@", "FROM golang:1.27.5-alpine@")')" \
+	"asserts go1.27.4 on a golang:1.27.5 base"
 run_case "base-images: xcaddy loses Caddy\x27s version" fail \
 	'./scripts/base-images-are-pinned.sh' \
 	"$(py 'edit("images/caddy.Dockerfile", "xcaddy build v2.11.8 --with", "xcaddy build --with")')" \
@@ -5001,7 +5001,7 @@ run_case "no-reader-leaves-a-pipe-early: a sourced library reads through the pip
 
 run_case "no-reader-leaves-a-pipe-early: a workflow step reads through the pipe" fail \
 	'./scripts/no-reader-leaves-a-pipe-early.sh' \
-	"$(py 'edit(".github/workflows/gates.yml", "grep -q \x27: go1\\.27\\.3$\x27 <<<\"$(printf \x27%s\\n\x27 \"$info\" | head -1)\"", "printf \x27%s\\n\x27 \"$info\" | head -1 | grep -q \x27: go1\\.27\\.3$\x27")')" \
+	"$(py 'edit(".github/workflows/gates.yml", "grep -q \x27: go1\\.27\\.4$\x27 <<<\"$(printf \x27%s\\n\x27 \"$info\" | head -1)\"", "printf \x27%s\\n\x27 \"$info\" | head -1 | grep -q \x27: go1\\.27\\.4$\x27")')" \
 	'.github/workflows/gates.yml:'
 
 run_case "no-reader-leaves-a-pipe-early: the words are only in a comment" pass \
@@ -5487,6 +5487,160 @@ run_case "metered-doors-require-keys: drills-broker-key is not made" fail \
 	'./scripts/metered-doors-require-keys.sh' \
 	"$(py 'edit("lib/identity-mint.sh", "        \"$IDM_DBROKER_SECRET\" \"$IDM_NS\" \"$IDM_LABEL\" \"$IDM_DBROKER_KEY\" \"$dbroker\" \\\n        | k_ \"-n $IDM_NS create -f -\" >/dev/null \\\n", "        \"$IDM_DBROKER_SECRET\" \"$IDM_NS\" \"$IDM_LABEL\" \"$IDM_DBROKER_KEY\" \"$dbroker\" \\\n        | cat >/dev/null \\\n")')" \
 	"drills-broker-key does not hold"
+
+# ---- supply-chain hygiene (2026-11-11): CLAUDE.md invariants 86, 87 and 88 ------------------------
+#
+# 86: no tracked executable. The gate reads the first bytes, never the name.
+run_case "no-binary-is-tracked: a Mach-O executable gets tracked" fail \
+	'./scripts/no-binary-is-tracked.sh' \
+	"$(py 'import subprocess
+p = "images/uapi-proxy/uapi-proxy"
+open(p, "wb").write(b"\xcf\xfa\xed\xfe" + b"\x00" * 64)
+subprocess.run(["git", "add", "-f", p], check=True)')" \
+	"is a tracked Mach-O executable"
+run_case "no-binary-is-tracked: an ELF executable is tracked under a text name" fail \
+	'./scripts/no-binary-is-tracked.sh' \
+	"$(py 'import subprocess
+p = "gates-have-teeth-plant-notes.txt"
+open(p, "wb").write(b"\x7fELF" + b"\x00" * 64)
+subprocess.run(["git", "add", p], check=True)')" \
+	"is a tracked ELF executable"
+run_case "no-binary-is-tracked: a universal Mach-O is tracked" fail \
+	'./scripts/no-binary-is-tracked.sh' \
+	"$(py 'import subprocess
+p = "gates-have-teeth-plant.bin"
+open(p, "wb").write(b"\xca\xfe\xba\xbe" + b"\x00" * 64)
+subprocess.run(["git", "add", p], check=True)')" \
+	"is a tracked Mach-O universal executable"
+run_case "no-binary-is-tracked: a Windows PE executable is tracked" fail \
+	'./scripts/no-binary-is-tracked.sh' \
+	"$(py 'import subprocess
+p = "gates-have-teeth-plant.exe"
+open(p, "wb").write(b"MZ" + b"\x00" * 58 + b"\x40\x00\x00\x00" + b"PE\x00\x00" + b"\x00" * 32)
+subprocess.run(["git", "add", p], check=True)')" \
+	"is a tracked PE executable"
+run_case "no-binary-is-tracked: a text file that begins with MZ is not a PE file" pass \
+	'./scripts/no-binary-is-tracked.sh' \
+	"$(py 'import subprocess
+p = "gates-have-teeth-plant.txt"
+open(p, "w").write("MZ is also how this plain text file begins, and it is not an executable\n" * 3)
+subprocess.run(["git", "add", p], check=True)')"
+run_case "no-binary-is-tracked: an ordinary text file is tracked" pass \
+	'./scripts/no-binary-is-tracked.sh' \
+	"$(py 'import subprocess
+p = "gates-have-teeth-plant-plain.txt"
+open(p, "w").write("nothing but text\n")
+subprocess.run(["git", "add", p], check=True)')"
+run_case "no-binary-is-tracked: nothing left in the index to check" fail \
+	'./scripts/no-binary-is-tracked.sh' \
+	"$(py 'import subprocess
+subprocess.run(["git", "rm", "-r", "--cached", "-q", "."], check=True)')" \
+	"measured NOTHING"
+
+# 87: nothing another project publishes runs unverified.
+run_case "remote-fetches-are-verified: a remote manifest is applied by URL again" fail \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'p = "install.sh"
+s = open(p).read()
+open(p, "w").write(s + "\nk_ \"apply -f https://example.invalid/some.yaml\"\n")')" \
+	"applies a remote manifest by URL"
+run_case "remote-fetches-are-verified: Longhorn goes back to the unverified apply" fail \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "vf_cat LONGHORN_SHA256 \"Longhorn\x27s longhorn.yaml\" \"$LONGHORN_VERSION\" \"https://raw.githubusercontent.com/longhorn/longhorn/$LONGHORN_VERSION/deploy/longhorn.yaml\" | k_ \"apply -f -\"", "k_ \"apply -f https://raw.githubusercontent.com/longhorn/longhorn/$LONGHORN_VERSION/deploy/longhorn.yaml\"")')" \
+	"applies a remote manifest by URL"
+run_case "remote-fetches-are-verified: a k3s install takes the floating get.k3s.io script again" fail \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "\x7b printf \x27%s\\n\x27 \"$K3S_TOKEN_VALUE\"; cat \"$K3S_INSTALL_FILE\"; \x7d | su_ \"$FIRST\"", "\x7b printf \x27%s\\n\x27 \"$K3S_TOKEN_VALUE\"; curl -sfL https://get.k3s.io; \x7d | su_ \"$FIRST\"")')" \
+	"names get.k3s.io"
+run_case "remote-fetches-are-verified: a download is piped into a shell" fail \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'p = "cloud/gcp/install-gcp.sh"
+s = open(p).read()
+open(p, "w").write(s + "\ncurl -fsSL https://example.invalid/i.sh | sudo sh\n")')" \
+	"runs a download in a shell without checking it"
+run_case "remote-fetches-are-verified: a shell is handed the text of a download" fail \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'p = "install.sh"
+s = open(p).read()
+open(p, "w").write(s + "\nbash -c \"$(curl -fsSL https://example.invalid/i.sh)\"\n")')" \
+	"runs a download in a shell without checking it"
+run_case "remote-fetches-are-verified: a download kept in a file, and prose that names the pipe, are not faults" pass \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'p = "install.sh"
+s = open(p).read()
+open(p, "w").write(s + "\ncurl -fsSL https://example.invalid/a.tar -o /tmp/a.tar\necho \"a pipe such as curl ... | bash is what the installers refuse\"\n")')"
+run_case "remote-fetches-are-verified: an installer stops sourcing the library" fail \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'edit("install.sh", ". \"$(dirname \"$\x7bBASH_SOURCE[0]:-$0\x7d\")/lib/verified-fetch.sh\"\n", "")')" \
+	"does not source lib/verified-fetch.sh"
+run_case "remote-fetches-are-verified: an installer stops fetching the k3s script through the library" fail \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "vf_file K3S_INSTALL_SHA256 ", "vf_file K3S_INSTALL_SHA257 ")')" \
+	"never fetches the k3s install script through vf_file"
+run_case "remote-fetches-are-verified: a default version is moved and no hash is pinned for it" fail \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'edit("install.sh", "LONGHORN_VERSION=\"$\x7bLONGHORN_VERSION:-v1.7.2\x7d\"", "LONGHORN_VERSION=\"$\x7bLONGHORN_VERSION:-v1.7.3\x7d\"")')" \
+	"has no row LONGHORN_SHA256@v1.7.3"
+run_case "remote-fetches-are-verified: the library stops comparing hashes" fail \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'edit("lib/verified-fetch.sh", "  if [ \"$got\" != \"$want\" ]; then\n    rm -f \"$tmp\"", "  if false; then\n    rm -f \"$tmp\"")')" \
+	"a file whose hash does NOT match was accepted"
+run_case "remote-fetches-are-verified: the library accepts a file on a machine with no hash tool" fail \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'edit("lib/verified-fetch.sh", "  else\n    return 127\n  fi", "  else\n    printf \x27%s\x27 \"$want\"\n  fi")')" \
+	"with no sha256sum or shasum the file was accepted unchecked"
+run_case "remote-fetches-are-verified: the library is gone" fail \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'import subprocess
+subprocess.run(["git", "rm", "-q", "lib/verified-fetch.sh"], check=True)')" \
+	"measured NOTHING"
+run_case "remote-fetches-are-verified: no installer is left to judge" fail \
+	'./scripts/remote-fetches-are-verified.sh' \
+	"$(py 'for p in ("install.sh", "cloud/aws/install-aws.sh", "cloud/gcp/install-gcp.sh"):
+    s = open(p).read()
+    assert "INSTALL_K3S_VERSION=" in s, p
+    open(p, "w").write(s.replace("INSTALL_K3S_VERSION=", "INSTALL_K3S_VERSIO="))')" \
+	"measured NOTHING"
+
+# 88: a deploy whose own proof failed ends red.
+run_case "deploy-ends-red: verify.sh is thrown away with || true again" fail \
+	'./scripts/deploy-ends-red-when-its-proof-fails.sh' \
+	"$(py 'edit("deploy.sh", "bash /root/stack-k8s/verify.sh\x27 || VERIFY_RC=$?", "bash /root/stack-k8s/verify.sh\x27 || true")')" \
+	"is followed by \`|| true\`"
+run_case "deploy-ends-red: security-tests.sh is thrown away with || true again" fail \
+	'./scripts/deploy-ends-red-when-its-proof-fails.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "bash /root/stack-k8s/security-tests.sh\x27 || SECTEST_RC=$?", "bash /root/stack-k8s/security-tests.sh\x27 || true")')" \
+	"is followed by \`|| true\`"
+run_case "deploy-ends-red: the closing check no longer exits non-zero" fail \
+	'./scripts/deploy-ends-red-when-its-proof-fails.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "  EXPLAINED=1\n  exit 1\nfi\n", "  EXPLAINED=1\nfi\n")')" \
+	"does not exit non-zero"
+run_case "deploy-ends-red: a failed proof still ends with the Done. headline" fail \
+	'./scripts/deploy-ends-red-when-its-proof-fails.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "DONE_HEADLINE=\"Finished, but this deploy ends RED: a check failed.\"", "DONE_HEADLINE=\"Done.\"")')" \
+	"the headline still says Done."
+run_case "deploy-ends-red: the summary stops naming security-tests.sh" fail \
+	'./scripts/deploy-ends-red-when-its-proof-fails.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "FAILED  security-tests.sh (is it contained)", "FAILED  the second check")')" \
+	"the summary does not name security-tests.sh"
+run_case "deploy-ends-red: the deploy exits before the way in is printed" fail \
+	'./scripts/deploy-ends-red-when-its-proof-fails.sh' \
+	"$(py 'edit("deploy.sh", "bash /root/stack-k8s/security-tests.sh\x27 || SECTEST_RC=$?\n", "bash /root/stack-k8s/security-tests.sh\x27 || SECTEST_RC=$?\n[ \"$SECTEST_RC\" -eq 0 ] || exit 3\n")')" \
+	"exits between the proofs and the summary"
+run_case "deploy-ends-red: a status variable is not set before its proof runs" fail \
+	'./scripts/deploy-ends-red-when-its-proof-fails.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "VERIFY_RC=0\nSECTEST_RC=0\n", "SECTEST_RC=0\n")')" \
+	"VERIFY_RC is not set to 0"
+run_case "deploy-ends-red: a reworded comment is not a fault" pass \
+	'./scripts/deploy-ends-red-when-its-proof-fails.sh' \
+	"$(py 'edit("deploy.sh", "# ---- 4 and 5. proof, not vibes ---------------------------------------------", "# ---- 4 and 5. proof, not vibes, reworded ------------------------------------")')"
+run_case "deploy-ends-red: no deploy script runs the proofs any more" fail \
+	'./scripts/deploy-ends-red-when-its-proof-fails.sh' \
+	"$(py 'for p in ("deploy.sh", "cloud/aws/deploy-aws.sh", "cloud/gcp/deploy-gcp.sh"):
+    s = open(p).read()
+    assert "/root/stack-k8s/verify.sh\x27" in s, p
+    open(p, "w").write(s.replace("/root/stack-k8s/verify.sh\x27", "/root/stack-k8s/verify.sx\x27"))')" \
+	"measured NOTHING"
 
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then

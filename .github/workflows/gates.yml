@@ -306,7 +306,7 @@ jobs:
       # way to learn the runner image changed under you.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
 
       # uapi-proxy is Go source in this repository, built into the wg image and
       # run beside the WireGuard daemon, where it is the thing standing between
@@ -346,7 +346,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/go/bin/kubeconform
-          key: kubeconform-v0.8.0-go1.27.3-${{ runner.os }}-${{ runner.arch }}
+          key: kubeconform-v0.8.0-go1.27.4-${{ runner.os }}-${{ runner.arch }}
 
       - name: install kubeconform
         if: steps.kubeconform.outputs.cache-hit != 'true'
@@ -360,7 +360,7 @@ jobs:
           info="$(go version -m "$(go env GOPATH)/bin/kubeconform")"
           printf '%s\n' "$info" | head -1
           grep -Eq '^[[:space:]]mod[[:space:]]github\.com/yannh/kubeconform[[:space:]]v0\.8\.0[[:space:]]' <<<"$info"
-          grep -q ': go1\.27\.3$' <<<"$(printf '%s\n' "$info" | head -1)"
+          grep -q ': go1\.27\.4$' <<<"$(printf '%s\n' "$info" | head -1)"
 
       - name: every manifest is a document Kubernetes would accept
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/manifests-valid.sh
@@ -416,6 +416,17 @@ jobs:
       # build reads: every base and the build frontend by digest, one Go, each Go stage asserting it.
       - name: every image this repository builds from is pinned whole (invariant 80)
         run: ./scripts/base-images-are-pinned.sh
+
+      # Added 2026-11-11 with invariants 86 to 88, the supply-chain hygiene change. A binary committed from a
+      # Mac sat in this repository (images/uapi-proxy/uapi-proxy); the installers applied Longhorn, Calico and
+      # Hetzner's CCM by URL and piped get.k3s.io into a shell on every node; deploy.sh threw away the exit
+      # code of its own proof and printed Done. See CLAUDE.md invariants 86, 87 and 88.
+      - name: no tracked file is a compiled executable (invariant 86)
+        run: ./scripts/no-binary-is-tracked.sh
+      - name: nothing another project publishes is applied or run unverified (invariant 87)
+        run: ./scripts/remote-fetches-are-verified.sh
+      - name: a deploy whose own proof failed ends red (invariant 88)
+        run: ./scripts/deploy-ends-red-when-its-proof-fails.sh
 
       # Added 2026-10-19. hub/add-site.sh reads the Cloud's version from a name:tag@sha256 reference, the form
       # the manifests pin. v1.5.3 read the digest as the tag and refused every pinned install.
@@ -519,14 +530,14 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
 
       - name: restore kubeconform
         id: kubeconform
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/go/bin/kubeconform
-          key: kubeconform-v0.8.0-go1.27.3-${{ runner.os }}-${{ runner.arch }}
+          key: kubeconform-v0.8.0-go1.27.4-${{ runner.os }}-${{ runner.arch }}
 
       - name: install kubeconform
         if: steps.kubeconform.outputs.cache-hit != 'true'
@@ -540,7 +551,7 @@ jobs:
           info="$(go version -m "$(go env GOPATH)/bin/kubeconform")"
           printf '%s\n' "$info" | head -1
           grep -Eq '^[[:space:]]mod[[:space:]]github\.com/yannh/kubeconform[[:space:]]v0\.8\.0[[:space:]]' <<<"$info"
-          grep -q ': go1\.27\.3$' <<<"$(printf '%s\n' "$info" | head -1)"
+          grep -q ': go1\.27\.4$' <<<"$(printf '%s\n' "$info" | head -1)"
 
       # Last inside each shard, because it mutates tracked files and restores
       # them. It needs a clean tree and says so plainly, so it also reports any

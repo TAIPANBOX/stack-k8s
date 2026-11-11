@@ -87,6 +87,7 @@ SSH_OPTS=(-o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20)
 [ -n "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/secret-doc.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/browser-seccomp.sh"
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/verified-fetch.sh"
 sh_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "${@:2}"; }
 su_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "sudo ${*:2}"; }
 k_()  { su_ "$FIRST" "/usr/local/bin/k3s kubectl $*"; }
@@ -96,12 +97,24 @@ EXPLAINED=0
 
 # GOTCHAS.md item 26: a `set -e` script that dies mid-run looks like one that
 # finished. Name the line and the code every time.
-trap 'rc=$?; { [ $rc -eq 0 ] || [ "${EXPLAINED:-0}" = 1 ]; } && exit $rc
+trap 'rc=$?; vf_cleanup; { [ $rc -eq 0 ] || [ "${EXPLAINED:-0}" = 1 ]; } && exit $rc
       printf "\n!! install-gcp.sh stopped at line %s (exit %s)\n" "$LINENO" "$rc" >&2
       [ $rc -eq 141 ] && printf "   exit 141 is SIGPIPE: a pipeline ended early. This is a bug in the script, please report it.\n" >&2
       printf "   Re-running is safe: every step here is idempotent.\n" >&2
       printf "   The cluster is still billing while you debug: see ../COSTS.md section 5.\n" >&2
       exit $rc' EXIT
+
+# CLAUDE.md invariant 87: every file somebody else publishes is downloaded once, here, on the
+# operator's machine, and checked against a sha256 pinned in lib/verified-fetch.sh before
+# anything uses it, and before any node is touched. A mismatch, or a version with no pinned
+# hash, stops the run with the file, the expected hash and the received one.
+vf_init || die "could not make the scratch directory for the verified downloads"
+K3S_INSTALL_FILE="$(vf_file K3S_INSTALL_SHA256 "the k3s install script" "$K3S_VERSION" "https://raw.githubusercontent.com/k3s-io/k3s/${K3S_VERSION//+/%2B}/install.sh")" \
+  || die "a download was refused (the lines above say which and why); nothing was installed"
+vf_file CALICO_SHA256 "Calico's tigera-operator.yaml" "$CALICO_VERSION" "https://raw.githubusercontent.com/projectcalico/calico/$CALICO_VERSION/manifests/tigera-operator.yaml" >/dev/null \
+  || die "a download was refused (the lines above say which and why); nothing was installed"
+vf_file LONGHORN_SHA256 "Longhorn's longhorn.yaml" "$LONGHORN_VERSION" "https://raw.githubusercontent.com/longhorn/longhorn/$LONGHORN_VERSION/deploy/longhorn.yaml" >/dev/null \
+  || die "a download was refused (the lines above say which and why); nothing was installed"
 
 # ---- [GCP] 1: the metadata service ----------------------------------------
 # Three clouds, three protocols for the same question. Hetzner answers a plain
@@ -355,7 +368,7 @@ if [ -z "$K3S_TOKEN_VALUE" ]; then
 fi
 put_graceful_shutdown "$FIRST"
 browser_seccomp_put su_ "$FIRST" || die "could not write the browser's seccomp profile on $FIRST"
-{ printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | su_ "$FIRST" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' sh -s - server \
+{ printf '%s\n' "$K3S_TOKEN_VALUE"; cat "$K3S_INSTALL_FILE"; } | su_ "$FIRST" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' sh -s - server \
     --cluster-init \
     --node-name '$FIRST_NODE_NAME' \
     --node-ip '$FIRST_PRIV' --advertise-address '$FIRST_PRIV' \
@@ -383,7 +396,7 @@ for n in "${SERVER_LIST[@]:1}"; do
   [ -n "$JOINED_NAME" ] || die "could not read a host name from $n to pin --node-name to"
   put_graceful_shutdown "$n"
   browser_seccomp_put su_ "$n" || die "could not write the browser's seccomp profile on $n"
-  { printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | su_ "$n" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' sh -s - server \
+  { printf '%s\n' "$K3S_TOKEN_VALUE"; cat "$K3S_INSTALL_FILE"; } | su_ "$n" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' sh -s - server \
       --server 'https://$FIRST_PRIV:6443' \
       --node-name '$JOINED_NAME' \
       --node-ip '$(priv_of "$n")' --advertise-address '$(priv_of "$n")' \
@@ -419,7 +432,7 @@ for n in ${AGENT_LIST[@]+"${AGENT_LIST[@]}"}; do
   [ -n "$AGENT_NAME" ] || die "could not read a host name from $n to pin --node-name to"
   put_graceful_shutdown "$n"
   browser_seccomp_put su_ "$n" || die "could not write the browser's seccomp profile on $n"
-  { printf '%s\n' "$K3S_TOKEN_VALUE"; curl -sfL https://get.k3s.io; } | su_ "$n" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' K3S_URL='https://$FIRST_PRIV:6443' sh -s - agent \
+  { printf '%s\n' "$K3S_TOKEN_VALUE"; cat "$K3S_INSTALL_FILE"; } | su_ "$n" "sh -c \"IFS= read -r K3S_TOKEN; export K3S_TOKEN; INSTALL_K3S_VERSION='$K3S_VERSION' K3S_URL='https://$FIRST_PRIV:6443' sh -s - agent \
       --node-name '$AGENT_NAME' \
       --node-ip '$(priv_of "$n")' \
       --kubelet-arg=provider-id=$(provider_id_of "$n") \
@@ -476,8 +489,8 @@ done
 # configuration is no longer byte-identical across the three clouds. AWS kept
 # the difference in Terraform. GCP does not let you.
 say "Calico $CALICO_VERSION (VXLAN, unconditional: see the comment above this line in the source)"
-k_ "create -f https://raw.githubusercontent.com/projectcalico/calico/$CALICO_VERSION/manifests/tigera-operator.yaml" 2>/dev/null \
-  || k_ "replace -f https://raw.githubusercontent.com/projectcalico/calico/$CALICO_VERSION/manifests/tigera-operator.yaml"
+vf_cat CALICO_SHA256 "Calico's tigera-operator.yaml" "$CALICO_VERSION" "https://raw.githubusercontent.com/projectcalico/calico/$CALICO_VERSION/manifests/tigera-operator.yaml" | k_ "create -f -" 2>/dev/null \
+  || vf_cat CALICO_SHA256 "Calico's tigera-operator.yaml" "$CALICO_VERSION" "https://raw.githubusercontent.com/projectcalico/calico/$CALICO_VERSION/manifests/tigera-operator.yaml" | k_ "replace -f -"
 su_ "$FIRST" "tee /tmp/calico-installation.yaml >/dev/null" <<YAML
 apiVersion: operator.tigera.io/v1
 kind: Installation
@@ -573,7 +586,7 @@ fi
 
 # ---- 5. Longhorn -----------------------------------------------------------
 say "Longhorn $LONGHORN_VERSION"
-k_ "apply -f https://raw.githubusercontent.com/longhorn/longhorn/$LONGHORN_VERSION/deploy/longhorn.yaml"
+vf_cat LONGHORN_SHA256 "Longhorn's longhorn.yaml" "$LONGHORN_VERSION" "https://raw.githubusercontent.com/longhorn/longhorn/$LONGHORN_VERSION/deploy/longhorn.yaml" | k_ "apply -f -"
 say "waiting for Longhorn (this takes a few minutes on a fresh node)"
 for i in $(seq 1 90); do
   ready="$(k_ "-n longhorn-system get ds longhorn-manager -o jsonpath='{.status.numberReady}'" 2>/dev/null || echo 0)"

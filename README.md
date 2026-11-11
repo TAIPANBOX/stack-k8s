@@ -257,7 +257,9 @@ git clone https://github.com/TAIPANBOX/stack-k8s && cd stack-k8s
 
 `--trust-domain` is the domain your agents carry in their ids
 (`agent://acme.example/...`). The manifests ship a placeholder there on purpose
-and `verify.sh` fails on it, so leave the flag out and the deploy ends red.
+and `verify.sh` fails on it, so leave the flag out and the deploy ends red: it still
+installs everything and prints your way in, then names the failed check in place of
+"Done." and exits non-zero (invariant 88).
 
 What it asks, in order:
 
@@ -270,6 +272,16 @@ What it asks, in order:
 
 Then it installs, and ends by issuing your first WireGuard device: a `.conf`
 saved beside the script at mode 0600, a QR for a phone, and the address to open.
+
+Everything the installers download from other projects (the k3s install script
+at the release's tag, Calico's operator, Longhorn, Hetzner's cloud controller) is
+fetched once on your machine and checked against a sha256 pinned in
+`lib/verified-fetch.sh` before a node sees a byte of it. If you pin another
+version with `K3S_VERSION`, `CALICO_VERSION`, `LONGHORN_VERSION` or `CCM_VERSION`,
+give the hash of that version's file too (`K3S_INSTALL_SHA256`, `CALICO_SHA256`,
+`LONGHORN_SHA256`, `HCLOUD_CCM_SHA256`): a version with no hash stops the run and
+names the variable, and a mismatch names the file, the hash expected and the one
+received (invariant 87).
 
 The whole conversation can be skipped for automation:
 
