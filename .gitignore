@@ -38,3 +38,8 @@ hub/site-*.env
 # with the digests and identities of its own images. The copy is the operator's, never the repository's.
 policy/operator-image-policy.yaml
 agent-enrol-key
+
+# A compiled uapi-proxy built by hand on an operator machine (a Mach-O one was committed by mistake and
+# removed 2026-11-11). The image Dockerfile builds its own from source; scripts/no-binary-is-tracked.sh
+# refuses any tracked executable.
+/images/uapi-proxy/uapi-proxy
