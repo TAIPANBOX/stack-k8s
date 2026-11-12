@@ -1208,7 +1208,7 @@ run_case "agent-tokens-are-required: the gateway drops the governed profile" fai
 
 run_case "agent-tokens-are-required: the gateway runs a tokenfuse that predates the governed profile" fail \
 	"$AGT" \
-	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.24\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
+	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.25\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
 	"predates the governed profile and the static-key list"
 
 TEETH_EDIT_27="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"\" }")')"
@@ -4323,7 +4323,7 @@ run_case "console-engines: the console's tokenfuse is an older tag than the stac
 	"differs from the stack's"
 run_case "console-engines: the manifests name two tokenfuse digests" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81e4b6", "ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81e4b2")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81dbcd", "ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81dbce")')" \
 	"names 2 different tokenfuse references"
 run_case "console-engines: an engine stage is named something the copy does not look for" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
