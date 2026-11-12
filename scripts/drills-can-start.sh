@@ -83,7 +83,7 @@ NAME = "drills-can-start"
 
 # (mockryx tag, directory in the image) -> {file: sources its expect.event blocks name}.
 IMAGE = {
-    ("v0.5.0", "/scenarios"): {
+    ("v0.5.1", "/scenarios"): {
         "allow-list-renamed-tool.yaml": set(),
         "approval-required.yaml": set(),
         "declared-tool-poisoning.yaml": set(),
@@ -92,13 +92,14 @@ IMAGE = {
         "injected-page.yaml": {"tokenfuse"},
         "on-behalf-of-forged-chain.yaml": set(),
         "pii-in-prompt.yaml": set(),
-        "reaction-chain-reaches-heraldyx.yaml": {"wardryx", "heraldyx"},
+        "reaction-chain-reaches-heraldyx.yaml": {"heraldyx"},
+        "reaction-chain-reaches-wardryx.yaml": {"wardryx"},
         "runaway-budget.yaml": set(),
         "token-flood.yaml": set(),
         "verdryx-quality-drift.yaml": {"verdryx"},
         "wardryx-denied-tool.yaml": set(),
     },
-    ("v0.5.0", "/scenarios/mcp"): {
+    ("v0.5.1", "/scenarios/mcp"): {
         "mcp-pii-in-arguments.yaml": set(),
         "mcp-secret-in-arguments.yaml": set(),
         "mcp-ungranted-tool-held.yaml": set(),
@@ -108,7 +109,7 @@ IMAGE = {
 # Whether the scenarios of an image directory send requests to the gateway (`request:` steps) rather than
 # to the MCP broker (`mcp:` steps). A drill that does must carry the pod labels the two gateway drill
 # NetworkPolicies select on, or every request is dropped and every step is a false Finding.
-IMAGE_GATEWAY = {("v0.5.0", "/scenarios"): True, ("v0.5.0", "/scenarios/mcp"): False}
+IMAGE_GATEWAY = {("v0.5.1", "/scenarios"): True, ("v0.5.1", "/scenarios/mcp"): False}
 NETPOL_FILE = "manifests/30-network-policy.yaml"
 NETPOL_EGRESS = "drills-egress-gateway"
 NETPOL_INGRESS = "gateway-ingress-drills"

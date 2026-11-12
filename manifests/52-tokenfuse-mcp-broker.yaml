@@ -526,7 +526,7 @@ spec:
               volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
           containers:
             - name: mockryx
-              image: ghcr.io/taipanbox/mockryx:v0.5.0@sha256:32e4e79cd3bf95d23aa240f925ca139726faf8a13cdcd3a1728ea3df633f08be
+              image: ghcr.io/taipanbox/mockryx:v0.5.1@sha256:3926512211a4609a402d3812ae0321df46baaa90406ea439e3f5c89316ef85ef
               # mockryx requires --gateway; no step in /scenarios/mcp sends it anything, and this pod cannot reach it.
               args: ["run", "--gateway", "http://tokenfuse-gateway:4100", "/scenarios/mcp"]
               env:
