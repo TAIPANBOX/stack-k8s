@@ -51,7 +51,7 @@ name: console image
 # shown once (#151), the policy and budget proofs, the sealed case, the bench, the typed remedies and the demo's case finding the
 # incident it showed (#147). Move one by changing this block and nothing else.
 env:
-  QRYX_REF: 432f0502f8d68623fdcd1a58b5e59711618527d9      # qryx v1.1.1
+  QRYX_REF: 912724d6611cf18332c4788d84f9348e6d476a71      # qryx v1.2.0
   MOCKRYX_REF: 213b18e5ea2652b6db759938fdcc4016bc9bdbaa   # mockryx v0.5.1
   VERDRYX_REF: ab61a745c5b3d920de3951674923fc59ac430ea8   # verdryx v0.3.0
   ENGRAM_REF: 28ad83f9a37f54e23797c833b40921033b04c334    # engram v3.1.0

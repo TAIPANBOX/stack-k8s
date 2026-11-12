@@ -774,7 +774,7 @@ run_case "gateway-cache-is-off: a subcommand sidecar is not a gateway container"
 # matching container from every manifest kustomization.yaml includes.
 run_case "gateway-cache-is-off: no gateway container left to judge" fail \
 	'./scripts/gateway-cache-is-off.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b657bbb332f7c8a345beeaaa1e071f05f6af2ce46882d0601a153eb7c5\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81dbcd116557eff54aae29e7d68104af8fc788265d58e71adf3f96fea03317\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the"
 
 # The gateway's declassify key (invariant 27). POST /v1/fuse/declassify lifts a
@@ -834,7 +834,7 @@ run_case "declassify-is-keyed: an installer never gives an existing Secret the k
 # Each must say it measured nothing, never OK.
 run_case "declassify-is-keyed: no gateway container left to judge" fail \
 	'./scripts/declassify-is-keyed.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b657bbb332f7c8a345beeaaa1e071f05f6af2ce46882d0601a153eb7c5\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81dbcd116557eff54aae29e7d68104af8fc788265d58e71adf3f96fea03317\n", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.0.4\n")')" \
 	"measured nothing about the declassify key"
 
 run_case "declassify-is-keyed: no installer left to read" fail \
@@ -1208,7 +1208,7 @@ run_case "agent-tokens-are-required: the gateway drops the governed profile" fai
 
 run_case "agent-tokens-are-required: the gateway runs a tokenfuse that predates the governed profile" fail \
 	"$AGT" \
-	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.24\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
+	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.25\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
 	"predates the governed profile and the static-key list"
 
 TEETH_EDIT_27="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"\" }")')"
@@ -1793,7 +1793,7 @@ run_case "typed-mode-is-honest: a launcher stops forwarding --typed-training" fa
 
 run_case "typed-mode-is-honest: the typryx pin goes back before the wardryx-proxy" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.6.0", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
+	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.6.1", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
 	"older than v0.4.0"
 
 run_case "typed-mode-is-honest: a document names a second typryx tag" fail \
@@ -1803,8 +1803,8 @@ run_case "typed-mode-is-honest: a document names a second typryx tag" fail \
 
 run_case "typed-mode-is-honest: the typryx image is no longer named" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.6.0", "image: example.invalid/typ:v0.4.0")
-edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.6.0", "image: example.invalid/typ:v0.4.0")')" \
+	"$(py 'edit("manifests/51-typryx.yaml", "image: ghcr.io/taipanbox/typryx:v0.6.1", "image: example.invalid/typ:v0.4.0")
+edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.6.1", "image: example.invalid/typ:v0.4.0")')" \
 	"measured nothing about the typryx pin"
 
 run_case "typed-mode-is-honest: a comment in the training section changes" pass \
@@ -1883,7 +1883,7 @@ run_case "run-budget-ceiling-is-set: a comment next to the ceiling changes" pass
 	'./scripts/run-budget-ceiling-is-set.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "# The operator\x27s ceiling on a run\x27s budget (tokenfuse v1.5.0,", "# The operator\x27s ceiling on the budget of a run (tokenfuse v1.5.0,")')"
 
-TEETH_EDIT_68="$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b657bbb332f7c8a345beeaaa1e071f05f6af2ce46882d0601a153eb7c5\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')"
+TEETH_EDIT_68="$(py 'edit("manifests/10-planes.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81dbcd116557eff54aae29e7d68104af8fc788265d58e71adf3f96fea03317\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR", "          image: ghcr.io/taipanbox/tokenfuse-other:v1.5.0\n          imagePullPolicy: IfNotPresent\n          command: [\"/usr/local/bin/tokenfuse\"]\n          env:\n            - \x7b name: TOKENFUSE_ADDR")')"
 run_case "run-budget-ceiling-is-set: no gateway container left to judge" fail \
 	'./scripts/run-budget-ceiling-is-set.sh' \
 	"$TEETH_EDIT_68" \
@@ -2026,7 +2026,7 @@ run_case "typed-mode-is-honest: a launcher stops forwarding --typed-risk-signal"
 
 run_case "typed-mode-is-honest: the proxy runs another typryx tag than typryx" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.6.0", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
+	"$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "image: ghcr.io/taipanbox/typryx:v0.6.1", "image: ghcr.io/taipanbox/typryx:v0.3.0")')" \
 	"different tags"
 
 TEETH_EDIT_83="$(py 'edit("manifests/56-typryx-wardryx-proxy.yaml", "args: [\"wardryx-proxy\"]", "args: [\"serve\"]")')"
@@ -2113,7 +2113,7 @@ run_case "chain-verifier: the verifier shares the money plane's uid" fail \
 
 run_case "chain-verifier: the image has no watch-dir" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/agent-conform:v2.0.2", "image: ghcr.io/taipanbox/agent-conform:v1.0.2")')" \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/agent-conform:v2.0.3", "image: ghcr.io/taipanbox/agent-conform:v1.0.2")')" \
 	"older than v1.1.0"
 
 run_case "chain-verifier: the verifier is in an opt-in file" fail \
@@ -2135,7 +2135,7 @@ run_case "chain-verifier: a comment on the verifier changes" pass \
 
 run_case "chain-verifier: no verifier left to judge" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/agent-conform:v2.0.2", "image: ghcr.io/taipanbox/agent-conform-other:v1.1.0")')" \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/agent-conform:v2.0.3", "image: ghcr.io/taipanbox/agent-conform-other:v1.1.0")')" \
 	"measured nothing about the verifier"
 
 # The bus file names (invariant 30). heraldyx v0.3.0 and idryx v1.1.0 refuse an event
@@ -2349,8 +2349,8 @@ run_case "temp: the console's temp is mounted read-only" fail \
 
 run_case "temp: no container left that needs a temp" fail \
 	'./scripts/read-only-root-has-a-temp.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.10.1", "image: registry.invalid/costcrew:v0.6.0")
-edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.10.1", "image: registry.invalid/costcrew:v0.6.0")')" \
+	"$(py 'edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.10.2", "image: registry.invalid/costcrew:v0.6.0")
+edit("manifests/49-costcrew.yaml", "image: ghcr.io/taipanbox/costcrew:v0.10.2", "image: registry.invalid/costcrew:v0.6.0")')" \
 	"measured NOTHING"
 
 run_case "temp: TMPDIR inside the data volume instead of a /tmp mount" pass \
@@ -3085,7 +3085,7 @@ run_case "wardryx-key-is-pep: the migration writes the key on the command line" 
 
 run_case "wardryx-key-is-pep: a pin moves back to the old wardryx" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.6.1", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.6.2", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
 	"does not pin wardryx v2.6.1"
 
 run_case "wardryx-key-is-pep: a reworded comment is not a fault" pass \
@@ -3447,7 +3447,7 @@ run_case "broker-blocks-raw-secrets: the broker cannot reach wardryx" fail \
 
 run_case "broker-blocks-raw-secrets: the broker image cannot be pulled" fail \
 	'./scripts/broker-blocks-raw-secrets.sh' \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b657bbb332f7c8a345beeaaa1e071f05f6af2ce46882d0601a153eb7c5\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "          image: ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81dbcd116557eff54aae29e7d68104af8fc788265d58e71adf3f96fea03317\n", "          image: ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag\n")')" \
 	"could not pull ghcr.io/taipanbox/tokenfuse:v0.0.0-gate-no-such-tag"
 
 run_case "broker-blocks-raw-secrets: no broker left to judge" fail \
@@ -3783,7 +3783,7 @@ run_case "bus-names: the witness's findings file loses its keyryx stem" fail \
 	"is named for no source heraldyx reads from it"
 run_case "bus-names: the heraldyx pin goes back before the findings are read safely" fail \
 	'./scripts/bus-names-match-the-source-rule.sh' \
-	"$(py 'edit("manifests/45-heraldyx.yaml", "ghcr.io/taipanbox/heraldyx:v0.9.0@", "ghcr.io/taipanbox/heraldyx:v0.8.0@")')" \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "ghcr.io/taipanbox/heraldyx:v0.9.1@", "ghcr.io/taipanbox/heraldyx:v0.8.0@")')" \
 	"older than v0.8.1"
 run_case "stream-files-are-precreated: the witness's findings file is not made before it starts" fail \
 	'./scripts/stream-files-are-precreated.sh' \
@@ -3904,7 +3904,7 @@ run_case "verified-images: a policy's glob moved onto another repository's image
 	"covered by two policies"
 run_case "verified-images: a manifest names a TAIPANBOX image with no signer row" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.6.1@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.5.0@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.6.2@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.5.0@sha256:")')" \
 	"has no signer row in BINDINGS"
 run_case "verified-images: the default install stops turning admission on" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -4010,7 +4010,7 @@ run_case "keyryx: the custody policy grants trailryx nothing" fail \
 	"does not grant trailryx-node the sign operation"
 run_case "keyryx: the wardryx patch rolls wardryx back to v2.3.0" fail \
 	'./scripts/keyryx-is-default.sh' \
-	"$(py 'edit("keyryx/wardryx-patch.yaml", "ghcr.io/taipanbox/wardryx:v2.6.1@sha256:2101d23bbe8ecb1b932a530611ffa02f1c7c9b82394c4fa8db238f7d0e7bd667", "ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543")')" \
+	"$(py 'edit("keyryx/wardryx-patch.yaml", "ghcr.io/taipanbox/wardryx:v2.6.2@sha256:b799701c2429605c9c3819a8cbd3085462fadcf5b07aa0e17f17edd1cacddada", "ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543")')" \
 	"would roll wardryx back"
 run_case "keyryx: the witness is pointed at no stream directory" fail \
 	'./scripts/keyryx-is-default.sh' \
@@ -4068,7 +4068,7 @@ run_case "keyryx-kid: a comment reworded in the library (must pass)" pass \
 # The Keyryx images and the record seal's trailryx-node are the release pins, by tag and digest (CLAUDE.md invariant 72).
 run_case "keyryx-release-pins: the witness is left on keyryx v0.1.3" fail \
 	'./scripts/keyryx-release-pins.sh' \
-	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("keyryx:v0.1.4@sha256:6597"); open(p, "w").write(s[:i] + "keyryx:v0.1.3@sha256:6597" + s[i + len("keyryx:v0.1.4@sha256:6597"):])')" \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("keyryx:v0.1.5@sha256:967d"); open(p, "w").write(s[:i] + "keyryx:v0.1.3@sha256:967d" + s[i + len("keyryx:v0.1.5@sha256:967d"):])')" \
 	"is not the release pin"
 run_case "keyryx-release-pins: the record seal is left on trailryx-node v1.4.0" fail \
 	'./scripts/keyryx-release-pins.sh' \
@@ -4076,7 +4076,7 @@ run_case "keyryx-release-pins: the record seal is left on trailryx-node v1.4.0" 
 	"is not the release pin"
 run_case "keyryx-release-pins: one keyryx digest is not the tag's" fail \
 	'./scripts/keyryx-release-pins.sh' \
-	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); s = s.replace("659723319e28c6c8", "659723319e28c6c9", 1); open(p, "w").write(s)')" \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); s = s.replace("967dd49907d48ede", "967dd49907d48edf", 1); open(p, "w").write(s)')" \
 	"is not the release pin"
 run_case "keyryx-release-pins: the record seal's image is absent (measured nothing)" fail \
 	'./scripts/keyryx-release-pins.sh' \
@@ -4141,7 +4141,7 @@ run_case "approver: WARDRYX_ALLOW_KEY_APPROVALS is set on wardryx" fail \
 	"sets WARDRYX_ALLOW_KEY_APPROVALS"
 run_case "approver: wardryx is pinned before the approver statements" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.6.1@sha256:", "wardryx:v2.3.0@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.6.2@sha256:", "wardryx:v2.3.0@sha256:")')" \
 	"before the approver statements"
 run_case "approver: the mint rewrites a kept pair" fail \
 	'./scripts/approver-key-is-minted.sh' \
@@ -4168,14 +4168,14 @@ run_case "add-site: a comment reworded beside the reader (must pass)" pass \
 	'./scripts/hub-add-site-reads-the-pinned-image.sh' \
 	"$(py 'edit("hub/add-site.sh", "# The manifests pin the image as name:tag@sha256", "# The manifests pin the image, as name:tag@sha256")')"
 
-# tokenfuse v1.24.0 is pinned by digest; each tokenfuse door names only its own two origins, and wardryx's agent-token door names their union (CLAUDE.md invariant 74).
+# tokenfuse v1.25.0 is pinned by digest; each tokenfuse door names only its own two origins, and wardryx's agent-token door names their union (CLAUDE.md invariant 74).
 run_case "tokenfuse-door-origins: the gateway is left on tokenfuse v1.22.0" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
-	"$(py 'p = "manifests/10-planes.yaml"; s = open(p).read(); s = s.replace("tokenfuse:v1.24.0@sha256:bc9e", "tokenfuse:v1.23.0@sha256:bc9e", 1); open(p, "w").write(s)')" \
+	"$(py 'p = "manifests/10-planes.yaml"; s = open(p).read(); s = s.replace("tokenfuse:v1.25.0@sha256:3a81", "tokenfuse:v1.23.0@sha256:3a81", 1); open(p, "w").write(s)')" \
 	"is not the release pin"
 run_case "tokenfuse-door-origins: the control plane digest is not the release pin" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "b05d3d12c61289006308cf94f3ab4edba958faf6575420eb50c93f973fc4a29a", "3f3b9831ec1c222d776ebfbf706e207a098aff80e550494f4c78b52c1784ed8e")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "e7d4160649128c6dc7d91d295a9a31e107e3bb7241d5483b5b193158a94dba58", "3f3b9831ec1c222d776ebfbf706e207a098aff80e550494f4c78b52c1784ed8e")')" \
 	"is not the release pin"
 run_case "tokenfuse-door-origins: the gateway's list names the broker's origin" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
@@ -4298,7 +4298,7 @@ run_case "workflow-checkouts: a checkout reads a branch" fail \
 	"is not a full 40-hex commit"
 run_case "workflow-checkouts: a pinned commit is shortened" fail \
 	'./scripts/workflow-checkouts-are-pinned.sh' \
-	"$(py 'edit(".github/workflows/console-image.yml", "QRYX_REF: 432f0502f8d68623fdcd1a58b5e59711618527d9", "QRYX_REF: 432f0502f8d68623")')" \
+	"$(py 'edit(".github/workflows/console-image.yml", "QRYX_REF: 912724d6611cf18332c4788d84f9348e6d476a71", "QRYX_REF: 912724d6611cf18332")')" \
 	"not a full 40-hex commit"
 run_case "workflow-checkouts: a sixth repository is checked out with no ref" fail \
 	'./scripts/workflow-checkouts-are-pinned.sh' \
@@ -4315,15 +4315,15 @@ run_case "workflow-checkouts: a comment reworded in the workflow (must pass)" pa
 # The console's two proof engines are the stack's own, digest for digest (CLAUDE.md invariant 79).
 run_case "console-engines: the console's wardryx differs from the stack's" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("images/console.Dockerfile", "wardryx:v2.6.1@sha256:2101d23b", "wardryx:v2.6.1@sha256:2101d23c")')" \
+	"$(py 'edit("images/console.Dockerfile", "wardryx:v2.6.2@sha256:b799701c", "wardryx:v2.6.2@sha256:2101d23c")')" \
 	"differs from the stack's"
 run_case "console-engines: the console's tokenfuse is an older tag than the stack's" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("images/console.Dockerfile", "tokenfuse:v1.24.0@sha256:bc9e", "tokenfuse:v1.23.0@sha256:bc9e")')" \
+	"$(py 'edit("images/console.Dockerfile", "tokenfuse:v1.25.0@sha256:3a81", "tokenfuse:v1.23.0@sha256:3a81")')" \
 	"differs from the stack's"
 run_case "console-engines: the manifests name two tokenfuse digests" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b6", "ghcr.io/taipanbox/tokenfuse:v1.24.0@sha256:bc9ee4b2")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81dbcd", "ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81dbce")')" \
 	"names 2 different tokenfuse references"
 run_case "console-engines: an engine stage is named something the copy does not look for" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \

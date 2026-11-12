@@ -1096,7 +1096,7 @@ sides use one secret, and it is off unless you turn it on:
 ```
 
 A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
-console v1.1.34 or later. The images pinned here are tokenfuse v1.24.0 and console v1.8.8,
+console v1.1.34 or later. The images pinned here are tokenfuse v1.25.0 and console v1.8.8,
 both later than those minimums; an older image
 ignores the setting.
 
@@ -1281,7 +1281,7 @@ kubectl -n agent-stack delete configmap gateway-identity-map
 
 ## Keyryx on the cluster (opt-in)
 
-Keyryx (`ghcr.io/taipanbox/keyryx:v0.1.4`) is the key custody service and the
+Keyryx (`ghcr.io/taipanbox/keyryx:v0.1.5`) is the key custody service and the
 independent witness of the record. Off by default: `kubectl apply -k manifests/`
 never applies it. `keyryx/up.sh` turns it on, `keyryx/down.sh` turns it off and
 keeps every key and claim. v0.1.4 changes only delegated keys (at the bound of four

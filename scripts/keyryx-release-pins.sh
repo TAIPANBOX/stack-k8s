@@ -19,7 +19,7 @@ import re
 import sys
 
 PINS = {
-    "keyryx": ("v0.1.4", "sha256:659723319e28c6c8895f5c2af6baa616b2e46ed90a3cf26d1c208dafe6a1ca3f"),
+    "keyryx": ("v0.1.5", "sha256:967dd49907d48edea9cb0af926ec9beae39de31909ced8149eff1546200d99e7"),
     "trailryx-node": ("v1.5.0", "sha256:f15215cd9708724e83fbd8493f2bf7d2a11980b37edf3b887081d8e17da18bab"),
 }
 bad = []
@@ -56,5 +56,5 @@ if bad:
         print("FAIL " + b)
     print(f"{len(bad)} problem(s). See CLAUDE.md invariant 72.")
     sys.exit(1)
-print("OK: custody, the witness and the record seal run the release pins: keyryx v0.1.4 and trailryx-node v1.5.0, each by tag and digest.")
+print("OK: custody, the witness and the record seal run the release pins: keyryx v0.1.5 and trailryx-node v1.5.0, each by tag and digest.")
 PY

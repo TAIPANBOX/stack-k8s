@@ -114,7 +114,7 @@ spec:
           volumeMounts: [{ name: journal, mountPath: /var/lib/scopyx }]
       containers:
         - name: scopyx
-          image: ghcr.io/taipanbox/scopyx:v1.3.0@sha256:a1e640a7965273750bd95d245316059046da203924e7ad5048c06a51d3fa555d
+          image: ghcr.io/taipanbox/scopyx:v1.3.1@sha256:e61b115a7d3d63a94897f39bea78a98f2640afa64f1698d5ae078ecb2bb25638
           imagePullPolicy: IfNotPresent
           env:
             # 0.0.0.0 because a pod binding loopback is reachable by nothing.

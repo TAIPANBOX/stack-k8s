@@ -224,7 +224,7 @@ spec:
           volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
       containers:
         - name: typryx
-          image: ghcr.io/taipanbox/typryx:v0.6.0@sha256:9ffe725c90a51297dca76940cd1e30e968cf323bfac2f61092f0db2acef0812b
+          image: ghcr.io/taipanbox/typryx:v0.6.1@sha256:77fc8d0f826bb840043c45ea3eb9f1dba1f73c1925c48502b942b2d491009239
           imagePullPolicy: IfNotPresent
           # ENTRYPOINT defaults to `serve`; TYPRYX_ADDR and TYPRYX_TEMPLATES
           # are baked into the image (0.0.0.0:4320, the three example
