@@ -4847,3 +4847,28 @@ it: the secret drill passed, and the PII drill and both steps of the tool-hold d
 `drills-broker`, minted with the gateway's keys and copied into the broker's door (CLAUDE.md invariant 85).
 `scripts/broker-drills-pass.sh` runs the drills and an agent's `broker-caller` call against the pinned
 gateway, broker and wardryx, and fails when either key leaves the gateway's list.
+
+## 164. Every plane that wrote the events bus could rename any stream on it, because the root of a Longhorn RWX volume is 0777
+
+**Ours, meeting a platform fact, and fixed.** The planes mounted the `stack-events` claim at its root, read-write, and each made
+its own stream there as its own uid, mode 0640 (invariant 59). Two platform facts made that layout weaker than it read. The root
+of a Longhorn RWX volume is `root:root 0777`, and kubelet applies no `fsGroup` to it, because Longhorn's CSIDriver says
+`fsGroupPolicy: ReadWriteOnceWithFSType` (on k3s's `local-path` the root is `2777` in the `fsGroup`). With no sticky bit, write
+on the directory is all `rename(2)` and `unlink(2)` ask for, so any pod with the mount could rename another plane's stream away,
+write its own under the name and remove the original, whatever its uid. And five planes ran as 65532, so between them the 0640
+mode kept nobody out: a costcrew pod could append to `wardryx.ndjson`, the decision journal. GAPS G3.16 recorded the second half;
+the run below found the first.
+
+Measured on 2026-11-11 with `evidence/bus-per-producer-longhorn/run.sh` on k3s v1.36.2+k3s1 and Longhorn v1.7.2, in a guest on the
+build machine: in the old shape, a pod as costcrew appended a forged `policy_allow` to `wardryx.ndjson`, and a pod as typryx (uid
+65532, fsGroup 10001) renamed `tokenfuse.ndjson` (uid 10001) away, wrote its own and removed the original. A third fact decides how
+the fix starts: kubelet makes a subPath that does not exist yet itself, as `root 0777`, even for a read-only mount, so a plane that
+started before the bus was made would make it, wide open and owned by root.
+
+**Fixed by** an owner uid no plane runs as (invariant 89). The Job `bus-owner`, uid 20000, is the only pod that mounts the claim's
+root read-write; it makes `streams/` `20000:10001 2750` and each stream in it `20000:<producer gid> 0664`, and each producer runs
+under its own uid and group and appends through that group. Every pod mounts `streams/` by subPath, so no path it holds leads to
+the root, and waits in `bus-ready` for the owner's marker. On the same stand the layout let each producer append to its own stream,
+refused another producer's append, truncate, create, rename, remove, link and chmod, refused a reader's write with the mount
+read-write, and wardryx v2.6.1 (agent-stack-go v2.0.2) and tokenfuse-cloud v1.24.0 opened a stream they do not own. NFS with
+AUTH_SYS carries sixteen groups (the seventeenth chgrp was refused), and the owner needs twelve.

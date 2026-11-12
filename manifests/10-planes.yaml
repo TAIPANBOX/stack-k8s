@@ -28,15 +28,17 @@ spec:
     metadata:
       labels: { app: tokenfuse-cloud, plane: money }
     spec:
-      # fsGroup so uid 10001 can write the snapshot: a freshly provisioned
-      # block volume comes up owned by root, and this container is not root.
+      # fsGroup so the control plane's uid (20013, its own on the bus: one uid and one group per producer, CLAUDE.md invariant 89)
+      # can write the snapshot: a freshly provisioned block volume comes up owned
+      # by root, and this container is not root. A snapshot an earlier release
+      # wrote as 10001 stays writable through that group.
       # No workload here talks to the Kubernetes API; see CLAUDE.md
       # invariant 15. Without this every pod carries a projected token for
       # the namespace default ServiceAccount, bound to nothing today but
       # usable by a compromised container for discovery and SelfSubjectReview,
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
-      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      securityContext: { runAsNonRoot: true, runAsUser: 20013, runAsGroup: 20013, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
       # Leave a dead node in 30 s, not the default 300 s. This pod holds a
       # ReadWriteOnce claim; on Longhorn, once evicted, it is force-deleted and
       # its volume released (the installers set node-down-pod-deletion-policy),
@@ -46,6 +48,15 @@ spec:
       tolerations:
         - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+      # bus-ready (CLAUDE.md invariant 89, GAPS G3.16): this pod mounts the bus as subPath streams, which
+      # the bus-owner Job (manifests/11-bus.yaml) makes. kubelet would make a missing subPath itself, as
+      # root 0777, so the pod waits for the owner's marker first, reading the volume root READ ONLY.
+      initContainers:
+        - name: bus-ready
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 20013, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+          volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
       containers:
         - name: cloud
           # Pulled, not built. `tokenfuse-control-plane` has been published
@@ -123,7 +134,7 @@ spec:
               valueFrom: { configMapKeyRef: { name: stack-wiring, key: TOKENFUSE_CLOUD_EVENTS_PATH } }
           ports: [{ name: http, containerPort: 8080 }]
           volumeMounts:
-            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
             - { name: state, mountPath: /var/lib/stack/cloud }
           readinessProbe:
             httpGet: { path: /healthz, port: http }
@@ -167,7 +178,7 @@ spec:
       # usable by a compromised container for discovery and SelfSubjectReview,
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
-      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      securityContext: { runAsNonRoot: true, runAsUser: 20010, runAsGroup: 20010, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
       # Leave a dead node in 30 s, not the default 300 s. One replica, no
       # ReadWriteOnce claim, so nothing ties this pod to the node it is on;
       # the default toleration alone kept the gateway refused for 360 s after
@@ -180,18 +191,20 @@ spec:
       # volume, and waits if vouchryx is not up yet. Public material, one connection, admitted by the
       # NetworkPolicy in 54-delegation.yaml from this pod alone. The same key set is what wardryx polls (invariant 63).
       #
-      # precreate-streams (CLAUDE.md invariant 59, GOTCHAS 150): idryx loads tokenfuse.ndjson at start, and the
-      # gateway creates that file only on its first call. Made here, by the gateway's own uid, mode 0640 in the
-      # bus group, so idryx starts and reads an empty stream on a quiet cluster. Only when absent.
+      # tokenfuse.ndjson is made by the bus owner before this pod starts (GOTCHAS 150 is why idryx needs it
+      # there on a quiet cluster); the gateway appends to it through its own group 20010.
+      # bus-ready (CLAUDE.md invariant 89, GAPS G3.16): this pod mounts the bus as subPath streams, which
+      # the bus-owner Job (manifests/11-bus.yaml) makes. kubelet would make a missing subPath itself, as
+      # root 0777, so the pod waits for the owner's marker first, reading the volume root READ ONLY.
       initContainers:
-        - name: precreate-streams
+        - name: bus-ready
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
-          securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
-          command: ["sh", "-c", "f=/var/lib/stack/events/tokenfuse.ndjson; if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; ls -ln /var/lib/stack/events"]
-          volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
+          securityContext: { runAsNonRoot: true, runAsUser: 20010, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+          volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
         - name: fetch-vouchryx-jwks
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
-          securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          securityContext: { runAsNonRoot: true, runAsUser: 20010, runAsGroup: 20010, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
           command: ["sh", "-c", "i=0; until wget -q -T 5 -O /jwks/jwks.json http://vouchryx:4310/.well-known/jwks.json && grep -q keys /jwks/jwks.json; do i=$((i+1)); [ $i -gt 150 ] && exit 1; sleep 2; done"]
           volumeMounts: [{ name: vouchryx-jwks, mountPath: /jwks }]
       containers:
@@ -438,7 +451,7 @@ spec:
           # gateway probes in 0.8 s (2026-09-26). CLAUDE.md invariant 21.
           lifecycle: { preStop: { sleep: { seconds: 5 } } }
           volumeMounts:
-            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
             - { name: traces, mountPath: /var/lib/stack/traces }
             # The identity map, read only. An empty directory until identity/up.sh
             # has written one; TOKENFUSE_IDENTITY_MAP above is unset until then.
@@ -561,12 +574,12 @@ spec:
             - { name: ROUTINE_SLO_INTERVAL, value: "21600" }
             - { name: ROUTINE_SLO_WINDOW, value: "28d" }
           volumeMounts:
-            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
             - { name: traces, mountPath: /var/lib/stack/traces, readOnly: true }
           securityContext:
             runAsNonRoot: true
             runAsUser: 20020
-            runAsGroup: 10001
+            runAsGroup: 20020
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
@@ -624,18 +637,13 @@ spec:
       # usable by a compromised container for discovery and SelfSubjectReview,
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
-      # fsGroup 10001, the stack group, and not wardryx's own 65532: the
-      # shared `stack-events` volume is written by tokenfuse-cloud and the
-      # console, whose fsGroup 10001 leaves it 10001:10001 mode 2775, and
-      # wardryx appends wardryx.ndjson to it. As 65532:65532 with no
-      # supplementary group that append is `permission denied`; fsGroup adds
-      # 10001 to the process's groups whatever the volume type, which is the
-      # same answer stack-single gives with `user: "65532:10001"`. Found on a
-      # kind run of v1.1.7 (2026-09-23). That run's volume was a hostPath,
-      # which gets no fsGroup chown at all, so it needed opening by hand
-      # whatever this line says; this closes the case where the volume is
-      # group 10001, not that one.
-      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      # uid 20001 and group 20001, wardryx's own (CLAUDE.md invariant 89, the
+      # number stack-single gives it): wardryx.ndjson is the bus owner's file in
+      # group 20001, mode 0664, so wardryx appends through that group and no
+      # other plane can. The process group is 10001, the bus group, so a policy
+      # version wardryx archives (0640) is readable by the console and nobody
+      # else's to change; fsGroup 10001 for the same group on any volume.
+      securityContext: { runAsNonRoot: true, runAsUser: 20001, runAsGroup: 10001, supplementalGroups: [20001], fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
       # Leave a dead node in 30 s, not the default 300 s. One replica, no
       # ReadWriteOnce claim, so nothing ties this pod to the node it is on;
       # the default toleration alone kept the gateway refused for 360 s after
@@ -643,16 +651,19 @@ spec:
       tolerations:
         - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
-      # Creates the stream file before wardryx starts, as wardryx's own uid. agent-stack-go v2
-      # refuses to create a missing stream in a directory another uid owns, and the volume root is
-      # root's, so without this it exits at start (CLAUDE.md invariant 59, GOTCHAS 135). An existing
-      # file is left as it is. Mode 0640, group 10001, the group the bus readers share.
+      # wardryx.ndjson and the policy archive directory are made by the bus owner (agent-stack-go v2
+      # creates no stream in a directory it does not own, GOTCHAS 135); wardryx appends through its
+      # own group 20001 and runs in group 10001, so the archive versions it writes (0640) are the
+      # bus group's to read and nobody else's to change.
+      # bus-ready (CLAUDE.md invariant 89, GAPS G3.16): this pod mounts the bus as subPath streams, which
+      # the bus-owner Job (manifests/11-bus.yaml) makes. kubelet would make a missing subPath itself, as
+      # root 0777, so the pod waits for the owner's marker first, reading the volume root READ ONLY.
       initContainers:
-        - name: precreate-streams
+        - name: bus-ready
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
-          securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
-          command: ["sh", "-c", "f=/var/lib/stack/events/wardryx.ndjson; if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; ls -ln /var/lib/stack/events"]
-          volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
+          securityContext: { runAsNonRoot: true, runAsUser: 20001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+          volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
       containers:
         - name: wardryx
           image: ghcr.io/taipanbox/wardryx:v2.6.1@sha256:2101d23bbe8ecb1b932a530611ffa02f1c7c9b82394c4fa8db238f7d0e7bd667
@@ -713,7 +724,7 @@ spec:
           # gateway probes in 0.8 s (2026-09-26). CLAUDE.md invariant 21.
           lifecycle: { preStop: { sleep: { seconds: 5 } } }
           volumeMounts:
-            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
             # A directory, not one file: the starter policy and, only with --typed-risk-signal, the hold
             # that holds a brokered call with no risk signal (CLAUDE.md invariant 65). wardryx reads every
             # *.yaml in it once, at start.
@@ -780,8 +791,8 @@ spec:
       # usable by a compromised container for discovery and SelfSubjectReview,
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
-      # supplementalGroups 10001: the bus files the writers create are group 10001, so this reader
-      # needs that group to read them (CLAUDE.md invariant 59).
+      # supplementalGroups 10001: streams/ is 20000:10001 2750, so only the bus group may enter it
+      # and read the streams (CLAUDE.md invariants 59 and 89).
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, supplementalGroups: [10001], seccompProfile: { type: RuntimeDefault } }
       # Leave a dead node in 30 s, not the default 300 s. One replica, no
       # ReadWriteOnce claim, so nothing ties this pod to the node it is on;
@@ -790,6 +801,15 @@ spec:
       tolerations:
         - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
+      # bus-ready (CLAUDE.md invariant 89, GAPS G3.16): this pod mounts the bus as subPath streams, which
+      # the bus-owner Job (manifests/11-bus.yaml) makes. kubelet would make a missing subPath itself, as
+      # root 0777, so the pod waits for the owner's marker first, reading the volume root READ ONLY.
+      initContainers:
+        - name: bus-ready
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 65532, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+          volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
       containers:
         - name: idryx
           image: ghcr.io/taipanbox/idryx:v1.4.0@sha256:2c80d101a01b2d3ac300abd57d397f38d8ff5515e34c5f851849244029ba6d15
@@ -811,7 +831,7 @@ spec:
           volumeMounts:
             # Read-only: idryx builds its graph FROM the log and never writes
             # to it, and the mount should say so.
-            - { name: events, mountPath: /var/lib/stack/events, readOnly: true }
+            - { name: events, mountPath: /var/lib/stack/events, subPath: streams, readOnly: true }
           readinessProbe:
             httpGet: { path: /healthz, port: http }
             initialDelaySeconds: 2

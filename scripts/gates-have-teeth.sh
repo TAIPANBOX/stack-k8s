@@ -1707,7 +1707,7 @@ run_case "typed-mode-is-honest: a ConfigMap is rendered for a mode" fail \
 
 run_case "typed-mode-is-honest: manifests/51 drifts from the lines the modes rewrite" fail \
 	'./scripts/typed-mode-is-honest.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "            - { name: events, mountPath: /var/lib/stack/events }", "            - { name: events,  mountPath: /var/lib/stack/events }")')" \
+	"$(py 'edit("manifests/51-typryx.yaml", "            - { name: events, mountPath: /var/lib/stack/events, subPath: streams }", "            - { name: events,  mountPath: /var/lib/stack/events, subPath: streams }")')" \
 	"no longer carries the three lines"
 
 TEETH_EDIT_51="$(py 'edit("cloud/aws/deploy-aws.sh", "    --typed-model-url)      TYPED_MODEL_URL=\"$2\"; shift 2 ;;\n", "")')"
@@ -2073,7 +2073,7 @@ run_case "chain-verifier: the verifier runs hourly" fail \
 	"$TEETH_EDIT_86" \
 	"not at least every 15 minutes"
 
-TEETH_EDIT_87="$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m", "                - \"/var/lib/stack\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m")')"
+TEETH_EDIT_87="$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events, subPath: streams \x7d\n                - \x7b name: events, mountPath: /var/lib/stack/conform, subPath: conform \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m", "                - \"/var/lib/stack\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events, subPath: streams \x7d\n                - \x7b name: events, mountPath: /var/lib/stack/conform, subPath: conform \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m")')"
 run_case "chain-verifier: the verifier watches a directory that is not the bus" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
 	"$TEETH_EDIT_87" \
@@ -2085,7 +2085,7 @@ run_case "chain-verifier: the verifier writes a stream named for another writer"
 	"$TEETH_EDIT_88" \
 	"inside the bus (its name is the source"
 
-TEETH_EDIT_89="$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              emptyDir: \x7b\x7d\n")')"
+TEETH_EDIT_89="$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events, subPath: streams \x7d\n                - \x7b name: events, mountPath: /var/lib/stack/conform, subPath: conform \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events, subPath: streams \x7d\n                - \x7b name: events, mountPath: /var/lib/stack/conform, subPath: conform \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              emptyDir: \x7b\x7d\n")')"
 run_case "chain-verifier: the verifier remembers in an emptyDir" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
 	"$TEETH_EDIT_89" \
@@ -2194,7 +2194,7 @@ run_case "mounted-keys: the risk proxy loses its fsGroup" fail \
 
 run_case "mounted-keys: typryx loses the fsGroup that lets it read its key" fail \
 	'./scripts/mounted-keys-are-readable.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "runAsGroup: 65532, fsGroup: 10001, seccompProfile", "runAsGroup: 65532, seccompProfile")')" \
+	"$(py 'edit("manifests/51-typryx.yaml", "runAsGroup: 20005, fsGroup: 10001, seccompProfile", "runAsGroup: 20005, seccompProfile")')" \
 	"Deployment/typryx mounts secret volume jev-key"
 
 run_case "mounted-keys: the model key mode drops its group read" fail \
@@ -4529,61 +4529,35 @@ run_case "risk-hold: a comment reworded in the planes manifest (must pass)" pass
 
 # Stream files are precreated (CLAUDE.md invariant 59, GOTCHAS 135). A writer that refuses to start
 # on a root-owned volume is the failure; each case below takes one property the gate judges away.
-#
-# 10-planes.yaml now holds two precreate-streams inits (wardryx and the tokenfuse gateway, GOTCHAS 150),
-# so the cases that edit one of them find it by the file its command creates, not by the first match.
-run_case "stream-precreate: wardryx loses its init container" fail \
-	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/wardryx.ndjson"); j = s.rindex("- name: precreate-streams", 0, i); open("manifests/10-planes.yaml", "w").write(s[:j] + "- name: precreate-streams-off" + s[j + len("- name: precreate-streams"):])')" \
-	"Deployment wardryx -> /var/lib/stack/events/wardryx.ndjson: no precreate-streams"
-run_case "stream-precreate: tokenfuse-gateway loses its init container" fail \
-	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/tokenfuse.ndjson"); j = s.rindex("- name: precreate-streams", 0, i); open("manifests/10-planes.yaml", "w").write(s[:j] + "- name: precreate-streams-off" + s[j + len("- name: precreate-streams"):])')" \
-	"Deployment tokenfuse-gateway -> /var/lib/stack/events/tokenfuse.ndjson: no precreate-streams"
-run_case "stream-precreate: the gateway's init creates a file idryx does not load" fail \
-	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "f=/var/lib/stack/events/tokenfuse.ndjson;", "f=/var/lib/stack/events/tokenfuse-x.ndjson;")')" \
-	"does not create /var/lib/stack/events/tokenfuse.ndjson"
-run_case "stream-precreate: the gateway's init runs as root" fail \
-	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/tokenfuse.ndjson"); j = s.rindex("runAsUser: 10001", 0, i); open("manifests/10-planes.yaml", "w").write(s[:j] + "runAsUser: 0" + s[j + len("runAsUser: 10001"):])')" \
-	"the init container runs as root"
-run_case "stream-precreate: the gateway's init creates the file in another group" fail \
-	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/tokenfuse.ndjson"); j = s.rindex("runAsGroup: 10001", 0, i); open("manifests/10-planes.yaml", "w").write(s[:j] + "runAsGroup: 65532" + s[j + len("runAsGroup: 10001"):])')" \
-	"does not create the file in group 10001"
-run_case "stream-precreate: the gateway's init leaves the file group-readable (umask 022)" fail \
-	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/tokenfuse.ndjson"); j = s.index("umask 027", i); open("manifests/10-planes.yaml", "w").write(s[:j] + "umask 022" + s[j + len("umask 027"):])')" \
-	"does not set the file to 0640"
+# Since invariant 89 the table holds the files on a writer's OWN volume (heraldyx's journal, scopyx's,
+# vouchryx's revocation list, the witness's findings); the bus streams are the bus owner's, below.
 run_case "stream-precreate: heraldyx loses the init that creates its journal" fail \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/45-heraldyx.yaml", "- name: precreate-streams", "- name: precreate-streams-off")')" \
 	"Deployment heraldyx -> /var/lib/stack/heraldyx/sent.ndjson: no precreate-streams"
-
 run_case "stream-precreate: the init runs as root" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false", "runAsUser: 0, runAsGroup: 10001, allowPrivilegeEscalation: false")')" \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "runAsUser: 65532, runAsGroup: 65532, allowPrivilegeEscalation: false", "runAsUser: 0, runAsGroup: 65532, allowPrivilegeEscalation: false")')" \
 	"the init container runs as root"
 run_case "stream-precreate: the init runs as another uid than the writer" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "runAsUser: 10002, runAsGroup: 10001, allowPrivilegeEscalation: false", "runAsUser: 10003, runAsGroup: 10001, allowPrivilegeEscalation: false")')" \
-	"does not run as the writer's uid 10002"
+	"$(py 'edit("manifests/54-delegation.yaml", "runAsUser: 20002, runAsGroup: 20002, allowPrivilegeEscalation: false", "runAsUser: 20003, runAsGroup: 20002, allowPrivilegeEscalation: false")')" \
+	"does not run as the writer's uid 20002"
 run_case "stream-precreate: the file is created in the wrong group" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false", "runAsUser: 65532, runAsGroup: 65532, allowPrivilegeEscalation: false")')" \
-	"does not create the file in group 10001"
+	"$(py 'edit("manifests/54-delegation.yaml", "runAsUser: 20002, runAsGroup: 20002, allowPrivilegeEscalation: false", "runAsUser: 20002, runAsGroup: 65532, allowPrivilegeEscalation: false")')" \
+	"does not create the file in group 20002"
 run_case "stream-precreate: the file is left group- and world-readable" fail \
 	'./scripts/stream-files-are-precreated.sh' \
 	"$(py 'edit("manifests/47-scopyx.yaml", "umask 027; : >", "umask 022; : >")')" \
 	"does not set the file to 0640"
 run_case "stream-precreate: the init creates a file the writer does not append to" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "f=/var/lib/stack/events/typryx.ndjson;", "f=/var/lib/stack/events/typryx-x.ndjson;")')" \
-	"does not create /var/lib/stack/events/typryx.ndjson"
+	"$(py 'edit("manifests/45-heraldyx.yaml", "f=/var/lib/stack/heraldyx/sent.ndjson;", "f=/var/lib/stack/heraldyx/sent-x.ndjson;")')" \
+	"does not create /var/lib/stack/heraldyx/sent.ndjson"
 run_case "stream-precreate: the revocation list is not among the files created" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/54-delegation.yaml", "for f in /var/lib/stack/events/vouchryx.ndjson /var/lib/stack/delegation/revocations.ndjson; do", "for f in /var/lib/stack/events/vouchryx.ndjson; do")')" \
+	"$(py 'edit("manifests/54-delegation.yaml", "for f in /var/lib/stack/delegation/revocations.ndjson; do", "for f in /var/lib/stack/delegation/other.ndjson; do")')" \
 	"does not create /var/lib/stack/delegation/revocations.ndjson"
 # Assigned before use: bash 3.2 (the shell a Mac ships) drops the text between the braces when an
 # edit with `{ ... }` sits inside "$(...)", and the teeth run then reported this case BROKEN.
@@ -4594,11 +4568,11 @@ run_case "stream-precreate: the init mounts a different volume than the file liv
 	"does not mount the volume journal"
 run_case "stream-precreate: the init image is not pinned by digest" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 's = open("manifests/10-planes.yaml").read(); i = s.index("f=/var/lib/stack/events/wardryx.ndjson"); j = s.rindex("image: busybox@sha256:", 0, i); k = s.index("\n", j); open("manifests/10-planes.yaml", "w").write(s[:j] + "image: busybox:1.36" + s[k:])')" \
+	"$(py 's = open("manifests/45-heraldyx.yaml").read(); i = s.index("f=/var/lib/stack/heraldyx/sent.ndjson"); j = s.rindex("image: busybox@sha256:", 0, i); k = s.index("\n", j); open("manifests/45-heraldyx.yaml", "w").write(s[:j] + "image: busybox:1.36" + s[k:])')" \
 	"does not run busybox by digest"
 run_case "stream-precreate: the object the table names is renamed away" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "  name: costcrew-crew\n", "  name: costcrew-crew-renamed\n")')" \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "kind: Deployment\nmetadata:\n  name: heraldyx\n", "kind: Deployment\nmetadata:\n  name: heraldyx-renamed\n")')" \
 	"the object is absent, so this writer is measured NOTHING"
 run_case "stream-precreate: a reader drops its group" fail \
 	'./scripts/stream-files-are-precreated.sh' \
@@ -4679,17 +4653,98 @@ spec:
 """
 p = "manifests/52-tokenfuse-mcp-broker.yaml"
 open(p, "w").write(open(p).read() + rogue)')"
-run_case "stream-precreate: an exception names a pod that no longer mounts the claim" fail \
-	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/49-costcrew.yaml", "claimName: stack-events", "claimName: stack-events-off")')" \
-	"the EXCEPTIONS entry matches no pod that mounts stack-events"
-run_case "stream-precreate: an exception that now has the group is stale" fail \
-	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/54-delegation.yaml", "fsGroup: 65532, seccompProfile", "fsGroup: 10001, seccompProfile")')" \
-	"now in group 10001, so its EXCEPTIONS entry is stale"
 run_case "stream-precreate: a comment naming the init container (must pass)" pass \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("manifests/51-typryx.yaml", "      # Creates the stream file before typryx starts", "      # precreate-streams (invariant 59) creates the stream file before typryx starts")')"
+	"$(py 'edit("manifests/54-delegation.yaml", "      # precreate-streams makes the revocation list", "      # precreate-streams (invariant 59) makes the revocation list")')"
+
+# One uid and one group per bus writer, and only the owner writes the bus directory (CLAUDE.md
+# invariant 89, GAPS G3.16). Each case takes one property away, the way a later edit would.
+run_case "bus-writers: two planes write the bus as one uid" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/51-typryx.yaml", "runAsUser: 20005, runAsGroup: 20005, fsGroup: 10001", "runAsUser: 20001, runAsGroup: 20005, fsGroup: 10001")')" \
+	"shares uid 20001 with"
+run_case "bus-writers: a plane carries another producer's group" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "fsGroup: 65532, supplementalGroups: [10001], seccompProfile", "fsGroup: 65532, supplementalGroups: [10001, 20001], seccompProfile")')" \
+	"carries the group of another producer (20001)"
+run_case "bus-writers: a writer is not in its own producer's group" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "runAsUser: 20012, runAsGroup: 20012, fsGroup: 10001, seccompProfile", "runAsUser: 20012, runAsGroup: 10001, fsGroup: 10001, seccompProfile")')" \
+	"is not in group 20012, so it cannot append to tokenfuse-mcp.ndjson"
+run_case "bus-writers: a plane mounts the volume root read-write" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "- { name: events, mountPath: /var/lib/stack/events, subPath: streams }\n            - { name: traces, mountPath: /var/lib/stack/traces, readOnly: true }", "- { name: events, mountPath: /var/lib/stack/events }\n            - { name: traces, mountPath: /var/lib/stack/traces, readOnly: true }")')" \
+	"container verdryx-slo: mounts the stack-events root read-write"
+run_case "bus-writers: a reader mounts the volume root read only" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "- { name: events, mountPath: /var/lib/stack/events, subPath: streams, readOnly: true }", "- { name: events, mountPath: /var/lib/stack/events, readOnly: true }")')" \
+	"container heraldyx: mounts the stack-events root;"
+run_case "bus-writers: a reader mounts the bus read-write" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "- { name: events, mountPath: /var/lib/stack/events, subPath: streams, readOnly: true }", "- { name: events, mountPath: /var/lib/stack/events, subPath: streams }")')" \
+	"container idryx: mounts the bus read-write and is no writer in WRITERS"
+run_case "bus-writers: a pod runs as the bus owner" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "runAsUser: 65532, runAsGroup: 65532, supplementalGroups: [10001], seccompProfile", "runAsUser: 20000, runAsGroup: 65532, supplementalGroups: [10001], seccompProfile")')" \
+	"runs as 20000, the bus owner"
+run_case "bus-writers: a pod starts without waiting for the owner" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/51-typryx.yaml", "- name: bus-ready", "- name: bus-wait")')" \
+	"Deployment typryx: its first init container is not bus-ready"
+run_case "bus-writers: the wait names no marker" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 's = open("manifests/49-costcrew.yaml").read(); open("manifests/49-costcrew.yaml", "w").write(s.replace("until [ -f /bus/streams/.layout ]", "until [ -d /bus/streams ]", 1))')" \
+	"its bus-ready init does not wait for streams/.layout"
+run_case "bus-writers: the owner leaves the bus directory writable to its group" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/11-bus.yaml", "own_dir \"$S\" 10001 2750", "own_dir \"$S\" 10001 2770")')" \
+	"the owner does not make streams/ 20000:10001 2750"
+run_case "bus-writers: the owner gives a stream to another producer's group" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/11-bus.yaml", "wardryx.ndjson:20001", "wardryx.ndjson:20003")')" \
+	"the owner gives wardryx.ndjson to group 20003; its producer is 20001"
+run_case "bus-writers: the owner stops making a stream" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/11-bus.yaml", "typryx.ndjson:20005", "typryx-old.ndjson:20005")')" \
+	"the owner's script does not make typryx.ndjson"
+run_case "bus-writers: the owner is in more groups than AUTH_SYS carries" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/11-bus.yaml", "supplementalGroups: [20001,", "supplementalGroups: [30001, 30002, 30003, 30004, 30005, 20001,")')" \
+	"NFS with AUTH_SYS honours 16"
+run_case "bus-writers: the owner runs as another uid" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/11-bus.yaml", "        runAsUser: 20000\n", "        runAsUser: 20001\n")')" \
+	"the owner runs as 20001, not 20000"
+run_case "bus-writers: a writer the table names is gone" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/54-delegation.yaml", "        - name: vouchryx\n", "        - name: vouchryx-main\n")')" \
+	"container vouchryx: WRITERS says it appends to vouchryx.ndjson"
+run_case "bus-writers: no owner Job at all" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/11-bus.yaml", "kind: Job\n", "kind: CronJob\n")')" \
+	"no Job bus-owner mounts the stack-events root"
+run_case "bus-writers: no pod mounts the claim at all" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'import glob, subprocess
+for f in subprocess.run(["git", "ls-files", "*.yaml", "*.sh"], capture_output=True, text=True).stdout.split():
+    t = open(f).read()
+    if "claimName: stack-events" in t:
+        open(f, "w").write(t.replace("claimName: stack-events", "claimName: stack-events-gone"))')" \
+	"no pod mounts the stack-events claim, so this gate measured NOTHING"
+run_case "bus-writers: a pod a script writes mounts the volume root" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("lib/tool-hold.sh", "{ name: events, mountPath: /var/lib/stack/events, readOnly: true, subPath: streams }", "{ name: events, mountPath: /var/lib/stack/events, readOnly: true }")')" \
+	"container replay: mounts the stack-events root"
+run_case "bus-writers: a probe entry outlives its pod" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("security-tests.sh", "metadata: { name: sec-bus, labels:", "metadata: { name: sec-bus-renamed, labels:")')" \
+	"the PROBES entry matches no pod"
+run_case "bus-writers: a writer's groups written as a longer list (must pass)" pass \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "fsGroup: 65532, supplementalGroups: [10001], seccompProfile", "fsGroup: 65532, supplementalGroups: [ 10001, 65532 ], seccompProfile")')"
+run_case "bus-writers: a comment above the bus-ready init reworded (must pass)" pass \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "# bus-ready (CLAUDE.md invariant 89, GAPS G3.16)", "# bus-ready, the wait (CLAUDE.md invariant 89, GAPS G3.16)")')"
 
 # ---- admission on in every launcher that applies the stack (CLAUDE.md invariant 58) ----
 TEETH_EDIT_196="$(py 'edit("cloud/gcp/deploy-gcp.sh", "k_ \"apply -k /root/stack-k8s/manifests\"\n", "su_ \"$FIRST\" \x27KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/up.sh --enforce\x27\nk_ \"apply -k /root/stack-k8s/manifests\"\n")')"

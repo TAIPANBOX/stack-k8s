@@ -1,0 +1,185 @@
+# stack-k8s fix/g3-16-bus-per-producer-uid on k3s v1.36.2+k3s1, Longhorn v1.7.2, 2026-11-12T00:28:47Z
+# deploy.sh --skip-install --skip-images, run 3 over the same cluster (runs 1 and 2: the Secrets install.sh makes were added by hand after run 1; run 2 named an SMTP host without a port)
+
+## verify.sh and security-tests.sh, from the deploy log
+  ok   every node Ready
+  ok   no machine is registered under two node names
+  note single-node cluster: cluster DNS cannot be spread, and one replica is all there is to have
+  ok   every pod Running (finished Job pods ignored)
+  note single-node cluster: nothing to spread over, and no resilience to claim
+  ok   the RWX event volume is Bound
+  ok   1 default StorageClass
+  ok   25 NetworkPolicies present
+  ok   default-deny holds (the console cannot reach the policy store)
+  ok   all five planes answer 200, and wardryx reaches its store
+  ok   the console can read all three planes it governs
+  ok   the console's bus is live
+  ok   gateway refuses /v1/runs without the admin key (401)
+  ok   gateway serves /v1/runs with the admin key
+  ok   the gateway runs the identity map ConfigMap gateway-identity-map holds
+  ok   the gateway runs the client keys Secret gateway-client-keys holds
+  ok   the gateway refuses a call with no client key (401)
+  ok   the gateway refuses a call with an unknown client key (401)
+  ok   an environment descriptor is mounted
+  ok   trust domain is set: stand.example
+  ok   the notifier is running
+  ok   the notifier mounts the event log read-only
+  ok   3 plane(s) are configured to write the shared event log
+  ok   the notifier's state volume is writable by it (fsGroup 65532)
+  ok   the notifier watches all 11 event log(s) that exist
+  ok   the dispatch record is intact
+  24 passed, 0 failed, 2 noted
+  ok   the notifier's egress reaches nothing inside the cluster, on any port
+  ok   an unlabelled pod in the namespace reached none of the six services
+  ok   console -> money plane (open, as designed)
+  ok   console -> policy plane (open, as designed)
+  ok   console -> identity plane (open, as designed)
+  ok   console -> the policy STORE (only wardryx may) (blocked, as designed)
+  ok   console -> the model provider (must go through the gateway) (blocked, as designed)
+  ok   console -> the open internet (blocked, as designed)
+  ok   gateway -> provider on 443 (the metered path is open)
+  ok   gateway -> provider on 80 is blocked (443 only)
+  ok   gateway cannot turn around and hit the cluster's own API
+  ok   a privileged, hostNetwork, hostPath pod was REJECTED by admission
+  ok   every Deployment and StatefulSet: non-root, no privilege escalation, all capabilities dropped, RuntimeDefault seccomp, no host namespaces, no hostPath
+  ok   the console itself runs inside agent-stack under enforced restricted
+  ok   no namespace holds NET_ADMIN: there is no privileged half to audit
+  ok   every Service is ClusterIP (the operator reaches the console over their own tunnel)
+  note read the datastore on disk directly (no etcdctl on this node); control: the Secret's NAME appears 5 times, its VALUE none
+  ok   a freshly written Secret is NOT plaintext in etcd (an encryption provider is active)
+  ok   no ConfigMap key looks like a credential
+  ok   g316 (local): sshd refuses passwords
+  ok   g316 (local): etcd is not listening on a public address
+  ok   the forged pod inherits no credential from the cluster
+  ok   every admin verb from the forged pod was refused, wardryx, tokenfuse-cloud and the gateway alike
+  ok   the gateway asks the PDP on every call (mode=enforce)
+  ok   the gateway knows where the PDP is (http://wardryx:8090)
+  ok   an unreachable PDP denies (failmode=closed)
+  ok   the gateway has a real upstream (https://api.anthropic.com/v1/messages)
+  note unexpected allow-probe result, read it by hand: ALLOWPROBE HTTP/1.1 401 Unauthorized
+  note deny-probe inconclusive, read it by hand: DENYPROBE HTTP/1.1 401 Unauthorized 
+  ok   streams/ is the bus owner's, 20000:10001 2750
+  ok   a plane cannot write another plane's stream (costcrew's identity refused on wardryx.ndjson)
+  ok   a plane cannot rename a name in the bus, nor add one
+  note namespace cosign-system: Pod Security 'none', 0 NetworkPolicies - a privileged pod can run there (fix: kubectl apply -f manifests/60-harden-neighbours.yaml, read its header first)
+  note namespace default: Pod Security 'none', 0 NetworkPolicies - a privileged pod can run there (fix: kubectl apply -f manifests/60-harden-neighbours.yaml, read its header first)
+  29 passed, 0 failed, 5 noted
+exit=0
+
+## pods and the uid each container runs as
+agent-conform-29907375-zd2gg Succeeded [agent-conform uid=pod] pod-uid=10002 pod-groups=10002/<no value>/10001
+g316-drills-7gnsh Failed [mockryx uid=pod] pod-uid=20040 pod-groups=20040/<no value>/10001
+g316-drills-9tphf Failed [mockryx uid=pod] pod-uid=20040 pod-groups=20040/<no value>/10001
+g316-drills-bfxj7 Failed [mockryx uid=pod] pod-uid=20040 pod-groups=20040/<no value>/10001
+g316-drills-cz6qx Running [mockryx uid=pod] pod-uid=20040 pod-groups=20040/<no value>/10001
+g316-drills-l2pd6 Failed [mockryx uid=pod] pod-uid=20040 pod-groups=20040/<no value>/10001
+g316-drills-zh9wz Failed [mockryx uid=pod] pod-uid=20040 pod-groups=20040/<no value>/10001
+g316-identity-sweep-2mcpd Succeeded [idryx-rescan uid=pod] pod-uid=<no value> pod-groups=<no value>/[10001]/<no value>
+g316-record-seal-z8524 Succeeded [trailryx uid=pod] pod-uid=10001 pod-groups=10001/<no value>/10001
+genaryx-console-6ffdbbb6b4-vmdfk Running [console uid=pod] pod-uid=20030 pod-groups=20030/[10001]/10001
+heraldyx-6d7565b48d-9rrwv Running [heraldyx uid=pod] pod-uid=65532 pod-groups=65532/[10001]/65532
+idryx-6b8f4475f9-vsttb Running [idryx uid=pod] pod-uid=65532 pod-groups=65532/[10001]/<no value>
+keyryx-custody-88bdcb66d-gt9tl Running [keyryx uid=pod] pod-uid=20101 pod-groups=20101/<no value>/20101
+keyryx-witness-576dbd88b4-vll58 Running [keyryx-witness uid=pod] pod-uid=20100 pod-groups=10001/<no value>/10001
+policy-db-0 Running [postgres uid=pod] pod-uid=70 pod-groups=70/<no value>/70
+tokenfuse-cloud-7968887588-s2x5w Running [cloud uid=pod] pod-uid=20013 pod-groups=20013/<no value>/10001
+tokenfuse-gateway-5c66db4db-gvt8h Running [gateway uid=pod] [focus-export uid=pod] [verdryx-slo uid=20020] pod-uid=20010 pod-groups=20010/<no value>/10001
+vouchryx-5ff5658b7c-c4fkp Running [vouchryx uid=pod] pod-uid=20002 pod-groups=20002/[10001]/65532
+wardryx-bc98dbff4-2tzj7 Running [wardryx uid=pod] pod-uid=20001 pod-groups=10001/[20001]/10001
+
+## the bus, as a reader sees it (idryx)
+error: Internal error occurred: Internal error occurred: error executing command in container: failed to exec in container: failed to start exec "87c46d5fff2dbaceb0525d3c77f98f2fe85f84891662cc30780ab8d43b734978": OCI runtime exec failed: exec failed: unable to start container process: exec: "ls": executable file not found in $PATH
+
+## the volume root, as the owner left it (bus-owner log)
+error: error from server (NotFound): jobs.batch "bus-owner" not found in namespace "agent-stack"
+
+## readers
+-- heraldyx
+Defaulted container "heraldyx" out of: heraldyx, bus-ready (init), precreate-streams (init)
+2026/11/12 00:20:49 passports: 0 owner(s) known from /var/lib/stack/passports
+2026/11/12 00:20:49 watching 12 file(s) under 2 path(s), floor high, dedup 10m0s, ceiling 20/hour
+2026/11/12 00:20:49 sending via smtp to 1 recipient(s)
+2026/11/12 00:21:19 delivery failed (smtp): deliver: smtp send: dial tcp: lookup smtp.stand.invalid on 10.43.0.10:53: no such host
+2026/11/12 00:22:22 delivery failed (smtp): deliver: smtp send: dial tcp: lookup smtp.stand.invalid on 10.43.0.10:53: no such host
+-- idryx
+Defaulted container "idryx" out of: idryx, bus-ready (init)
+idryx: tokenfuse /var/lib/stack/events/tokenfuse.ndjson: prev_hash chain intact: 5 event(s) chained, 1 chain head(s), 0 unverifiable
+idryx: tokenfuse /var/lib/stack/events/tokenfuse.ndjson: 1 event type(s) no idryx detector reads, ingested as they are: "identity_mismatch"; 1 source(s) no idryx detector reads, ingested as they are: "tokenfuse"
+idryx: tokenfuse /var/lib/stack/events/tokenfuse.ndjson: prev_hash chain intact: 5 event(s) chained, 1 chain head(s), 0 unverifiable
+idryx: tokenfuse /var/lib/stack/events/tokenfuse.ndjson: 1 event type(s) no idryx detector reads, ingested as they are: "identity_mismatch"; 1 source(s) no idryx detector reads, ingested as they are: "tokenfuse"
+idryx: tokenfuse /var/lib/stack/events/tokenfuse.ndjson: prev_hash chain intact: 5 event(s) chained, 1 chain head(s), 0 unverifiable
+-- identity-sweep (job from the CronJob)
+Defaulted container "idryx-rescan" out of: idryx-rescan, bus-ready (init)
+medium    bom_incomplete  agent://mockryx.local/sec-probe      2026-11-12 00:23Z  agent-bom incomplete: missing owner, runtime, attestation
+medium    bom_incomplete  agent://unidentified.invalid/caller  2026-11-12 00:23Z  agent-bom incomplete: missing owner, runtime, attestation
+low       orphaned_nhi    agent://mockryx.local/sec-probe      2026-11-12 00:23Z  NHI has no mapped owner
+low       orphaned_nhi    agent://unidentified.invalid/caller  2026-11-12 00:23Z  NHI has no mapped owner
+idryx: tokenfuse /var/lib/stack/events/tokenfuse.ndjson: 1 event type(s) no idryx detector reads, ingested as they are: "identity_mismatch"; 1 source(s) no idryx detector reads, ingested as they are: "tokenfuse"
+idryx: tokenfuse /var/lib/stack/events/tokenfuse.ndjson: prev_hash chain intact: 5 event(s) chained, 1 chain head(s), 0 unverifiable
+-- record-seal (job from the CronJob)
+/var/lib/stack/events/wardryx.ndjson: nothing is remembered about this file, so all of it is new
+/var/lib/stack/events/wardryx.ndjson: nothing new. The cursor is at byte 0 of 0 (0 line(s), 0 record(s) so far)
+  refused: not_an_envelope 0 unknown_schema 0 no_agent 0 foreign_trust_domain 0 claimed_subject 0 unknown_type 0 no_run_id 0 bad_time 0
+cursor: byte 0, 0 line(s), 0 record(s), committed 1 time(s), in /var/lib/stack/records/s0-d46298f3bdcc91f8.cur
+0 sealed segment(s), 0 record(s), in /var/lib/stack/records
+0 row(s)
+trailryx-node: there is nothing sealed here to pack
+nothing sealed here to pack yet
+-- keyryx-witness
+Defaulted container "keyryx-witness" out of: keyryx-witness, bus-ready (init), root-key-copy (init), precreate-streams (init)
+2026/11/11 23:46:12 keyryx witness v0.1.4: listening on 0.0.0.0:4341; reading /var/lib/stack/events every 1m0s
+-- agent-conform (last scheduled run)
+NOTE typryx.ndjson: no event to verify (0 line(s), 0 malformed)
+NOTE verdryx.ndjson: no event to verify (0 line(s), 0 malformed)
+NOTE vouchryx.ndjson: no event to verify (0 line(s), 0 malformed)
+NOTE wardryx.ndjson: no event to verify (0 line(s), 0 malformed)
+agent-conform watch-dir: 11 stream(s), 0 new alert(s) written (0 chain_broken), 0 new checkpoint refusal(s)
+
+## a decision through the running wardryx (asked from the console pod, with the key it holds)
+{
+  "decision": "allow",
+  "policy_version": "9e560629dee4",
+  "reason": "allowed: request satisfies all matched policy rules",
+  "approval_token_required": false,
+  "cacheable": false
+}
+
+
+## the bus, as a reader sees it (a pod as idryx: uid 65532, group 10001, subPath streams, read only)
+/ev:
+total 24
+drwxr-s---    3 20000    10001         4096 Nov 12 00:07 .
+drwxr-xr-x    1 0        0             4096 Nov 12 00:29 ..
+-rw-r-----    1 20000    10001           14 Nov 12 00:07 .layout
+-rw-rw-r--    1 20000    10002            0 Nov 11 23:45 agent-conform.ndjson
+-rw-rw-r--    1 20000    20030            0 Nov 11 23:45 console.ndjson
+-rw-rw-r--    1 20000    10003            0 Nov 11 23:45 costcrew.ndjson
+-rw-rw-r--    1 20000    20040            0 Nov 11 23:45 mockryx.ndjson
+-rw-rw-r--    1 20000    20013            0 Nov 11 23:45 tokenfuse-cloud.ndjson
+-rw-rw-r--    1 20000    20012            0 Nov 11 23:45 tokenfuse-mcp.ndjson
+-rw-rw-r--    1 20000    20010         2492 Nov 12 00:22 tokenfuse.ndjson
+-rw-rw-r--    1 20000    20005            0 Nov 11 23:45 typryx.ndjson
+-rw-rw-r--    1 20000    20020            0 Nov 11 23:45 verdryx.ndjson
+-rw-rw-r--    1 20000    20002            0 Nov 11 23:45 vouchryx.ndjson
+drwxrwxr-x    2 20000    20001         4096 Nov 12 00:08 wardryx-policy-archive
+-rw-rw-r--    1 20000    20001          631 Nov 12 00:29 wardryx.ndjson
+
+/ev/wardryx-policy-archive:
+total 16
+drwxrwxr-x    2 20000    20001         4096 Nov 12 00:08 .
+drwxr-s---    3 20000    10001         4096 Nov 12 00:07 ..
+-rw-r-----    1 20001    10001          779 Nov 12 00:08 9e560629dee4.json
+-rw-r-----    1 20001    10001          474 Nov 11 23:51 e2646312dcd6.json
+
+0 lines  /ev/agent-conform.ndjson
+0 lines  /ev/console.ndjson
+0 lines  /ev/costcrew.ndjson
+0 lines  /ev/mockryx.ndjson
+0 lines  /ev/tokenfuse-cloud.ndjson
+0 lines  /ev/tokenfuse-mcp.ndjson
+6 lines  /ev/tokenfuse.ndjson
+0 lines  /ev/typryx.ndjson
+0 lines  /ev/verdryx.ndjson
+0 lines  /ev/vouchryx.ndjson
+1 lines  /ev/wardryx.ndjson
+{"schema":"taipanbox.dev/agent-event/v0.2","ts":"2026-11-12T00:29:15Z","source":"wardryx","type":"policy_allow","agent_id":"agent://stand.example/agents/g316","severity":"info","run_id":"run-g316-full","data":{"approval_

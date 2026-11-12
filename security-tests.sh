@@ -663,6 +663,68 @@ case "$pdp_out" in
     note "deny-probe inconclusive, read it by hand: $(printf '%s' "$pdp_out" | grep DENYPROBE || echo none)" ;;
 esac
 
+head_ "11c. a plane writes only its own stream, and only the bus owner changes a name on the bus"
+# CLAUDE.md invariant 89, GAPS G3.16, GOTCHAS 164. The probe takes costcrew's identity (uid and group
+# 10003, the bus group 10001) and mounts the bus as every plane does, subPath streams, READ-WRITE: the
+# question is what the modes refuse, not what a read-only mount refuses. It reads wardryx.ndjson first,
+# so a refusal below cannot be a mount that failed. Nothing it tries should succeed; a rename that does
+# is put back at once and reported.
+kc delete pod sec-bus --ignore-not-found >/dev/null 2>&1
+cat <<'YAML' | kc apply -f - >/dev/null 2>&1
+apiVersion: v1
+kind: Pod
+metadata: { name: sec-bus, labels: { role: security-probe } }
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext: { runAsNonRoot: true, runAsUser: 10003, runAsGroup: 10003, supplementalGroups: [10001], seccompProfile: { type: RuntimeDefault } }
+  containers:
+    - name: probe
+      image: ghcr.io/taipanbox/genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5
+      imagePullPolicy: IfNotPresent
+      command: ["sleep", "600"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: { drop: ["ALL"] }
+      volumeMounts: [{ name: events, mountPath: /bus, subPath: streams }]
+  volumes:
+    - name: events
+      persistentVolumeClaim: { claimName: stack-events }
+YAML
+if kc wait --for=condition=Ready pod/sec-bus --timeout=90s >/dev/null 2>&1; then
+  bus_file="$(mktemp "${TMPDIR:-/tmp}/sec-bus.XXXXXX")"
+  cat > "${bus_file}" <<'SH'
+cd /bus || { echo "BUSPROBE nomount"; exit 0; }
+if head -c 0 wardryx.ndjson 2>/dev/null; then echo "BUSPROBE read ok"; else echo "BUSPROBE read refused"; fi
+echo "BUSPROBE dir $(stat -c '%u:%g %a' .)"
+if (echo '{"forged":true}' >> wardryx.ndjson) 2>/dev/null; then echo "BUSPROBE append WROTE"; else echo "BUSPROBE append refused"; fi
+if (: > sec-bus-probe.ndjson) 2>/dev/null; then echo "BUSPROBE create WROTE"; rm -f sec-bus-probe.ndjson; else echo "BUSPROBE create refused"; fi
+if mv wardryx.ndjson .sec-bus-moved 2>/dev/null; then mv .sec-bus-moved wardryx.ndjson; echo "BUSPROBE rename WROTE"; else echo "BUSPROBE rename refused"; fi
+SH
+  bus_out="$(kc exec -i sec-bus -- sh < "${bus_file}" 2>/dev/null | grep '^BUSPROBE ')"
+  rm -f "${bus_file}"
+  echo "$bus_out" | sed 's/^/    /'
+  if ! grep -q 'BUSPROBE read ok' <<<"$bus_out"; then
+    note "the probe could not read the bus, so what it was refused says nothing: $(printf '%s' "$bus_out" | tr '\n' ' ')"
+  else
+    grep -q 'BUSPROBE dir 20000:10001 2750' <<<"$bus_out" \
+      && ok "streams/ is the bus owner's, 20000:10001 2750" \
+      || bad "streams/ is $(sed -n 's/^BUSPROBE dir //p' <<<"$bus_out"), not 20000:10001 2750: a plane may change a name on the bus"
+    grep -q 'BUSPROBE append refused' <<<"$bus_out" \
+      && ok "a plane cannot write another plane's stream (costcrew's identity refused on wardryx.ndjson)" \
+      || bad "costcrew's identity appended to wardryx.ndjson: a plane can write another plane's stream"
+    if grep -q 'BUSPROBE create refused' <<<"$bus_out" && grep -q 'BUSPROBE rename refused' <<<"$bus_out"; then
+      ok "a plane cannot rename a name in the bus, nor add one"
+    else
+      bad "a plane can add or rename a name in the bus: $(grep -E 'create|rename' <<<"$bus_out" | tr '\n' ' ')"
+    fi
+  fi
+  kc delete pod sec-bus --wait=false >/dev/null 2>&1
+else
+  note "could not start the bus probe pod; skipping the bus check"
+fi
+
 head_ "12. the neighbouring namespaces"
 # GOTCHAS 23: this namespace is hardened; a neighbour is the platform's job.
 # Reported, not asserted: the suite cannot fix another namespace and must not
@@ -682,7 +744,7 @@ done
 # verify.sh started the moment this script returns found one still
 # Terminating and failed its "every pod Running or Completed" check on a
 # healthy stack. Wait for them to be gone before reporting, bounded.
-for p in sec-probe-notify sec-probe sec-privileged sec-forged; do
+for p in sec-probe-notify sec-probe sec-privileged sec-forged sec-bus; do
   kc wait --for=delete "pod/$p" --timeout=60s >/dev/null 2>&1 || true
 done
 

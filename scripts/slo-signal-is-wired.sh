@@ -71,10 +71,10 @@ wants = {
     "name: VERDRYX_EVENTS_PATH": "it is not told where to write",
     "key: WARDRYX_SIGNAL_EVENTS": "its path is not the key wardryx reads, so the two can name different files",
     "{ name: traces, mountPath: /var/lib/stack/traces, readOnly: true }": "it can write the traces it reads",
-    "{ name: events, mountPath: /var/lib/stack/events }": "it cannot reach the events volume",
+    "{ name: events, mountPath: /var/lib/stack/events, subPath: streams }": "it cannot reach the bus (subPath streams, invariant 89)",
     "readOnlyRootFilesystem: true": "its root is writable",
     "allowPrivilegeEscalation: false": "it can gain privileges",
-    "runAsGroup: 10001": "it is not in the stack group, so it cannot create on the volume",
+    "runAsGroup: 20020": "it is not in group 20020, the group the bus owner gives verdryx.ndjson (invariant 89), so it cannot append to it",
 }
 for want, why in wants.items():
     if want not in side:
@@ -109,7 +109,7 @@ ward = planes_code[wardryx_start:]
 ward = ward[: ward.find("\n---\n")]
 if "- name: WARDRYX_SIGNAL_EVENTS" not in ward or "key: WARDRYX_SIGNAL_EVENTS" not in ward:
     bad.append("wardryx: it is not handed WARDRYX_SIGNAL_EVENTS, so nothing reads the budget")
-if "{ name: events, mountPath: /var/lib/stack/events }" not in ward:
+if "{ name: events, mountPath: /var/lib/stack/events, subPath: streams }" not in ward:
     bad.append("wardryx: it does not mount the events volume, so it cannot read the file")
 
 rule = re.search(r"- name: slo-burn-hold\n((?: {6}.*\n)+)", code(base))

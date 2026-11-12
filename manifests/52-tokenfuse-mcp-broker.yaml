@@ -192,11 +192,10 @@ spec:
       # usable by a compromised container for discovery and SelfSubjectReview,
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
-      # Same shape tokenfuse-cloud and tokenfuse-gateway already use: uid/gid
-      # 10001, fsGroup 10001, because this container appends its own file to
-      # the shared `stack-events` claim, which those two pods' fsGroup leaves
-      # 10001:10001 mode 2775.
-      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      # uid and group 20012, the broker's own as in stack-single (CLAUDE.md
+      # invariant 89): tokenfuse-mcp.ndjson is the bus owner's file in group
+      # 20012. fsGroup 10001 enters the bus and reads the key files below.
+      securityContext: { runAsNonRoot: true, runAsUser: 20012, runAsGroup: 20012, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
       # Leave a dead node in 30 s, not the default 300 s. CLAUDE.md invariants 21
       # and 22: one replica, so the default would charge five minutes of outage
       # after the node is marked NotReady.
@@ -205,10 +204,18 @@ spec:
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
       # The broker's copy of vouchryx's key set (CLAUDE.md invariant 54), as the gateway's: fetched before start,
       # into a memory volume, and retried until vouchryx answers.
+      # bus-ready (CLAUDE.md invariant 89, GAPS G3.16): this pod mounts the bus as subPath streams, which
+      # the bus-owner Job (manifests/11-bus.yaml) makes. kubelet would make a missing subPath itself, as
+      # root 0777, so the pod waits for the owner's marker first, reading the volume root READ ONLY.
       initContainers:
+        - name: bus-ready
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 20012, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+          volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
         - name: fetch-vouchryx-jwks
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
-          securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          securityContext: { runAsNonRoot: true, runAsUser: 20012, runAsGroup: 20012, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
           command: ["sh", "-c", "i=0; until wget -q -T 5 -O /jwks/jwks.json http://vouchryx:4310/.well-known/jwks.json && grep -q keys /jwks/jwks.json; do i=$((i+1)); [ $i -gt 150 ] && exit 1; sleep 2; done"]
           volumeMounts: [{ name: vouchryx-jwks, mountPath: /jwks }]
       containers:
@@ -310,7 +317,7 @@ spec:
           ports: [{ name: mcp, containerPort: 4200 }]
           lifecycle: { preStop: { sleep: { seconds: 5 } } }
           volumeMounts:
-            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
             - { name: vouchryx-jwks, mountPath: /etc/tokenfuse/delegation, readOnly: true }
             - { name: taint-key, mountPath: /run/taint, readOnly: true }
           readinessProbe:
@@ -509,14 +516,14 @@ spec:
           automountServiceAccountToken: false
           # fsGroup: the key below is a 0440 file, readable through the group fsGroup adds (CLAUDE.md invariant 32).
           # mockryx v0.5.0 accepts a key file owned by root at 0640 or stricter.
-          securityContext: { runAsNonRoot: true, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
-          # The stream file before the drill runs, as the drill image's uid, as `drills` does (CLAUDE.md invariant 59).
+          securityContext: { runAsNonRoot: true, runAsUser: 20040, runAsGroup: 20040, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+          # uid and group 20040, as `drills`: both append to mockryx.ndjson (CLAUDE.md invariant 89).
           initContainers:
-            - name: precreate-streams
+            - name: bus-ready
               image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
-              securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
-              command: ["sh", "-c", "f=/var/lib/stack/events/mockryx.ndjson; if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; ls -ln /var/lib/stack/events"]
-              volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
+              securityContext: { runAsNonRoot: true, runAsUser: 20040, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+              command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+              volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
           containers:
             - name: mockryx
               image: ghcr.io/taipanbox/mockryx:v0.5.0@sha256:32e4e79cd3bf95d23aa240f925ca139726faf8a13cdcd3a1728ea3df633f08be
@@ -533,7 +540,7 @@ spec:
                 # applied by hand without the mint runs it keyless, which the broker refuses 401.
                 - { name: MOCKRYX_MCP_BROKER_KEY_FILE, value: "/run/drills-broker/broker_key" }
               volumeMounts:
-                - { name: events, mountPath: /var/lib/stack/events }
+                - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
                 - { name: drills-broker-key, mountPath: /run/drills-broker, readOnly: true }
                 # This cluster's tool-hold drill over the image's own file of that name (see above); the other two
                 # broker drills run as the image ships them.

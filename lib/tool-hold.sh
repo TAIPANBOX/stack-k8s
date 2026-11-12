@@ -197,6 +197,14 @@ spec:
       restartPolicy: Never
       automountServiceAccountToken: false
       securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, supplementalGroups: [10001], seccompProfile: { type: RuntimeDefault } }
+      # The bus is subPath streams of the claim (CLAUDE.md invariant 89); bus-ready waits for the owner's
+      # marker, reading the claim's root read only, so kubelet never makes streams/ itself.
+      initContainers:
+        - name: bus-ready
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 65532, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 60 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+          volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
       containers:
         - name: replay
           image: $image
@@ -207,7 +215,7 @@ spec:
             requests: { cpu: 50m, memory: 64Mi }
             limits: { memory: 512Mi }
           volumeMounts:
-            - { name: events, mountPath: /var/lib/stack/events, readOnly: true }
+            - { name: events, mountPath: /var/lib/stack/events, readOnly: true, subPath: streams }
             - { name: candidate, mountPath: /candidate, readOnly: true }
       volumes:
         - name: events

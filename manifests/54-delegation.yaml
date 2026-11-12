@@ -62,10 +62,11 @@ spec:
       # usable by a compromised container for discovery and SelfSubjectReview,
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
-      # 65532 is the distroless nonroot uid this image ships (the same image
-      # runs `vouchryx-demo` too, via a command override, so nothing here
-      # needs a second image).
-      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      # uid and group 20002, vouchryx's own as in stack-single (CLAUDE.md invariant
+      # 89): vouchryx.ndjson is the bus owner's file in group 20002. fsGroup 65532
+      # keeps the revocation store writable to the group whatever uid wrote it
+      # before (the image ships 65532); supplementalGroups 10001 enters the bus.
+      securityContext: { runAsNonRoot: true, runAsUser: 20002, runAsGroup: 20002, fsGroup: 65532, supplementalGroups: [10001], seccompProfile: { type: RuntimeDefault } }
       # Leave a dead node in 30 s, not the default 300 s. CLAUDE.md
       # invariant 21. This pod holds a ReadWriteOnce claim (the revocation
       # store); on Longhorn, once evicted, it is force-deleted and its volume
@@ -76,15 +77,23 @@ spec:
       tolerations:
         - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
-      # Creates both files vouchryx appends to before it starts, as its own uid (CLAUDE.md
-      # invariant 59, GOTCHAS 135). An existing file is left as it is. Mode 0640, group 10001: the
-      # events file is for the bus readers, and the revocation list is owned by this uid either way.
+      # precreate-streams makes the revocation list on vouchryx's own claim, as its own uid (CLAUDE.md
+      # invariant 59, GOTCHAS 135); an existing file is left as it is. Its stream on the bus is the
+      # bus owner's to make (invariant 89).
+      # bus-ready (CLAUDE.md invariant 89, GAPS G3.16): this pod mounts the bus as subPath streams, which
+      # the bus-owner Job (manifests/11-bus.yaml) makes. kubelet would make a missing subPath itself, as
+      # root 0777, so the pod waits for the owner's marker first, reading the volume root READ ONLY.
       initContainers:
+        - name: bus-ready
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 20002, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+          volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
         - name: precreate-streams
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
-          securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
-          command: ["sh", "-c", "for f in /var/lib/stack/events/vouchryx.ndjson /var/lib/stack/delegation/revocations.ndjson; do if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; done; ls -ln /var/lib/stack/events /var/lib/stack/delegation"]
-          volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }, { name: delegation-state, mountPath: /var/lib/stack/delegation }]
+          securityContext: { runAsNonRoot: true, runAsUser: 20002, runAsGroup: 20002, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "for f in /var/lib/stack/delegation/revocations.ndjson; do if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; done; ls -ln /var/lib/stack/delegation"]
+          volumeMounts: [{ name: delegation-state, mountPath: /var/lib/stack/delegation }]
       containers:
         - name: vouchryx
           image: ghcr.io/taipanbox/vouchryx:v0.7.0@sha256:c2b684746b854af9cc0a0cef7e5ebcaa8ee5070806ddf3912d5603af45360912
@@ -145,7 +154,7 @@ spec:
             - { name: trusted-issuer-jwks, mountPath: /etc/vouchryx/trusted, readOnly: true }
             - { name: workload-jwks, mountPath: /etc/vouchryx/workload, readOnly: true }
             - { name: delegation-state, mountPath: /var/lib/stack/delegation }
-            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
           # Stop taking traffic before stopping: the endpoint leaves the
           # Service while this sleeps. CLAUDE.md invariant 21.
           lifecycle: { preStop: { sleep: { seconds: 5 } } }

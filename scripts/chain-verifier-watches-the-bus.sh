@@ -23,15 +23,18 @@
 #      EVENTS_DIR names in stack-wiring), and its `-out` is a file named
 #      agent-conform.ndjson inside it: the stream has to be on the bus for the
 #      notifier and the console to see it;
-#   4. what it remembers (`-state`, when given) is inside that same directory,
-#      on the claim `stack-events`, and the pod mounts no emptyDir: a CronJob is a
+#   4. what it remembers (`-state`, when given) is in /var/lib/stack/conform, the
+#      `conform/` directory beside the bus on the claim `stack-events` (subPath
+#      conform; the bus itself is subPath streams, invariant 89, and the verifier
+#      replaces its memory by rename, which a directory only the owner may write
+#      refuses), and the pod mounts no emptyDir: a CronJob is a
 #      new pod per run, so an emptyDir forgets between runs and a persistent break
 #      is announced again every run. It mounts exactly one claim and it is the one
 #      that exists: a second claim is a billed disk, the operator's decision;
 #   5. a new break must stay visible: restartPolicy Never and backoffLimit 0, so a
 #      retry cannot exit 0 over the failure (the finding is remembered by then);
-#   6. it can create its file on the bus (fsGroup 10001, as the other bus writers),
-#      under its own uid and not the money plane's (10002, not 10001), and it is
+#   6. it is in the bus group (fsGroup 10001), under its own uid and not the money
+#      plane's (10002, not 10001), and it is
 #      hardened like everything else here (non-root, read-only root, no
 #      capabilities, no service account token);
 #   7. the image tag is v1.1.0 or later: `watch-dir` does not exist before it.
@@ -75,6 +78,7 @@ def code_of(text):
 
 
 EVENTS_DIR = None
+CONFORM_DIR = "/var/lib/stack/conform"
 base = pathlib.Path("manifests/00-base.yaml")
 if base.exists():
     mm = re.search(r'(?m)^\s*EVENTS_DIR:\s*"([^"]+)"', code_of(base.read_text()))
@@ -132,9 +136,12 @@ for path, doc in subjects:
                                 "inside the bus (its name is the source its events claim)")
         if "-state" in args and args.index("-state") + 1 < len(args):
             state = args[args.index("-state") + 1]
-            if not state.startswith(bus + "/"):
-                problems.append(f"{where}: -state is {state!r}, outside the bus directory, so it is on a volume this "
-                                "check cannot show persists")
+            if not state.startswith(CONFORM_DIR + "/"):
+                problems.append(f"{where}: -state is {state!r}, not in {CONFORM_DIR}, the verifier's own directory on "
+                                "stack-events, so it is on a volume this check cannot show persists")
+            elif not re.search(r"\{\s*name:\s*events\s*,\s*mountPath:\s*" + re.escape(CONFORM_DIR) + r"\s*,\s*subPath:\s*conform\s*\}", c):
+                problems.append(f"{where}: {CONFORM_DIR} is not the claim's conform/ directory (subPath conform), so "
+                                "its memory is not on stack-events")
 
     if "emptyDir" in c:
         problems.append(f"{where}: mounts an emptyDir: a CronJob is a new pod per run, so what it remembers is gone "
@@ -143,8 +150,9 @@ for path, doc in subjects:
     if claims != ["stack-events"]:
         problems.append(f"{where}: claims are {claims}; it must mount exactly stack-events, the one that exists. A second "
                         "claim is a billed disk, and that is the operator's decision")
-    if not re.search(r"\{\s*name:\s*events\s*,\s*mountPath:\s*" + re.escape(EVENTS_DIR or "/var/lib/stack/events") + r"\s*\}", c):
-        problems.append(f"{where}: the bus is not mounted read-write at {EVENTS_DIR}, so it cannot create its stream there")
+    if not re.search(r"\{\s*name:\s*events\s*,\s*mountPath:\s*" + re.escape(EVENTS_DIR or "/var/lib/stack/events") + r"\s*,\s*subPath:\s*streams\s*\}", c):
+        problems.append(f"{where}: the bus is not mounted read-write at {EVENTS_DIR} as subPath streams, so it cannot "
+                        "append to its stream there")
 
     if not (re.search(r"restartPolicy:\s*Never", c) and re.search(r"backoffLimit:\s*0\b", c)):
         problems.append(f"{where}: needs restartPolicy: Never and backoffLimit: 0; a retry exits 0 (the finding is "
@@ -152,7 +160,7 @@ for path, doc in subjects:
     sc = re.search(r"securityContext:\s*\{([^}]*)\}", c)
     scs = sc.group(1) if sc else ""
     if "fsGroup: 10001" not in scs:
-        problems.append(f"{where}: no fsGroup 10001, so it cannot create its file on the bus the other writers share")
+        problems.append(f"{where}: no fsGroup 10001, so it cannot enter the bus the other writers share")
     if "runAsUser: 10002" not in scs or "runAsNonRoot: true" not in scs:
         problems.append(f"{where}: must run non-root as uid 10002, its own and not the money plane's 10001")
     for need in ("automountServiceAccountToken: false", "readOnlyRootFilesystem: true", 'drop: ["ALL"]',
@@ -172,6 +180,6 @@ if problems:
     sys.exit(1)
 
 print(f"OK: {len(subjects)} chain verifier CronJob(s) in the default install, every 15 minutes or sooner, watching "
-      f"{EVENTS_DIR} and writing agent-conform.ndjson there, its state on stack-events (no emptyDir, no new claim), "
+      f"{EVENTS_DIR} and writing agent-conform.ndjson there, its state in conform/ on stack-events (no emptyDir, no new claim), "
       "a failed pass kept visible.")
 PY

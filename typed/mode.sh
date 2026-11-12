@@ -362,7 +362,7 @@ render_typryx() { # env-fragment mount-fragment volume-fragment [file mount-anch
   if [ $# -ge 6 ]; then
     a2="$5"; a3="$6"
   else
-    a2='            - { name: events, mountPath: /var/lib/stack/events }'
+    a2='            - { name: events, mountPath: /var/lib/stack/events, subPath: streams }'
     a3='          persistentVolumeClaim: { claimName: stack-events }'
   fi
   out="$(ENV_FRAG="$1" MOUNT_FRAG="$2" VOL_FRAG="$3" A2="$a2" A3="$a3" awk '
