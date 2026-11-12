@@ -56,7 +56,11 @@ preview_mint_settle() {
 
   img="$(k_ "-n $PREVIEW_NS get deployment/genaryx-console --ignore-not-found -o jsonpath='{.spec.template.spec.containers[*].image}'")" \
     || die "could not read the console's image"
-  img="$(tr ' ' '\n' <<<"$img" | grep -m1 'genaryx-console' || true)"
+  local word found=""
+  for word in $img; do
+    case "$word" in *genaryx-console*) found="$word"; break ;; esac
+  done
+  img="$found"
   if [ -z "$img" ]; then
     printf '   preview key: none (no console in %s, so wardryx records each preview as off)\n' "$PREVIEW_NS"
     return 0
