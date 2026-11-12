@@ -66,7 +66,8 @@
           "record-seal": "trailryx-seal"
         },
         "manual_jobs": {
-          "drills-broker": "mockryx's drills for the MCP broker (scenarios/mcp), with the drills' own broker key; shipped suspended beside the broker in manifests/52-tokenfuse-mcp-broker.yaml, so it exists only where the typed-answer door does, and run by a person with kubectl create job --from=cronjob/drills-broker. Not a second routine: the estate's mockryx-drill is the drills CronJob, and one routine maps to one CronJob (CLAUDE.md invariant 85)."
+          "drills-broker": "mockryx's drills for the MCP broker (scenarios/mcp), with the drills' own broker key; shipped suspended beside the broker in manifests/52-tokenfuse-mcp-broker.yaml, so it exists only where the typed-answer door does, and run by a person with kubectl create job --from=cronjob/drills-broker. Not a second routine: the estate's mockryx-drill is the drills CronJob, and one routine maps to one CronJob (CLAUDE.md invariant 85).",
+          "drills-heraldyx": "the whole reaction chain behind one denied tool call, to heraldyx's journal of the mail it sent (mockryx v0.5.0's reaction-chain-reaches-heraldyx as this cluster's copy); shipped suspended beside heraldyx in manifests/45-heraldyx.yaml, on heraldyx's node, reading heraldyx-state read only, so it exists only where heraldyx does, and run by a person with kubectl create job --from=cronjob/drills-heraldyx. Each run sends one real mail. Not a second routine: the estate's mockryx-drill is the drills CronJob (CLAUDE.md invariant 90, estate-gates GAPS G3.20)."
         },
         "persistent_claims": [
           "cloud-state",

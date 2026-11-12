@@ -5753,6 +5753,69 @@ for p in glob.glob("manifests/*.yaml"):
         open(p, "w").write(s.replace("image: ghcr.io/taipanbox/mockryx:", "image: example.invalid/mockryx:"))')" \
 	"measured NOTHING"
 
+# The heraldyx drill (2026-11-12, estate-gates GAPS G3.20): heraldyx's alert_sent is only in sent.ndjson on
+# its own ReadWriteOnce claim, so the drill that waits for it lives beside heraldyx, reads the claim read only
+# on heraldyx's node and cannot stay Pending; the gateway drills run a copy of the chain that stops at wardryx.
+run_case "drills-can-start: the gateway drills run the image's whole chain again" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - { name: scenarios, mountPath: /scenarios/reaction-chain-reaches-heraldyx.yaml, subPath: reaction-chain-reaches-wardryx.yaml, readOnly: true }\n", "")')" \
+	"is not in manifests/45-heraldyx.yaml"
+run_case "drills-can-start: the gateway drills' copy is mounted under a name the image does not have" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "mountPath: /scenarios/reaction-chain-reaches-heraldyx.yaml,", "mountPath: /scenarios/reaction-chain-reaches-heraldx.yaml,")')" \
+	"adds a scenario and replaces none"
+run_case "drills-can-start: the gateway drills' copy waits for heraldyx again" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "            source: wardryx\n            type: policy_deny\n            within: 10s\n", "            source: heraldyx\n            type: alert_sent\n            within: 20s\n")')" \
+	"is not in manifests/45-heraldyx.yaml"
+run_case "drills-can-start: the heraldyx drill stops watching heraldyx's journal" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "value: \"/var/lib/stack/heraldyx/sent.ndjson\"", "value: \"/var/lib/stack/events/wardryx.ndjson\"")')" \
+	"no watched path is /var/lib/stack/heraldyx/sent.ndjson"
+run_case "drills-can-start: the heraldyx drill leaves heraldyx's group" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "fsGroup: 10001, supplementalGroups: [65532], ", "fsGroup: 10001, ")')" \
+	"the pod is not in group 65532"
+run_case "drills-can-start: the heraldyx drill's copy stops waiting for heraldyx" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "            source: heraldyx\n            type: alert_sent\n", "            source: wardryx\n            type: policy_deny\n")')" \
+	"waits for no heraldyx event"
+run_case "drills-can-start: the heraldyx drill runs every Monday, mail and all" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "  schedule: \"0 6 * * 1\"\n  suspend: true\n", "  schedule: \"0 6 * * 1\"\n  suspend: false\n")')" \
+	"is not suspended"
+run_case "drills-can-start: the heraldyx drill mounts a subPath of heraldyx's claim" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "mountPath: /var/lib/stack/heraldyx, readOnly: true }", "mountPath: /var/lib/stack/heraldyx, subPath: journal, readOnly: true }")')" \
+	"is mounted by subPath journal"
+run_case "drills-can-start: the heraldyx drill's pod loses the drills' label" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "          labels: { role: drills }\n", "          labels: { role: drills-heraldyx }\n")')" \
+	"are not what drills-egress-gateway and gateway-ingress-drills select"
+run_case "drills-can-start: the heraldyx drill mounts heraldyx's claim writable" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "persistentVolumeClaim: { claimName: heraldyx-state, readOnly: true }", "persistentVolumeClaim: { claimName: heraldyx-state }")')" \
+	"is not read only on both the volume and the mount"
+run_case "drills-can-start: the heraldyx drill can be placed on any node" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "          affinity:\n            podAffinity:\n              requiredDuringSchedulingIgnoredDuringExecution:\n                - labelSelector: { matchLabels: { app: heraldyx } }\n                  topologyKey: kubernetes.io/hostname\n", "")')" \
+	"no required podAffinity to app: heraldyx"
+run_case "drills-can-start: the heraldyx drill can stay Pending for good" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "      activeDeadlineSeconds: 900\n", "")')" \
+	"no activeDeadlineSeconds"
+run_case "drills-can-start: the heraldyx drill retries, and mails again" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "      # (CLAUDE.md invariant 90).\n      backoffLimit: 0\n", "      # (CLAUDE.md invariant 90).\n      backoffLimit: 1\n")')" \
+	"backoffLimit is 1"
+run_case "drills-can-start: the heraldyx drill's scenarios are no ConfigMap the gate can read" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "configMap: { name: drills-heraldyx-scenarios, defaultMode: 0444 }", "emptyDir: {}")')" \
+	"measured NOTHING about"
+run_case "drills-can-start: the heraldyx drill's mail warning reworded (must pass)" pass \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "# EACH RUN SENDS A REAL MAIL.", "# EVERY RUN SENDS A REAL MAIL.")')"
+
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then
 	exit 0

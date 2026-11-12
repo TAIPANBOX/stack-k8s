@@ -514,6 +514,25 @@ The notifier's daily pulse and quiet hours are set in `manifests/45-heraldyx.yam
 - `HERALDYX_TZ` (default empty): the IANA zone the quiet hours are read in, for example `Europe/London`.
 - `HERALDYX_SMTP_TLS` (default unset, which is `starttls`): how heraldyx 0.8.0 secures the mail connection. Unset, the server must offer STARTTLS, and a server that does not is refused, so mail is never sent in the clear to a remote host. Use `implicit` for a server on port 465, and `plain` only for a loopback relay. Set it in your environment before `./deploy.sh`, `cloud/aws/deploy-aws.sh` or `cloud/gcp/deploy-gcp.sh`: the script checks the word and writes it into the `heraldyx-mail` Secret, and the notifier reads it from there.
 
+**The heraldyx drill.** The same file carries `drills-heraldyx`, a suspended CronJob that fires the whole
+reaction chain behind one denied tool call: the gateway refuses it, wardryx writes its own record of the
+refusal, and heraldyx, reading only that record, journals the mail it sent about it. The gateway drills
+(`drills`) stop at wardryx's record, because heraldyx's journal (`sent.ndjson`) is on heraldyx's own
+ReadWriteOnce volume, which only a pod on heraldyx's node can mount. This drill runs there, reads that
+volume read only, and reaches the gateway's port and nothing else. **Each run sends one real mail**, which is
+the reaction it proves, so run it when you mean it:
+
+```bash
+kubectl -n agent-stack create job --from=cronjob/drills-heraldyx drills-heraldyx-now
+kubectl -n agent-stack logs -f job/drills-heraldyx-now
+```
+
+A pass means heraldyx journalled a dispatch for the drill's run. The journal line also says whether your mail
+server accepted the message; read it there (`outcome` in the line's data), because mockryx v0.5.0 matches a
+reaction on its source, type and run id only. Run it outside `HERALDYX_QUIET` hours: inside them heraldyx
+holds a high alert until they end, and the drill reports a Finding. With no heraldyx pod running, the job
+ends after 15 minutes rather than waiting for one. `scripts/drills-can-start.sh` holds the shape (CLAUDE.md invariant 90).
+
 ### How an agent reads the web
 
 An agent does not call scopyx. It calls tokenfuse's MCP broker (`52-tokenfuse-mcp-broker.yaml`), which holds
