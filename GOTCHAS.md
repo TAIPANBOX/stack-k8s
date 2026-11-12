@@ -4872,3 +4872,14 @@ the root, and waits in `bus-ready` for the owner's marker. On the same stand the
 refused another producer's append, truncate, create, rename, remove, link and chmod, refused a reader's write with the mount
 read-write, and wardryx v2.6.1 (agent-stack-go v2.0.2) and tokenfuse-cloud v1.24.0 opened a stream they do not own. NFS with
 AUTH_SYS carries sixteen groups (the seventeenth chgrp was refused), and the owner needs twelve.
+
+**The owner itself, found by a review of the first version of the fix and measured.** Two directories the owner makes are
+writable by a producer's group on purpose: wardryx's policy archive (group 20001) and the chain verifier's `conform/` (group
+10002). The first owner script wrote its copies of the old layout through a temp file in those directories, and `cat >`, `chgrp`
+and `chmod` follow a symbolic link. With `evidence/bus-per-producer-longhorn/owner-symlink.sh`: as wardryx, remove the copied
+archive version and link `.copy.tmp` to `typryx.ndjson`; on its next run the owner wrote the old policy into typryx's stream (17
+bytes over an empty file) and stopped on the chgrp, so the planted link turned the owner's write onto another producer's
+stream. Fixed: every file the owner writes is written in `streams/`, which only it can write, given its group and mode there,
+and moved into place with `mv -T`, which replaces a planted name and never follows it; the same run then leaves both streams
+`20000:<producer> 0664` and empty, and the owner completes. `scripts/bus-writers-are-separate.sh` refuses a write outside
+`streams/` and a move without `-T` (red on the first version, `gate-red-on-03868f9-owner.txt`).

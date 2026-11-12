@@ -310,6 +310,20 @@ else:
                        "closed to everybody but the owner")
         if not re.search(r'own_file "\$S" "\$\{row%%:\*\}" "\$\{row##\*:\}" 0664\b', live):
             bad.append(f"{f}: the owner does not make each stream 0664 in its producer's group")
+        # A producer's group can write the archive and conform/, so a link it plants where the owner writes
+        # a temp file would turn the owner's write and chgrp onto another stream (GOTCHAS 164, measured
+        # by evidence/bus-per-producer-longhorn/owner-symlink.sh). Every file the owner writes is written
+        # in streams/, which only it can write, and moved into place with mv -T, which never follows a link.
+        tdef = re.search(r'^\s*T=(\S+)\s*$', live, re.M)
+        for target in re.findall(r'>\s*"([^"]+)"', live):
+            if not (target.startswith("$S/") or target in ("$f", "$f.tmp") or (target == "$T" and tdef and tdef.group(1).startswith("$S/"))):
+                bad.append(f"{f}: the owner writes {target}, outside streams/, where a producer can plant a link in its place")
+        for args in re.findall(r'^\s*own_file\s+("[^"]*"|\S+)', live, re.M):
+            if args != '"$S"':
+                bad.append(f"{f}: own_file is called on {args}, not on streams/, so its temp file may sit where a producer can write")
+        for line in re.findall(r'^.*\bmv\b.*$', live, re.M):
+            if not re.search(r'\bmv\s+-T\b', line):
+                bad.append(f"{f}: the owner moves a file without mv -T: {line.strip()}")
 
 if bad:
     for b in bad:

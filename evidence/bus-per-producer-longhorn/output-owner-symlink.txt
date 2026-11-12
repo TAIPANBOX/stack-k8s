@@ -1,0 +1,28 @@
+== owner from: manifests/11-bus.yaml at 03868f9 (before the fix) (stack-rwx)
+   [old-layout] planted old layout
+-- owner-1: Complete
+   [owner-1] copied /bus/wardryx-policy-archive/v1.json -> /bus/streams/wardryx-policy-archive/v1.json
+   [owner-1] copied /bus/agent-conform.state.json -> /bus/conform/agent-conform.state.json
+   [owner-1] bus ready
+   [as-wardryx] lrwxrwxrwx    1 20001    10001           16 Nov 12 00:57 .copy.tmp -> ../typryx.ndjson
+   [as-verifier] lrwxrwxrwx    1 10002    10002           26 Nov 12 00:57 agent-conform.state.json.tmp -> ../streams/vouchryx.ndjson
+-- owner-2: did not complete
+   [read-back] typryx.ndjson: 20000:20005 664, 17 bytes
+   [read-back] vouchryx.ndjson: 20000:20002 664, 0 bytes
+   [as-verifier-2] the verifier is refused on vouchryx.ndjson
+
+== owner from: manifests/11-bus.yaml with the fix (stack-rwx)
+   [old-layout] planted old layout
+-- owner-1: Complete
+   [owner-1] copied /bus/wardryx-policy-archive/v1.json -> /bus/streams/wardryx-policy-archive/v1.json
+   [owner-1] copied /bus/agent-conform.state.json -> /bus/conform/agent-conform.state.json
+   [owner-1] bus ready
+   [as-wardryx] lrwxrwxrwx    1 20001    10001           16 Nov 12 01:02 .copy.tmp -> ../typryx.ndjson
+   [as-verifier] lrwxrwxrwx    1 10002    10002           26 Nov 12 01:02 agent-conform.state.json.tmp -> ../streams/vouchryx.ndjson
+-- owner-2: Complete
+   [owner-2] copied /bus/wardryx-policy-archive/v1.json -> /bus/streams/wardryx-policy-archive/v1.json
+   [owner-2] copied /bus/agent-conform.state.json -> /bus/conform/agent-conform.state.json
+   [owner-2] bus ready
+   [read-back] typryx.ndjson: 20000:20005 664, 0 bytes
+   [read-back] vouchryx.ndjson: 20000:20002 664, 0 bytes
+   [as-verifier-2] the verifier is refused on vouchryx.ndjson

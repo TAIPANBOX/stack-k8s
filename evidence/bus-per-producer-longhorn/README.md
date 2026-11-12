@@ -24,10 +24,15 @@ and Longhorn versions are the launcher's pins (`install.sh`, `lib/verified-fetch
   (output `output-local-path.txt`). Section 1 is the shape before this change, section 2 the layout it builds,
   with the owner's script cut out of `manifests/11-bus.yaml` itself.
 - `gate-red-on-34f669e.txt`: `scripts/bus-writers-are-separate.sh` on the tree before the change, 60 problems.
+- `owner-symlink.sh` (output `output-owner-symlink.txt`): a link planted by a producer where the owner writes a
+  temp file, against the first owner script (`03868f9`) and the fixed one. `gate-red-on-03868f9-owner.txt`: the
+  gate's owner rules on that first script.
 - `deploy-full-run.txt`: `deploy.sh --skip-install --skip-images` against the guest (root ssh on a local
-  port), from this branch's manifests, twice over the same cluster, each ending with `verify.sh` and
-  `security-tests.sh`. The cluster's two Secrets that `install.sh` makes (`stack-keys`, `stack-policy-db`)
-  were made by hand with `lib/secret-doc.sh`, the way `install.sh` makes them, because install was skipped.
+  port), from this branch's manifests, three times over the same cluster, each ending with `verify.sh` and
+  `security-tests.sh`; the file holds the third. The cluster's two Secrets that `install.sh` makes
+  (`stack-keys`, `stack-policy-db`) were made by hand with `lib/secret-doc.sh`, the way `install.sh` makes
+  them, because install was skipped; the first run timed out waiting for them and the second named an SMTP
+  host without a port.
 
 ## What it showed
 
@@ -43,6 +48,9 @@ and Longhorn versions are the launcher's pins (`install.sh`, `lib/verified-fetch
   archived a policy version; tokenfuse-cloud v1.24.0 opened its stream. The owner's second run on the
   same volume changed nothing.
 - kubelet makes a subPath that does not exist yet itself, as `root 0777`, for a read-only mount too.
+- The first owner script followed a link wardryx planted in its archive as `.copy.tmp` and wrote the old policy
+  into `typryx.ndjson`; the fixed one stages in `streams/` and moves with `mv -T`, and both streams stay
+  `20000:<producer> 0664` and empty.
 - NFS with AUTH_SYS: a process in 21 groups had its chgrp honoured for its primary group and the first 15
   supplementary ones, and refused for the rest. On `local-path` all 20 were honoured.
 - The whole stack from this branch came up on Longhorn RWX: every plane started under its new uid, the

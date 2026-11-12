@@ -4739,6 +4739,14 @@ run_case "bus-writers: a probe entry outlives its pod" fail \
 	'./scripts/bus-writers-are-separate.sh' \
 	"$(py 'edit("security-tests.sh", "metadata: { name: sec-bus, labels:", "metadata: { name: sec-bus-renamed, labels:")')" \
 	"the PROBES entry matches no pod"
+run_case "bus-writers: the owner stages a copy where a producer can plant a link" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/11-bus.yaml", "    T=$S/.stage.tmp\n", "    T=$A/.stage.tmp\n")')" \
+	"outside streams/, where a producer can plant a link"
+run_case "bus-writers: the owner moves a file without -T" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/11-bus.yaml", "if mv -T -f \"$T\" \"$4\"", "if mv -f \"$T\" \"$4\"")')" \
+	"the owner moves a file without mv -T"
 run_case "bus-writers: a writer's groups written as a longer list (must pass)" pass \
 	'./scripts/bus-writers-are-separate.sh' \
 	"$(py 'edit("manifests/49-costcrew.yaml", "fsGroup: 65532, supplementalGroups: [10001], seccompProfile", "fsGroup: 65532, supplementalGroups: [ 10001, 65532 ], seccompProfile")')"

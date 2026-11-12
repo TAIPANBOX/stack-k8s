@@ -73,3 +73,10 @@ Feature: a plane writes only its own stream, and only the bus owner changes a na
     When wardryx (agent-stack-go v2) and tokenfuse open it
     Then each opens it and appends, though neither owns it
     # -> evidence/bus-per-producer-longhorn/output-stack-rwx.txt, 2f
+
+  Scenario: a producer plants a link where the owner writes a temp file
+    Given wardryx may add a version to its archive and the verifier may write conform/
+    When wardryx links .copy.tmp in the archive to typryx.ndjson and the owner copies the old layout in
+    Then typryx.ndjson stays the owner's, in typryx's group, untouched, because the owner writes only in streams/ and moves with mv -T
+    # -> evidence/bus-per-producer-longhorn/output-owner-symlink.txt
+    # -> gates-have-teeth.sh "bus-writers: the owner stages a copy where a producer can plant a link" and "bus-writers: the owner moves a file without -T"

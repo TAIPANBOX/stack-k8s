@@ -68,7 +68,7 @@ data:
     	if [ ! -e "$f" ]; then
     		if [ -n "${5:-}" ] && [ -f "$5" ] && [ ! -L "$5" ]; then
     			cat "$5" > "$f.tmp"
-    			mv "$f.tmp" "$f"
+    			mv -T -f "$f.tmp" "$f"
     			echo "copied $5 -> $f"
     		else
     			: > "$f"
@@ -99,6 +99,17 @@ data:
 
     # wardryx's policy archive: wardryx adds a version through its group; the version files it writes are
     # its own, 0640, in its process group 10001, so the console reads them and nothing else can change them.
+    # A file bound for a directory a producer's group can write (the archive, conform/) is made in
+    # streams/, which only the owner can write, given its group and mode there, and renamed into place
+    # with mv -T: a rename replaces whatever name a producer planted and never follows it, so a link
+    # planted where a temp file would go cannot turn the owner's write or chgrp onto another stream.
+    T=$S/.stage.tmp
+    place() { # source group mode destination
+    	rm -f "$T"
+    	cat "$1" > "$T"; chgrp "$2" "$T"; chmod "$3" "$T"
+    	if mv -T -f "$T" "$4"; then echo "copied $1 -> $4"; else rm -f "$T"; echo "not copied: $4 is a directory"; fi
+    }
+
     A=$S/wardryx-policy-archive
     own_dir "$A" 20001 0775
     if [ -d "$B/wardryx-policy-archive" ] && [ ! -L "$B/wardryx-policy-archive" ]; then
@@ -106,9 +117,7 @@ data:
     		[ -f "$old" ] && [ ! -L "$old" ] || continue
     		# copied once; a version already here is wardryx's or an earlier copy, and is left alone
     		[ -e "$A/${old##*/}" ] || [ -L "$A/${old##*/}" ] && continue
-    		cat "$old" > "$A/.copy.tmp"; chgrp 10001 "$A/.copy.tmp"; chmod 0640 "$A/.copy.tmp"
-    		mv "$A/.copy.tmp" "$A/${old##*/}"
-    		echo "copied $old -> $A/${old##*/}"
+    		place "$old" 10001 0640 "$A/${old##*/}"
     	done
     fi
 
@@ -117,14 +126,13 @@ data:
     # The verifier replaces this file itself, so it is copied once and never re-owned here.
     C=$B/conform/agent-conform.state.json
     if [ ! -e "$C" ] && [ ! -L "$C" ] && [ -s "$B/agent-conform.state.json" ] && [ ! -L "$B/agent-conform.state.json" ]; then
-    	cat "$B/agent-conform.state.json" > "$C.tmp"; chgrp 10002 "$C.tmp"; chmod 0660 "$C.tmp"; mv "$C.tmp" "$C"
-    	echo "copied $B/agent-conform.state.json -> $C"
+    	place "$B/agent-conform.state.json" 10002 0660 "$C"
     fi
 
     echo "bus-layout v1" > "$S/.layout.tmp"
     chgrp 10001 "$S/.layout.tmp"
     chmod 0640 "$S/.layout.tmp"
-    mv "$S/.layout.tmp" "$S/.layout"
+    mv -T -f "$S/.layout.tmp" "$S/.layout"
     ls -lan "$S"
     echo "bus ready"
 ---
