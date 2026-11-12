@@ -3086,7 +3086,7 @@ run_case "wardryx-key-is-pep: the migration writes the key on the command line" 
 run_case "wardryx-key-is-pep: a pin moves back to the old wardryx" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.7.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
-	"does not pin wardryx v2.6.1"
+	"does not pin wardryx v2.7.0"
 
 run_case "wardryx-key-is-pep: a reworded comment is not a fault" pass \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
