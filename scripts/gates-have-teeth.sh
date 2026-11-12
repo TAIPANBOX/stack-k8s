@@ -5731,7 +5731,7 @@ run_case "drills-can-start: a watched log the bus owner never makes" fail \
 	"names no stream the bus owner makes"
 run_case "drills-can-start: the drills retry a drill that found a gap" fail \
 	'./scripts/drills-can-start.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "      gap (CLAUDE.md invariant 90).\n      backoffLimit: 0\n", "      gap (CLAUDE.md invariant 90).\n")')" \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "      # gap (CLAUDE.md invariant 90).\n      backoffLimit: 0\n", "      # gap (CLAUDE.md invariant 90).\n")')" \
 	"backoffLimit is unset (6)"
 run_case "drills-can-start: drills-broker retries too" fail \
 	'./scripts/drills-can-start.sh' \
