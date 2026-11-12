@@ -40,6 +40,11 @@ jobs:
       - name: every stream file is created by its writer before it starts (invariant 59)
         run: ./scripts/stream-files-are-precreated.sh
 
+      # Added 2026-11-11 (GAPS G3.16), in BOTH callers on the same commit: one uid and one group per bus
+      # writer, and nobody but the bus owner can create, rename or remove a name in the bus directory.
+      - name: no two bus writers share a uid, and only the owner writes the bus directory (invariant 89)
+        run: ./scripts/bus-writers-are-separate.sh
+
       - name: node names are pinned by the install, not by a boot
         run: ./scripts/node-name-is-pinned.sh
 

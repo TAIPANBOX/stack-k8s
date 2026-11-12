@@ -1,0 +1,61 @@
+FAIL keyryx/manifests/59-keyryx.yaml: Deployment keyryx-witness, container keyryx-witness: mounts the stack-events root; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL keyryx/manifests/59-keyryx.yaml: Deployment keyryx-witness: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/10-planes.yaml: Deployment tokenfuse-cloud, container cloud: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/10-planes.yaml: Deployment tokenfuse-cloud: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/10-planes.yaml: Deployment tokenfuse-gateway, init precreate-streams: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/10-planes.yaml: Deployment tokenfuse-gateway, container gateway: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/10-planes.yaml: Deployment tokenfuse-gateway, container verdryx-slo: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/10-planes.yaml: Deployment tokenfuse-gateway: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/10-planes.yaml: Deployment wardryx, init precreate-streams: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/10-planes.yaml: Deployment wardryx, container wardryx: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/10-planes.yaml: Deployment wardryx: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/10-planes.yaml: Deployment idryx, container idryx: mounts the stack-events root; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/10-planes.yaml: Deployment idryx: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/20-console.yaml: Deployment genaryx-console, container console: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/20-console.yaml: Deployment genaryx-console: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/40-routines-and-secrets.yaml: CronJob identity-sweep, container idryx-rescan: mounts the stack-events root; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/40-routines-and-secrets.yaml: CronJob identity-sweep: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/40-routines-and-secrets.yaml: CronJob record-seal, container trailryx: mounts the stack-events root; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/40-routines-and-secrets.yaml: CronJob record-seal: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/40-routines-and-secrets.yaml: CronJob drills, init precreate-streams: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/40-routines-and-secrets.yaml: CronJob drills, container mockryx: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/40-routines-and-secrets.yaml: CronJob drills: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/40-routines-and-secrets.yaml: CronJob agent-conform, init precreate-streams: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/40-routines-and-secrets.yaml: CronJob agent-conform, container agent-conform: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/40-routines-and-secrets.yaml: CronJob agent-conform: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/45-heraldyx.yaml: Deployment heraldyx, container heraldyx: mounts the stack-events root; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/45-heraldyx.yaml: Deployment heraldyx: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/49-costcrew.yaml: Deployment costcrew, init precreate-streams: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/49-costcrew.yaml: Deployment costcrew, container costcrew: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/49-costcrew.yaml: Deployment costcrew: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/49-costcrew.yaml: CronJob costcrew-crew, init precreate-streams: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/49-costcrew.yaml: CronJob costcrew-crew, container crew: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/49-costcrew.yaml: CronJob costcrew-crew: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/51-typryx.yaml: Deployment typryx, init precreate-streams: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/51-typryx.yaml: Deployment typryx, container typryx: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/51-typryx.yaml: Deployment typryx: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/52-tokenfuse-mcp-broker.yaml: Deployment tokenfuse-mcp-broker, container broker: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/52-tokenfuse-mcp-broker.yaml: Deployment tokenfuse-mcp-broker: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/52-tokenfuse-mcp-broker.yaml: CronJob drills-broker, init precreate-streams: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/52-tokenfuse-mcp-broker.yaml: CronJob drills-broker, container mockryx: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/52-tokenfuse-mcp-broker.yaml: CronJob drills-broker: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/54-delegation.yaml: Deployment vouchryx, init precreate-streams: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/54-delegation.yaml: Deployment vouchryx, container vouchryx: mounts the stack-events root read-write; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL manifests/54-delegation.yaml: Deployment vouchryx: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL lib/tool-hold.sh: Job $TOOL_HOLD_ASK, container replay: mounts the stack-events root; only the owner Job may, and only the bus-ready init may read it: mount subPath streams
+FAIL lib/tool-hold.sh: Job $TOOL_HOLD_ASK: its first init container is not bus-ready, so a container may start before the owner has made streams/, and kubelet then makes it as root 0777
+FAIL manifests/10-planes.yaml: Deployment tokenfuse-gateway, container gateway: WRITERS says it appends to tokenfuse.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/10-planes.yaml: Deployment tokenfuse-gateway, container verdryx-slo: WRITERS says it appends to verdryx.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/10-planes.yaml: Deployment tokenfuse-cloud, container cloud: WRITERS says it appends to tokenfuse-cloud.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/10-planes.yaml: Deployment wardryx, container wardryx: WRITERS says it appends to wardryx.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/20-console.yaml: Deployment genaryx-console, container console: WRITERS says it appends to console.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/40-routines-and-secrets.yaml: CronJob drills, container mockryx: WRITERS says it appends to mockryx.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/52-tokenfuse-mcp-broker.yaml: CronJob drills-broker, container mockryx: WRITERS says it appends to mockryx.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/40-routines-and-secrets.yaml: CronJob agent-conform, container agent-conform: WRITERS says it appends to agent-conform.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/49-costcrew.yaml: Deployment costcrew, container costcrew: WRITERS says it appends to costcrew.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/49-costcrew.yaml: CronJob costcrew-crew, container crew: WRITERS says it appends to costcrew.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/51-typryx.yaml: Deployment typryx, container typryx: WRITERS says it appends to typryx.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/52-tokenfuse-mcp-broker.yaml: Deployment tokenfuse-mcp-broker, container broker: WRITERS says it appends to tokenfuse-mcp.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/54-delegation.yaml: Deployment vouchryx, container vouchryx: WRITERS says it appends to vouchryx.ndjson, but no such container mounts the bus read-write; the table is stale
+FAIL manifests/11-bus.yaml: no Job bus-owner mounts the stack-events root, so nothing makes the bus and the owner is measured NOTHING
+60 problem(s). See CLAUDE.md invariant 89.

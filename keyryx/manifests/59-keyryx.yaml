@@ -177,7 +177,15 @@ spec:
         runAsGroup: 10001
         fsGroup: 10001
         seccompProfile: { type: RuntimeDefault }
+      # bus-ready (CLAUDE.md invariant 89, GAPS G3.16): this pod mounts the bus as subPath streams, which
+      # the bus-owner Job (manifests/11-bus.yaml) makes. kubelet would make a missing subPath itself, as
+      # root 0777, so the pod waits for the owner's marker first, reading the volume root READ ONLY.
       initContainers:
+        - name: bus-ready
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          securityContext: { runAsNonRoot: true, runAsUser: 20100, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+          volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
         - name: root-key-copy
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
           command:
@@ -263,6 +271,7 @@ spec:
             - name: events
               mountPath: /var/lib/stack/events
               readOnly: true
+              subPath: streams
             - name: keyryx-witness-state
               mountPath: /var/lib/keyryx-witness
             - name: keyryx-key-tmp

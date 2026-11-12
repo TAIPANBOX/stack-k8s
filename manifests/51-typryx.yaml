@@ -204,33 +204,24 @@ spec:
       # usable by a compromised container for discovery and SelfSubjectReview,
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
-      # 65532:65532 is not a guess, it is the uid:gid the image already runs
-      # as (distroless, verified 2026-09-25); stating it here means a change
-      # to the image's own user is a visible manifest diff instead of a
-      # silent mismatch.
-      #
-      # fsGroup 10001, the stack group, not typryx's own 65532: `stack-events`
-      # is written by tokenfuse-cloud, tokenfuse-gateway and the console, whose
-      # fsGroup 10001 leaves it 10001:10001 mode 2775, and typryx now appends
-      # typryx.ndjson to it. As 65532:65532 with no supplementary group that
-      # append is `permission denied`; fsGroup adds 10001 to the process's
-      # groups whatever the volume type, the same fix wardryx already carries
-      # in 10-planes.yaml for the same reason.
-      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      # uid and group 20005, typryx's own as in stack-single (CLAUDE.md
+      # invariant 89): typryx.ndjson is the bus owner's file in group 20005, so
+      # typryx appends to it and to no other stream. The image ships 65532;
+      # naming the uid here keeps that a visible manifest diff. fsGroup 10001
+      # enters the bus and keeps its state claim writable to the group.
+      securityContext: { runAsNonRoot: true, runAsUser: 20005, runAsGroup: 20005, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
       # Leave a dead node in 30 s, not the default 300 s. CLAUDE.md invariants 21
       # and 22: one replica, so the default would charge five minutes of outage
       # after the node is marked NotReady.
       tolerations:
         - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
-      # Creates the stream file before typryx starts, as its own uid (CLAUDE.md invariant 59,
-      # GOTCHAS 135). An existing file is left as it is. Mode 0640, group 10001 for the bus readers.
       initContainers:
-        - name: precreate-streams
+        - name: bus-ready
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
-          securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
-          command: ["sh", "-c", "f=/var/lib/stack/events/typryx.ndjson; if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; ls -ln /var/lib/stack/events"]
-          volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
+          securityContext: { runAsNonRoot: true, runAsUser: 20005, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+          volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
       containers:
         - name: typryx
           image: ghcr.io/taipanbox/typryx:v0.6.0@sha256:9ffe725c90a51297dca76940cd1e30e968cf323bfac2f61092f0db2acef0812b
@@ -261,7 +252,7 @@ spec:
           ports: [{ name: http, containerPort: 4320 }]
           volumeMounts:
             - { name: state, mountPath: /var/lib/typryx }
-            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
           readinessProbe:
             # /healthz needs no credential, by design (typryx's own README):
             # a load balancer or a probe has no password to give it.

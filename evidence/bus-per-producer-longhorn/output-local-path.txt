@@ -1,0 +1,209 @@
+
+== stand
+Server Version: v1.36.2+k3s1
+driver.longhorn.io fsGroupPolicy=ReadWriteOnceWithFSType
+storage class: local-path (rancher.io/local-path), access mode ReadWriteOnce
+
+== 1. RED: the pods as the manifests had them before this change (stack-k8s 34f669e)
+-- pod root-probe (uid 20000, gid 10001, supplementalGroups [], fsGroup 10001, mount <volume root>, readOnly false): Succeeded
+   drwxrwsrwx    2 0        10001         4096 Nov 12 00:53 /ev
+   /dev/vda1 on /ev type ext4
+   uid=20000 gid=10001 groups=10001
+-- pod gateway-precreate (uid 10001, gid 10001, supplementalGroups [], fsGroup 10001, mount <volume root>, readOnly false): Succeeded
+   -rw-r-----    1 10001    10001           29 Nov 12 00:53 /ev/tokenfuse.ndjson
+-- pod wardryx-precreate (uid 65532, gid 10001, supplementalGroups [], fsGroup 10001, mount <volume root>, readOnly false): Succeeded
+   -rw-r-----    1 65532    10001           48 Nov 12 00:53 /ev/wardryx.ndjson
+-- pod costcrew-as-before (uid 65532, gid 65532, supplementalGroups [], fsGroup 65532, mount <volume root>, readOnly false): Succeeded
+   expected ok, got ok: append a forged line to wardryx.ndjson, the decision journal 
+      wardryx.ndjson now:
+        {"source":"wardryx","type":"policy_deny","n":1}
+        {"source":"wardryx","type":"policy_allow","forged":true}
+-- pod typryx-as-before (uid 65532, gid 65532, supplementalGroups [], fsGroup 10001, mount <volume root>, readOnly false): Succeeded
+   uid=65532 gid=65532 groups=10001,65532
+   expected ok, got ok: append to wardryx.ndjson (same uid 65532, group 10001) 
+   expected ok, got ok: rename the gateway stream tokenfuse.ndjson (uid 10001) away 
+   expected ok, got ok: put a forged tokenfuse.ndjson in its place 
+   expected ok, got ok: remove a stream of another uid 
+   total 16
+   drwxrwsrwx    2 0        10001         4096 Nov 12 00:53 .
+   drwxr-xr-x    1 0        0             4096 Nov 12 00:53 ..
+   -rw-r--r--    1 65532    10001           37 Nov 12 00:53 tokenfuse.ndjson
+   -rw-rw----    1 65532    10001          118 Nov 12 00:53 wardryx.ndjson
+
+== 2. LAYOUT: one owner uid makes streams/ once, each producer its own uid and group, every plane mounts streams/ only
+-- pod old-layout (uid 65532, gid 10001, supplementalGroups [], fsGroup 10001, mount <volume root>, readOnly false): Succeeded
+   /ev:
+   total 16
+   drwxrwsrwx    3 0        10001         4096 Nov 12 00:54 .
+   drwxr-xr-x    1 0        0             4096 Nov 12 00:54 ..
+   drwxr-s---    2 65532    10001         4096 Nov 12 00:54 wardryx-policy-archive
+   -rw-r-----    1 65532    10001           29 Nov 12 00:54 wardryx.ndjson
+   
+   /ev/wardryx-policy-archive:
+   total 12
+   drwxr-s---    2 65532    10001         4096 Nov 12 00:54 .
+   drwxrwsrwx    3 0        10001         4096 Nov 12 00:54 ..
+   -rw-r-----    1 65532    10001            3 Nov 12 00:54 v1.json
+-- job bus-owner: Complete
+   copied /bus/wardryx.ndjson -> /bus/streams/wardryx.ndjson
+   copied /bus/wardryx-policy-archive/v1.json -> /bus/streams/wardryx-policy-archive/v1.json
+   total 20
+   drwxr-s---    3 20000    10001         4096 Nov 12 00:54 .
+   drwxrwsrwx    5 0        10001         4096 Nov 12 00:54 ..
+   -rw-r-----    1 20000    10001           14 Nov 12 00:54 .layout
+   -rw-rw-r--    1 20000    10002            0 Nov 12 00:54 agent-conform.ndjson
+   -rw-rw-r--    1 20000    20030            0 Nov 12 00:54 console.ndjson
+   -rw-rw-r--    1 20000    10003            0 Nov 12 00:54 costcrew.ndjson
+   -rw-rw-r--    1 20000    20040            0 Nov 12 00:54 mockryx.ndjson
+   -rw-rw-r--    1 20000    20013            0 Nov 12 00:54 tokenfuse-cloud.ndjson
+   -rw-rw-r--    1 20000    20012            0 Nov 12 00:54 tokenfuse-mcp.ndjson
+   -rw-rw-r--    1 20000    20010            0 Nov 12 00:54 tokenfuse.ndjson
+   -rw-rw-r--    1 20000    20005            0 Nov 12 00:54 typryx.ndjson
+   -rw-rw-r--    1 20000    20020            0 Nov 12 00:54 verdryx.ndjson
+   -rw-rw-r--    1 20000    20002            0 Nov 12 00:54 vouchryx.ndjson
+   drwxrwxr-x    2 20000    20001         4096 Nov 12 00:54 wardryx-policy-archive
+   -rw-rw-r--    1 20000    20001           29 Nov 12 00:54 wardryx.ndjson
+   bus ready
+-- pod list-as-owner (uid 20000, gid 10001, supplementalGroups [], mount <volume root>, readOnly true): Succeeded
+   drwxrwsrwx    5 0        10001         4096 Nov 12 00:54 /ev
+   drwxrws---    2 20000    10002         4096 Nov 12 00:54 /ev/conform
+   drwxr-s---    3 20000    10001         4096 Nov 12 00:54 /ev/streams
+   /ev/conform:
+   total 8
+   drwxrws---    2 20000    10002         4096 Nov 12 00:54 .
+   drwxrwsrwx    5 0        10001         4096 Nov 12 00:54 ..
+   
+   /ev/streams:
+   total 20
+   drwxr-s---    3 20000    10001         4096 Nov 12 00:54 .
+   drwxrwsrwx    5 0        10001         4096 Nov 12 00:54 ..
+   -rw-r-----    1 20000    10001           14 Nov 12 00:54 .layout
+   -rw-rw-r--    1 20000    10002            0 Nov 12 00:54 agent-conform.ndjson
+   -rw-rw-r--    1 20000    20030            0 Nov 12 00:54 console.ndjson
+   -rw-rw-r--    1 20000    10003            0 Nov 12 00:54 costcrew.ndjson
+   -rw-rw-r--    1 20000    20040            0 Nov 12 00:54 mockryx.ndjson
+   -rw-rw-r--    1 20000    20013            0 Nov 12 00:54 tokenfuse-cloud.ndjson
+   -rw-rw-r--    1 20000    20012            0 Nov 12 00:54 tokenfuse-mcp.ndjson
+   -rw-rw-r--    1 20000    20010            0 Nov 12 00:54 tokenfuse.ndjson
+   -rw-rw-r--    1 20000    20005            0 Nov 12 00:54 typryx.ndjson
+   -rw-rw-r--    1 20000    20020            0 Nov 12 00:54 verdryx.ndjson
+   -rw-rw-r--    1 20000    20002            0 Nov 12 00:54 vouchryx.ndjson
+   drwxrwxr-x    2 20000    20001         4096 Nov 12 00:54 wardryx-policy-archive
+   -rw-rw-r--    1 20000    20001           29 Nov 12 00:54 wardryx.ndjson
+   
+   /ev/streams/wardryx-policy-archive:
+   total 12
+   drwxrwxr-x    2 20000    20001         4096 Nov 12 00:54 .
+   drwxr-s---    3 20000    10001         4096 Nov 12 00:54 ..
+   -rw-r-----    1 20000    10001            3 Nov 12 00:54 v1.json
+-- job bus-owner-again (second run on the same volume): Complete
+   drwxrwxr-x    2 20000    20001         4096 Nov 12 00:54 wardryx-policy-archive
+   -rw-rw-r--    1 20000    20001           29 Nov 12 00:54 wardryx.ndjson
+   bus ready
+
+== 2a. a producer appends to its own stream through its group
+-- pod wardryx-producer (uid 20001, gid 10001, supplementalGroups [20001], mount streams subPath, readOnly false): Succeeded
+   uid=20001 gid=10001 groups=10001,20001
+   expected ok, got ok: wardryx (20001) appends to wardryx.ndjson 
+   expected ok, got ok: wardryx adds a version to its policy archive 
+   -rw-rw-r--    1 20000    20001           56 Nov 12 00:54 /ev/wardryx.ndjson
+   
+   /ev/wardryx-policy-archive:
+   total 8
+   -rw-r-----    1 20000    10001            3 Nov 12 00:54 v1.json
+   -rw-r-----    1 20001    10001            3 Nov 12 00:54 v2.json
+
+== 2b. another producer can neither write another plane's stream nor change a name in the bus directory
+-- pod costcrew-producer (uid 10003, gid 10001, supplementalGroups [10003], mount streams subPath, readOnly false): Succeeded
+   uid=10003 gid=10001 groups=10001,10003
+   expected ok, got ok: costcrew (10003) appends to its own costcrew.ndjson 
+   expected refused, got refused: append a forged line to wardryx.ndjson (sh: can't create /ev/wardryx.ndjson: Permission denied)
+   expected refused, got refused: truncate wardryx.ndjson (sh: can't create /ev/wardryx.ndjson: Permission denied)
+   expected refused, got refused: create a new stream file (sh: can't create /ev/costcrew2.ndjson: Permission denied)
+   expected refused, got refused: rename wardryx.ndjson away (mv: can't rename '/ev/wardryx.ndjson': Permission denied)
+   expected refused, got refused: remove wardryx.ndjson (rm: can't remove '/ev/wardryx.ndjson': Permission denied)
+   expected refused, got refused: make a directory (mkdir: can't create directory '/ev/x': Permission denied)
+   expected refused, got refused: chmod wardryx.ndjson (chmod: /ev/wardryx.ndjson: Operation not permitted)
+   expected refused, got refused: link a stream under a new name (ln: /ev/w2.ndjson: Operation not permitted)
+   expected refused, got refused: add a version to wardryx policy archive (sh: can't create /ev/wardryx-policy-archive/v9.json: Permission denied)
+   expected refused, got refused: rename an archived version (mv: can't rename '/ev/wardryx-policy-archive/v1.json': Permission denied)
+   expected ok, got ok: read wardryx.ndjson (the bus is readable to the bus group) 
+
+== 2c. two containers of one pod, each with its own group (the gateway and its verdryx-slo sidecar)
+-- pod gateway-shape (uid 20010, gid 20010, supplementalGroups [10001], mount streams subPath, readOnly false): Succeeded
+   uid=20010 gid=20010 groups=10001,20010
+   expected ok, got ok: gateway (20010:20010) appends to tokenfuse.ndjson 
+   expected refused, got refused: gateway appends to verdryx.ndjson, the sidecar s stream (sh: can't create /ev/verdryx.ndjson: Permission denied)
+
+== 2d. readers read every stream and write none
+-- pod reader (uid 65532, gid 65532, supplementalGroups [10001], mount streams subPath, readOnly true): Succeeded
+   uid=65532 gid=65532 groups=10001,65532
+   expected ok, got ok: read every stream 
+   expected ok, got ok: read the policy archive 
+   expected refused, got refused: append to wardryx.ndjson (sh: can't create /ev/wardryx.ndjson: Permission denied)
+-- pod reader-rw-mount (uid 65532, gid 65532, supplementalGroups [10001], mount streams subPath, readOnly false): Succeeded
+   expected refused, got refused: append to wardryx.ndjson, with the mount read-write: the mode alone refuses (sh: can't create /ev/wardryx.ndjson: Permission denied)
+   expected refused, got refused: create a file, mount read-write (sh: can't create /ev/r.ndjson: Permission denied)
+-- pod outsider (uid 30000, gid 30000, supplementalGroups [], mount streams subPath, readOnly true): Succeeded
+   expected refused, got refused: a pod outside the bus group lists the bus (ls: can't open '/ev': Permission denied)
+
+== 2e. the wait init mounts the volume root read only and cannot change it
+-- pod root-readonly (uid 20003, gid 10001, supplementalGroups [], mount <volume root>, readOnly true): Succeeded
+   expected refused, got refused: rename streams/ at the volume root (mv: can't rename '/ev/streams': Read-only file system)
+   expected refused, got refused: make a new streams.new at the volume root (mkdir: can't create directory '/ev/streams.new': Read-only file system)
+   expected ok, got ok: see the owner marker (bus-layout v1)
+
+== 2f. the agent-stack-go v2 writer (wardryx v2.6.1) and tokenfuse (control plane v1.24.0) open a stream they do not own
+   pod/wardryx condition met
+   pod/cloud condition met
+-- wardryx log (events and archive lines):
+   wardryx: starting a fresh event chain in /var/lib/stack/events/wardryx.ndjson
+   wardryx: listening on every interface; this service decides allow and deny for the whole stack; put it behind something that authenticates or bind it to loopback
+   2026/11/12 00:54:58 INFO wardryx: policy set loaded policy_version=4f53cda18c2b policies=0 base_policies=0 no_grant_floors=[] archived=/var/lib/stack/events/wardryx-policy-archive/4f53cda18c2b.json
+-- tokenfuse-cloud log (the exporter's startup line):
+   [2m2026-11-12T00:54:58.671248Z[0m [32m INFO[0m [2mtokenfuse_cloud[0m[2m:[0m agent-event NDJSON export enabled (fresh prev_hash chain) path='/var/lib/stack/events/tokenfuse-cloud.ndjson'
+   decide: {
+   decide:   "decision": "allow",
+   decide:   "policy_version": "4f53cda18c2b",
+   decide:   "reason": "allowed: no policy targets agent agent://acme.example/a",
+   decide:   "approval_token_required": false,
+   decide:   "cacheable": true
+   decide: }
+   decide: 
+   decide: All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+   decide: If you don't see a command prompt, try pressing enter.
+   decide: warning: couldn't attach to pod/curl, falling back to streaming logs: Internal error occurred: Internal error occurred: error attaching to container: failed to load task: no running task found: not found
+   decide: {
+   decide:   "decision": "allow",
+   decide:   "policy_version": "4f53cda18c2b",
+   decide:   "reason": "allowed: no policy targets agent agent://acme.example/a",
+   decide:   "approval_token_required": false,
+   decide:   "cacheable": true
+   decide: }
+   decide: 
+-- pod after-writers (uid 65532, gid 65532, supplementalGroups [10001], mount streams subPath, readOnly true): Succeeded
+   -rw-rw-r--    1 20000    20013            0 Nov 12 00:54 /ev/tokenfuse-cloud.ndjson
+   -rw-rw-r--    1 20000    20001          558 Nov 12 00:55 /ev/wardryx.ndjson
+      wardryx.ndjson lines: 3
+   {"schema":"taipanbox.dev/agent-event/v0.2","ts":"2026-11-12T00:55:04Z","source":"wardryx","type":"policy_allow","agent_id":"agent://acme.example/a","severity":"info","run_id":"run-g316","data":{"appro
+
+== 2g. kubelet and a subPath that does not exist yet (why every pod waits for the owner's marker)
+-- pod missing-subpath (uid 20003, gid 10001, supplementalGroups [], mount not-made-yet subPath, readOnly true): Succeeded
+   drwxrwsrwx    2 0        10001         4096 Nov 12 00:55 /ev
+-- pod root-after (uid 20000, gid 10001, supplementalGroups [], mount <volume root>, readOnly true): Succeeded
+   total 28
+   drwxrwsrwx    6 0        10001         4096 Nov 12 00:55 .
+   drwxr-xr-x    1 0        0             4096 Nov 12 00:55 ..
+   drwxrws---    2 20000    10002         4096 Nov 12 00:54 conform
+   drwxrwsrwx    2 0        10001         4096 Nov 12 00:55 not-made-yet
+   drwxr-s---    3 20000    10001         4096 Nov 12 00:54 streams
+   drwxr-s---    2 65532    10001         4096 Nov 12 00:54 wardryx-policy-archive
+   -rw-r-----    1 65532    10001           29 Nov 12 00:54 wardryx.ndjson
+
+== 2h. the AUTH_SYS limit: how many groups of a process the server honours
+-- pod groups-limit (uid 20000, gid 10001, supplementalGroups [30001,30002,30003,30004,30005,30006,30007,30008,30009,30010,30011,30012,30013,30014,30015,30016,30017,30018,30019,30020], mount <volume root>, readOnly false): Succeeded
+   uid=20000 gid=10001 groups=10001,30001,30002,30003,30004,30005,30006,30007,30008,30009,30010,30011,30012,30013,30014,30015,30016,30017,30018,30019,30020
+   chgrp honoured for: 30001 30002 30003 30004 30005 30006 30007 30008 30009 30010 30011 30012 30013 30014 30015 30016 30017 30018 30019 30020
+   chgrp refused for: none
+
+== done

@@ -1,0 +1,179 @@
+# The events bus and its one owner (CLAUDE.md invariant 89, GAPS G3.16).
+#
+# `stack-events` is one ReadWriteMany claim that the planes append to and the readers read. Its root
+# on Longhorn RWX is root:root 0777 (measured, evidence/bus-per-producer-longhorn): a pod that mounts
+# it there can create, rename or remove any name in it, whatever its uid. stack-single closes this
+# with a root init service; Pod Security `restricted`, which this namespace enforces, forbids root, so
+# here the bus is a subdirectory, `streams/`, made by an owner uid that no plane runs as:
+#
+#   this Job, uid 20000, is the only pod that mounts the claim's root read-write. It makes streams/
+#   (20000:10001 2750: the bus group may enter and read, nobody but the owner may add, rename or
+#   remove a name), each stream in it (20000:<producer gid> 0664: the producer appends through its
+#   own group, the bus group reads), wardryx's policy archive (20000:20001 0775) and the chain
+#   verifier's memory beside the bus (conform/, 20000:10002 2770), then writes streams/.layout;
+#
+#   every other pod mounts streams/ by subPath at /var/lib/stack/events, so no path inside it leads to
+#   the root, and waits in an init container `bus-ready` for streams/.layout, because kubelet makes a
+#   subPath that does not exist yet itself, as root 0777 (measured).
+#
+# One uid and one group per producer, numbered as stack-single numbers them where it has one:
+#   wardryx 20001  vouchryx 20002  typryx 20005  gateway 20010  MCP broker 20012  control plane 20013
+#   verdryx-slo 20020  console 20030  drills 20040  chain verifier 10002  costcrew 10003
+# The owner is in all eleven and in 10001: twelve groups. NFS with AUTH_SYS honours sixteen (measured:
+# a chgrp to the seventeenth is refused on Longhorn RWX), so the table has room for four more.
+#
+# The Job runs on every apply: it is idempotent, refuses a streams/ or a stream it does not own, and
+# is deleted ten minutes after it finishes so that the next apply runs it again. A stream of the
+# layout before this change, at the claim's root, is copied in once so the chains continue
+# (README, "Upgrading the bus layout").
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bus-owner
+  namespace: agent-stack
+  labels: { app: bus-owner }
+data:
+  bus-owner.sh: |
+    #!/bin/sh
+    # The bus owner (CLAUDE.md invariant 89, GAPS G3.16). Runs once per deploy as uid 20000, a uid no
+    # plane runs as, in group 10001 and in every producer's group. It mounts the events claim's ROOT at
+    # /bus; no plane does (each mounts /bus/streams by subPath), so nothing else can create, rename or
+    # remove a name here. What it makes:
+    #   streams/                      20000:10001 2750  the bus; the bus group may enter and read it
+    #   streams/<stream>.ndjson       20000:<producer> 0664  the producer appends through its group
+    #   streams/wardryx-policy-archive 20000:20001 0775  wardryx adds versions, the bus group reads them
+    #   conform/                      20000:10002 2770  the chain verifier's memory, beside the bus
+    #   streams/.layout               written last; every plane's init waits for it
+    # A file of the old layout at the volume root is copied in once, so the chains continue. The old
+    # files are left where they are, readable by nothing that runs after this.
+    set -eu
+    B=/bus
+    S=$B/streams
+    OWNER=20000
+    umask 0007
+
+    refuse() { echo "refused: $*" >&2; exit 1; }
+
+    own_dir() { # path group mode
+    	if [ -L "$1" ] || { [ -e "$1" ] && [ ! -d "$1" ]; }; then refuse "$1 is not a directory"; fi
+    	[ -d "$1" ] || mkdir "$1"
+    	[ "$(stat -c %u "$1")" = "$OWNER" ] || refuse "$1 belongs to uid $(stat -c %u "$1"), not $OWNER: made by somebody else"
+    	chgrp "$2" "$1"
+    	chmod "$3" "$1"
+    }
+
+    own_file() { # dir name group mode [old copy]
+    	f="$1/$2"
+    	if [ -L "$f" ] || { [ -e "$f" ] && [ ! -f "$f" ]; }; then refuse "$f is not a regular file"; fi
+    	if [ ! -e "$f" ]; then
+    		if [ -n "${5:-}" ] && [ -f "$5" ] && [ ! -L "$5" ]; then
+    			cat "$5" > "$f.tmp"
+    			mv -T -f "$f.tmp" "$f"
+    			echo "copied $5 -> $f"
+    		else
+    			: > "$f"
+    		fi
+    	fi
+    	[ "$(stat -c %u "$f")" = "$OWNER" ] || refuse "$f belongs to uid $(stat -c %u "$f"), not $OWNER"
+    	chgrp "$3" "$f"
+    	chmod "$4" "$f"
+    }
+
+    own_dir "$S" 10001 2750
+
+    # stream                  producer gid   (uid = gid)
+    for row in \
+    	tokenfuse.ndjson:20010 \
+    	tokenfuse-cloud.ndjson:20013 \
+    	tokenfuse-mcp.ndjson:20012 \
+    	wardryx.ndjson:20001 \
+    	vouchryx.ndjson:20002 \
+    	typryx.ndjson:20005 \
+    	verdryx.ndjson:20020 \
+    	console.ndjson:20030 \
+    	mockryx.ndjson:20040 \
+    	agent-conform.ndjson:10002 \
+    	costcrew.ndjson:10003; do
+    	own_file "$S" "${row%%:*}" "${row##*:}" 0664 "$B/${row%%:*}"
+    done
+
+    # wardryx's policy archive: wardryx adds a version through its group; the version files it writes are
+    # its own, 0640, in its process group 10001, so the console reads them and nothing else can change them.
+    # A file bound for a directory a producer's group can write (the archive, conform/) is made in
+    # streams/, which only the owner can write, given its group and mode there, and renamed into place
+    # with mv -T: a rename replaces whatever name a producer planted and never follows it, so a link
+    # planted where a temp file would go cannot turn the owner's write or chgrp onto another stream.
+    T=$S/.stage.tmp
+    place() { # source group mode destination
+    	rm -f "$T"
+    	cat "$1" > "$T"; chgrp "$2" "$T"; chmod "$3" "$T"
+    	if mv -T -f "$T" "$4"; then echo "copied $1 -> $4"; else rm -f "$T"; echo "not copied: $4 is a directory"; fi
+    }
+
+    A=$S/wardryx-policy-archive
+    own_dir "$A" 20001 0775
+    if [ -d "$B/wardryx-policy-archive" ] && [ ! -L "$B/wardryx-policy-archive" ]; then
+    	for old in "$B"/wardryx-policy-archive/*; do
+    		[ -f "$old" ] && [ ! -L "$old" ] || continue
+    		# copied once; a version already here is wardryx's or an earlier copy, and is left alone
+    		[ -e "$A/${old##*/}" ] || [ -L "$A/${old##*/}" ] && continue
+    		place "$old" 10001 0640 "$A/${old##*/}"
+    	done
+    fi
+
+    # The chain verifier's memory: replaced by rename, so its own directory, outside the bus it reads.
+    own_dir "$B/conform" 10002 2770
+    # The verifier replaces this file itself, so it is copied once and never re-owned here.
+    C=$B/conform/agent-conform.state.json
+    if [ ! -e "$C" ] && [ ! -L "$C" ] && [ -s "$B/agent-conform.state.json" ] && [ ! -L "$B/agent-conform.state.json" ]; then
+    	place "$B/agent-conform.state.json" 10002 0660 "$C"
+    fi
+
+    echo "bus-layout v1" > "$S/.layout.tmp"
+    chgrp 10001 "$S/.layout.tmp"
+    chmod 0640 "$S/.layout.tmp"
+    mv -T -f "$S/.layout.tmp" "$S/.layout"
+    ls -lan "$S"
+    echo "bus ready"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bus-owner
+  namespace: agent-stack
+  labels: { app: bus-owner }
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels: { app: bus-owner }
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 20000
+        runAsGroup: 10001
+        # every producer's group, so the owner can give each stream to its producer (chgrp)
+        supplementalGroups: [20001, 20002, 20005, 20010, 20012, 20013, 20020, 20030, 20040, 10002, 10003]
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: owner
+          image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          command: ["sh", "/script/bus-owner.sh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - { name: events, mountPath: /bus }
+            - { name: script, mountPath: /script, readOnly: true }
+      volumes:
+        - name: events
+          persistentVolumeClaim: { claimName: stack-events }
+        - name: script
+          configMap: { name: bus-owner, defaultMode: 0444 }

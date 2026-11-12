@@ -55,6 +55,7 @@ resources:
   - 00-base.yaml
   - 15-policy-store.yaml
   - 10-planes.yaml
+  - 11-bus.yaml
   - 20-console.yaml
   - 30-network-policy.yaml
   - 40-routines-and-secrets.yaml

@@ -285,7 +285,7 @@ else
 	grep -qF "image: $PIN" "$ask" || fail "C: the question runs another image than the one the manifests pin"
 	grep -qF -- '"-format", "json"' "$ask" || fail "C: the Job does not ask for the report a program reads"
 	grep -qF -- '"-policy", "/candidate"' "$ask" || fail "C: the Job puts no candidate to the history"
-	grep -qF '{ name: events, mountPath: /var/lib/stack/events, readOnly: true }' "$ask" || fail "C: the Job can write the events it reads"
+	grep -qF '{ name: events, mountPath: /var/lib/stack/events, readOnly: true, subPath: streams }' "$ask" || fail "C: the Job can write the events it reads, or reads another directory than the bus (invariant 89)"
 	grep -qF 'persistentVolumeClaim: { claimName: stack-events, readOnly: true }' "$ask" || fail "C: the Job can write the events it reads"
 	grep -qF 'automountServiceAccountToken: false' "$ask" || fail "C: the Job carries a service-account token (invariant 15)"
 	grep -qF 'readOnlyRootFilesystem: true' "$ask" || fail "C: the Job's root is writable"

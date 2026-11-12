@@ -102,21 +102,22 @@ spec:
       # usable by a compromised container for discovery and SelfSubjectReview,
       # and by any future RBAC binding an operator adds to `default`.
       automountServiceAccountToken: false
-      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      securityContext: { runAsNonRoot: true, runAsUser: 10003, runAsGroup: 10003, fsGroup: 65532, supplementalGroups: [10001], seccompProfile: { type: RuntimeDefault } }
       # Leave a dead node in 30 s, not the default 300 s. CLAUDE.md invariants 21
       # and 22: one replica, so the default would charge five minutes of outage
       # after the node is marked NotReady.
       tolerations:
         - { key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
         - { key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30 }
-      # Creates the stream file before costcrew starts, as its own uid (CLAUDE.md invariant 59,
-      # GOTCHAS 135). An existing file is left as it is. Mode 0640, group 10001 for the bus readers.
+      # uid and group 10003, costcrew's own as in stack-single (CLAUDE.md invariant 89): costcrew.ndjson
+      # is the bus owner's file in group 10003. fsGroup 65532 keeps its state claim writable to the group,
+      # whatever uid wrote a file there before; supplementalGroups 10001 lets it enter the bus.
       initContainers:
-        - name: precreate-streams
+        - name: bus-ready
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
-          securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
-          command: ["sh", "-c", "f=/var/lib/stack/events/costcrew.ndjson; if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; ls -ln /var/lib/stack/events"]
-          volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
+          securityContext: { runAsNonRoot: true, runAsUser: 10003, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+          volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
       containers:
         - name: costcrew
           image: ghcr.io/taipanbox/costcrew:v0.10.1@sha256:2fb72d878eb11702141ce0822049a95a28feae8fec9001bc8d568d144ae43036
@@ -155,7 +156,7 @@ spec:
             # Read-write: this plane APPENDS its stream here. idryx mounts the
             # same claim read-only because it only reads; the difference is
             # deliberate and worth keeping visible.
-            - { name: events, mountPath: /var/lib/stack/events }
+            - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
             - { name: state, mountPath: /var/lib/costcrew }
             # The one writable directory outside the data, because the root is
             # read-only. See the `tmp` volume below.
@@ -301,15 +302,16 @@ spec:
                   labelSelector:
                     matchLabels:
                       app: costcrew
-          securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
-          # Creates the stream file before the crew runs, as its own uid (CLAUDE.md invariant 59,
-          # GOTCHAS 135). An existing file is left as it is. Mode 0640, group 10001 for the bus readers.
+          securityContext: { runAsNonRoot: true, runAsUser: 10003, runAsGroup: 10003, fsGroup: 65532, supplementalGroups: [10001], seccompProfile: { type: RuntimeDefault } }
+          # uid and group 10003, costcrew's own as in stack-single (CLAUDE.md invariant 89): costcrew.ndjson
+          # is the bus owner's file in group 10003. fsGroup 65532 keeps its state claim writable to the group,
+          # whatever uid wrote a file there before; supplementalGroups 10001 lets it enter the bus.
           initContainers:
-            - name: precreate-streams
+            - name: bus-ready
               image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
-              securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 10001, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
-              command: ["sh", "-c", "f=/var/lib/stack/events/costcrew.ndjson; if [ ! -e \"$f\" ]; then umask 027; : > \"$f\"; fi; ls -ln /var/lib/stack/events"]
-              volumeMounts: [{ name: events, mountPath: /var/lib/stack/events }]
+              securityContext: { runAsNonRoot: true, runAsUser: 10003, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+              command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+              volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
           containers:
             - name: crew
               image: ghcr.io/taipanbox/costcrew:v0.10.1@sha256:2fb72d878eb11702141ce0822049a95a28feae8fec9001bc8d568d144ae43036
@@ -395,7 +397,7 @@ spec:
                 # file the console appends to. One file is one hash chain and
                 # they take turns on it, which is what the emitter's own lock
                 # is for.
-                - { name: events, mountPath: /var/lib/stack/events }
+                - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
                 # The runner opens the same SQLite store and can be the first
                 # to open it after an upgrade, so it needs the same writable
                 # temp as the console. See the console's `tmp` volume above.

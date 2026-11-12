@@ -46,6 +46,62 @@ Three honest ways out, in the order a real operator would consider them:
    its deployment, so it is out of scope here and named as future work rather
    than pretended away.
 
+## The events bus: one owner, one uid and one group per writer
+
+Every stream on `stack-events` is written by one plane and read by many, so who can write a name on it is
+a security property, not housekeeping. The claim's root on Longhorn RWX is `root:root 0777`, and kubelet
+gives it no `fsGroup` (Longhorn's CSI driver applies `fsGroup` to ReadWriteOnce volumes only). A pod that
+mounts that root can create, rename or remove any name in it, whatever its uid. stack-single closes this
+with a root init service; Pod Security `restricted`, which this namespace enforces, allows no root, so the
+bus here is a subdirectory with an owner of its own (CLAUDE.md invariant 89):
+
+- **The owner.** The Job `bus-owner` (`manifests/11-bus.yaml`) runs as uid 20000, which no plane runs as,
+  and is the only pod that mounts the claim's root read-write. It makes `streams/` (`20000:10001 2750`: the
+  bus group may enter and read it, nobody but the owner may add, rename or remove a name), each stream in it
+  (`20000:<producer> 0664`), wardryx's policy archive (`20000:20001 0775`), and `conform/` beside the bus
+  for the chain verifier's memory (`20000:10002 2770`), then writes `streams/.layout`. It runs on every
+  apply, changes nothing that is already right, and refuses a `streams/` or a stream somebody else made.
+- **The producers.** Each runs under a uid and a group of its own and appends through that group: wardryx
+  20001, vouchryx 20002, typryx 20005, the gateway 20010, the MCP broker 20012, the control plane 20013,
+  verdryx-slo 20020, the console 20030, the drills 20040, the chain verifier 10002, costcrew 10003 (the
+  numbers stack-single gives them, where it has one). No producer carries another producer's group.
+- **Everybody else.** Every pod mounts `streams/` by subPath at `/var/lib/stack/events`, so the paths the
+  planes and readers already use did not move, and no path a pod holds leads to the root. Readers mount it
+  read only and are in group 10001. Each pod waits first in an init container, `bus-ready`, that mounts the
+  root read only and waits for the owner's marker: kubelet makes a subPath that does not exist yet itself,
+  as `root 0777`, and a plane that started first would make the bus wide open.
+
+Measured on 2026-11-11 on k3s v1.36.2 with Longhorn v1.7.2 (`evidence/bus-per-producer-longhorn/`): in the
+layout before this one, a pod as costcrew appended a forged line to `wardryx.ndjson` and a pod as typryx
+renamed the gateway's stream away and put its own in its place. In this layout each producer appends to its
+own stream, and another producer's append, truncate, create, rename, remove, link and chmod are refused; a
+reader cannot write even with the mount read-write; wardryx v2.6.1 and tokenfuse v1.24.0 open a stream they
+do not own. NFS with AUTH_SYS carries sixteen groups of a process and the owner is in twelve, so the table
+has room for four more producers. `scripts/bus-writers-are-separate.sh` holds the layout, and
+`security-tests.sh` asks a live cluster the same question.
+
+### Upgrading the bus layout
+
+This is a breaking change for a cluster that already runs: every writing plane's uid changes, and the bus
+moves into `streams/`. The owner copies each stream of the old layout at the claim's root into `streams/`
+once, with the policy archive and the verifier's memory, so the hash chains continue; the old files stay
+where they are, and nothing reads them after the change. The planes' own state claims keep their `fsGroup`,
+so a file an earlier uid wrote stays writable to the new one through the group.
+
+Lines a plane writes between the copy and its own restart land in the old file and are not copied, so stop
+the writers first, apply, and let the owner run before they start again:
+
+```sh
+kubectl -n agent-stack scale deploy --all --replicas=0
+kubectl -n agent-stack delete job bus-owner --ignore-not-found
+kubectl apply -k manifests/
+kubectl -n agent-stack wait --for=condition=complete job/bus-owner --timeout=300s
+```
+
+`kubectl apply -k` puts every Deployment back at its declared replicas, and each plane's `bus-ready` waits for
+the owner's marker before it starts. A cluster you would rather start clean needs only a new `stack-events`
+claim: the owner makes every stream empty.
+
 ## Fact 2: the console is not a client of four services, it is a host of five tools
 
 The Genaryx console reaches the money, policy and identity planes over HTTP,
@@ -85,10 +141,11 @@ wrong produces a cluster where half the console's tabs are permanently empty.
 | Deployment + Service | `idryx` | 8081 |
 | Deployment + Service | `genaryx-console` (with qryx, verdryx, engram, mockryx inside) | 7420 |
 | StatefulSet + Service | the policy store: Postgres behind `wardryx`, holding its approvals and its runtime policy documents | 5432 |
-| PersistentVolumeClaim (RWX) | the shared event directory | |
+| PersistentVolumeClaim (RWX) | the shared event directory; the planes mount its `streams/` subdirectory | |
+| Job | `bus-owner`, the bus's one owner: makes `streams/` and every stream in it on each apply, and is the only pod that can create, rename or remove a name there (see "The events bus" above) | |
 | PersistentVolumeClaim | `verdryx.db`, `engram.engram` stores | |
 | CronJob | four of the six governance routines that `stack-up`'s `routines.sh` installs by default, as CronJobs: crypto trend, quality drift, identity sweep (`qryx-trend`, `verdryx-drift`, `idryx-detect`), plus the record seal (`trailryx-seal`, at 5:27, last because it seals what the others did). The fifth, the chain verification, is the row below. FinOps export (`focus-export`) cannot run as a CronJob here and does not: its data lives in a per-pod `emptyDir` (GOTCHAS 81), so since 2026-08-28 it runs as a SIDECAR in the `tokenfuse-gateway` pod, hourly, printing rather than storing. The alternative was a PersistentVolumeClaim for the trace directory, which is a billed disk and so a spending decision rather than a fix; `drills` (`mockryx-drill`) is separate: opt-in, suspended below | |
-| CronJob | `agent-conform`, the on-box chain verifier, every 15 minutes: it verifies the `prev_hash` chain of every stream on the shared bus and writes a `chain_broken` event to `agent-conform.ndjson` on the bus when one is broken. In the default apply; keeps its memory beside its output on `stack-events`, so it adds no disk. See "The on-box chain verifier" below | |
+| CronJob | `agent-conform`, the on-box chain verifier, every 15 minutes: it verifies the `prev_hash` chain of every stream on the shared bus and writes a `chain_broken` event to `agent-conform.ndjson` on the bus when one is broken. In the default apply; keeps its memory in `conform/` beside the bus on `stack-events`, so it adds no disk. See "The on-box chain verifier" below | |
 | NetworkPolicy | default-deny for the pods of `agent-stack`, then exactly the paths above. It covers the stack's own pods, not agents that run outside the namespace: see "What the NetworkPolicy confines, and where your agents run" below | |
 | Deployment + PVC + NetworkPolicy | `heraldyx`, the notifier. **Not in the default apply**, see "Being told, rather than watching" below. No Service and no port: it reads the event log and sends mail, so nothing calls it | |
 | Deployment + PVC + Service + NetworkPolicy x4 | `47-scopyx.yaml`, the web-egress enforcement point. **Not in the default apply**: it opens 80 and 443 to the whole public internet on behalf of agents, which is the widest grant in the namespace and the one decision an operator most needs to have made themselves. Refuses to start without a credential, deliberately. An agent reads the web through the MCP broker, which holds scopyx's key and is the only pod `scopyx-ingress` admits: see "How an agent reads the web" below | |
@@ -837,7 +894,7 @@ On by default. Every six hours a sidecar of the gateway's pod (`verdryx-slo`) me
 
 **What you can see.** wardryx's `/readyz` carries `"signal_events": "ok"`, `"unreadable"` or `"broken"`. Every decision records the signal, whether or not it held anything, and heraldyx alerts on each `slo_burn` line. A sidecar that cannot measure stops, and the pod shows it, because a routine that cannot measure must not look like a fleet with nothing to report.
 
-**What guards the file.** It is `verdryx.ndjson` on `stack-events`, under a uid nothing else runs as, so no other plane can write or truncate it. A file wardryx cannot believe holds nobody, on purpose: this signal can only add a hold, and every other control stands without it.
+**What guards the file.** It is `verdryx.ndjson` on `stack-events`, the bus owner's file in group 20020, which only the sidecar carries (uid and group 20020), so no other plane can write or truncate it, and nobody but the owner can rename or replace it. A file wardryx cannot believe holds nobody, on purpose: this signal can only add a hold, and every other control stands without it.
 
 ### An agent's tool call waits for a person until something grants the tool
 
@@ -905,13 +962,13 @@ quarantined or stopped.
 - **A new break fails the Job**, once, on purpose: a second signal beside the
   event, and `verify.sh` counts the failed pod as not Running until it ages out
   (three are kept). The next run exits 0, because the finding is remembered.
-- **Where it remembers.** In `agent-conform.state.json` beside its output on
-  `stack-events`. An `emptyDir` would forget between runs (each run is a new pod)
-  and announce a persistent break every 15 minutes, and a claim of its own is a
-  billed disk, which is your decision, so it adds none. It holds the bus
-  read-write, runs as uid 10002 with the bus group, and writes only its own output
-  and state because the tool does not write anything else, not because the mount
-  says so.
+- **Where it remembers.** In `conform/agent-conform.state.json`, a directory of its
+  own beside the bus on `stack-events` (it replaces that file by rename, which
+  `streams/` allows nobody but the owner). An `emptyDir` would forget between runs
+  (each run is a new pod) and announce a persistent break every 15 minutes, and a
+  claim of its own is a billed disk, which is your decision, so it adds none. It
+  runs as uid and group 10002 in the bus group, and can append to its own stream
+  and to no other plane's.
 - **What it cannot see.** `prev_hash` is unkeyed: a writer compromised in its own
   uid can forge its own stream with a valid chain, and truncation from the end is
   invisible. Only signing closes those.
@@ -1245,9 +1302,7 @@ yet, so their pins stay where they are) and trailryx (its next release is later)
 NOT PROVEN here: that the launchers' own CNI enforces the policies (kind's
 kindnet did, in `evidence/keyryx-kind/run.out`, step 6); wardryx was not run
 against Keyryx on a cluster; the witness answered 404 on its head route in the
-kind run (no signed head yet after about three minutes, not investigated); the
-event producers do not yet write under per-producer identities in the default
-planes (the kind run shows the mechanism on a test volume only); the projected
+kind run (no signed head yet after about three minutes, not investigated); the projected
 service-account token path is not used, because wardryx v2.2.0 reads its
 credential once at start and a projected token expires within an hour.
 

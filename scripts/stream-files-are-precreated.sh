@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# CLAUDE.md invariant 59: every stream file a Go writer appends to on the shared event volume
-# (or its own journal volume) is created before the writer starts, by an init container that runs
-# as the writer's own uid, mode 0640, in the group the readers are in; and every reader of the bus
-# files is in that group (fsGroup or supplementalGroups 10001).
+# CLAUDE.md invariant 59: every stream file a Go writer appends to on a volume of its own (a journal,
+# a revocation list, the witness's findings) is created before the writer starts, by an init container
+# that runs as the writer's own uid, mode 0640; and every pod that mounts the events bus is in the bus
+# group 10001 (fsGroup or supplementalGroups), the group that may enter and read it.
+#
+# The streams ON the bus are not in this table since invariant 89 (GAPS G3.16): the bus owner makes
+# each of them, 20000:<producer gid> 0664, before any plane starts, and
+# scripts/bus-writers-are-separate.sh holds that. A precreate init on the bus could not work any more:
+# the planes mount streams/ by subPath, and nothing but the owner may create a name in it.
 #
 # WHY
 #
@@ -47,20 +52,9 @@ import sys
 # file, kind, object name, the file the writer appends to, the uid it appends as,
 # the group the file is created in, the volume it lives on
 WRITERS = [
-    ("10-planes.yaml", "Deployment", "wardryx", "/var/lib/stack/events/wardryx.ndjson", 65532, 10001, "events"),
-    ("40-routines-and-secrets.yaml", "CronJob", "agent-conform", "/var/lib/stack/events/agent-conform.ndjson", 10002, 10001, "events"),
-    # the drills image is distroless nonroot (mockryx Dockerfile, USER 65532:65532); the pod names no runAsUser
-    ("40-routines-and-secrets.yaml", "CronJob", "drills", "/var/lib/stack/events/mockryx.ndjson", 65532, 10001, "events"),
-    ("51-typryx.yaml", "Deployment", "typryx", "/var/lib/stack/events/typryx.ndjson", 65532, 10001, "events"),
-    ("54-delegation.yaml", "Deployment", "vouchryx", "/var/lib/stack/events/vouchryx.ndjson", 65532, 10001, "events"),
-    ("54-delegation.yaml", "Deployment", "vouchryx", "/var/lib/stack/delegation/revocations.ndjson", 65532, 10001, "delegation-state"),
-    ("49-costcrew.yaml", "Deployment", "costcrew", "/var/lib/stack/events/costcrew.ndjson", 65532, 10001, "events"),
-    ("49-costcrew.yaml", "CronJob", "costcrew-crew", "/var/lib/stack/events/costcrew.ndjson", 65532, 10001, "events"),
-    # The gateway is the Rust tokenfuse binary, not a Go writer, but the same failure applies: idryx
-    # loads tokenfuse.ndjson at start (`--load tokenfuse:...`), and the file only appears on the
-    # first call through the gateway. With no traffic yet, idryx exits on "no such file" and
-    # restarts (GOTCHAS 150). The gateway runs as the same uid it creates the file as, 10001.
-    ("10-planes.yaml", "Deployment", "tokenfuse-gateway", "/var/lib/stack/events/tokenfuse.ndjson", 10001, 10001, "events"),
+    # vouchryx's revocation list, on its own claim (fsGroup 65532 keeps the files an earlier uid wrote
+    # writable to the group), as vouchryx's own uid since invariant 89.
+    ("54-delegation.yaml", "Deployment", "vouchryx", "/var/lib/stack/delegation/revocations.ndjson", 20002, 20002, "delegation-state"),
     # heraldyx opens its own dispatch journal on its state volume with the same writer, so a fresh
     # volume (no file yet, root-owned directory) cannot open its journal without this, and runs
     # on with no record of what it sent (GOTCHAS 136).
@@ -74,19 +68,9 @@ WRITERS = [
 
 # Pods that mount the stack-events claim WITHOUT group 10001, each with the reason it does not need it.
 # Keyed by repository-relative file, kind and object name. Every entry must still mount the claim and
-# still lack the group, or the gate says so.
-EXCEPTIONS = {
-    ("manifests/49-costcrew.yaml", "Deployment", "costcrew"):
-        "writes only its own precreated stream (costcrew.ndjson, owned by its uid 65532 at 0640); its "
-        "manifest names no bus reader, and the group would add read access to every plane's stream. Not "
-        "checked against its code. Revisit if it reads the bus.",
-    ("manifests/49-costcrew.yaml", "CronJob", "costcrew-crew"):
-        "the scheduled run of costcrew: writes only its own precreated stream, as its own uid 65532 at "
-        "0640; its manifest names no bus reader. Same reason as the Deployment above.",
-    ("manifests/54-delegation.yaml", "Deployment", "vouchryx"):
-        "writes only its own precreated stream (vouchryx.ndjson, owned by its uid 65532 at 0640); its "
-        "revocations live on its own volume and its manifest names no bus reader.",
-}
+# still lack the group, or the gate says so. Empty since invariant 89: a plane that writes the bus must
+# enter streams/, which only the bus group may, so costcrew, costcrew-crew and vouchryx joined it.
+EXCEPTIONS = {}
 
 
 def discovered_mounters():

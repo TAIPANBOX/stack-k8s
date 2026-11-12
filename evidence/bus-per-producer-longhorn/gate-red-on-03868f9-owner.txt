@@ -1,0 +1,7 @@
+FAIL manifests/11-bus.yaml: the owner writes $A/.copy.tmp, outside streams/, where a producer can plant a link in its place
+FAIL manifests/11-bus.yaml: the owner writes $C.tmp, outside streams/, where a producer can plant a link in its place
+FAIL manifests/11-bus.yaml: the owner moves a file without mv -T: mv "$f.tmp" "$f"
+FAIL manifests/11-bus.yaml: the owner moves a file without mv -T: mv "$A/.copy.tmp" "$A/${old##*/}"
+FAIL manifests/11-bus.yaml: the owner moves a file without mv -T: cat "$B/agent-conform.state.json" > "$C.tmp"; chgrp 10002 "$C.tmp"; chmod 0660 "$C.tmp"; mv "$C.tmp" "$C"
+FAIL manifests/11-bus.yaml: the owner moves a file without mv -T: mv "$S/.layout.tmp" "$S/.layout"
+6 problem(s). See CLAUDE.md invariant 89.
