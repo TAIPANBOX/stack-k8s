@@ -666,7 +666,7 @@ spec:
           volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v2.6.1@sha256:2101d23bbe8ecb1b932a530611ffa02f1c7c9b82394c4fa8db238f7d0e7bd667
+          image: ghcr.io/taipanbox/wardryx:v2.6.2@sha256:b799701c2429605c9c3819a8cbd3085462fadcf5b07aa0e17f17edd1cacddada
           imagePullPolicy: IfNotPresent
           # Single-dash flags, exactly as up.sh calls it.
           args:
@@ -812,7 +812,7 @@ spec:
           volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
       containers:
         - name: idryx
-          image: ghcr.io/taipanbox/idryx:v1.4.0@sha256:2c80d101a01b2d3ac300abd57d397f38d8ff5515e34c5f851849244029ba6d15
+          image: ghcr.io/taipanbox/idryx:v1.4.1@sha256:7ace674b5c44bf2ec65a22399315e1e8e71d71e75cfd933dcd0ddec53a9c20a6
           imagePullPolicy: IfNotPresent
           # Double-dash flags here, and :8081 because idryx's own default 8080
           # collides with the cloud plane. Both quirks are up.sh's, kept so the

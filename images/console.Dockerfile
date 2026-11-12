@@ -62,7 +62,7 @@ RUN cd qryx    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/qryx
 # scripts/console-engines-are-the-stacks.sh holds the two references equal to
 # manifests/10-planes.yaml's (CLAUDE.md invariant 79), and moving one without
 # the other fails it. Pulled, not built: the node builds nothing it can pull.
-FROM ghcr.io/taipanbox/wardryx:v2.6.1@sha256:2101d23bbe8ecb1b932a530611ffa02f1c7c9b82394c4fa8db238f7d0e7bd667 AS wardryx-engine
+FROM ghcr.io/taipanbox/wardryx:v2.6.2@sha256:b799701c2429605c9c3819a8cbd3085462fadcf5b07aa0e17f17edd1cacddada AS wardryx-engine
 FROM ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81dbcd116557eff54aae29e7d68104af8fc788265d58e71adf3f96fea03317 AS tokenfuse-engine
 
 # --- runtime ----------------------------------------------------------------
@@ -76,7 +76,7 @@ RUN apt-get update \
 LABEL org.opencontainers.image.title="genaryx-console"
 # Which engines the proofs run, readable from `docker inspect`: the question an
 # incident asks of a proof is which wardryx replayed it.
-LABEL dev.taipanbox.engine.wardryx="v2.6.1@sha256:2101d23bbe8ecb1b932a530611ffa02f1c7c9b82394c4fa8db238f7d0e7bd667"
+LABEL dev.taipanbox.engine.wardryx="v2.6.2@sha256:b799701c2429605c9c3819a8cbd3085462fadcf5b07aa0e17f17edd1cacddada"
 LABEL dev.taipanbox.engine.tokenfuse="v1.25.0@sha256:3a81dbcd116557eff54aae29e7d68104af8fc788265d58e71adf3f96fea03317"
 
 # The two Python tools, installed as real console-invokable commands
