@@ -227,7 +227,7 @@ spec:
 #
 # What a pass means: heraldyx journalled a dispatch for this run (source heraldyx, type alert_sent, the same
 # run_id). heraldyx journals it whether the mail server accepted the message or refused it, with the outcome
-# in the line's data, and mockryx v0.5.0 matches on source, type and run_id only (its own scenario says so).
+# in the line's data, and mockryx matches on source, type and run_id only (its own scenario says so).
 # Inside HERALDYX_QUIET hours heraldyx holds an alert below critical until they end, and policy_deny is
 # high, so a run then is a Finding about the hour, not about the chain: run it outside them.
 #
@@ -245,14 +245,15 @@ spec:
 #     gateway's port 4100 and nothing else, and it sends the drills' own key (drills-client-key), which the
 #     gateway binds to agent://mockryx.local/* alone.
 # The scenario is this cluster's copy (the ConfigMap drills-heraldyx-scenarios below): mockryx loads a whole
-# directory, and the image's /scenarios holds twelve others that the gateway drills already run.
+# directory, and the image's /scenarios holds thirteen others that the gateway drills already run.
 #
-# ONE step, not the original's two. mockryx v0.5.0 counts a reaction only if its timestamp is at or after the
-# second its own step's request went out (internal/watch, the floor from sentAt). In the original, step 1's
-# denial is what heraldyx mails about, and heraldyx dedups by run id, so a journal line written before step 2
-# was sent is refused by step 2 and no second one comes: a false Finding. Here the single request is the one
-# heraldyx reacts to. wardryx's own record, the hop between, is the gateway drills' step (`drills`), and
-# heraldyx reads nothing else, so an alert_sent for this run means the record was written too.
+# ONE step, not v0.5.0's two (mockryx's own file is one step from v0.5.1, mockryx#96). mockryx counts a
+# reaction only if its timestamp is at or after the second its own step's request went out (internal/watch,
+# the floor from sentAt). In the original, step 1's denial is what heraldyx mails about, and heraldyx dedups
+# by run id, so a journal line written before step 2 was sent is refused by step 2 and no second one comes: a
+# false Finding. Here the single request is the one heraldyx reacts to. wardryx's own record, the hop between,
+# is the gateway drills' step (`drills`), and heraldyx reads nothing else, so an alert_sent for this run means
+# the record was written too.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -294,7 +295,7 @@ spec:
               volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
           containers:
             - name: mockryx
-              image: ghcr.io/taipanbox/mockryx:v0.5.0@sha256:32e4e79cd3bf95d23aa240f925ca139726faf8a13cdcd3a1728ea3df633f08be
+              image: ghcr.io/taipanbox/mockryx:v0.5.1@sha256:3926512211a4609a402d3812ae0321df46baaa90406ea439e3f5c89316ef85ef
               args: ["run", "--gateway", "http://tokenfuse-gateway:4100", "/drills/heraldyx"]
               env:
                 - name: MOCKRYX_EVENTS_PATH
@@ -327,10 +328,10 @@ spec:
             - name: scenarios
               configMap: { name: drills-heraldyx-scenarios, defaultMode: 0444 }
 ---
-# This cluster's copy of mockryx v0.5.0's reaction-chain-reaches-heraldyx, with a name of its own so a report
-# says which ran: the original's request, one step that waits for heraldyx (the CronJob above says why).
-# mockryx's file carries the full reasoning for each hop. scripts/drills-can-start.sh reads this copy: it must
-# wait for heraldyx, and the drill must watch heraldyx's journal.
+# This cluster's copy of mockryx's reaction-chain-reaches-heraldyx (one step, as v0.5.1 ships it), with a name
+# of its own so a report says which ran: the original's request, one step that waits for heraldyx (the CronJob
+# above says why). mockryx's file carries the full reasoning for each hop. scripts/drills-can-start.sh reads
+# this copy: it must wait for heraldyx, and the drill must watch heraldyx's journal.
 apiVersion: v1
 kind: ConfigMap
 metadata:

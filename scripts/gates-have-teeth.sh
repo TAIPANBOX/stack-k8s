@@ -5446,7 +5446,7 @@ run_case "broker-drills-pass: the drill reads its key from a path nothing mounts
 	"mockryx would read no key"
 run_case "broker-drills-pass: the CronJob falls back to a mockryx with no broker key" fail \
 	"$BDP" \
-	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "mockryx:v0.5.0@sha256:", "mockryx:v0.4.0@sha256:")')" \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "mockryx:v0.5.1@sha256:", "mockryx:v0.4.0@sha256:")')" \
 	"older than v0.5.0"
 run_case "broker-drills-pass: the broker admits the gateway drills' pod" fail \
 	"$BDP" \
@@ -5739,7 +5739,7 @@ run_case "drills-can-start: drills-broker retries too" fail \
 	"backoffLimit is 2"
 run_case "drills-can-start: the pin moves to a mockryx nobody read" fail \
 	'./scripts/drills-can-start.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/mockryx:v0.5.0@", "image: ghcr.io/taipanbox/mockryx:v0.6.0@")')" \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/mockryx:v0.5.1@", "image: ghcr.io/taipanbox/mockryx:v0.6.0@")')" \
 	"measured NOTHING about"
 run_case "drills-can-start: the comment above the watched logs reworded (must pass)" pass \
 	'./scripts/drills-can-start.sh' \
