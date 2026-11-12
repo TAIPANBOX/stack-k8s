@@ -62,7 +62,7 @@ spec:
           # five source commits are labels on it: `docker inspect` answers
           # "which qryx is in this console", and that is the question an
           # incident asks.
-          image: ghcr.io/taipanbox/genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5
+          image: ghcr.io/taipanbox/genaryx-console:v1.12.0@sha256:32c28d24c9a35438cda3b47bac2ea1d001edde268deeb7dfada652102bbc996f
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef: { name: stack-wiring }
@@ -155,12 +155,16 @@ spec:
             # The approver key (CLAUDE.md invariant 67): the console signs the statement that names the person who
             # approved a hold or a denial. A file, mounted from the Secret console-approver-key, never a variable.
             - { name: GENARYX_APPROVER_KEY_FILE, value: "/run/approver/approver.pem" }
+            # The preview key (CLAUDE.md invariant 91): the console opens the sealed arguments of a held call with it.
+            # A file, mounted from the Secret console-preview-key, never a variable; wardryx holds only the public half.
+            - { name: GENARYX_PREVIEW_KEY_FILE, value: "/run/preview/preview.key" }
           ports: [{ name: http, containerPort: 7420 }]
           volumeMounts:
             - { name: state, mountPath: /var/lib/stack }
             - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
             - { name: environment, mountPath: /etc/genaryx/taipan/environments, readOnly: true }
             - { name: approver, mountPath: /run/approver, readOnly: true }
+            - { name: preview, mountPath: /run/preview, readOnly: true }
           readinessProbe:
             httpGet: { path: /healthz, port: http }
             initialDelaySeconds: 3
@@ -204,6 +208,11 @@ spec:
         # an approver statement without it, so a console with no key waits for the mint instead of starting blind.
         - name: approver
           secret: { secretName: console-approver-key, defaultMode: 0440 }
+        # The preview key (CLAUDE.md invariant 91), minted once by lib/preview-mint.sh. 0440 with the pod's fsGroup
+        # 10001 is the narrowest a Secret volume allows: its files are root's, so 0400 would leave the console
+        # (uid 20030) unable to read it. Not optional: a console with no key waits for the mint.
+        - name: preview
+          secret: { secretName: console-preview-key, defaultMode: 0440 }
 ---
 apiVersion: v1
 kind: Service

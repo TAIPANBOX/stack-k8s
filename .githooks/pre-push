@@ -107,6 +107,7 @@ step "a deploy whose own proof failed ends red (invariant 88)" "./scripts/deploy
 step "every scheduled drill can start, watches what it waits for, and runs once (invariant 90)" "./scripts/drills-can-start.sh"
 step "hub/add-site.sh reads a digest-pinned tokenfuse-cloud image" "./scripts/hub-add-site-reads-the-pinned-image.sh"
 step "the console approver key is minted once and wardryx verifies with it (invariant 67)" "./scripts/approver-key-is-minted.sh"
+step "the console preview key is minted once and wardryx seals to its public half (invariant 91)" "./scripts/preview-key-is-minted.sh"
 step "Keyryx is installed by default, with --without-keyryx as the opt-out (invariant 69)" "./scripts/keyryx-is-default.sh"
 step "the Keyryx witness reads the record and the record-seal reads attestations through shared volumes (invariant 70)" "./scripts/keyryx-witness-shares-the-record.sh"
 step "the record-seal fails closed: a failed pack ends the run non-zero (invariant 71)" "./scripts/record-seal-fails-closed.sh"

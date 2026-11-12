@@ -449,6 +449,11 @@ jobs:
       - name: the console approver key is minted once and wardryx verifies with it (invariant 67)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/approver-key-is-minted.sh
 
+      # Added 2026-11-12 with invariant 91. The console's preview key is minted once on the console's image and read
+      # back by exec; wardryx seals each held call's arguments to its public half. See CLAUDE.md invariant 91.
+      - name: the console preview key is minted once and wardryx seals to its public half (invariant 91)
+        run: ./scripts/preview-key-is-minted.sh
+
       # Added 2026-10-19 with invariant 69. Keyryx is installed by default in every launcher, and the record and
       # the approvals are signed through custody. See CLAUDE.md invariant 69.
       - name: Keyryx is installed by default, with --without-keyryx as the opt-out (invariant 69)

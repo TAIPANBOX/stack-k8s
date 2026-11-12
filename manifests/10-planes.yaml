@@ -550,7 +550,7 @@ spec:
         # the budget that caused it. No `|| true`: a routine that cannot measure must not look like a
         # fleet with nothing to report, so a failure stops the container and the pod shows it.
         - name: verdryx-slo
-          image: ghcr.io/taipanbox/genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5
+          image: ghcr.io/taipanbox/genaryx-console:v1.12.0@sha256:32c28d24c9a35438cda3b47bac2ea1d001edde268deeb7dfada652102bbc996f
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
@@ -718,6 +718,12 @@ spec:
             # requires a statement the console signed on every grant and denial, verified against this JWK set. The
             # console is pinned to genaryx-console v1.6.0 or later (v1.7.0), v1.6.0 being the first image that sends one. Never WARDRYX_ALLOW_KEY_APPROVALS.
             - { name: WARDRYX_APPROVER_JWKS, value: "/etc/wardryx/approver/approver-jwks.json" }
+            # The console's public preview key (CLAUDE.md invariant 91), minted by lib/preview-mint.sh. Set, wardryx seals
+            # each held call's arguments to it and only the console opens them. Optional: with no console there is
+            # nobody to show a preview to, and wardryx records each hold's preview as off. The mint restarts wardryx
+            # once, because this is read at start.
+            - name: WARDRYX_PREVIEW_RECIPIENT
+              valueFrom: { configMapKeyRef: { name: wardryx-preview-recipient, key: recipient, optional: true } }
           ports: [{ name: http, containerPort: 8090 }]
           # Stop taking traffic before stopping: the endpoint leaves the
           # Service while this sleeps. Without it a rolling update refused 3

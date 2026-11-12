@@ -300,6 +300,7 @@ ALLOW_UNPINNED = {
     # manifests/10-planes.yaml, so it has no pin of its own to judge, and tool-hold-is-seeded.sh holds
     # the Job's image equal to that pin, digest and all (invariant 83)
     ("lib/tool-hold.sh", "$image"): "read from manifests/10-planes.yaml at run time, held equal to that pin",
+    ("lib/preview-mint.sh", "$img"): "read from the running genaryx-console Deployment at run time, so the mint pod runs the image the console already runs (invariant 91)",
     # upstream cloud controllers, applied into kube-system by the cloud installers, pinned by version
     # from the installer's own variable; kube-system is not opted in, so the policy does not cover them
     ("cloud/aws/install-aws.sh", "registry.k8s.io/provider-aws/cloud-controller-manager:$CCM_VERSION"):

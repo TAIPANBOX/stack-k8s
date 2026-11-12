@@ -353,7 +353,7 @@ else:
 # with nothing noticing. Same fault, same gate, the other file it now reads.
 run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
 	'./scripts/pinned-images.sh' \
-	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.12.0@sha256:32c28d24c9a35438cda3b47bac2ea1d001edde268deeb7dfada652102bbc996f", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
 	"moves: a pod can come back different"
 
 # The default apply set must not publish anything to the world, and must not
@@ -3819,7 +3819,7 @@ run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)"
 # edits one tracked file the gate reads; the gate's own baseline must be green first.
 run_case "verified-images: a TAIPANBOX image carries a tag only" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.12.0@sha256:32c28d24c9a35438cda3b47bac2ea1d001edde268deeb7dfada652102bbc996f", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
 	"image not pinned by digest"
 run_case "verified-images: an upstream image nobody allowed" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -4086,6 +4086,63 @@ run_case "keyryx-release-pins: a comment reworded in the Keyryx manifest (must p
 	'./scripts/keyryx-release-pins.sh' \
 	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "# Images: keyryx v0.1.0, pinned by the index digest of the tag.", "# Images: keyryx, pinned by the index digest of the tag.")')"
 
+# The console's preview key and wardryx's recipient (CLAUDE.md invariant 91).
+run_case "preview: the mint applies over an existing key" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("lib/preview-mint.sh", "} | k_ \"-n $PREVIEW_NS create -f -\" >/dev/null \\\n    || preview_mint_fail", "} | k_ \"-n $PREVIEW_NS apply -f -\" >/dev/null \\\n    || preview_mint_fail")')" \
+	"runs \`apply\`"
+run_case "preview: the key is read back through the pod's log" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("lib/preview-mint.sh", "exec $PREVIEW_POD -- cat /work/preview.key", "logs $PREVIEW_POD")')" \
+	"reads its pod's log"
+run_case "preview: the mint pod keeps its work on disk" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("lib/preview-mint.sh", "emptyDir: \x7b medium: Memory, sizeLimit: 1Mi \x7d", "emptyDir: \x7b sizeLimit: 1Mi \x7d")')" \
+	"not memory-backed"
+run_case "preview: the mint pod carries a service account token" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("lib/preview-mint.sh", "  automountServiceAccountToken: false\n", "")')" \
+	"carries a service account token"
+run_case "preview: wardryx is not restarted after the mint" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("lib/preview-mint.sh", "k_ \"-n $PREVIEW_NS rollout restart deployment/wardryx\" >/dev/null \\\n    || die", "true \\\n    || die")')" \
+	"does not restart wardryx"
+run_case "preview: a half pair is repaired instead of refused" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("lib/preview-mint.sh", "  if [ \"$secret_there\" = yes ] || [ \"$cm_there\" = yes ]; then\n    die \"the preview key and its recipient", "  if false; then\n    die \"the preview key and its recipient")')" \
+	"half pair"
+run_case "preview: an old console's empty answer is accepted" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("lib/preview-mint.sh", "  [[ \"$recipient\" =~ ^hpke:647a:[A-Za-z0-9_-]+$ ]] \\\n    || preview_mint_fail", "  true \\\n    || preview_mint_fail")')" \
+	"printed no recipient was accepted"
+run_case "preview: the console reads the key from another path" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "value: \"/run/preview/preview.key\"", "value: \"/run/other/preview.key\"")')" \
+	"GENARYX_PREVIEW_KEY_FILE is /run/other/preview.key"
+run_case "preview: the console's preview Secret becomes optional" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "secret: \x7b secretName: console-preview-key, defaultMode: 0440 \x7d", "secret: \x7b secretName: console-preview-key, defaultMode: 0440, optional: true \x7d")')" \
+	"is not the Secret console-preview-key at mode 0440"
+run_case "preview: the private preview key is mounted into wardryx" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "        - name: approver-jwks\n          configMap: \x7b name: wardryx-approver-jwks \x7d\n", "        - name: approver-jwks\n          configMap: \x7b name: wardryx-approver-jwks \x7d\n        - name: preview\n          secret: \x7b secretName: console-preview-key, defaultMode: 0440 \x7d\n")')" \
+	"not by the console alone"
+run_case "preview: wardryx gets a literal recipient" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - name: WARDRYX_PREVIEW_RECIPIENT\n              valueFrom: \x7b configMapKeyRef: \x7b name: wardryx-preview-recipient, key: recipient, optional: true \x7d \x7d\n", "            - \x7b name: WARDRYX_PREVIEW_RECIPIENT, value: \"hpke:647a:x\" \x7d\n")')" \
+	"does not read WARDRYX_PREVIEW_RECIPIENT"
+run_case "preview: wardryx is pinned back to 2.6.2" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.7.0@sha256:", "wardryx:v2.6.2@sha256:")')" \
+	"before the argument preview"
+run_case "preview: a cloud launcher never mints the preview key" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "\npreview_mint_settle\n", "\n")')" \
+	"never calls preview_mint_settle"
+run_case "preview: a comment reworded in the wiring (must pass)" pass \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "A file, mounted from the Secret console-preview-key, never a variable", "A file mounted from the Secret console-preview-key, never a variable")')"
+
 # The console's approver key and wardryx's copy of its public half (CLAUDE.md invariant 67).
 run_case "approver: the mint applies over an existing key" fail \
 	'./scripts/approver-key-is-minted.sh' \
@@ -4121,7 +4178,7 @@ run_case "approver: wardryx reads the JWK set from another file" fail \
 	"but the JWK set is mounted at"
 run_case "approver: the console is left on v1.1.48 while wardryx reads the JWK set" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5", "genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
+	"$(py 'edit("manifests/20-console.yaml", "genaryx-console:v1.12.0@sha256:32c28d24c9a35438cda3b47bac2ea1d001edde268deeb7dfada652102bbc996f", "genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
 	"every approval would be refused"
 run_case "approver: a TODO is left in place after the wiring" fail \
 	'./scripts/approver-key-is-minted.sh' \
