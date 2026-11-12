@@ -1,0 +1,27 @@
+image: ghcr.io/taipanbox/mockryx:v0.5.0@sha256:32e4e79cd3bf95d23aa240f925ca139726faf8a13cdcd3a1728ea3df633f08be
+=== gateway drills' copy, watching wardryx.ndjson
+mockryx: 1 defensive gap(s) found across 1 scenario(s)
+mockryx: 1 scenario(s) against http://127.0.0.1:9
+
+STATUS  SCENARIO                                        CALLS  BUDGET BURNED  FINDINGS
+failed  reaction-chain-reaches-wardryx-on-this-cluster  1      $0.000000      1
+
+1 defensive gap(s):
+
+  [reaction-chain-reaches-wardryx-on-this-cluster / shell-exec-denied-and-recorded-by-wardryx] attempt 1: expected status 403 map[x-fuse-wardryx:deny], got 0. request failed: send request: Post "http://127.0.0.1:9/v1/messages": dial tcp 127.0.0.1:9: connect: connection refused
+exit=1
+=== heraldyx drill's copy, watching wardryx.ndjson and sent.ndjson
+mockryx: 1 scenario(s) against http://127.0.0.1:9
+
+STATUS  SCENARIO                                         CALLS  BUDGET BURNED  FINDINGS
+failed  reaction-chain-reaches-heraldyx-on-this-cluster  2      $0.000000      2
+
+2 defensive gap(s):
+
+  [reaction-chain-reaches-heraldyx-on-this-cluster / shell-exec-denied-and-recorded-by-wardryx] attempt 1: expected status 403 map[x-fuse-wardryx:deny], got 0. request failed: send request: Post "http://127.0.0.1:9/v1/messages": dial tcp 127.0.0.1:9: connect: connection refused
+  [reaction-chain-reaches-heraldyx-on-this-cluster / same-run-heraldyx-notifies] attempt 1: expected status 403 map[x-fuse-wardryx:deny], got 0. request failed: send request: Post "http://127.0.0.1:9/v1/messages": dial tcp 127.0.0.1:9: connect: connection refused
+mockryx: 2 defensive gap(s) found across 1 scenario(s)
+exit=1
+=== heraldyx drill's copy, no watch list (must be refused, exit 2)
+mockryx: scenario "reaction-chain-reaches-heraldyx-on-this-cluster" step "shell-exec-denied-and-recorded-by-wardryx" declares expect.event, but no --watch-events or $MOCKRYX_WATCH_EVENTS was provided
+exit=2
