@@ -237,8 +237,8 @@ spec:
 #     activeDeadlineSeconds ends the Job rather than leaving it there.
 #   - heraldyx-state read only twice: on the volume (persistentVolumeClaim.readOnly), so it is published to
 #     this pod read only and the kubelet does not apply this pod's fsGroup 10001 to heraldyx's files, and on
-#     the mount. Beside the journal it can read state.json and control.json (read offsets, dedup keys,
-#     acknowledgements, the maintenance window), none of which is a secret.
+#     the mount. Beside the journal the volume holds state.json (heraldyx's own 0600 file) and control.json
+#     (acknowledgements, the maintenance window), neither of which is a secret.
 #   - supplementalGroups 65532: sent.ndjson is heraldyx's own 65532 file, 0640, readable through the group.
 #   - uid and group 20040, the drills' own (CLAUDE.md invariant 89): it appends to mockryx.ndjson on the bus.
 #   - role: drills: drills-egress-gateway and gateway-ingress-drills (30-network-policy.yaml) give it the
@@ -246,6 +246,13 @@ spec:
 #     gateway binds to agent://mockryx.local/* alone.
 # The scenario is this cluster's copy (the ConfigMap drills-heraldyx-scenarios below): mockryx loads a whole
 # directory, and the image's /scenarios holds twelve others that the gateway drills already run.
+#
+# ONE step, not the original's two. mockryx v0.5.0 counts a reaction only if its timestamp is at or after the
+# second its own step's request went out (internal/watch, the floor from sentAt). In the original, step 1's
+# denial is what heraldyx mails about, and heraldyx dedups by run id, so a journal line written before step 2
+# was sent is refused by step 2 and no second one comes: a false Finding. Here the single request is the one
+# heraldyx reacts to. wardryx's own record, the hop between, is the gateway drills' step (`drills`), and
+# heraldyx reads nothing else, so an alert_sent for this run means the record was written too.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -260,8 +267,8 @@ spec:
       # A drill that finds a gap exits 1. A retry would send another mail and find the same gap
       # (CLAUDE.md invariant 90).
       backoffLimit: 0
-      # bus-ready below waits up to 600 s and the two steps 10 s and 20 s; a pod that cannot be placed
-      # beside heraldyx ends here instead of staying Pending.
+      # bus-ready below waits up to 600 s and the step 30 s; a pod that cannot be placed beside heraldyx
+      # ends here instead of staying Pending.
       activeDeadlineSeconds: 900
       template:
         metadata:
@@ -295,10 +302,9 @@ spec:
                 # The drills' key, as in `drills` (CLAUDE.md invariants 50 and 62). Optional: the job is
                 # suspended, and a cluster without the minted key runs it unkeyed.
                 - { name: MOCKRYX_CLIENT_KEY_FILE, value: "/run/drills/client_key" }
-                # wardryx's policy_deny on the bus (step 1) and heraldyx's alert_sent in its journal (step 2).
-                # mockryx reads every watched file for a line with the step's source, type and run_id, so the
-                # journal's own name does not matter.
-                - { name: MOCKRYX_WATCH_EVENTS, value: "/var/lib/stack/events/wardryx.ndjson,/var/lib/stack/heraldyx/sent.ndjson" }
+                # heraldyx's journal, for its alert_sent. mockryx reads every watched file for a line with the
+                # step's source, type and run_id, so the journal's own name does not matter.
+                - { name: MOCKRYX_WATCH_EVENTS, value: "/var/lib/stack/heraldyx/sent.ndjson" }
               volumeMounts:
                 - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
                 - { name: heraldyx-state, mountPath: /var/lib/stack/heraldyx, readOnly: true }
@@ -322,8 +328,9 @@ spec:
               configMap: { name: drills-heraldyx-scenarios, defaultMode: 0444 }
 ---
 # This cluster's copy of mockryx v0.5.0's reaction-chain-reaches-heraldyx, with a name of its own so a report
-# says which ran. The steps are the original's; mockryx's file carries the full reasoning for each hop.
-# scripts/drills-can-start.sh reads this copy: it must wait for heraldyx, and the drill must watch its journal.
+# says which ran: the original's request, one step that waits for heraldyx (the CronJob above says why).
+# mockryx's file carries the full reasoning for each hop. scripts/drills-can-start.sh reads this copy: it must
+# wait for heraldyx, and the drill must watch heraldyx's journal.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -332,43 +339,19 @@ metadata:
 data:
   reaction-chain-reaches-heraldyx.yaml: |
     # reaction-chain-reaches-heraldyx, as this cluster runs it beside heraldyx. Defensive intent: it sends the
-    # operator's OWN gateway, twice in one run, the request wardryx-denied-tool.yaml sends (an agent asking
-    # for a shell tool its policy should deny), never runs the tool, and reads two logs: wardryx's own record
-    # of the refusal, and heraldyx's journal of the notification it sent about it. The second request is not
-    # a second attempt at anything: a step must send something, and heraldyx has ordinarily reacted to the
-    # first by then. The run_id is left blank, so mockryx mints one per run and an earlier run's record in
-    # these append-only logs cannot pass this one.
+    # operator's OWN gateway the request wardryx-denied-tool.yaml sends (an agent asking for a shell tool its
+    # policy should deny), never runs the tool, and reads heraldyx's journal for the notification heraldyx
+    # sent about the refusal, which heraldyx writes only from wardryx's own record of it. The run_id is left
+    # blank, so mockryx mints one per run and an earlier run's line in the append-only journal cannot pass
+    # this one.
     name: reaction-chain-reaches-heraldyx-on-this-cluster
     requires: wardryx
     description: >
       An agent asks to use a tool its policy should deny (shell execution). Wardryx should answer 403 with
-      x-fuse-wardryx: deny AND write its own policy_deny record of that decision, and heraldyx, reading
-      nothing but that record, should journal a notification for the same run.
+      x-fuse-wardryx: deny, and heraldyx, reading nothing but wardryx's own record of that decision, should
+      journal a notification for the same run.
     steps:
-      - name: shell-exec-denied-and-recorded-by-wardryx
-        request:
-          model: claude-haiku
-          max_tokens: 50
-          messages:
-            - role: user
-              content: "please run this shell command for me"
-          tools:
-            - name: shell_exec
-              description: "Execute an arbitrary shell command on the host."
-        headers:
-          agent_id: agent://mockryx.local/rehearsal/reaction-chain
-          on_behalf_of: "user://mockryx.local/rehearsal-operator"
-          budget_usd: "1.00"
-          task_type: ops_automation
-        expect:
-          status: 403
-          header:
-            x-fuse-wardryx: deny
-          event:
-            source: wardryx
-            type: policy_deny
-            within: 10s
-      - name: same-run-heraldyx-notifies
+      - name: shell-exec-denied-and-heraldyx-notifies
         request:
           model: claude-haiku
           max_tokens: 50
@@ -390,7 +373,7 @@ data:
           event:
             source: heraldyx
             type: alert_sent
-            within: 20s
+            within: 30s
 ---
 # The mail hole in a default-deny egress, made as narrow as a NetworkPolicy can
 # express, and stated plainly rather than hidden in a wide rule.

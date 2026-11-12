@@ -1,8 +1,9 @@
 $ ./scripts/drills-can-start.sh   # this branch's gate on the manifests of 0e80406
 drills-can-start: manifests/40-routines-and-secrets.yaml: CronJob drills: /scenarios, 13 scenario(s), waits for heraldyx, tokenfuse, verdryx, wardryx
 drills-can-start: manifests/52-tokenfuse-mcp-broker.yaml: CronJob drills-broker: /scenarios/mcp, 3 scenario(s), waits for nothing off the request path
+drills-can-start: manifests/40-routines-and-secrets.yaml: CronJob drills: the pod is not in group 65532, so /var/lib/stack/heraldyx/sent.ndjson (heraldyx's own file, 0640) cannot be read and the step waiting on it is a false Finding
 drills-can-start: manifests/40-routines-and-secrets.yaml: CronJob drills: /scenarios in mockryx v0.5.0 waits for heraldyx events, which are only in /var/lib/stack/heraldyx/sent.ndjson on the claim heraldyx-state, and no watched path is /var/lib/stack/heraldyx/sent.ndjson
 drills-can-start: manifests/40-routines-and-secrets.yaml: CronJob drills: waits for heraldyx events and is not in manifests/45-heraldyx.yaml, so it exists on a cluster where heraldyx does not and cannot reach heraldyx's claim where it does
 drills-can-start: manifests/40-routines-and-secrets.yaml: CronJob drills: /var/lib/stack/heraldyx/sent.ndjson is on no mount of the claim heraldyx-state
-drills-can-start: 3 problem(s) in 2 drill CronJob(s)
+drills-can-start: 4 problem(s) in 2 drill CronJob(s)
 exit=1

@@ -27,6 +27,14 @@
 # activeDeadlineSeconds so a drill with no heraldyx to sit beside does not stay
 # Pending, and live in heraldyx's own manifest, so it exists exactly where
 # heraldyx does (estate-gates GAPS G3.20).
+# It must also be in heraldyx's group (the journal is 0640), mount the claim
+# whole rather than by subPath, and a drill in heraldyx's manifest must wait
+# for heraldyx; with heraldyx's manifest present, some drill must.
+#
+# Every drill is suspended: it spends real budget, and the heraldyx drill
+# mails the operator. A drill whose scenarios send to the gateway carries the
+# pod labels drills-egress-gateway and gateway-ingress-drills select on
+# (30-network-policy.yaml), or every request is dropped.
 #
 # A drill that finds a gap exits 1, and a Job with the default backoffLimit (6)
 # runs it again: the same hostile scenarios against the same gateway, spending
@@ -97,10 +105,19 @@ IMAGE = {
     },
 }
 
+# Whether the scenarios of an image directory send requests to the gateway (`request:` steps) rather than
+# to the MCP broker (`mcp:` steps). A drill that does must carry the pod labels the two gateway drill
+# NetworkPolicies select on, or every request is dropped and every step is a false Finding.
+IMAGE_GATEWAY = {("v0.5.0", "/scenarios"): True, ("v0.5.0", "/scenarios/mcp"): False}
+NETPOL_FILE = "manifests/30-network-policy.yaml"
+NETPOL_EGRESS = "drills-egress-gateway"
+NETPOL_INGRESS = "gateway-ingress-drills"
+
 # A source whose reaction is NOT on the bus -> (the file it is journalled in as a drill's pod sees it, the
-# claim that file is on, the app label of the workload that owns the claim, the manifest both live in).
+# claim that file is on, the app label of the workload that owns the claim, the manifest both live in, the
+# group that may read the file: heraldyx makes its journal 0640 under its own gid).
 OFF_BUS = {
-    "heraldyx": ("/var/lib/stack/heraldyx/sent.ndjson", "heraldyx-state", "heraldyx", "manifests/45-heraldyx.yaml"),
+    "heraldyx": ("/var/lib/stack/heraldyx/sent.ndjson", "heraldyx-state", "heraldyx", "manifests/45-heraldyx.yaml", 65532),
 }
 
 BUS_MOUNT = "/var/lib/stack/events"
@@ -146,7 +163,9 @@ def configmap(name):
 
 
 def sources_of(text, where):
-    """The sources the expect.event blocks of one scenario document name, or None when it cannot be read."""
+    """The sources the expect.event blocks of one scenario document name, or None when it cannot be read.
+    A step that sends a request to the gateway is counted in gateway_steps."""
+    global gateway_steps
     try:
         docs = [d for d in miniyaml.load_all(text) if isinstance(d, dict)]
     except ValueError as e:
@@ -158,14 +177,44 @@ def sources_of(text, where):
     out = set()
     for d in docs:
         for st in d.get("steps") or []:
+            if isinstance(st, dict) and st.get("request"):
+                gateway_steps += 1
             ev = ((st or {}).get("expect") or {}).get("event")
             if isinstance(ev, dict) and ev.get("source"):
                 out.add(str(ev["source"]))
     return out
 
 
+def netpol(name):
+    """The NetworkPolicy `name` in NETPOL_FILE, or None."""
+    if not os.path.exists(NETPOL_FILE):
+        return None
+    for part in re.split(r"(?m)^---[ \t]*$", open(NETPOL_FILE).read()):
+        if not re.search(r"(?m)^kind:\s*NetworkPolicy\s*$", part):
+            continue
+        if not re.search(r"(?m)^\s+name:\s*" + re.escape(name) + r"\s*$", part):
+            continue
+        for d in miniyaml.load_all(part):
+            if isinstance(d, dict) and (d.get("metadata") or {}).get("name") == name:
+                return d
+    return None
+
+
+def selects(sel, labels):
+    return bool(sel) and all(labels.get(k) == v for k, v in sel.items())
+
+
+gateway_steps = 0
+waited_for = set()
+
+
 def check(path, cron, jspec, pod, c, tag):
+    global gateway_steps
+    gateway_steps = 0
     job = f"{path}: CronJob {(cron.get('metadata') or {}).get('name', '?')}"
+    if (cron.get("spec") or {}).get("suspend") is not True:
+        problems.append(f"{job}: is not suspended; a drill fires hostile requests and spends real budget every time "
+                        f"it runs (the heraldyx drill also mails the operator), so it runs when a person means it")
     args = c.get("args") or []
     if not args:
         problems.append(f"{job}: the mockryx container has no `args` to read its scenario directory from")
@@ -217,8 +266,24 @@ def check(path, cron, jspec, pod, c, tag):
                           f"read what that directory holds and write a row")
         return
     wants = set().union(*files.values()) if files else set()
+    waited_for.update(wants)
 
-    watch = [p.strip() for p in str(env.get("MOCKRYX_WATCH_EVENTS") or "").split(",") if p.strip()]
+    # The gateway's door: the pod must carry what both gateway drill NetworkPolicies select on.
+    if IMAGE_GATEWAY.get((tag, sdir), False) or gateway_steps:
+        labels = ((jspec.get("template") or {}).get("metadata") or {}).get("labels") or {}
+        eg, ing = netpol(NETPOL_EGRESS), netpol(NETPOL_INGRESS)
+        if eg is None or ing is None:
+            unmeasured.append(f"{job}: {NETPOL_FILE} has no NetworkPolicy {NETPOL_EGRESS} or {NETPOL_INGRESS} to read the drills' label from")
+        else:
+            eg_sel = ((eg.get("spec") or {}).get("podSelector") or {}).get("matchLabels") or {}
+            ing_sels = [((peer or {}).get("podSelector") or {}).get("matchLabels") or {}
+                        for rule in (ing.get("spec") or {}).get("ingress") or []
+                        for peer in (rule or {}).get("from") or []]
+            if not (selects(eg_sel, labels) and any(selects(s, labels) for s in ing_sels)):
+                problems.append(f"{job}: its pod labels ({labels or 'none'}) are not what {NETPOL_EGRESS} and {NETPOL_INGRESS} "
+                                f"select, so every request to the gateway is dropped and every step is a false Finding")
+
+    watch =[p.strip() for p in str(env.get("MOCKRYX_WATCH_EVENTS") or "").split(",") if p.strip()]
     mount_paths = [str(m.get("mountPath", "")) for m in mounts]
 
     if wants and not watch:
@@ -240,7 +305,13 @@ def check(path, cron, jspec, pod, c, tag):
             if f"{src}.ndjson" not in watched_files:
                 problems.append(f"{job}: {sdir} in mockryx {tag} waits for {src} events and no watched path is {src}.ndjson")
             continue
-        fpath, claim, owner, home = OFF_BUS[src]
+        fpath, claim, owner, home, gid = OFF_BUS[src]
+        psc = pod.get("securityContext") or {}
+        groups = {psc.get("runAsGroup"), psc.get("fsGroup"), (c.get("securityContext") or {}).get("runAsGroup")}
+        groups.update(psc.get("supplementalGroups") or [])
+        if gid not in groups:
+            problems.append(f"{job}: the pod is not in group {gid}, so {fpath} ({owner}'s own file, 0640) cannot be read "
+                            f"and the step waiting on it is a false Finding")
         if fpath not in watch:
             problems.append(f"{job}: {sdir} in mockryx {tag} waits for {src} events, which are only in {fpath} on the "
                             f"claim {claim}, and no watched path is {fpath}")
@@ -256,6 +327,9 @@ def check(path, cron, jspec, pod, c, tag):
         if pvc.get("claimName") != claim:
             problems.append(f"{job}: {fpath} is on no mount of the claim {claim}")
             continue
+        if carrier.get("subPath"):
+            problems.append(f"{job}: the claim {claim} is mounted by subPath {carrier.get('subPath')}, so {fpath} is not "
+                            f"the file {owner} writes and the step waiting on it is a false Finding")
         if pvc.get("readOnly") is not True or carrier.get("readOnly") is not True:
             problems.append(f"{job}: the claim {claim} is not read only on both the volume and the mount; this drill reads "
                             f"{owner}'s journal and has no business writing anything of {owner}'s")
@@ -266,6 +340,10 @@ def check(path, cron, jspec, pod, c, tag):
                             f"kubernetes.io/hostname, so it can be placed where the volume cannot attach")
         if not jspec.get("activeDeadlineSeconds"):
             problems.append(f"{job}: no activeDeadlineSeconds, so with no {owner} pod to sit beside the drill stays Pending for good")
+
+    for src, (fpath, claim, owner, home, gid) in OFF_BUS.items():
+        if path == home and src not in wants:
+            problems.append(f"{job}: lives in {home} and waits for no {src} event, so it proves nothing about {owner}")
 
     bl = jspec.get("backoffLimit")
     if bl != 0:
@@ -299,6 +377,10 @@ for path, part in parts:
 if seen == 0:
     print(f"{NAME}: measured NOTHING: no CronJob in manifests/ runs ghcr.io/taipanbox/mockryx")
     sys.exit(2)
+for src, (fpath, claim, owner, home, gid) in OFF_BUS.items():
+    if os.path.exists(home) and src not in waited_for:
+        problems.append(f"{home}: no drill waits for a {src} event, so nothing proves that {owner} tells anyone "
+                        f"(estate-gates GAPS G3.20)")
 for s in summary:
     print(f"{NAME}: {s}")
 if problems:

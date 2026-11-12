@@ -5770,8 +5770,28 @@ run_case "drills-can-start: the gateway drills' copy waits for heraldyx again" f
 	"is not in manifests/45-heraldyx.yaml"
 run_case "drills-can-start: the heraldyx drill stops watching heraldyx's journal" fail \
 	'./scripts/drills-can-start.sh' \
-	"$(py 'edit("manifests/45-heraldyx.yaml", ",/var/lib/stack/heraldyx/sent.ndjson\"", "\"")')" \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "value: \"/var/lib/stack/heraldyx/sent.ndjson\"", "value: \"/var/lib/stack/events/wardryx.ndjson\"")')" \
 	"no watched path is /var/lib/stack/heraldyx/sent.ndjson"
+run_case "drills-can-start: the heraldyx drill leaves heraldyx's group" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "fsGroup: 10001, supplementalGroups: [65532], ", "fsGroup: 10001, ")')" \
+	"the pod is not in group 65532"
+run_case "drills-can-start: the heraldyx drill's copy stops waiting for heraldyx" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "            source: heraldyx\n            type: alert_sent\n", "            source: wardryx\n            type: policy_deny\n")')" \
+	"waits for no heraldyx event"
+run_case "drills-can-start: the heraldyx drill runs every Monday, mail and all" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "  schedule: \"0 6 * * 1\"\n  suspend: true\n", "  schedule: \"0 6 * * 1\"\n  suspend: false\n")')" \
+	"is not suspended"
+run_case "drills-can-start: the heraldyx drill mounts a subPath of heraldyx's claim" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "mountPath: /var/lib/stack/heraldyx, readOnly: true }", "mountPath: /var/lib/stack/heraldyx, subPath: journal, readOnly: true }")')" \
+	"is mounted by subPath journal"
+run_case "drills-can-start: the heraldyx drill's pod loses the drills' label" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "          labels: { role: drills }\n", "          labels: { role: drills-heraldyx }\n")')" \
+	"are not what drills-egress-gateway and gateway-ingress-drills select"
 run_case "drills-can-start: the heraldyx drill mounts heraldyx's claim writable" fail \
 	'./scripts/drills-can-start.sh' \
 	"$(py 'edit("manifests/45-heraldyx.yaml", "persistentVolumeClaim: { claimName: heraldyx-state, readOnly: true }", "persistentVolumeClaim: { claimName: heraldyx-state }")')" \
