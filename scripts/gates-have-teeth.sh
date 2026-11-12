@@ -5705,6 +5705,54 @@ run_case "deploy-ends-red: no deploy script runs the proofs any more" fail \
     open(p, "w").write(s.replace("/root/stack-k8s/verify.sh\x27", "/root/stack-k8s/verify.sx\x27"))')" \
 	"measured NOTHING"
 
+# ---- the drills can start (2026-11-12): CLAUDE.md invariant 90 -------------------------------------------
+#
+# mockryx refuses a run whose scenarios wait for an event when no log is named to watch; a watched path
+# that is not in the pod is a false Finding; a drill that retries fires its hostile scenarios again.
+run_case "drills-can-start: the drills lose MOCKRYX_WATCH_EVENTS again" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'p = "manifests/40-routines-and-secrets.yaml"
+s = open(p).read()
+i = s.index("                - { name: MOCKRYX_WATCH_EVENTS, value: ")
+j = s.index("\n", i) + 1
+open(p, "w").write(s[:i] + s[j:])')" \
+	"MOCKRYX_WATCH_EVENTS is not set"
+run_case "drills-can-start: verdryx drops out of the watched logs" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", ",/var/lib/stack/events/verdryx.ndjson\"", "\"")')" \
+	"waits for verdryx events and no watched path is verdryx.ndjson"
+run_case "drills-can-start: a watched log outside every mount of the pod" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "/var/lib/stack/events/verdryx.ndjson\"", "/tmp/verdryx.ndjson\"")')" \
+	"is not under any mount of the mockryx container"
+run_case "drills-can-start: a watched log the bus owner never makes" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "/var/lib/stack/events/tokenfuse.ndjson,", "/var/lib/stack/events/tokenfuse.ndjson,/var/lib/stack/events/gateway.ndjson,")')" \
+	"names no stream the bus owner makes"
+run_case "drills-can-start: the drills retry a drill that found a gap" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "      # gap (CLAUDE.md invariant 90).\n      backoffLimit: 0\n", "      # gap (CLAUDE.md invariant 90).\n")')" \
+	"backoffLimit is unset (6)"
+run_case "drills-can-start: drills-broker retries too" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/52-tokenfuse-mcp-broker.yaml", "      backoffLimit: 0\n", "      backoffLimit: 2\n")')" \
+	"backoffLimit is 2"
+run_case "drills-can-start: the pin moves to a mockryx nobody read" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "image: ghcr.io/taipanbox/mockryx:v0.5.0@", "image: ghcr.io/taipanbox/mockryx:v0.6.0@")')" \
+	"measured NOTHING about"
+run_case "drills-can-start: the comment above the watched logs reworded (must pass)" pass \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "# The products\x27 own logs mockryx polls", "# The products\x27 own event logs mockryx polls")')"
+run_case "drills-can-start: no CronJob runs mockryx any more" fail \
+	'./scripts/drills-can-start.sh' \
+	"$(py 'import glob
+for p in glob.glob("manifests/*.yaml"):
+    s = open(p).read()
+    if "image: ghcr.io/taipanbox/mockryx:" in s:
+        open(p, "w").write(s.replace("image: ghcr.io/taipanbox/mockryx:", "image: example.invalid/mockryx:"))')" \
+	"measured NOTHING"
+
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then
 	exit 0

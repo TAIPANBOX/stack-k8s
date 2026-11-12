@@ -433,6 +433,12 @@ jobs:
       - name: a deploy whose own proof failed ends red (invariant 88)
         run: ./scripts/deploy-ends-red-when-its-proof-fails.sh
 
+      # Added 2026-11-12 with invariant 90. mockryx v0.5.0 refuses to start when a scenario waits for an
+      # event and no log is named to watch, and the CronJob `drills` named none, so it failed on every run;
+      # it also retried a drill that found a gap, firing the hostile scenarios again at real cost.
+      - name: every scheduled drill can start, watches what it waits for, and runs once (invariant 90)
+        run: ./scripts/drills-can-start.sh
+
       # Added 2026-10-19. hub/add-site.sh reads the Cloud's version from a name:tag@sha256 reference, the form
       # the manifests pin. v1.5.3 read the digest as the tag and refused every pinned install.
       - name: hub/add-site.sh reads a digest-pinned tokenfuse-cloud image

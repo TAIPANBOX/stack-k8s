@@ -104,6 +104,7 @@ step "every image this repository builds from is pinned whole (invariant 80)" ".
 step "no tracked file is a compiled executable (invariant 86)" "./scripts/no-binary-is-tracked.sh"
 step "nothing another project publishes is applied or run unverified (invariant 87)" "./scripts/remote-fetches-are-verified.sh"
 step "a deploy whose own proof failed ends red (invariant 88)" "./scripts/deploy-ends-red-when-its-proof-fails.sh"
+step "every scheduled drill can start, watches what it waits for, and runs once (invariant 90)" "./scripts/drills-can-start.sh"
 step "hub/add-site.sh reads a digest-pinned tokenfuse-cloud image" "./scripts/hub-add-site-reads-the-pinned-image.sh"
 step "the console approver key is minted once and wardryx verifies with it (invariant 67)" "./scripts/approver-key-is-minted.sh"
 step "Keyryx is installed by default, with --without-keyryx as the opt-out (invariant 69)" "./scripts/keyryx-is-default.sh"
