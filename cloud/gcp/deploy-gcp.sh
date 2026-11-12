@@ -385,6 +385,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 . "$ROOT/lib/policy-store.sh" || die "no lib/policy-store.sh in $ROOT"
 . "$ROOT/lib/identity-mint.sh" || die "no lib/identity-mint.sh in $ROOT"
 . "$ROOT/lib/approver-mint.sh" || die "no lib/approver-mint.sh in $ROOT"
+. "$ROOT/lib/preview-mint.sh" || die "no lib/preview-mint.sh in $ROOT"
 . "$ROOT/lib/keyryx-install.sh" || die "no lib/keyryx-install.sh in $ROOT"
 . "$ROOT/lib/upstream-key.sh" || die "no lib/upstream-key.sh in $ROOT"
 . "$ROOT/lib/tool-hold.sh" || die "no lib/tool-hold.sh in $ROOT"
@@ -794,6 +795,8 @@ static_keys_settle
 identity_mint_settle "$ROOT/agent-key"
 # The console's approver key and wardryx's public copy (CLAUDE.md invariant 67), minted once, after the apply.
 approver_mint_settle
+# The console's preview key and wardryx's recipient (CLAUDE.md invariant 91), minted once, after the apply.
+preview_mint_settle
 # Keyryx (CLAUDE.md invariant 69): on by default. --without-keyryx removes its wiring, which is the weaker setting.
 if [ "$KEYRYX_INSTALL" = 1 ]; then
   keyryx_install_settle

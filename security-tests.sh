@@ -132,7 +132,7 @@ spec:
   securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
   containers:
     - name: probe
-      image: ghcr.io/taipanbox/genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5
+      image: ghcr.io/taipanbox/genaryx-console:v1.12.0@sha256:32c28d24c9a35438cda3b47bac2ea1d001edde268deeb7dfada652102bbc996f
       imagePullPolicy: IfNotPresent
       command: ["sleep", "300"]
       securityContext:
@@ -186,7 +186,7 @@ spec:
   securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
   containers:
     - name: probe
-      image: ghcr.io/taipanbox/genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5
+      image: ghcr.io/taipanbox/genaryx-console:v1.12.0@sha256:32c28d24c9a35438cda3b47bac2ea1d001edde268deeb7dfada652102bbc996f
       imagePullPolicy: IfNotPresent
       command: ["sleep", "600"]
       securityContext:
@@ -264,7 +264,7 @@ metadata: { name: sec-privileged }
 spec:
   containers:
     - name: p
-      image: ghcr.io/taipanbox/genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5
+      image: ghcr.io/taipanbox/genaryx-console:v1.12.0@sha256:32c28d24c9a35438cda3b47bac2ea1d001edde268deeb7dfada652102bbc996f
       securityContext: { privileged: true }
   hostNetwork: true
   hostPID: true
@@ -525,7 +525,7 @@ spec:
   securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
   containers:
     - name: forged
-      image: ghcr.io/taipanbox/genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5
+      image: ghcr.io/taipanbox/genaryx-console:v1.12.0@sha256:32c28d24c9a35438cda3b47bac2ea1d001edde268deeb7dfada652102bbc996f
       imagePullPolicy: IfNotPresent
       command: ["sleep", "300"]
       securityContext:
@@ -680,7 +680,7 @@ spec:
   securityContext: { runAsNonRoot: true, runAsUser: 10003, runAsGroup: 10003, supplementalGroups: [10001], seccompProfile: { type: RuntimeDefault } }
   containers:
     - name: probe
-      image: ghcr.io/taipanbox/genaryx-console:v1.8.8@sha256:55765e22aeb5a157099b30a9ecbda53b83121c17b3b98b6896af5733ba16f9a5
+      image: ghcr.io/taipanbox/genaryx-console:v1.12.0@sha256:32c28d24c9a35438cda3b47bac2ea1d001edde268deeb7dfada652102bbc996f
       imagePullPolicy: IfNotPresent
       command: ["sleep", "600"]
       securityContext:
