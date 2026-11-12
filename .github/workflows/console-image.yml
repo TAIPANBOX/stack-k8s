@@ -55,7 +55,7 @@ env:
   MOCKRYX_REF: 213b18e5ea2652b6db759938fdcc4016bc9bdbaa   # mockryx v0.5.1
   VERDRYX_REF: ab61a745c5b3d920de3951674923fc59ac430ea8   # verdryx v0.3.0
   ENGRAM_REF: 28ad83f9a37f54e23797c833b40921033b04c334    # engram v3.1.0
-  GENARYX_REF: fd0710effa8889f41b9bf6da499888eb84a796ca   # genaryx #152 merge commit
+  GENARYX_REF: fb5e03682f76114e40feb469f3b9f7c0b323919e   # genaryx #158 merge commit
 
 on:
   push:

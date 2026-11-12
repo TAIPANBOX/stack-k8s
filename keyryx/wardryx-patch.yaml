@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
         - name: wardryx
-          image: ghcr.io/taipanbox/wardryx:v2.6.2@sha256:b799701c2429605c9c3819a8cbd3085462fadcf5b07aa0e17f17edd1cacddada
+          image: ghcr.io/taipanbox/wardryx:v2.7.0@sha256:91dccc66ba00adefc2e1930423a172d5c17a8c4531fac97e8fab32acdef77940
           env:
             - name: WARDRYX_APPROVAL_SIGNER
               value: keyryx
