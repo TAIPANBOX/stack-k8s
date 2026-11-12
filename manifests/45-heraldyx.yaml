@@ -228,6 +228,8 @@ spec:
 # What a pass means: heraldyx journalled a dispatch for this run (source heraldyx, type alert_sent, the same
 # run_id). heraldyx journals it whether the mail server accepted the message or refused it, with the outcome
 # in the line's data, and mockryx v0.5.0 matches on source, type and run_id only (its own scenario says so).
+# Inside HERALDYX_QUIET hours heraldyx holds an alert below critical until they end, and policy_deny is
+# high, so a run then is a Finding about the hour, not about the chain: run it outside them.
 #
 # How it reaches the journal, and what it cannot do to it:
 #   - required podAffinity to app: heraldyx on kubernetes.io/hostname: a ReadWriteOnce volume attaches to one

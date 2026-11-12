@@ -529,8 +529,9 @@ kubectl -n agent-stack logs -f job/drills-heraldyx-now
 
 A pass means heraldyx journalled a dispatch for the drill's run. The journal line also says whether your mail
 server accepted the message; read it there (`outcome` in the line's data), because mockryx v0.5.0 matches a
-reaction on its source, type and run id only. With no heraldyx pod running, the job ends after 15 minutes
-rather than waiting for one. `scripts/drills-can-start.sh` holds the shape (CLAUDE.md invariant 90).
+reaction on its source, type and run id only. Run it outside `HERALDYX_QUIET` hours: inside them heraldyx
+holds a high alert until they end, and the drill reports a Finding. With no heraldyx pod running, the job
+ends after 15 minutes rather than waiting for one. `scripts/drills-can-start.sh` holds the shape (CLAUDE.md invariant 90).
 
 ### How an agent reads the web
 
