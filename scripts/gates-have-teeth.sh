@@ -3085,8 +3085,8 @@ run_case "wardryx-key-is-pep: the migration writes the key on the command line" 
 
 run_case "wardryx-key-is-pep: a pin moves back to the old wardryx" fail \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.7.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
-	"does not pin wardryx v2.7.0"
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.8.0", "image: ghcr.io/taipanbox/wardryx:v1.5.0")')" \
+	"does not pin wardryx v2.8.0"
 
 run_case "wardryx-key-is-pep: a reworded comment is not a fault" pass \
 	'./scripts/wardryx-gateway-key-is-pep.sh' \
@@ -3904,7 +3904,7 @@ run_case "verified-images: a policy's glob moved onto another repository's image
 	"covered by two policies"
 run_case "verified-images: a manifest names a TAIPANBOX image with no signer row" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.7.0@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.5.0@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "image: ghcr.io/taipanbox/wardryx:v2.8.0@sha256:", "image: ghcr.io/taipanbox/wardryx-new:v2.5.0@sha256:")')" \
 	"has no signer row in BINDINGS"
 run_case "verified-images: the default install stops turning admission on" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -4010,7 +4010,7 @@ run_case "keyryx: the custody policy grants trailryx nothing" fail \
 	"does not grant trailryx-node the sign operation"
 run_case "keyryx: the wardryx patch rolls wardryx back to v2.3.0" fail \
 	'./scripts/keyryx-is-default.sh' \
-	"$(py 'edit("keyryx/wardryx-patch.yaml", "ghcr.io/taipanbox/wardryx:v2.7.0@sha256:91dccc66ba00adefc2e1930423a172d5c17a8c4531fac97e8fab32acdef77940", "ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543")')" \
+	"$(py 'edit("keyryx/wardryx-patch.yaml", "ghcr.io/taipanbox/wardryx:v2.8.0@sha256:f9b86a82114698f64a3251816ee0be6f80b4a6b2c239082b7035f1b4228f06aa", "ghcr.io/taipanbox/wardryx:v2.3.0@sha256:eaa8cff9fe3722f7040e9f9b3aac2f57c5e66afb7a012a0eda1a62e63b647543")')" \
 	"would roll wardryx back"
 run_case "keyryx: the witness is pointed at no stream directory" fail \
 	'./scripts/keyryx-is-default.sh' \
@@ -4133,7 +4133,7 @@ run_case "preview: wardryx gets a literal recipient" fail \
 	"does not read WARDRYX_PREVIEW_RECIPIENT"
 run_case "preview: wardryx is pinned back to 2.6.2" fail \
 	'./scripts/preview-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.7.0@sha256:", "wardryx:v2.6.2@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.8.0@sha256:", "wardryx:v2.6.2@sha256:")')" \
 	"before the argument preview"
 run_case "preview: a cloud launcher never mints the preview key" fail \
 	'./scripts/preview-key-is-minted.sh' \
@@ -4198,7 +4198,7 @@ run_case "approver: WARDRYX_ALLOW_KEY_APPROVALS is set on wardryx" fail \
 	"sets WARDRYX_ALLOW_KEY_APPROVALS"
 run_case "approver: wardryx is pinned before the approver statements" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.7.0@sha256:", "wardryx:v2.3.0@sha256:")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "wardryx:v2.8.0@sha256:", "wardryx:v2.3.0@sha256:")')" \
 	"before the approver statements"
 run_case "approver: the mint rewrites a kept pair" fail \
 	'./scripts/approver-key-is-minted.sh' \
@@ -4372,7 +4372,7 @@ run_case "workflow-checkouts: a comment reworded in the workflow (must pass)" pa
 # The console's two proof engines are the stack's own, digest for digest (CLAUDE.md invariant 79).
 run_case "console-engines: the console's wardryx differs from the stack's" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("images/console.Dockerfile", "wardryx:v2.7.0@sha256:91dccc66", "wardryx:v2.7.0@sha256:2101d23c")')" \
+	"$(py 'edit("images/console.Dockerfile", "wardryx:v2.8.0@sha256:f9b86a82", "wardryx:v2.8.0@sha256:2101d23c")')" \
 	"differs from the stack's"
 run_case "console-engines: the console's tokenfuse is an older tag than the stack's" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
