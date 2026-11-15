@@ -4072,7 +4072,7 @@ run_case "keyryx-release-pins: the witness is left on keyryx v0.1.3" fail \
 	"is not the release pin"
 run_case "keyryx-release-pins: the record seal is left on trailryx-node v1.4.0" fail \
 	'./scripts/keyryx-release-pins.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "trailryx-node:v1.5.0@sha256:f152", "trailryx-node:v1.4.0@sha256:f152")')" \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "trailryx-node:v1.6.0@sha256:68c4", "trailryx-node:v1.4.0@sha256:68c4")')" \
 	"is not the release pin"
 run_case "keyryx-release-pins: one keyryx digest is not the tag's" fail \
 	'./scripts/keyryx-release-pins.sh' \
