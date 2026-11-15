@@ -15,7 +15,7 @@
 # Build context is the PARENT of the repos (~/Development), because this one
 # image legitimately spans five of them.
 # --- the console's own web assets -------------------------------------------
-FROM node:22-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS web
+FROM node:22-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS web
 WORKDIR /w
 COPY genaryx-a360/apps/web/package.json genaryx-a360/apps/web/pnpm-lock.yam[l] ./
 RUN corepack enable && (pnpm install --frozen-lockfile || npm install)
@@ -66,7 +66,7 @@ FROM ghcr.io/taipanbox/wardryx:v2.8.0@sha256:f9b86a82114698f64a3251816ee0be6f80b
 FROM ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81dbcd116557eff54aae29e7d68104af8fc788265d58e71adf3f96fea03317 AS tokenfuse-engine
 
 # --- runtime ----------------------------------------------------------------
-FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates libssl3 \
  && rm -rf /var/lib/apt/lists/* \
