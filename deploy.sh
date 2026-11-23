@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # One command, bare servers to a governed agent stack.
 #
-#   curl -fsSL https://raw.githubusercontent.com/TAIPANBOX/stack-k8s/main/deploy.sh | bash -s -- \
+#   curl -fsSL https://github.com/TAIPANBOX/stack-k8s/releases/latest/download/deploy.sh | bash -s -- \
 #     --servers 1.2.3.4,1.2.3.5,1.2.3.6 --agents 1.2.3.7,1.2.3.8 --hcloud-token <token>
+#
+# Piped, this file is only a bootstrap (CLAUDE.md invariant 94): it fetches the latest release's
+# tree (or STACK_TAG=vX.Y.Z), runs nothing from it until cosign has verified its signed bundle for
+# this repository's release workflow at exactly that tag, then runs the verified tree's deploy.sh.
+# INSTALL_FROM_MAIN=1 takes main instead, unsigned and said so; there is no fallback between them.
 #
 # or, from a clone:
 #
@@ -202,10 +207,9 @@ TYPED_TRAINING="${TYPED_TRAINING:-0}"
 # tool call's risk class can reach a `hold_if_signal` policy (wardryx v1.2.0). Off unless
 # asked, and refused when the typed mode is off (typed/mode.sh holds the one copy).
 TYPED_RISK_SIGNAL="${TYPED_RISK_SIGNAL:-0}"
-REF="${REF:-main}"
 SKIP_INSTALL=0; SKIP_IMAGES=0
-REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/TAIPANBOX/stack-k8s}"
-REPO_TARBALL="${REPO_TARBALL:-https://api.github.com/repos/TAIPANBOX/stack-k8s/tarball}"
+# Every argument as given, for the verified tree's deploy.sh when this copy is only the bootstrap.
+STACK_ARGS=("$@")
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -287,17 +291,112 @@ sh_() { ssh "${SSH_OPTS[@]}" "root@$1" "${@:2}"; }
 k_()  { sh_ "$FIRST" "/usr/local/bin/k3s kubectl $*"; }
 
 # ---- 0. find this repo, whether cloned or piped from curl -------------------
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+# tree-bootstrap: begin (CLAUDE.md invariant 94; scripts/piped-tree-is-verified.sh runs this block)
+# A piped deploy.sh is not the deploy: it fetches a release's tree, has cosign verify the tree's
+# signed bundle for exactly this repository's release workflow at exactly that tag, and only then
+# runs the tree's own deploy.sh. Nothing in the tree runs before the verification, and a failure at
+# any step stops here with nothing changed; there is no fallback to an unsigned tree.
+STACK_RELEASES="${STACK_RELEASES:-https://github.com/TAIPANBOX/stack-k8s/releases}"
+STACK_MAIN_TARBALL="${STACK_MAIN_TARBALL:-https://api.github.com/repos/TAIPANBOX/stack-k8s/tarball/main}"
+# The signer is not configurable: STACK_RELEASES changes where the bytes come from, never who signed.
+STACK_SIGNER="https://github.com/TAIPANBOX/stack-k8s/.github/workflows/release.yml@refs/tags/"
+STACK_ISSUER="https://token.actions.githubusercontent.com"
+# cosign itself, by version and by the SHA-256 in that release's cosign_checksums.txt (read 2026-11-23).
+COSIGN_VERSION="v3.1.3"
+COSIGN_SHA256_darwin_amd64="2347488e5d5b25336644024dfeca5601b190e91197a71a917bda44744aff106c"
+COSIGN_SHA256_darwin_arm64="5cf948c2f4dfe59687bdd0b8523709067383e03982cc543475c8a7dc70e92a76"
+COSIGN_SHA256_linux_amd64="4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"
+COSIGN_SHA256_linux_arm64="c5d324e091826b0d7a78eb16fef316450b4eb9aaec045611c08ba06f5e73220a"
+tree_sha256() { # FILE: prints its SHA-256, or fails when no tool can
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+  else return 1; fi
+}
+tree_bootstrap() { # sets ROOT to a verified tree and runs its deploy.sh, or dies
+  local work tag url plat want got
+  # A tree this bootstrap already fetched never fetches another: an archive with no manifests/ would
+  # otherwise download, verify and exec for ever.
+  [ -z "${STACK_TREE_VERIFIED:-}${STACK_TREE_UNSIGNED:-}" ] \
+    || die "the fetched tree's deploy.sh found no manifests/ beside it; nothing was changed"
+  [ -z "${REF:-}" ] || die "REF is no longer read: a piped deploy takes the latest signed release, STACK_TAG=vX.Y.Z for another one, or INSTALL_FROM_MAIN=1 for main, unsigned. Nothing was changed."
+  case "${INSTALL_FROM_MAIN:-0}" in 0|1) ;; *) die "INSTALL_FROM_MAIN takes 1 or nothing, not '${INSTALL_FROM_MAIN}'. Nothing was changed." ;; esac
+  work="$(mktemp -d)" || die "could not make a temporary directory for the tree"
+  ROOT="$work/tree"
+  mkdir "$ROOT" || die "could not make $ROOT"
+  if [ "${INSTALL_FROM_MAIN:-0}" = 1 ]; then
+    [ -z "${STACK_TAG:-}" ] || die "INSTALL_FROM_MAIN=1 and STACK_TAG ask for two different trees; give one. Nothing was changed."
+    say "fetching stack-k8s main into $ROOT: UNSIGNED, because INSTALL_FROM_MAIN=1 asked for it"
+    # The bearer reaches curl on stdin (--config -), never on its command line (CLAUDE.md invariant 60).
+    { [ -z "$CONSOLE_TOKEN" ] || printf 'header = "Authorization: Bearer %s"\n' "$CONSOLE_TOKEN"; } \
+      | curl -fsSL --config - "$STACK_MAIN_TARBALL" | tar -xz --no-same-owner -C "$ROOT" --strip-components=1 \
+      || die "could not fetch stack-k8s main from $STACK_MAIN_TARBALL; nothing was changed"
+    [ -f "$ROOT/deploy.sh" ] || die "main's tree from $STACK_MAIN_TARBALL has no deploy.sh; nothing was changed"
+    # main's own deploy.sh drives main's tree: the piped copy is a release's, and an older launcher over a
+    # newer tree would skip what main added. Unsigned, and it says so again when it starts.
+    exec env STACK_TREE_UNSIGNED=main bash "$ROOT/deploy.sh" ${STACK_ARGS[@]+"${STACK_ARGS[@]}"} </dev/null
+  fi
+  tag="${STACK_TAG:-}"
+  if [ -z "$tag" ]; then
+    url="$(curl -fsSI -o /dev/null -w '%{redirect_url}' "$STACK_RELEASES/latest")" \
+      || die "could not ask $STACK_RELEASES/latest which release is the latest; nothing was changed"
+    tag="${url##*/}"
+  fi
+  grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' <<<"$tag" \
+    || die "'$tag' is not a release tag (vMAJOR.MINOR.PATCH); nothing was changed"
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64) plat=darwin_arm64 ;; Darwin-x86_64) plat=darwin_amd64 ;;
+    Linux-x86_64) plat=linux_amd64 ;; Linux-aarch64|Linux-arm64) plat=linux_arm64 ;;
+    *) die "no pinned cosign for $(uname -s) $(uname -m), so the tree cannot be verified here; clone the repository at $tag and run ./deploy.sh" ;;
+  esac
+  want="COSIGN_SHA256_$plat"
+  say "fetching cosign $COSIGN_VERSION and stack-k8s $tag"
+  curl -fsSL -o "$work/cosign" "https://github.com/sigstore/cosign/releases/download/$COSIGN_VERSION/cosign-${plat%_*}-${plat#*_}" \
+    || die "could not download cosign $COSIGN_VERSION; nothing was changed"
+  got="$(tree_sha256 "$work/cosign")" || die "this machine has neither sha256sum nor shasum, so cosign cannot be checked"
+  [ "$got" = "${!want}" ] || die "the cosign binary does not match its pinned SHA-256 (got $got); nothing was run"
+  chmod 0755 "$work/cosign"
+  curl -fsSL -o "$work/stack-k8s.tar.gz" "$STACK_RELEASES/download/$tag/stack-k8s.tar.gz" \
+    || die "could not download the tree of $tag from $STACK_RELEASES; nothing was changed"
+  curl -fsSL -o "$work/stack-k8s.tar.gz.sigstore.json" "$STACK_RELEASES/download/$tag/stack-k8s.tar.gz.sigstore.json" \
+    || die "release $tag carries no signed bundle (stack-k8s.tar.gz.sigstore.json), so its tree is not run; nothing was changed"
+  "$work/cosign" verify-blob --bundle "$work/stack-k8s.tar.gz.sigstore.json" \
+      --certificate-identity "$STACK_SIGNER$tag" --certificate-oidc-issuer "$STACK_ISSUER" \
+      "$work/stack-k8s.tar.gz" >"$work/verify.log" 2>&1 \
+    || die "cosign refused the tree of $tag for $STACK_SIGNER$tag: $(tail -n 1 "$work/verify.log"). Nothing was run."
+  # Verified bytes still decide where they land: every member under stack-k8s/, none climbing out,
+  # and no link, so extraction cannot write outside the tree.
+  tar -tzf "$work/stack-k8s.tar.gz" | awk '!/^stack-k8s\// || /(^|\/)\.\.(\/|$)/ { n++ } END { exit n > 0 }' \
+    || die "the tree of $tag names a member outside stack-k8s/ or one that climbs out; nothing was extracted"
+  tar -tvzf "$work/stack-k8s.tar.gz" | awk '/^[lh]/ { n++ } END { exit n > 0 }' \
+    || die "the tree of $tag carries a link; nothing was extracted"
+  tar -xzf "$work/stack-k8s.tar.gz" --no-same-owner -C "$ROOT" --strip-components=1 \
+    || die "could not extract the tree of $tag"
+  [ "$(cat "$ROOT/RELEASE" 2>/dev/null)" = "$tag" ] \
+    || die "the signed tree says it is '$(cat "$ROOT/RELEASE" 2>/dev/null)', not $tag; nothing was run"
+  say "verified stack-k8s $tag: signed by $STACK_SIGNER$tag"
+  # stdin is /dev/null: the piped copy's stdin is the rest of the curl pipe, and a later ssh without its
+  # own redirect would forward it.
+  exec env STACK_TREE_VERIFIED="$tag" bash "$ROOT/deploy.sh" ${STACK_ARGS[@]+"${STACK_ARGS[@]}"} </dev/null
+}
+# tree-bootstrap: end
+# A checkout is this file read from disk with manifests/ beside it. Piped, BASH_SOURCE[0] is empty and
+# `dirname bash` is the current directory, so a piped run from inside a stale clone (or any directory
+# with a manifests/) would otherwise be taken for a checkout and run unverified (found by the T3 review).
+HERE=""
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+  HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+fi
 if [ -n "$HERE" ] && [ -d "$HERE/manifests" ]; then
   ROOT="$HERE"
-  say "using this checkout: $ROOT"
+  if [ -n "${STACK_TREE_VERIFIED:-}" ]; then
+    say "using the tree of stack-k8s $STACK_TREE_VERIFIED, verified against its signed bundle: $ROOT"
+  elif [ -n "${STACK_TREE_UNSIGNED:-}" ]; then
+    say "using stack-k8s $STACK_TREE_UNSIGNED, UNSIGNED, because INSTALL_FROM_MAIN=1 asked for it: $ROOT"
+  else
+    say "using this checkout: $ROOT"
+  fi
 else
-  ROOT="$(mktemp -d)"
-  say "fetching stack-k8s@$REF into $ROOT"
-  # The bearer reaches curl on stdin (--config -), never on its command line (CLAUDE.md invariant 60).
-  { [ -z "$CONSOLE_TOKEN" ] || printf 'header = "Authorization: Bearer %s"\n' "$CONSOLE_TOKEN"; } \
-    | curl -fsSL --config - "$REPO_TARBALL/$REF" | tar -xz -C "$ROOT" --strip-components=1 \
-    || die "could not fetch the repo; check the network, or clone it and run ./deploy.sh"
+  tree_bootstrap
 fi
 [ -d "$ROOT/manifests" ] || die "no manifests/ in $ROOT"
 # The one secret generator (CLAUDE.md invariant 41): a bounded read, so it ends whatever

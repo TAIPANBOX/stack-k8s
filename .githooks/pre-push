@@ -107,6 +107,7 @@ step "a deploy whose own proof failed ends red (invariant 88)" "./scripts/deploy
 step "every scheduled drill can start, watches what it waits for, and runs once (invariant 90)" "./scripts/drills-can-start.sh"
 step "every scenario is bound to a check that exists (invariant 92)" "./scripts/features-are-bound.sh"
 step "the console installs only from its lockfile, with a pinned pnpm (invariant 93)" "./scripts/console-install-is-locked.sh"
+step "a piped deploy runs only a release tree cosign verified (invariant 94)" "./scripts/piped-tree-is-verified.sh"
 step "hub/add-site.sh reads a digest-pinned tokenfuse-cloud image" "./scripts/hub-add-site-reads-the-pinned-image.sh"
 step "the console approver key is minted once and wardryx verifies with it (invariant 67)" "./scripts/approver-key-is-minted.sh"
 step "the console preview key is minted once and wardryx seals to its public half (invariant 91)" "./scripts/preview-key-is-minted.sh"

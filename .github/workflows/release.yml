@@ -1,0 +1,103 @@
+# The tree a piped deploy runs, signed by this workflow (CLAUDE.md invariant 94).
+#
+#   curl -fsSL https://github.com/TAIPANBOX/stack-k8s/releases/latest/download/deploy.sh | bash -s -- ...
+#
+# The piped deploy.sh is a bootstrap: it reads the latest release tag (or STACK_TAG), fetches
+# stack-k8s.tar.gz and stack-k8s.tar.gz.sigstore.json from that release, and runs nothing from the
+# tarball until `cosign verify-blob` has accepted the bundle for exactly this workflow file at exactly
+# that tag:
+#
+#   identity  https://github.com/TAIPANBOX/stack-k8s/.github/workflows/release.yml@refs/tags/<tag>
+#   issuer    https://token.actions.githubusercontent.com
+#
+# So a tarball signed by another workflow, another repository or another tag is refused, and so is
+# a release with no bundle. A person pushes the tag; this workflow builds the archive of that tag,
+# signs it, verifies its own signature, and attaches the four assets to the tag's release (a DRAFT
+# it creates when there is none yet, from docs/releases/<tag>.md). The release is published by a
+# person, so `releases/latest` never names a release without its assets.
+#
+# The archive is `git archive` of the tag, gzip -n, with one file added: stack-k8s/RELEASE holding
+# the tag, which the bootstrap compares with the tag it asked for. --add-virtual-file takes its path
+# whole and does NOT apply --prefix (git 2.54, measured 2026-11-23: `RELEASE` landed at the root), so
+# the prefix is written into the path.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  tree:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # attach the assets to the release
+      id-token: write   # keyless signing: the identity is this workflow at this tag
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: the tag is a release version
+        id: tag
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' <<<"$tag" \
+            || { echo "::error::$tag is not vMAJOR.MINOR.PATCH, so no piped deploy could ask for it"; exit 1; }
+          # The identity says "release.yml at this tag", so a tag pushed on a commit that is not on main,
+          # with an edited release.yml, would sign too. Only a tag on main's history is signed here; who
+          # may push a v* tag at all is the repository's tag rules.
+          git fetch -q origin main
+          git merge-base --is-ancestor "$tag" origin/main \
+            || { echo "::error::$tag is not on main's history, so this workflow does not sign it"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: archive the tag
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          git archive --format=tar --prefix=stack-k8s/ --add-virtual-file="stack-k8s/RELEASE:$TAG" "$TAG" \
+            | gzip -n -9 > dist/stack-k8s.tar.gz
+          git show "$TAG:deploy.sh" > dist/deploy.sh
+          ( cd dist && sha256sum stack-k8s.tar.gz > stack-k8s.tar.gz.sha256 )
+          release="$(tar -xzOf dist/stack-k8s.tar.gz stack-k8s/RELEASE)"
+          [ "$release" = "$TAG" ] \
+            || { echo "::error::the archive's RELEASE does not say $TAG"; exit 1; }
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v3.1.3
+
+      - name: sign the archive, keyless
+        run: cosign sign-blob --yes --bundle dist/stack-k8s.tar.gz.sigstore.json dist/stack-k8s.tar.gz
+
+      # The same check the bootstrap makes, with the same exact identity, so a bundle that would be
+      # refused on an operator's machine is never attached.
+      - name: verify the signature as a deploy will
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          cosign verify-blob \
+            --bundle dist/stack-k8s.tar.gz.sigstore.json \
+            --certificate-identity "https://github.com/TAIPANBOX/stack-k8s/.github/workflows/release.yml@refs/tags/$TAG" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            dist/stack-k8s.tar.gz
+
+      - name: attach the assets to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          assets=(dist/stack-k8s.tar.gz dist/stack-k8s.tar.gz.sigstore.json dist/stack-k8s.tar.gz.sha256 dist/deploy.sh)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${assets[@]}" --clobber
+          else
+            notes="docs/releases/$TAG.md"
+            [ -f "$notes" ] || { echo "::error::no $notes, so the draft release would carry no notes"; exit 1; }
+            gh release create "$TAG" --draft --verify-tag --title "stack-k8s ${TAG#v}" --notes-file "$notes" "${assets[@]}"
+          fi

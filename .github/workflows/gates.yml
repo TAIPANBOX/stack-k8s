@@ -445,6 +445,10 @@ jobs:
         run: ./scripts/features-are-bound.sh
       - name: the console installs only from its lockfile, with a pinned pnpm (invariant 93)
         run: ./scripts/console-install-is-locked.sh
+      # Added 2026-11-23 with invariant 94. A piped deploy runs only a release tree whose signed bundle
+      # cosign verified for this repository's release workflow at that tag.
+      - name: a piped deploy runs only a release tree cosign verified (invariant 94)
+        run: ./scripts/piped-tree-is-verified.sh
 
       # Added 2026-10-19. hub/add-site.sh reads the Cloud's version from a name:tag@sha256 reference, the form
       # the manifests pin. v1.5.3 read the digest as the tag and refused every pinned install.
