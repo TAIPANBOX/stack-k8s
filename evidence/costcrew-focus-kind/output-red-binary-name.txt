@@ -1,0 +1,83 @@
+Creating cluster "costcrew-focus" ...
+ • Ensuring node image (kindest/node:v1.37.0) 🖼️  ...
+ ✓ Ensuring node image (kindest/node:v1.37.0) 🖼️
+ • Preparing nodes 📦   ...
+ ✓ Preparing nodes 📦 
+ • Writing configuration 📜  ...
+ ✓ Writing configuration 📜
+ • Starting control-plane 🕹️  ...
+ ✓ Starting control-plane 🕹️
+ • Installing CNI 🔌  ...
+ ✓ Installing CNI 🔌
+ • Installing StorageClass 💾  ...
+ ✓ Installing StorageClass 💾
+ • Waiting ≤ 2m0s for control-plane = Ready ⏳  ...
+ ✓ Waiting ≤ 2m0s for control-plane = Ready ⏳
+ • Ready after 18s 💚
+Set kubectl context to "kind-costcrew-focus"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-costcrew-focus
+
+Not sure what to do next? 😅  Check out https://kind.sigs.k8s.io/docs/user/quick-start/
+
+== objects, derived from manifests/
+Namespace agent-stack
+PersistentVolumeClaim stack-events
+ConfigMap bus-owner
+Job bus-owner
+Deployment tokenfuse-gateway
+PersistentVolumeClaim costcrew-state
+Deployment costcrew
+ConfigMap stack-wiring
+
+== apply, pass 1 (the second run is the real test)
+ok   bus-owner completed
+ok   gateway pod ready
+ok   costcrew ready
+
+== apply, pass 2 (the second run is the real test)
+ok   bus-owner completed
+ok   gateway pod ready
+ok   costcrew ready
+
+== the owner's directories, as a pod of the gateway's identity sees them
+/bus/focus 20000:10003 2751
+/bus/focus/gateway 20000:20010 2775
+pod "focus-stat" deleted from agent-stack namespace
+ok   focus/ 20000:10003 2751, focus/gateway 20000:20010 2775
+
+== costcrew says where it reads
+Defaulted container "costcrew" out of: costcrew, bus-ready (init)
+2026/11/23 22:23:01 CostCrew: reading the gateway's export from /var/lib/stack/focus/gateway, at start and every 15m0s
+Defaulted container "costcrew" out of: costcrew, bus-ready (init)
+ok   costcrew reads /var/lib/stack/focus/gateway
+
+== one call through the gateway (built-in stub upstream)
+{"stub":true,"usage":{"input_tokens":1000,"output_tokens":500}}
+focus-export: gateway: nothing exported this window: /bin/sh: 14: tokenfuse-gateway: not found
+focus-export: gateway: nothing exported this window: /bin/sh: 14: tokenfuse-gateway: not found
+focus-export: gateway: nothing exported this window: /bin/sh: 14: tokenfuse-gateway: not found
+FAIL focus-export never wrote the export
+
+== the export, as the costcrew pod's mount holds it
+total 8
+drwxrwsr-x    2 20000    20010         4096 Nov 23 22:22 .
+drwxr-s--x    3 20000    10003         4096 Nov 23 22:22 ..
+head: /f/gateway/focus-gateway.csv: No such file or directory
+
+REFUSED-WRITE
+pod "focus-read" deleted from agent-stack namespace
+FAIL the export does not carry agent://acme.example/agents/focus-proof
+ok   costcrew's identity cannot write the export
+ok   no partial file beside the export
+
+== costcrew reads it at start
+Defaulted container "costcrew" out of: costcrew, bus-ready (init)
+Defaulted container "costcrew" out of: costcrew, bus-ready (init)
+2026/11/23 22:26:15 CostCrew: reading the gateway's export from /var/lib/stack/focus/gateway, at start and every 15m0s
+2026/11/23 22:26:15 CostCrew: the gateway's export was not imported: no *.csv or *.csv.gz files found in /var/lib/stack/focus/gateway
+Defaulted container "costcrew" out of: costcrew, bus-ready (init)
+FAIL costcrew did not import the export
+
+RUN_EXIT=1

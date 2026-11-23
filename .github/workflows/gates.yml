@@ -439,6 +439,10 @@ jobs:
       - name: every scheduled drill can start, watches what it waits for, and runs once (invariant 90)
         run: ./scripts/drills-can-start.sh
 
+      # Added 2026-11-23 with invariant 95. The gateway's FOCUS export reaches the costcrew console.
+      - name: the gateway's spend reaches the FinOps console (invariant 95)
+        run: ./scripts/costcrew-reads-the-gateway-spend.sh
+
       # Added 2026-11-23 with invariants 92 and 93. Every scenario is bound to a check that exists, and
       # the console's web assets install only from their lockfile with a pinned pnpm.
       - name: every scenario is bound to a check that exists (invariant 92)

@@ -4920,3 +4920,19 @@ bootstrap's listing check (every member under `stack-k8s/`) refused the archive 
 `scripts/piped-tree-is-verified.sh` building its release fixture with the workflow's own `git archive` line
 rather than by hand (invariant 94), so a workflow and a bootstrap that disagree about the archive go red
 together.
+## 167. focus-export called a binary the image does not ship, and printed "nothing to export" every hour for three months
+
+**Ours, and fixed.** The gateway pod's `focus-export` sidecar ran `tokenfuse-gateway focus-export ...`. The tokenfuse image
+ships `/usr/local/bin/tokenfuse` and nothing called `tokenfuse-gateway`; the gateway container itself runs
+`/usr/local/bin/tokenfuse`. The script read any non-zero exit as an idle window and printed `focus-export: nothing to export
+in this window`, so the shell's `tokenfuse-gateway: not found` never reached the log, and from 2026-08-28 every window of every
+cluster exported nothing while looking like a quiet hour.
+
+Measured on 2026-11-23 by `evidence/costcrew-focus-kind/run.sh` on kind v0.33.0 in an Incus VM on the build machine, with
+tokenfuse v1.25.0: the first run, with the script printing the tool's own words instead, logged `/bin/sh: 14:
+tokenfuse-gateway: not found` on every window; `ls /usr/local/bin` in the container shows `tokenfuse` alone. Every static gate
+here passed, because none of them could know which names an image carries.
+
+**Fixed by** invariant 95: the script calls `tokenfuse`, and `scripts/costcrew-reads-the-gateway-spend.sh` requires the binary
+the script calls to be the one the gateway container's command names, and runs the script against a stub of that name; a
+failed window now prints what the tool said.

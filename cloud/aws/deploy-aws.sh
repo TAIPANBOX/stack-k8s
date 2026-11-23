@@ -738,6 +738,10 @@ policy_store_guard   # CLAUDE.md invariant 43, GOTCHAS 129: refuse before anythi
 tool_hold_guard      # CLAUDE.md invariant 83: a call the hold would stop ends the run here, with the list
 identity_mint_guard  # CLAUDE.md invariant 85: the operator's own client keys must hold drills-broker and broker-caller first
 tar -cz -C "$ROOT" manifests policy | su_ "$FIRST" 'sh -c "mkdir -p /root/stack-k8s && tar -xz -C /root/stack-k8s"'
+# The bus owner runs on every apply (CLAUDE.md invariants 89 and 95), but a Job that finished less than ten
+# minutes ago is still there, and apply leaves an unchanged Job alone: a new directory in its script (focus/,
+# 1.17) would then never be made and the pods that wait for it would wait for ever. So the old one goes first.
+k_ "-n agent-stack delete job bus-owner --ignore-not-found"
 k_ "apply -k /root/stack-k8s/manifests"
 
 # Admission (CLAUDE.md invariant 58), the step deploy.sh runs after its apply: from here on

@@ -105,6 +105,7 @@ step "no tracked file is a compiled executable (invariant 86)" "./scripts/no-bin
 step "nothing another project publishes is applied or run unverified (invariant 87)" "./scripts/remote-fetches-are-verified.sh"
 step "a deploy whose own proof failed ends red (invariant 88)" "./scripts/deploy-ends-red-when-its-proof-fails.sh"
 step "every scheduled drill can start, watches what it waits for, and runs once (invariant 90)" "./scripts/drills-can-start.sh"
+step "the gateway's spend reaches the FinOps console (invariant 95)" "./scripts/costcrew-reads-the-gateway-spend.sh"
 step "every scenario is bound to a check that exists (invariant 92)" "./scripts/features-are-bound.sh"
 step "the console installs only from its lockfile, with a pinned pnpm (invariant 93)" "./scripts/console-install-is-locked.sh"
 step "a piped deploy runs only a release tree cosign verified (invariant 94)" "./scripts/piped-tree-is-verified.sh"
