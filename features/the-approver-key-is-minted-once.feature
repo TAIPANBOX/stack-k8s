@@ -1,7 +1,7 @@
 # @decided 2026-10-19, from the review's approval finding (paraphrased): an approval names the person who gave
 # it, and a bearer key does not decide a hold unless the operator switches that on. `@claude 2026-10-19`: the
 # choices the decision did not make are in CLAUDE.md invariant 67. Scenarios are bound to cases in
-# scripts/gates-have-teeth.sh by name; this repository has no runner, so the binding is by eye.
+# scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: the console's approver key is minted once and wardryx verifies its statements with the public half
 
   The console signs a statement that names the person who approved a hold, and wardryx checks it against

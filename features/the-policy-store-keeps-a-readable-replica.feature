@@ -60,7 +60,7 @@ Feature: the policy store keeps a readable copy of its data when the node under 
     Given Longhorn salvages a volume on its own when all its replicas are faulty
     When an installer patches that setting to false
     Then policy-store-survives-a-partition.sh fails and says automatic salvage is off
-    # -> gates-have-teeth.sh "policy-store-survives-a-partition: an installer turns automatic salvage off"
+    # -> gates-have-teeth.sh "policy-store-survives-a-partition: an installer turns auto-salvage off"
 
   Scenario: an installer that never writes the class is named
     Given each installer that installs Longhorn creates the stack-policy class

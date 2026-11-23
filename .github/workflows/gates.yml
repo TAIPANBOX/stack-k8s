@@ -439,6 +439,13 @@ jobs:
       - name: every scheduled drill can start, watches what it waits for, and runs once (invariant 90)
         run: ./scripts/drills-can-start.sh
 
+      # Added 2026-11-23 with invariants 92 and 93. Every scenario is bound to a check that exists, and
+      # the console's web assets install only from their lockfile with a pinned pnpm.
+      - name: every scenario is bound to a check that exists (invariant 92)
+        run: ./scripts/features-are-bound.sh
+      - name: the console installs only from its lockfile, with a pinned pnpm (invariant 93)
+        run: ./scripts/console-install-is-locked.sh
+
       # Added 2026-10-19. hub/add-site.sh reads the Cloud's version from a name:tag@sha256 reference, the form
       # the manifests pin. v1.5.3 read the digest as the tag and refused every pinned install.
       - name: hub/add-site.sh reads a digest-pinned tokenfuse-cloud image

@@ -1,8 +1,7 @@
 # @claude 2026-10-08, from the request that followed the costcrew v0.4.0 pin:
 # the console and its crew keep a read-only root, and gain a small, size-limited
 # writable temp so SQLite can VACUUM. GOTCHAS 120 is what the pin found.
-# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this
-# repository has no runner and no binding gate, so the binding is by eye.
+# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: a read-only container that needs a temp directory has one
 
   SQLite writes a VACUUM's working copy and a big sort to a temp file. With a

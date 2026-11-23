@@ -30,10 +30,11 @@
 # ONLY the MCP broker's `TOKENFUSE_WARDRYX_URL` points at this proxy (see
 # `typed/mode.sh`, which adds the broker's wardryx settings when the flag is
 # given). The LLM gateway keeps asking wardryx directly, so a slow typed answer
-# can never sit on the model path. No `hold_if_signal` policy is seeded here:
-# without one the proxy adds a signal wardryx ignores, and nothing is held until
-# an operator writes the rule (README, "A typed risk signal"). A rule that would
-# `deny` on a signal is refused by wardryx at load.
+# can never sit on the model path. The rule is not in this file: the same
+# flag makes `typed/mode.sh hold` write the ConfigMap `wardryx-typed-hold`, whose
+# one rule holds a destructive, external_send or financial call, and a call with
+# no signal at all, for a person (CLAUDE.md invariant 65; README, "A typed risk
+# signal"). A rule that would `deny` on a signal is refused by wardryx at load.
 #
 # ## The same backend as typryx, because it is the same typryx
 #

@@ -1,7 +1,6 @@
 # @decided 2026-09-27: the launchers route Felyx through the stack's gateway by
 # default, with its agent id in the trust domain.
-# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this
-# repository has no runner and no binding gate yet, so the binding is by eye.
+# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: Felyx, the console's copilot, is governed like any other agent
 
   Felyx calls a model to answer an operator's questions. Its calls go through

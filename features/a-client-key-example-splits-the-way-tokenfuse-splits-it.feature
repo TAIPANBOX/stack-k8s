@@ -1,8 +1,7 @@
 # @decided 2026-10-05: every TOKENFUSE_MCP_KEYS or TOKENFUSE_CLIENT_KEYS
 # example in this repository is checked against the split tokenfuse actually
 # makes, and the key id is a bare name. CLAUDE.md invariant 33.
-# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this
-# repository has no runner and no binding gate yet, so the binding is by eye.
+# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: a client key example splits the way tokenfuse splits it
 
   tokenfuse reads TOKENFUSE_MCP_KEYS and TOKENFUSE_CLIENT_KEYS with one parser,

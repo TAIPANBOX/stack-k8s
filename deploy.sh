@@ -99,8 +99,11 @@
 # `wardryx-proxy` between tokenfuse's MCP broker and wardryx, so the risk class of a pending
 # tool call can reach a wardryx `hold_if_signal` policy (wardryx v1.2.0, typryx v0.4.0). Only
 # the broker's wardryx URL moves to the proxy; the LLM gateway keeps asking wardryx directly.
-# It seeds NO policy: nothing is held until an operator writes a `hold_if_signal` rule (a
-# worked example is in README.md). Each eligible tool call costs one typryx ask, so in the
+# It seeds one hold rule, `typed-risk-hold` (CLAUDE.md invariant 65): a brokered tool call
+# whose risk class is destructive, external_send or financial at 0.8 or more, or that arrives
+# with no signal at all (`when_absent: hold`), waits for a person; nothing is denied. Other
+# classes or thresholds are your own `hold_if_signal` rule (README.md has an example). Each
+# eligible tool call costs one typryx ask, so in the
 # jev mode it is a bill, and the broker starts asking wardryx about every tool call.
 # typed/mode.sh holds the validation and the rendering, one copy for all three
 # launchers; see README.md, "Typed answers: choose where your data goes".

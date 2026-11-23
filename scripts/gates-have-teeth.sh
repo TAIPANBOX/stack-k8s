@@ -4463,7 +4463,7 @@ run_case "base-images: the tag moves and the digest and assertion stay" fail \
 	'./scripts/base-images-are-pinned.sh' \
 	"$(py 'edit("images/console.Dockerfile", "FROM golang:1.27.4-alpine@", "FROM golang:1.27.5-alpine@")')" \
 	"asserts go1.27.4 on a golang:1.27.5 base"
-run_case "base-images: xcaddy loses Caddy\x27s version" fail \
+run_case "base-images: xcaddy loses Caddy's version" fail \
 	'./scripts/base-images-are-pinned.sh' \
 	"$(py 'edit("images/caddy.Dockerfile", "xcaddy build v2.11.8 --with", "xcaddy build --with")')" \
 	"names no Caddy version"
@@ -5872,6 +5872,76 @@ run_case "drills-can-start: the heraldyx drill's scenarios are no ConfigMap the 
 run_case "drills-can-start: the heraldyx drill's mail warning reworded (must pass)" pass \
 	'./scripts/drills-can-start.sh' \
 	"$(py 'edit("manifests/45-heraldyx.yaml", "# EACH RUN SENDS A REAL MAIL.", "# EVERY RUN SENDS A REAL MAIL.")')"
+
+# Every scenario is bound to a check that exists (CLAUDE.md invariant 92). Each case breaks one direction
+# or one binding form; the braces in the py bodies are \x7b and \x7d.
+run_case "features-are-bound: a scenario loses its only binding" fail \
+	'./scripts/features-are-bound.sh' \
+	"$(py 'edit("features/gateway-semantic-cache-is-off.feature", "    # -> gates-have-teeth.sh \"gateway-cache-is-off: ", "    # (unbound) \"gateway-cache-is-off: ")')" \
+	"is bound to no test"
+run_case "features-are-bound: a binding names a teeth case that was renamed" fail \
+	'./scripts/features-are-bound.sh' \
+	"$(py 'edit("features/the-policy-store-keeps-a-readable-replica.feature", "an installer turns auto-salvage off\"", "an installer turns automatic salvage off\"")')" \
+	"names a test that is gone"
+run_case "features-are-bound: a binding in a form the gate does not know" fail \
+	'./scripts/features-are-bound.sh' \
+	"$(py 'edit("features/the-policy-store-keeps-a-readable-replica.feature", "    # -> gates-have-teeth.sh \"policy-store-survives-a-partition: an installer turns auto-salvage off\"", "    # -> policy-store-survives-a-partition: an installer turns auto-salvage off")')" \
+	"does not know how to resolve"
+run_case "features-are-bound: a case binding names a case its script does not have" fail \
+	'./scripts/features-are-bound.sh' \
+	"$(py 'edit("features/hostkeys-are-verified.feature", "# -> hostkeys-are-verified.sh case D2", "# -> hostkeys-are-verified.sh case Z9")')" \
+	"has no case Z9"
+run_case "features-are-bound: a check binding names a check its script does not run" fail \
+	'./scripts/features-are-bound.sh' \
+	"$(py 'edit("features/typed-answers-choose-where-your-data-goes.feature", "check \"1 default is off\"", "check \"1 default is somewhere else\"")')" \
+	"has no check"
+run_case "features-are-bound: an evidence binding names a file this repository does not track" fail \
+	'./scripts/features-are-bound.sh' \
+	"$(py 'open("evidence/untracked-run.txt", "w").write("x\n"); edit("features/a-plane-writes-only-its-own-stream.feature", "# -> evidence/bus-per-producer-longhorn/output-owner-symlink.txt", "# -> evidence/untracked-run.txt")')" \
+	"is not a tracked file"
+run_case "features-are-bound: every feature file is gone, which must say it measured nothing" fail \
+	'./scripts/features-are-bound.sh' \
+	"$(py 'import glob, os
+for f in glob.glob("features/*.feature"): os.remove(f)')" \
+	"measured NOTHING"
+run_case "features-are-bound: a Then line reworded (must pass)" pass \
+	'./scripts/features-are-bound.sh' \
+	"$(py 'edit("features/the-policy-store-keeps-a-readable-replica.feature", "Then policy-store-survives-a-partition.sh fails and says automatic salvage is off", "Then policy-store-survives-a-partition.sh fails and says that automatic salvage is off")')"
+run_case "risk-hold: a launcher header says again that the flag seeds no policy" fail \
+	'./scripts/risk-hold-follows-the-flag.sh' \
+	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "# It seeds one hold rule, \x60typed-risk-hold\x60", "# It seeds NO policy, not \x60typed-risk-hold\x60")')" \
+	"says the risk flag seeds no hold"
+
+# The console installs its web assets only from the lockfile, with a pinned pnpm (CLAUDE.md invariant 93).
+run_case "console-install-is-locked: the lockfile is copied through a glob again" fail \
+	'./scripts/console-install-is-locked.sh' \
+	"$(py 'edit("images/console.Dockerfile", "genaryx-a360/apps/web/pnpm-lock.yaml ./", "genaryx-a360/apps/web/pnpm-lock.yam[l] ./")')" \
+	"a pattern a missing file passes"
+run_case "console-install-is-locked: the install falls back to npm" fail \
+	'./scripts/console-install-is-locked.sh' \
+	"$(py 'edit("images/console.Dockerfile", " && pnpm install --frozen-lockfile\n", " && (pnpm install --frozen-lockfile || npm install)\n")')" \
+	"fallback"
+run_case "console-install-is-locked: pnpm is pinned by version alone" fail \
+	'./scripts/console-install-is-locked.sh' \
+	"$(py 'import re
+s = open("images/console.Dockerfile").read(); t = re.sub(r"pnpm@11\.29\.0\+sha512\.[0-9a-f]+", "pnpm@11.29.0", s); assert t != s; open("images/console.Dockerfile", "w").write(t)')" \
+	"not as an exact version with the sha512"
+run_case "console-install-is-locked: the frozen install is dropped" fail \
+	'./scripts/console-install-is-locked.sh' \
+	"$(py 'edit("images/console.Dockerfile", " && pnpm install --frozen-lockfile\n", " && pnpm install\n")')" \
+	"without --frozen-lockfile"
+run_case "console-install-is-locked: corepack takes whichever pnpm it likes" fail \
+	'./scripts/console-install-is-locked.sh' \
+	"$(py 'import re
+s = open("images/console.Dockerfile").read(); t = re.sub(r" && corepack prepare pnpm@\S+ --activate \\\n", "", s); assert t != s; open("images/console.Dockerfile", "w").write(t)')" \
+	"is not activated by"
+run_case "console-install-is-locked: no stage installs JavaScript, which must say it measured nothing" fail \
+	'./scripts/console-install-is-locked.sh' \
+	"$(py 'edit("images/console.Dockerfile", " && pnpm install --frozen-lockfile\n", " && true\n")')" \
+	"measured NOTHING"
+run_case "console-install-is-locked: a comment reworded beside the install (must pass)" pass \
+	'./scripts/console-install-is-locked.sh' \
+	"$(py 'edit("images/console.Dockerfile", "# pnpm itself is pinned by version and by the sha512 of its tarball", "# pnpm is pinned by version and by the sha512 of its tarball")')"
 
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then

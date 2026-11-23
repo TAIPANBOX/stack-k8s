@@ -1,6 +1,6 @@
 # @decided 2026-10-19 (paraphrased): Keyryx is part of every install, and the record and the approvals are signed
 # through it. `@claude 2026-10-19`: the choices the decision did not make are in CLAUDE.md invariant 69. Scenarios
-# are bound to cases in scripts/gates-have-teeth.sh by name; this repository has no runner, so the binding is by eye.
+# are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: Keyryx is installed by default, and the opt-out is named
 
   Custody holds the keys that sign the record and the approvals. A launcher install turns it on; the operator who

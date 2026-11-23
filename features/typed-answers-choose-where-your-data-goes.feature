@@ -1,8 +1,7 @@
 # @decided 2026-09-30: a customer chooses where the data of a typed answer goes,
 # from three modes (Jev, their own model, or off), and the launchers ask.
 # Scenarios are bound to checks in scripts/typed-mode-is-honest.sh, and to cases
-# in scripts/gates-have-teeth.sh, by name; this repository has no runner and no
-# binding gate yet, so the binding is by eye.
+# in scripts/gates-have-teeth.sh, by name; scripts/features-are-bound.sh holds the binding.
 Feature: typed answers, choose where your data goes
 
   typryx answers a typed question with a probability. The launchers deploy it on
@@ -77,7 +76,10 @@ Feature: typed answers, choose where your data goes
     And the directory is on the typryx-state claim typryx already had, never on the shared events bus
     And no PersistentVolumeClaim exists beyond typryx-state
     # -> typed-mode-is-honest.sh checks "10 training adds no volume, claim or policy", "10 training has a writable home", "10 training stays off the shared bus" and "10 no new disk"
-    # -> gates-have-teeth.sh "typed-mode-is-honest: the training flag provisions a claim", "...the training directory is under no mount", "...lands on the shared bus" and "...brings another object"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the training flag provisions a claim"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the training directory is under no mount"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the training log lands on the shared bus"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the training flag brings another object"
 
   Scenario: the training log needs a typryx to write it
     Given --typed-training with no --with-typed, or with --typed-mode off
@@ -85,11 +87,14 @@ Feature: typed answers, choose where your data goes
     Then it refuses before it installs anything, naming --typed-training
     And every launcher parses the flag and hands it to typed/mode.sh
     # -> typed-mode-is-honest.sh checks "11 training needs typryx" and "11 launchers hand --typed-training to typed/mode.sh"
-    # -> gates-have-teeth.sh "typed-mode-is-honest: the training flag is accepted with no typryx", "a launcher loses --typed-training" and "a launcher stops forwarding --typed-training"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the training flag is accepted with no typryx"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: a launcher loses --typed-training"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: a launcher stops forwarding --typed-training"
 
   Scenario: the pinned typryx is one that reads the training variable
     Given every reference to ghcr.io/taipanbox/typryx in the repository
     When the gate reads them
     Then they name one tag, and it is v0.4.0 or later (v0.3.0 first read the variable, v0.4.0 has the wardryx-proxy subcommand)
     # -> typed-mode-is-honest.sh checks "12 one typryx tag" and "12 typryx has the wardryx-proxy subcommand"
-    # -> gates-have-teeth.sh "typed-mode-is-honest: the typryx pin goes back before the wardryx-proxy" and "a document names a second typryx tag"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the typryx pin goes back before the wardryx-proxy"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: a document names a second typryx tag"

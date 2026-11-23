@@ -3,8 +3,7 @@
 # it. `@claude 2026-10-04`: the default 5.00 equals tokenfuse's own built-in run
 # budget, so an ordinary run is unchanged and only a caller-declared larger
 # budget is clamped. Scenarios are bound to cases in scripts/gates-have-teeth.sh
-# by name; this repository has no runner and no binding gate, so the binding is
-# by eye.
+# by name; scripts/features-are-bound.sh holds the binding.
 Feature: the gateway caps what a run may declare for its own budget
 
   A run's budget used to come from the header the agent sends, and the next call
@@ -24,7 +23,8 @@ Feature: the gateway caps what a run may declare for its own budget
     Given the gateway container sets the ceiling
     When the value is a word, or zero
     Then run-budget-ceiling-is-set.sh fails saying it is not a positive decimal
-    # -> gates-have-teeth.sh "run-budget-ceiling-is-set: the ceiling is a word the gateway refuses" and "run-budget-ceiling-is-set: the ceiling is zero"
+    # -> gates-have-teeth.sh "run-budget-ceiling-is-set: the ceiling is a word the gateway refuses"
+    # -> gates-have-teeth.sh "run-budget-ceiling-is-set: the ceiling is zero"
 
   Scenario: the default drifts from tokenfuse's own
     Given the shipped ceiling is 5.00, the gateway's own built-in run budget
@@ -48,7 +48,9 @@ Feature: the gateway caps what a run may declare for its own budget
     Given the three launchers take the figure through budget/ceiling.sh
     When it accepts zero, a sign or an exponent, or refuses a figure with six decimals
     Then run-budget-ceiling-is-set.sh runs it over both kinds of figure and fails naming the one it got wrong
-    # -> gates-have-teeth.sh "run-budget-ceiling-is-set: budget/ceiling.sh accepts zero", "run-budget-ceiling-is-set: budget/ceiling.sh accepts a sign and an exponent" and "run-budget-ceiling-is-set: budget/ceiling.sh refuses a figure the gateway accepts"
+    # -> gates-have-teeth.sh "run-budget-ceiling-is-set: budget/ceiling.sh accepts zero"
+    # -> gates-have-teeth.sh "run-budget-ceiling-is-set: budget/ceiling.sh accepts a sign and an exponent"
+    # -> gates-have-teeth.sh "run-budget-ceiling-is-set: budget/ceiling.sh refuses a figure the gateway accepts"
 
   Scenario: a deploy path stops checking the figure before it installs
     Given every deploy path runs budget/ceiling.sh check before its install step
@@ -84,4 +86,5 @@ Feature: the gateway caps what a run may declare for its own budget
     Given the gate finds the gateway by its image and command
     When no container matches
     Then run-budget-ceiling-is-set.sh says it measured nothing instead of reporting OK
-    # -> gates-have-teeth.sh "run-budget-ceiling-is-set: no gateway container left to judge" and "run-budget-ceiling-is-set: budget/ceiling.sh taken away"
+    # -> gates-have-teeth.sh "run-budget-ceiling-is-set: no gateway container left to judge"
+    # -> gates-have-teeth.sh "run-budget-ceiling-is-set: budget/ceiling.sh taken away"

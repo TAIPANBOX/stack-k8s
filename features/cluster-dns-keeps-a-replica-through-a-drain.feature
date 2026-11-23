@@ -1,7 +1,7 @@
 # @claude 2026-10-14: after a GCP run in which a stopped node took one of two coredns replicas
 # with it. The installers give cluster DNS a disruption budget of their own and leave k3s's
 # coredns Deployment to k3s. Scenarios are bound to cases in scripts/gates-have-teeth.sh by name;
-# this repository has no runner and no binding gate, so the binding is by eye.
+# scripts/features-are-bound.sh holds the binding.
 Feature: cluster DNS keeps a replica through a drain, and k3s's own coredns is left to k3s
 
   Every pod in the cluster resolves names through coredns. The installers run two replicas on

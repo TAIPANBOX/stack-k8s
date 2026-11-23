@@ -2,7 +2,7 @@
 # split into CI shards (six since 2026-10-28) that run in parallel. A gate proves that together the
 # shards run every case exactly once, because a case lost in the split changes no
 # exit code. Scenarios are bound to cases in scripts/gates-have-teeth.sh by name;
-# this repository has no runner and no binding gate, so the binding is by eye.
+# scripts/features-are-bound.sh holds the binding.
 Feature: the teeth run is split across shards that together run every case once
 
   Each case of the teeth run belongs to exactly one shard, chosen by its position,

@@ -1,7 +1,7 @@
 # @claude 2026-10-14: after a GCP run in which a reboot of a server hung for seven minutes in systemd-shutdown,
 # with a process still writing to the shared volume after the network had gone. The installers give every node a
 # kubelet shutdown period and a systemd-logind delay long enough to use it. Scenarios are bound to cases in
-# scripts/gates-have-teeth.sh by name; this repository has no runner and no binding gate, so the binding is by eye.
+# scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: a node that is shut down stops its pods before its network goes
 
   A node that is rebooted or stopped gives its pods time to stop, and the kubelet stops them before the

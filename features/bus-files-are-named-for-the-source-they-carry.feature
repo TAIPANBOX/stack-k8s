@@ -2,7 +2,7 @@
 # and idryx v1.1.0 refuse an event whose `source` is not allowed for the file it
 # was read from. `@claude 2026-10-04`: this launcher needed no rename; the gate
 # keeps it so. Scenarios are bound to cases in scripts/gates-have-teeth.sh by name;
-# this repository has no runner and no binding gate, so the binding is by eye.
+# scripts/features-are-bound.sh holds the binding.
 Feature: every bus file is named for the source it carries
 
   `<source>.ndjson` carries `<source>`, `tokenfuse-cloud.ndjson` and
@@ -25,7 +25,8 @@ Feature: every bus file is named for the source it carries
     Given idryx loads tokenfuse.ndjson as tokenfuse
     When the pair names wardryx for that file
     Then the gate fails, because idryx v1.1.0 would refuse every line and the graph would be empty
-    # -> gates-have-teeth.sh "bus-names: an idryx --load pair names a source the file may not carry" and "bus-names: an idryx --load path is not a stream file"
+    # -> gates-have-teeth.sh "bus-names: an idryx --load pair names a source the file may not carry"
+    # -> gates-have-teeth.sh "bus-names: an idryx --load path is not a stream file"
 
   Scenario: the control plane and the broker keep their own files
     Given they write tokenfuse-cloud.ndjson and tokenfuse-mcp.ndjson as tokenfuse

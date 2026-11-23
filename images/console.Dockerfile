@@ -17,8 +17,15 @@
 # --- the console's own web assets -------------------------------------------
 FROM node:22-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS web
 WORKDIR /w
-COPY genaryx-a360/apps/web/package.json genaryx-a360/apps/web/pnpm-lock.yam[l] ./
-RUN corepack enable && (pnpm install --frozen-lockfile || npm install)
+# The lockfile is required and is the only source of versions (CLAUDE.md invariant 93). Until
+# 2026-11-23 the COPY named it through a glob that matches nothing without failing, and the install
+# fell back to `npm install`, which resolves every range in package.json afresh: a missing or stale
+# lockfile built a console from whatever the registry served that day, under the same tag.
+# pnpm itself is pinned by version and by the sha512 of its tarball, so corepack refuses another one.
+COPY genaryx-a360/apps/web/package.json genaryx-a360/apps/web/pnpm-lock.yaml ./
+RUN corepack enable \
+ && corepack prepare pnpm@11.29.0+sha512.d913f9b37cd5fe6780052e809774edabb7bdcf69a6e6d9b8fd3b38bc052fa8a7d891b6c201a38fb504a07ffce2e5e8c262ef54fb8f57db62f22d353a30bc8a96 --activate \
+ && pnpm install --frozen-lockfile
 COPY genaryx-a360/apps/web/ ./
 # `--mode web` is not a preference, it is which PRODUCT this bundle is.
 # It loads apps/web/.env.web, whose one line sets `VITE_GENARYX_API=/api`, and

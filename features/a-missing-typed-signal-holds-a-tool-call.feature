@@ -1,8 +1,7 @@
 # @decided 2026-10-19, from the security review's wave 3: where a document described a protection the
 # product did not give by default, the product gives it. A risk signal that never arrives must not read
 # as a harmless call. `@claude 2026-10-19`: the choices the decision did not make are in CLAUDE.md
-# invariant 65. Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this repository has
-# no runner and no binding gate, so the binding is by eye.
+# invariant 65. Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: a brokered tool call with no risk signal waits for a person, only when the flag asked for it
 
   With --typed-risk-signal the policy plane holds a call that carries no action.risk_class signal, and
@@ -43,3 +42,9 @@ Feature: a brokered tool call with no risk signal waits for a person, only when 
     When the GCP launcher runs without the flag
     Then the ConfigMap is deleted and the policy plane restarted
     # -> gates-have-teeth.sh "risk-hold: the GCP launcher does not clear the hold without the flag"
+
+  Scenario: the prose beside the flag says what the flag does
+    Given the flag seeds the hold rule typed-risk-hold
+    When a launcher header, manifests/56 or the README says the flag seeds no policy
+    Then risk-hold-follows-the-flag.sh fails and names the file and the line
+    # -> gates-have-teeth.sh "risk-hold: a launcher header says again that the flag seeds no policy"

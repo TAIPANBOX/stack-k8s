@@ -2,8 +2,7 @@
 # start with no manual patch, and a pod that mounts a key Secret at a mode that is
 # not world-readable must carry a group that can read it, in every typed mode and
 # in every manifest. GOTCHAS 117 is the run that found the gap. Scenarios are
-# bound to cases in scripts/gates-have-teeth.sh by name; this repository has no
-# runner and no binding gate, so the binding is by eye.
+# bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: every key a pod mounts is readable by the user the pod runs as
 
   Kubernetes writes Secret, ConfigMap and projected files owned by root, with the
@@ -44,10 +43,13 @@ Feature: every key a pod mounts is readable by the user the pod runs as
     Given the proxy's securityContext is written as a block instead of a flow mapping
     When it does or does not carry fsGroup
     Then the gate passes or fails accordingly
-    # -> gates-have-teeth.sh "mounted-keys: a block-style securityContext with fsGroup is read" and "mounted-keys: a block-style securityContext without fsGroup"
+    # -> gates-have-teeth.sh "mounted-keys: a block-style securityContext with fsGroup is read"
+    # -> gates-have-teeth.sh "mounted-keys: a block-style securityContext without fsGroup"
 
   Scenario: the gate says when it measured nothing
     Given typed/mode.sh, the manifests, or every key Secret mount is gone
     When the gate runs
     Then it fails and says it measured nothing, rather than reporting OK
-    # -> gates-have-teeth.sh "mounted-keys: typed/mode.sh taken away", "mounted-keys: no manifests/*.yaml left to read" and "mounted-keys: no typed render mounts a key"
+    # -> gates-have-teeth.sh "mounted-keys: typed/mode.sh taken away"
+    # -> gates-have-teeth.sh "mounted-keys: no manifests/*.yaml left to read"
+    # -> gates-have-teeth.sh "mounted-keys: no typed render mounts a key"

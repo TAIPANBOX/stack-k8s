@@ -4883,3 +4883,23 @@ stream. Fixed: every file the owner writes is written in `streams/`, which only 
 and moved into place with `mv -T`, which replaces a planted name and never follows it; the same run then leaves both streams
 `20000:<producer> 0664` and empty, and the owner completes. `scripts/bus-writers-are-separate.sh` refuses a write outside
 `streams/` and a move without `-T` (red on the first version, `gate-red-on-03868f9-owner.txt`).
+
+## 165. The console image's install fell back to `npm install`, and took whichever pnpm the registry called latest
+
+**Ours, and fixed.** `images/console.Dockerfile` copied the web lockfile as `pnpm-lock.yam[l]` and ran
+`corepack enable && (pnpm install --frozen-lockfile || npm install)`. The bracket is a glob, and a glob that matches nothing is
+not an error to `COPY`, so a checkout without the lockfile built on. `corepack enable` with no `packageManager` field and no
+version on the command line downloads the registry's latest pnpm. And `||` turned every refusal of the frozen install, a missing
+lockfile or one out of step with `package.json`, into `npm install`, which reads no pnpm lockfile and resolves every range again.
+The image is published under a version tag and signed, so the same tag could name different JavaScript dependencies from one
+build to the next.
+
+Measured on 2026-11-23 with `docker build --target web` in an Incus VM on the build machine, genaryx at `cb7f779` with its
+`pnpm-lock.yaml` taken out: corepack downloaded pnpm 12.23.0 (genaryx's own CI uses pnpm 11), pnpm refused with
+`ERR_PNPM_NO_LOCKFILE`, and the build went on into `npm install`. That run ended only because npm crashed on its own
+(`Cannot read properties of null (reading 'edgesOut')`); on another day it would have finished.
+
+**Fixed by** invariant 93: the lockfile copied by its literal name, `corepack prepare pnpm@11.29.0+sha512.<hash> --activate`, and
+`pnpm install --frozen-lockfile` alone. The same run then stopped at the COPY with no lockfile, stopped at `corepack prepare` with
+`Mismatch hashes` when one hex digit of the hash was changed, and built the locked stage. `scripts/console-install-is-locked.sh`
+holds it.

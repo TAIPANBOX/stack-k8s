@@ -2,8 +2,7 @@
 # run agent-stack-go's `agent-conform watch-dir`, so a broken hash chain on the
 # shared events bus is seen by the notifier and the console instead of by nobody.
 # `@claude 2026-10-04`: where its memory lives is in CLAUDE.md invariant 31.
-# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this
-# repository has no runner and no binding gate, so the binding is by eye.
+# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: the chain verifier watches the bus and a break stays visible
 
   Every stream on the bus is a hash chain and nothing on a box checked one. A
@@ -57,7 +56,8 @@ Feature: the chain verifier watches the bus and a break stays visible
     Given the bus is group-writable by 10001 through fsGroup
     When the pod has no fsGroup, or runs as the money plane's uid
     Then the gate fails
-    # -> gates-have-teeth.sh "chain-verifier: the verifier cannot create its file on the bus" and "chain-verifier: the verifier shares the money plane's uid"
+    # -> gates-have-teeth.sh "chain-verifier: the verifier cannot create its file on the bus"
+    # -> gates-have-teeth.sh "chain-verifier: the verifier shares the money plane's uid"
 
   Scenario: the image has no watch-dir
     Given watch-dir starts at agent-conform v1.1.0
