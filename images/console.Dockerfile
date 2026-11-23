@@ -15,7 +15,7 @@
 # Build context is the PARENT of the repos (~/Development), because this one
 # image legitimately spans five of them.
 # --- the console's own web assets -------------------------------------------
-FROM node:22-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS web
+FROM node:22-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS web
 WORKDIR /w
 # The lockfile is required and is the only source of versions (CLAUDE.md invariant 93). Until
 # 2026-11-23 the COPY named it through a glob that matches nothing without failing, and the install
@@ -48,7 +48,7 @@ COPY genaryx-a360/ ./
 RUN cargo build --release -p genaryx-web
 
 # --- the Go tools the console shells out to ---------------------------------
-FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS gotools
+FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS gotools
 # A digest outranks the tag beside it, so a bump that moved the tag alone would
 # keep the old Go under the new name. This line stops that build (invariant 80).
 RUN test "$(go env GOVERSION)" = go1.27.4
@@ -73,7 +73,7 @@ FROM ghcr.io/taipanbox/wardryx:v2.8.0@sha256:f9b86a82114698f64a3251816ee0be6f80b
 FROM ghcr.io/taipanbox/tokenfuse:v1.25.0@sha256:3a81dbcd116557eff54aae29e7d68104af8fc788265d58e71adf3f96fea03317 AS tokenfuse-engine
 
 # --- runtime ----------------------------------------------------------------
-FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates libssl3 \
  && rm -rf /var/lib/apt/lists/* \
