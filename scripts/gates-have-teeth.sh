@@ -5942,6 +5942,67 @@ run_case "console-install-is-locked: no stage installs JavaScript, which must sa
 run_case "console-install-is-locked: a comment reworded beside the install (must pass)" pass \
 	'./scripts/console-install-is-locked.sh' \
 	"$(py 'edit("images/console.Dockerfile", "# pnpm itself is pinned by version and by the sha512 of its tarball", "# pnpm is pinned by version and by the sha512 of its tarball")')"
+# A piped deploy runs only a release tree cosign verified (CLAUDE.md invariant 94). Each case takes one
+# property away; the braces in the py bodies are \x7b and \x7d.
+run_case "piped-tree: the tree is extracted before cosign verifies it" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 's = open("deploy.sh").read(); v = s[s.index("  \"$work/cosign\" verify-blob"):s.index("  # Verified bytes still decide")]; s = s.replace(v, ""); x = "  [ \"$(cat \"$ROOT/RELEASE\" 2>/dev/null)\" = \"$tag\" ] \\\n"; assert x in s; open("deploy.sh", "w").write(s.replace(x, v + x))')" \
+	"a tree cosign refused was extracted or run"
+run_case "piped-tree: the signer is widened to a regexp" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit("deploy.sh", "--certificate-identity \"$STACK_SIGNER$tag\"", "--certificate-identity-regexp \"$STACK_SIGNER.*\"")')" \
+	"a regexp identity is accepted"
+run_case "piped-tree: a refused tree falls back to main" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit("deploy.sh", "      \"$work/stack-k8s.tar.gz\" >\"$work/verify.log\" 2>&1 \\\n    || die \"cosign refused", "      \"$work/stack-k8s.tar.gz\" >\"$work/verify.log\" 2>&1 \\\n    || \x7b INSTALL_FROM_MAIN=1; STACK_TAG=; tree_bootstrap; return 0; \x7d || die \"cosign refused")')" \
+	"B: a tree cosign refused"
+run_case "piped-tree: the RELEASE check is dropped" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit("deploy.sh", "  [ \"$(cat \"$ROOT/RELEASE\" 2>/dev/null)\" = \"$tag\" ] \\\n", "  true || [ \"$(cat \"$ROOT/RELEASE\" 2>/dev/null)\" = \"$tag\" ] \\\n")')" \
+	"E: a signed tree whose RELEASE names another tag ran"
+run_case "piped-tree: members outside the tree are let through" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit("deploy.sh", "awk \x27!/^stack-k8s\\// || /(^|\\/)\\.\\.(\\/|$)/ \x7b n++ \x7d END \x7b exit n > 0 \x7d\x27", "awk \x27END \x7b exit 0 \x7d\x27")')" \
+	"F: a member outside stack-k8s/"
+run_case "piped-tree: REF is read again" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit("deploy.sh", "  [ -z \"$\x7bREF:-\x7d\" ] || die \"REF is no longer read", "  [ -n \"$\x7bREF:-\x7d\" ] || true; [ -z \"$\x7bREF:-x\x7d\" ] || : \"REF is no longer read")')" \
+	"REF=main was ignored rather than refused"
+run_case "piped-tree: the README pipes main again" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit("README.md", "curl -fsSL https://github.com/TAIPANBOX/stack-k8s/releases/latest/download/deploy.sh", "curl -fsSL https://raw.githubusercontent.com/TAIPANBOX/stack-k8s/main/deploy.sh")')" \
+	"an operator is still told to pipe main"
+run_case "piped-tree: the release workflow stops verifying its own signature" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit(".github/workflows/release.yml", "--certificate-identity \"https://github.com/TAIPANBOX/stack-k8s/.github/workflows/release.yml@refs/tags/$TAG\"", "--certificate-identity \"https://github.com/TAIPANBOX/stack-k8s/.github/workflows/other.yml@refs/tags/$TAG\"")')" \
+	"does not verify its signature for the exact identity"
+run_case "piped-tree: the bootstrap block is gone, which must say it measured nothing" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit("deploy.sh", "# tree-bootstrap: begin", "# bootstrap: begin")')" \
+	"measured NOTHING"
+run_case "piped-tree: the release archive puts RELEASE at its root, where --add-virtual-file left it" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit(".github/workflows/release.yml", "--add-virtual-file=\"stack-k8s/RELEASE:$TAG\"", "--add-virtual-file=\"RELEASE:$TAG\"")')" \
+	"A: the latest signed release did not run"
+run_case "piped-tree: a piped run from a directory with manifests/ is taken for a checkout" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit("deploy.sh", "HERE=\"\"\nif [ -n \"$\x7bBASH_SOURCE[0]:-\x7d\" ] && [ -f \"$\x7bBASH_SOURCE[0]\x7d\" ]; then\n  HERE=\"$(cd \"$(dirname \"$\x7bBASH_SOURCE[0]\x7d\")\" 2>/dev/null && pwd || true)\"\nfi", "HERE=\"$(cd \"$(dirname \"$\x7bBASH_SOURCE[0]:-$0\x7d\")\" 2>/dev/null && pwd || true)\"")')" \
+	"M: piped from a directory with manifests/"
+run_case "piped-tree: main is driven by the release's launcher instead of its own" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit("deploy.sh", "    exec env STACK_TREE_UNSIGNED=main bash \"$ROOT/deploy.sh\"", "    return 0; exec env STACK_TREE_UNSIGNED=main bash \"$ROOT/deploy.sh\"")')" \
+	"K: INSTALL_FROM_MAIN=1 did not run main"
+run_case "piped-tree: a fetched tree can enter the bootstrap again" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit("deploy.sh", "  [ -z \"$\x7bSTACK_TREE_VERIFIED:-\x7d$\x7bSTACK_TREE_UNSIGNED:-\x7d\" ] \\\n    || die", "  true \\\n    || die")')" \
+	"can enter the bootstrap again"
+run_case "piped-tree: the workflow signs a tag that is not on main" fail \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit(".github/workflows/release.yml", "git merge-base --is-ancestor \"$tag\" origin/main", "git merge-base --is-ancestor \"$tag\" \"$tag\"")')" \
+	"need not be on main"
+run_case "piped-tree: a comment reworded in the bootstrap (must pass)" pass \
+	'./scripts/piped-tree-is-verified.sh' \
+	"$(py 'edit("deploy.sh", "# A piped deploy.sh is not the deploy:", "# A piped deploy.sh is not itself the deploy:")')"
 
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then

@@ -4903,3 +4903,20 @@ Measured on 2026-11-23 with `docker build --target web` in an Incus VM on the bu
 `pnpm install --frozen-lockfile` alone. The same run then stopped at the COPY with no lockfile, stopped at `corepack prepare` with
 `Mismatch hashes` when one hex digit of the hash was changed, and built the locked stage. `scripts/console-install-is-locked.sh`
 holds it.
+
+## 166. `git archive --add-virtual-file` ignores `--prefix`, so the release tree's RELEASE file landed outside the tree
+
+**Upstream.** git's documentation for `--add-virtual-file=<path>:<content>` reads as though the file joins the
+archive like any other, and every other member of `git archive --prefix=stack-k8s/` is under `stack-k8s/`. The
+virtual file is not: its path is taken whole. The first version of `.github/workflows/release.yml` wrote
+`--add-virtual-file="RELEASE:$TAG"`, and the archive held `RELEASE` at its root beside `stack-k8s/`.
+
+Measured on 2026-11-23 before any tag was pushed, with the workflow's own line run against this repository at
+HEAD (git 2.54.0 on the Mac): `tar -xzOf ... stack-k8s/RELEASE` answered "Not found in archive", and the
+bootstrap's listing check (every member under `stack-k8s/`) refused the archive on both bsdtar and GNU tar 1.35
+(forge). Every piped deploy of the first signed release would have stopped there.
+
+**Fixed by** writing the prefix into the path, `--add-virtual-file="stack-k8s/RELEASE:$TAG"`, and by
+`scripts/piped-tree-is-verified.sh` building its release fixture with the workflow's own `git archive` line
+rather than by hand (invariant 94), so a workflow and a bootstrap that disagree about the archive go red
+together.

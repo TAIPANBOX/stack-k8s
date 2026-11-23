@@ -355,9 +355,30 @@ Piped from curl it still works, and with no terminal to ask on it says so and
 names the flags rather than hanging or guessing:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/TAIPANBOX/stack-k8s/main/deploy.sh | bash -s -- \
+curl -fsSL https://github.com/TAIPANBOX/stack-k8s/releases/latest/download/deploy.sh | bash -s -- \
   --servers ip1,ip2,ip3 --hcloud-token <token> --no-tunnel
 ```
+
+Piped, `deploy.sh` is only a bootstrap, and what it runs is a signed release:
+
+- It reads the latest release tag (or `STACK_TAG=v1.17.0` for another), fetches
+  that release's `stack-k8s.tar.gz` and `stack-k8s.tar.gz.sigstore.json`, and
+  fetches cosign v3.1.3, checked against its pinned SHA-256.
+- cosign verifies the bundle for exactly this repository's release workflow at
+  exactly that tag (`https://github.com/TAIPANBOX/stack-k8s/.github/workflows/release.yml@refs/tags/<tag>`,
+  issuer `https://token.actions.githubusercontent.com`). A tarball signed by
+  anything else, a release with no bundle, a member outside the tree, a link, or
+  a tree whose `RELEASE` names another tag, stops the run with nothing changed.
+- Only then does the verified tree's own `deploy.sh` run, with your arguments.
+- `INSTALL_FROM_MAIN=1` takes `main` instead, unsigned, says so, and runs
+  `main`'s own `deploy.sh`. It is refused together with `STACK_TAG`, and nothing
+  falls back from one to the other. The old `REF=` is refused rather than ignored.
+- A piped run is a piped run wherever you stand: a `manifests/` folder in your
+  current directory does not make it a checkout.
+- Only a release whose tag is on `main` is signed, and the release must be the
+  draft the workflow attached the assets to: publish that draft, never a new one.
+
+From a clone nothing of this applies: your checkout is the tree.
 
 ### The parts, if you want them separately
 
