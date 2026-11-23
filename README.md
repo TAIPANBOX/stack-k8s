@@ -825,8 +825,9 @@ launchers.
 Use this when you want a person to approve a tool call because a classifier says
 it is probably destructive, an external send, or a money movement. It needs
 typryx deployed (`--with-typed`, or a `--typed-mode`), a wardryx of v1.4.0 or
-later (v1.2.0 for the rule alone; `when_absent` needs v1.4.0), and a policy rule you
-write. All of it is off by default.
+later (v1.2.0 for the rule alone; `when_absent` needs v1.4.0). The flag seeds the hold
+rule itself (below); any other class or threshold is a rule you write. All of it is off
+by default.
 
 ```bash
 ./deploy.sh ... --with-typed --typed-risk-signal           # the free stub backend

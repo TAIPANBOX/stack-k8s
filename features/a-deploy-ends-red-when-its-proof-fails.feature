@@ -1,8 +1,7 @@
 # @decided 2026-11-11 (paraphrased): the README says a deploy without a trust domain ends red, so a deploy
 # whose own proof failed must end red. @claude 2026-11-11: the three deploy scripts threw the exit code of
 # verify.sh and security-tests.sh away with `|| true`, printed Done. and exited 0.
-# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this repository has no runner and no
-# binding gate for this file, so the binding is by eye.
+# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: a deploy whose own proof failed ends red
 
   Scenario: verify.sh fails

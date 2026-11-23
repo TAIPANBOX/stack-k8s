@@ -27,6 +27,9 @@
 #      plane, because a policy file is read at start and a changed ConfigMap alone changes nothing in
 #      a running pod. Each one also clears the ConfigMap and restarts the plane when the flag is off,
 #      so a run without the flag removes a hold an earlier run with the flag left behind.
+#   5. The prose an operator reads beside the flag (the three launchers' headers, manifests/56 and the
+#      README) does not say the flag seeds no policy. It did until 2026-11-23, after the hold existed,
+#      and a reader who believed it would think a missing signal goes through.
 #
 # A subject that is absent is "measured NOTHING", never a pass.
 set -uo pipefail
@@ -166,6 +169,20 @@ for path in LAUNCHERS:
         span = live[clear.end(): clear.end() + (end_of_block.start() if end_of_block else 0)]
         if not re.search(restart, span):
             bad.append(f"{path}: clears {CM} without restarting wardryx, so the running pod keeps the removed rule")
+
+# ---- 5. no prose beside the flag says it seeds nothing ----
+STALE = re.compile(r"seeds\s+no\s+policy|nothing\s+is\s+held\s+until\s+an?\s+operator|"
+                   r"no\s+`?hold_if_signal`?\s+policy\s+is\s+seeded", re.I)
+PROSE = LAUNCHERS + ["manifests/56-typryx-wardryx-proxy.yaml", "README.md"]
+for path in PROSE:
+    text = read(path)
+    if text is None:
+        bad.append(f"{path} is absent: its prose about the hold is measured NOTHING")
+        continue
+    m = STALE.search(text)
+    if m:
+        line = text.count("\n", 0, m.start()) + 1
+        bad.append(f"{path}:{line}: says the risk flag seeds no hold ({m.group(0)!r}), while it seeds typed-risk-hold")
 
 if bad:
     for b in bad:

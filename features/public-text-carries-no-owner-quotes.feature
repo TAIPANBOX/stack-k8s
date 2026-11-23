@@ -3,8 +3,7 @@
 # attributing a decision to the owner by name. A decision is still recorded, as
 # `@decided YYYY-MM-DD` followed by a paraphrase, and that line is not edited
 # afterwards. The owner's name as copyright holder is ownership, not a quote.
-# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this
-# repository has no runner and no binding gate, so the binding is by eye.
+# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: a public repository carries no quote of the owner
 
   Anyone can read this repository. A decision is recorded so a later reader does

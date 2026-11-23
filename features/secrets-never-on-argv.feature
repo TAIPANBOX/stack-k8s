@@ -1,7 +1,7 @@
 # @decided 2026-10-19 (paraphrased): the cloud installers keep their secrets off the command
 # line. The 2026-10-17 security review found the plane credentials, the Hetzner token, the
 # console bearer and a token in a git clone URL on ssh and process argv (findings F-015).
-# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name, checked by eye.
+# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name, and scripts/features-are-bound.sh holds the binding.
 Feature: a secret never appears on a command line
 
   A process's arguments are readable by every user on both ends of an ssh, for as long as

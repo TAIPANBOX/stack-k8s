@@ -1,7 +1,6 @@
 # @decided 2026-10-14: the deploy scripts mint the typed-answer door's two Secrets when they are
 # absent and never overwrite one, as stack-single's installer already does. Scenarios are bound
-# to cases in scripts/gates-have-teeth.sh by name; this repository has no runner and no binding
-# gate, so the binding is by eye.
+# to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: a typed deploy comes up green without a Secret made by hand
 
   typryx and the MCP broker in front of it each read a Secret for their door, and neither starts

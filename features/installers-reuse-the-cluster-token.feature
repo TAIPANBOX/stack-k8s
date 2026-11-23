@@ -1,7 +1,7 @@
 # @decided 2026-09-13, from the second AWS deploy of the R2 proving run, which
 # killed the first server because one of three installers minted a fresh k3s
 # token on every run. Scenarios are bound to cases in scripts/gates-have-teeth.sh
-# by name; this repository has no runner and no binding gate yet.
+# by name; scripts/features-are-bound.sh holds the binding.
 Feature: every installer reuses the cluster's token on a second run
 
   The second run is the real test. An installer that mints a new k3s token on
@@ -21,8 +21,8 @@ Feature: every installer reuses the cluster's token on a second run
     Given an installer that reads the token
     When the read sits below the first-server install, on one line or wrapped over two
     Then k3s-token-is-reused.sh fails naming both line numbers
-    # -> gates-have-teeth.sh "k3s-token-is-reused: the token is read after the install rewrote it",
-    #    "k3s-token-is-reused: a wrapped first-server install hides a read placed after it"
+    # -> gates-have-teeth.sh "k3s-token-is-reused: the token is read after the install rewrote it"
+    # -> gates-have-teeth.sh "k3s-token-is-reused: a wrapped first-server install hides a read placed after it"
 
   Scenario: a read over a helper that cannot read the file is no read
     Given the token file is root-owned, mode 0600

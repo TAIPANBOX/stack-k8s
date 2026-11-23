@@ -1,7 +1,6 @@
 # @decided 2026-09-13, from the first fresh GCP cluster after the manifests
 # started reading a Secret key that two of the three installers never wrote.
-# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this
-# repository has no runner and no binding gate yet, so the binding is by eye.
+# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: every installer creates every Secret key the manifests read
 
   A fresh cluster on any cloud must come up with the same planes as the Hetzner

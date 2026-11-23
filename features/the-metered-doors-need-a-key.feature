@@ -2,7 +2,7 @@
 # starting with the defaults; here, the gateway authenticates every caller and binds each key to the
 # agent ids it may speak as, with keys a deploy mints when the operator brings none, as
 # stack-single's installer does. Scenarios are bound to cases in scripts/gates-have-teeth.sh by
-# name; this repository has no runner and no binding gate, so the binding is by eye.
+# name; scripts/features-are-bound.sh holds the binding.
 Feature: the gateway needs a key, and a deploy mints one when nobody gave it any
 
   The gateway is the door every metered call goes through. Without client keys it admits anything

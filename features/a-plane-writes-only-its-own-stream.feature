@@ -2,8 +2,7 @@
 # share a uid, and no plane can create, rename or remove a name in the bus directory, as stack-single already
 # holds with a root init. `@claude 2026-11-11`: here an owner uid makes the bus, because Pod Security
 # `restricted` allows no root. Scenarios are bound to cases in scripts/gates-have-teeth.sh and to the measured
-# run in evidence/bus-per-producer-longhorn/ by name; this repository has no runner and no binding gate, so
-# the binding is by eye.
+# run in evidence/bus-per-producer-longhorn/ by name; scripts/features-are-bound.sh holds the binding.
 Feature: a plane writes only its own stream, and only the bus owner changes a name on the bus
 
   Each plane appends to its own stream through a group of its own. The streams sit in `streams/`, which only
@@ -46,13 +45,15 @@ Feature: a plane writes only its own stream, and only the bus owner changes a na
     Given every plane mounts streams/ by subPath
     When a writer or a reader mounts the claim's root instead
     Then the gate fails, because a pod holding the root can rename streams/ itself
-    # -> gates-have-teeth.sh "bus-writers: a plane mounts the volume root read-write" and "bus-writers: a reader mounts the volume root read only"
+    # -> gates-have-teeth.sh "bus-writers: a plane mounts the volume root read-write"
+    # -> gates-have-teeth.sh "bus-writers: a reader mounts the volume root read only"
 
   Scenario: a pod starts before the owner has made the bus
     Given kubelet makes a missing subPath itself, as root 0777
     When a pod has no bus-ready init waiting for the owner's marker
     Then the gate fails
-    # -> gates-have-teeth.sh "bus-writers: a pod starts without waiting for the owner" and "bus-writers: the wait names no marker"
+    # -> gates-have-teeth.sh "bus-writers: a pod starts without waiting for the owner"
+    # -> gates-have-teeth.sh "bus-writers: the wait names no marker"
     # -> evidence/bus-per-producer-longhorn/output-stack-rwx.txt, 2g
 
   Scenario: the owner opens the bus directory to its group
@@ -79,4 +80,5 @@ Feature: a plane writes only its own stream, and only the bus owner changes a na
     When wardryx links .copy.tmp in the archive to typryx.ndjson and the owner copies the old layout in
     Then typryx.ndjson stays the owner's, in typryx's group, untouched, because the owner writes only in streams/ and moves with mv -T
     # -> evidence/bus-per-producer-longhorn/output-owner-symlink.txt
-    # -> gates-have-teeth.sh "bus-writers: the owner stages a copy where a producer can plant a link" and "bus-writers: the owner moves a file without -T"
+    # -> gates-have-teeth.sh "bus-writers: the owner stages a copy where a producer can plant a link"
+    # -> gates-have-teeth.sh "bus-writers: the owner moves a file without -T"

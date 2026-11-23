@@ -15,13 +15,13 @@ Feature: the cluster admits only images whose signature verifies
     Given policy/up.sh --enforce has opted the stack's namespace in
     When a pod names a TAIPANBOX image with no signature the controller can read
     Then the admission is refused, measured on kind by evidence/verified-images-kind/run.sh
-    # -> gates-have-teeth.sh "verified-images: the keyless policy turns to warn" (the gate holds enforce)
+    # -> gates-have-teeth.sh "verified-images: the keyless policy turns to warn"
 
   Scenario: a signed TAIPANBOX image from its own repository's release workflow is admitted
     Given the policy for that image names its own repository's release workflow as its only signer
     When a pod names an image that workflow signed on a version tag, and the controller can read the signature
     Then the admission is allowed, measured for every digest the manifests pin by evidence/verified-images-kind/admission-v120.sh
-    # -> gates-have-teeth.sh "verified-images: a policy admits another repository's identity" (the policy names its own repository)
+    # -> gates-have-teeth.sh "verified-images: a policy admits another repository's identity"
 
   Scenario: a keyless signature the controller can read is admitted when its signer matches
     Given a legacy keyless signature (cosign v2.4.0) and a policy that names its signer

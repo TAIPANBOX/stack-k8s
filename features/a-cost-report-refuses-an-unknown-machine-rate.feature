@@ -1,8 +1,7 @@
 # @claude 2026-10-14: the cost report must never under-report. A running machine type with no
 # published rate stops the report with a non-zero exit that names the type, in both clouds, and a
 # type that has a rate still prices. CLAUDE.md invariant 44; GOTCHAS 127. Scenarios are bound to
-# cases in scripts/gates-have-teeth.sh by name; this repository has no runner and no binding gate,
-# so the binding is by eye.
+# cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: a cost report refuses a machine type it has no rate for
 
   A cost report that counts an unpriced machine as nothing prints a calm total under the real

@@ -4,7 +4,7 @@
 # reproduces the decision. The launchers offer it, off by default, behind one flag.
 # `@claude 2026-10-04`: the choices the audit did not make are in CLAUDE.md
 # invariant 29. Scenarios are bound to cases in scripts/gates-have-teeth.sh by
-# name; this repository has no runner and no binding gate, so the binding is by eye.
+# name; scripts/features-are-bound.sh holds the binding.
 Feature: a typed risk signal reaches a policy hold only through the MCP broker
 
   typryx's wardryx-proxy sits between tokenfuse's MCP broker and wardryx and adds
@@ -34,13 +34,16 @@ Feature: a typed risk signal reaches a policy hold only through the MCP broker
     Given the broker asked wardryx nothing before
     When the risk signal is on
     Then only the broker's wardryx URL names the proxy, and its mode is enforce, its fail mode closed, its key the viewer key
-    # -> gates-have-teeth.sh "typed-mode-is-honest: the broker keeps asking wardryx directly", "typed-mode-is-honest: the broker fails open" and "typed-mode-is-honest: the broker uses the admin key"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the broker keeps asking wardryx directly"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the broker fails open"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the broker uses the admin key"
 
   Scenario: the broker waits longer than the proxy may take
     Given the proxy may take 3000 ms to ask typryx, and up to 5000 ms if raised, before it forwards without a signal
     When the broker's own wait is not longer than that longest ask
     Then the gate fails, because every slow answer would turn into a refusal
-    # -> gates-have-teeth.sh "typed-mode-is-honest: the broker waits less than the proxy may take" and "typed-mode-is-honest: the broker waits less than the proxy's longest ask"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the broker waits less than the proxy may take"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the broker waits less than the proxy's longest ask"
 
   Scenario: the proxy's deadline is too short for an own model on CPU
     Given an own model on CPU measured a median of 2,130 ms
@@ -52,13 +55,15 @@ Feature: a typed risk signal reaches a policy hold only through the MCP broker
     Given the typed mode chose jev or an own model
     When the proxy renders
     Then it carries the same backend and key mount as typryx, and the model egress policy selects both pods and no wider
-    # -> gates-have-teeth.sh "typed-mode-is-honest: the proxy answers from another backend than typryx" and "typed-mode-is-honest: the model egress leaves the proxy out"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the proxy answers from another backend than typryx"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the model egress leaves the proxy out"
 
   Scenario: the proxy keeps no state
     Given the proxy asks about tool-call arguments
     When it is given a journal, or inherits the training log
     Then the gate fails, because a second writer would fork typryx's chain and the log would hold the arguments
-    # -> gates-have-teeth.sh "typed-mode-is-honest: the proxy gets a journal on the shared bus" and "typed-mode-is-honest: the proxy inherits the training log"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the proxy gets a journal on the shared bus"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the proxy inherits the training log"
 
   Scenario: the door admits only the broker
     Given the proxy runs open on purpose because the broker cannot send a key
@@ -76,13 +81,16 @@ Feature: a typed risk signal reaches a policy hold only through the MCP broker
     Given typryx v0.4.0 is the first release with wardryx-proxy
     When the proxy runs another tag, another subcommand, or forwards to something other than wardryx
     Then the gate fails
-    # -> gates-have-teeth.sh "typed-mode-is-honest: the proxy runs another typryx tag than typryx", "typed-mode-is-honest: the proxy runs the service, not the proxy" and "typed-mode-is-honest: the proxy forwards to something other than wardryx"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the proxy runs another typryx tag than typryx"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the proxy runs the service, not the proxy"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: the proxy forwards to something other than wardryx"
 
   Scenario: every launcher offers the flag
     Given the launchers hand every typed flag to typed/mode.sh
     When one stops parsing or forwarding --typed-risk-signal
     Then the gate fails naming the launcher
-    # -> gates-have-teeth.sh "typed-mode-is-honest: a launcher loses --typed-risk-signal" and "typed-mode-is-honest: a launcher stops forwarding --typed-risk-signal"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: a launcher loses --typed-risk-signal"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: a launcher stops forwarding --typed-risk-signal"
 
   Scenario: the manifest drifts from the lines the modes rewrite
     Given typed/mode.sh rewrites three lines of manifests/56
@@ -94,4 +102,5 @@ Feature: a typed risk signal reaches a policy hold only through the MCP broker
     Given the manifest is correct
     When only a comment changes
     Then the gate still passes
-    # -> gates-have-teeth.sh "typed-mode-is-honest: a comment in manifests/56 changes" and "typed-mode-is-honest: manifests/56 taken away"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: a comment in manifests/56 changes"
+    # -> gates-have-teeth.sh "typed-mode-is-honest: manifests/56 taken away"

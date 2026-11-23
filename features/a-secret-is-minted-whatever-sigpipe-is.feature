@@ -1,8 +1,7 @@
 # @claude 2026-10-14: ported from stack-single (its invariant 31), after a hook there hung on the
 # idiom this repository's three deploy scripts also carried. A secret is minted from a bounded
 # read of /dev/urandom by one generator, lib/gen.sh, so minting one ends whatever SIGPIPE is set
-# to. Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this repository has no
-# runner and no binding gate, so the binding is by eye.
+# to. Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: a secret is minted from a bounded read, whatever SIGPIPE is set to
 
   The operator password a deploy prints at the end, and every other random value this

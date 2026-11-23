@@ -1,6 +1,5 @@
 # @decided 2026-09-24, from a measured overload run on a 4-core appliance.
-# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this
-# repository has no runner and no binding gate yet, so the binding is by eye.
+# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: the gateway's semantic cache is off in every install
 
   The gateway's semantic response cache defaults to shadow mode whenever its

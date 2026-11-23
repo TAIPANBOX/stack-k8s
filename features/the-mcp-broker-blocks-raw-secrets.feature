@@ -2,7 +2,7 @@
 # starting with the defaults; here, tokenfuse's MCP broker refuses a raw secret in tool arguments,
 # refuses a tool listing its scanner flags, and asks the policy plane about every tool call,
 # failing closed, as stack-single's broker does. Scenarios are bound to cases in
-# scripts/gates-have-teeth.sh by name, by eye.
+# scripts/gates-have-teeth.sh by name, and scripts/features-are-bound.sh holds the binding.
 Feature: the MCP broker blocks raw secrets and asks the policy plane about every tool call
 
   The broker fronts the typed plane. Left to tokenfuse's own defaults it forwards a raw secret it

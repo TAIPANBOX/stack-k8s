@@ -1,7 +1,7 @@
 # @decided 2026-11-12 (paraphrased): a person approving a held tool call is shown its arguments, taken from the
 # enforcement point and sealed so that only the console reads them; a decision made without seeing them is allowed
 # and recorded as unseen. `@claude 2026-11-12`: the wiring is CLAUDE.md invariant 91. Scenarios are bound to cases in
-# scripts/gates-have-teeth.sh by name; this repository has no runner, so the binding is by eye.
+# scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: the console's preview key is minted once, and wardryx seals held calls' arguments to its public half
 
   wardryx seals the arguments of each held call to the console's preview key, and only the console opens them. The

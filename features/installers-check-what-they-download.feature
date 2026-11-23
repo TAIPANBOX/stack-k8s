@@ -1,8 +1,7 @@
 # @decided 2026-11-11 (paraphrased): the installers fetch what other projects publish once, on the
 # operator's machine, and check its hash before any node uses it. @claude 2026-11-11: until then each
 # node pulled Longhorn, Calico and Hetzner's controller by URL and ran whatever get.k3s.io answered.
-# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this repository has no runner
-# and no binding gate for this file, so the binding is by eye.
+# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: nothing another project publishes runs before its hash is checked
 
   Scenario: a manifest is applied by URL again

@@ -1,7 +1,6 @@
 # @claude 2026-11-05, from the estate register's G3.9: the console's TLS image compiled from a moving
 # base with the DNS plugin at its latest, and nothing read a Dockerfile's FROM lines.
-# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; this
-# repository has no runner and no binding gate, so the binding is by eye.
+# Scenarios are bound to cases in scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 Feature: every image this repository builds from is pinned whole
 
   The manifests pin what a build produced. A rebuild of one tag still has to read

@@ -12,8 +12,7 @@
 # so a cluster that names no file runs exactly as before and `kubectl apply -k` never touches them;
 # the gateway rolls because its pod template carries the map's sha256 and the Secret's
 # resourceVersion, so it rolls exactly when what it reads changed. Scenarios are bound to cases in
-# scripts/gates-have-teeth.sh by name; this repository has no runner and no binding gate, so the
-# binding is by eye.
+# scripts/gates-have-teeth.sh by name; scripts/features-are-bound.sh holds the binding.
 #
 # @decided 2026-10-17 (paraphrased): close the agent-security findings of the 2026-10-17 review,
 # defaults first, so the gateway requires its client keys and a deploy given no files mints them
