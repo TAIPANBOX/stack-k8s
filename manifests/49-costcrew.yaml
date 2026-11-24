@@ -116,7 +116,7 @@ spec:
         - name: bus-ready
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
           securityContext: { runAsNonRoot: true, runAsUser: 10003, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
-          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ] && [ \"$(stat -c %u:%g:%a /bus/focus/gateway 2>/dev/null)\" = 20000:20010:2775 ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout or focus/gateway is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
           volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
       containers:
         - name: costcrew
@@ -143,6 +143,16 @@ spec:
             - "$(TRAILRYX_TRUST_DOMAIN)"
             - "-stack-owner"
             - "$(COSTCREW_OWNER)"
+            # The gateway's spend (CLAUDE.md invariant 95): focus-export's folder, read at start
+            # and every 15 minutes (costcrew invariant 104). The first read that finds a real
+            # call replaces the generated estate the console starts with; without the flag every
+            # import is refused while that estate is there, and the AI pages keep showing it. No
+            # -focus-dir-openai: this launcher runs one gateway door. A folder with no CSV yet
+            # (no call priced) is refused per read and read again; the folder itself exists
+            # before this container starts, because bus-ready waits for it.
+            - "-focus-dir"
+            - "/var/lib/stack/focus/gateway"
+            - "-focus-replace-generated"
           env:
             - name: TRAILRYX_TRUST_DOMAIN
               valueFrom: { configMapKeyRef: { name: stack-wiring, key: TRAILRYX_TRUST_DOMAIN } }
@@ -157,6 +167,10 @@ spec:
             # same claim read-only because it only reads; the difference is
             # deliberate and worth keeping visible.
             - { name: events, mountPath: /var/lib/stack/events, subPath: streams }
+            # The gateway's FOCUS export, read only (CLAUDE.md invariant 95). focus/ lets this uid in
+            # through its group 10003; the CSV is read through "other". It must never carry the
+            # gateway's group 20010: it appends to the bus, and that group could write tokenfuse.ndjson.
+            - { name: events, mountPath: /var/lib/stack/focus, subPath: focus, readOnly: true }
             - { name: state, mountPath: /var/lib/costcrew }
             # The one writable directory outside the data, because the root is
             # read-only. See the `tmp` volume below.

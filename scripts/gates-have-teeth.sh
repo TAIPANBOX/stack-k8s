@@ -5873,6 +5873,76 @@ run_case "drills-can-start: the heraldyx drill's mail warning reworded (must pas
 	'./scripts/drills-can-start.sh' \
 	"$(py 'edit("manifests/45-heraldyx.yaml", "# EACH RUN SENDS A REAL MAIL.", "# EVERY RUN SENDS A REAL MAIL.")')"
 
+# The gateway's spend reaches the FinOps console (CLAUDE.md invariant 95). Each case is a wiring fault
+# that leaves every container running and the AI pages on the generated estate.
+run_case "costcrew-reads-spend: -focus-dir names the empty parent" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "            - \"/var/lib/stack/focus/gateway\"\n", "            - \"/var/lib/stack/focus\"\n")')" \
+	"so the console imports nothing"
+run_case "costcrew-reads-spend: the replace flag is dropped" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "            - \"-focus-replace-generated\"\n", "")')" \
+	"no -focus-replace-generated"
+run_case "costcrew-reads-spend: the console mounts the export read-write" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "subPath: focus, readOnly: true \x7d", "subPath: focus \x7d")')" \
+	"mounts focus read-write"
+run_case "costcrew-reads-spend: the console is given the gateway's group" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "fsGroup: 65532, supplementalGroups: [10001], seccompProfile", "fsGroup: 65532, supplementalGroups: [10001, 20010], seccompProfile")')" \
+	"carries the gateway's group 20010"
+run_case "costcrew-reads-spend: the sidecar writes where it no longer has a mount" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "              out=/var/lib/stack/focus/gateway\n", "              out=/var/lib/stack/focus\n")')" \
+	"not to its focus/gateway mount"
+run_case "costcrew-reads-spend: the export is written straight to the name the console reads" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "              part=\"$out/.focus-gateway.partial\"\n", "              part=\"$out/focus-gateway.csv\"\n")')" \
+	"can read half an export"
+run_case "costcrew-reads-spend: an idle window deletes the last good file" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "                  rm -f \"$part\"\n", "                  rm -f \"$part\" \"$csv\"\n")')" \
+	"does not keep the last good file"
+run_case "costcrew-reads-spend: a failed export is swallowed as a quiet window" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "nothing exported this window: $said\"", "nothing exported this window\"")')" \
+	"not printed in the tool's own words"
+run_case "costcrew-reads-spend: the first export waits an interval" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "              while :; do\n                if [ ! -d \"$traces\" ]; then\n                  echo \"focus-export: gateway:", "              sleep \"$interval\"\n              while :; do\n                if [ ! -d \"$traces\" ]; then\n                  echo \"focus-export: gateway:")')" \
+	"sleeps before its first export"
+run_case "costcrew-reads-spend: the owner makes focus/ after the marker" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 's = open("manifests/11-bus.yaml").read(); a = "    own_dir \"$B/focus\" 10003 2751\n    own_dir \"$B/focus/gateway\" 20010 2775\n"; assert a in s; s = s.replace(a, ""); b = "    ls -lan \"$S\"\n"; assert b in s; open("manifests/11-bus.yaml", "w").write(s.replace(b, a + b))')" \
+	"is made after streams/.layout"
+run_case "costcrew-reads-spend: the console stops waiting for focus/gateway" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 's = open("manifests/49-costcrew.yaml").read(); a = " && [ \\\"$(stat -c %u:%g:%a /bus/focus/gateway 2>/dev/null)\\\" = 20000:20010:2775 ]"; assert s.count(a) == 1, s.count(a); open("manifests/49-costcrew.yaml", "w").write(s.replace(a, ""))')" \
+	"does not wait for focus/gateway"
+run_case "costcrew-reads-spend: the sidecar calls a binary the image does not ship" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "said=\"$(tokenfuse focus-export", "said=\"$(tokenfuse-gateway focus-export")')" \
+	"not 'tokenfuse', the binary the gateway container runs"
+run_case "costcrew-reads-spend: the export keeps the tool's own mode" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "if chmod 0644 \"$part\" && mv -f", "if mv -f")')" \
+	"not 0644"
+run_case "costcrew-reads-spend: the bus-owner waits for the next apply only after ten minutes" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("cloud/aws/deploy-aws.sh", "k_ \"-n agent-stack delete job bus-owner --ignore-not-found\"\n", "")')" \
+	"is not deleted before the first apply"
+run_case "costcrew-reads-spend: the sidecar is gone, which must say it measured nothing" fail \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "        - name: focus-export\n", "        - name: focus-exporter\n")')" \
+	"measured NOTHING"
+run_case "costcrew-reads-spend: a comment reworded beside the console's flags (must pass)" pass \
+	'./scripts/costcrew-reads-the-gateway-spend.sh' \
+	"$(py 'edit("manifests/49-costcrew.yaml", "# The gateway\x27s spend (CLAUDE.md invariant 95): focus-export\x27s folder", "# The spend the gateway priced (CLAUDE.md invariant 95): focus-export\x27s folder")')"
+run_case "bus-writers: a pod other than costcrew mounts the FOCUS export" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "            - \x7b name: traces, mountPath: /var/lib/stack/traces, readOnly: true \x7d\n            # focus/gateway on the events claim", "            - \x7b name: traces, mountPath: /var/lib/stack/traces, readOnly: true \x7d\n            - \x7b name: events, mountPath: /var/lib/stack/focus-all, subPath: focus, readOnly: true \x7d\n            # focus/gateway on the events claim")')" \
+	"only the costcrew console reads it"
+
 # Every scenario is bound to a check that exists (CLAUDE.md invariant 92). Each case breaks one direction
 # or one binding form; the braces in the py bodies are \x7b and \x7d.
 run_case "features-are-bound: a scenario loses its only binding" fail \

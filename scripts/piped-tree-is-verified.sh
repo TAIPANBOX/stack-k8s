@@ -221,7 +221,7 @@ mkrelease() { # TAG: the release archive built by release.yml's own `git archive
 	(
 		cd "$r" && unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 		git init -q && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -qm t \
-			&& git tag "$1" && TAG="$1" && eval "$cmd"
+			&& git tag "$1" && TAG="$1" && REF="$1" && eval "$cmd"
 	) >"$T/archive.log" 2>&1 || { fail "release.yml's git archive line did not run: $(tail -n 1 "$T/archive.log")"; return 1; }
 	cp "$r/dist/stack-k8s.tar.gz" "$T/fix/stack-k8s.tar.gz"
 }

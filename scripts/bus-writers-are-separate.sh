@@ -20,8 +20,10 @@
 # script outside scripts/ and evidence/ writes, that mounts the stack-events claim)
 #
 #   1. a container mounts the claim only as subPath `streams`, or subPath `conform` for the chain
-#      verifier alone, or at the root read only in an init container named bus-ready, or at the root
-#      read-write in the Job bus-owner alone;
+#      verifier alone, or subPath `focus/gateway` read-write for the gateway's focus-export alone, or
+#      subPath `focus` read only for the costcrew console alone (CLAUDE.md invariant 95), or at the
+#      root read only in an init container named bus-ready, or at the root read-write in the Job
+#      bus-owner alone;
 #   2. every container that mounts streams/ read-write is a writer in WRITERS; its uid is its
 #      producer's number, no other stream's writer has that uid, its groups hold its producer's group
 #      and no other producer's group;
@@ -68,6 +70,10 @@ WRITERS = {
 }
 PRODUCER_GIDS = {gid for gid, _ in WRITERS.values()}
 CONFORM = ("manifests/40-routines-and-secrets.yaml", "CronJob", "agent-conform", "agent-conform")
+# The gateway's FOCUS export (CLAUDE.md invariant 95): focus-export writes focus/gateway, the costcrew
+# console reads focus/, and nobody else mounts either.
+FOCUS_WRITER = ("manifests/10-planes.yaml", "Deployment", "tokenfuse-gateway", "focus-export")
+FOCUS_READER = ("manifests/49-costcrew.yaml", "Deployment", "costcrew", "costcrew")
 # Pods that take a plane's identity ON PURPOSE, to show what that identity cannot do. Keyed by file, kind and
 # name; each must still exist, or the entry is stale.
 PROBES = {
@@ -224,6 +230,15 @@ for f, d, spec, vols, claim_ro in bus_pods:
                 if sub == "conform":
                     if (f, kind, name, cname) != CONFORM or ckind != "container":
                         bad.append(f"{where}: mounts subPath conform, the chain verifier's own directory")
+                    continue
+                if sub == "focus/gateway":
+                    if (f, kind, name, cname) != FOCUS_WRITER or ckind != "container" or ro:
+                        bad.append(f"{where}: mounts subPath focus/gateway, which only the gateway's focus-export writes")
+                    continue
+                if sub == "focus":
+                    if (f, kind, name, cname) != FOCUS_READER or ckind != "container" or not ro:
+                        bad.append(f"{where}: mounts subPath focus{'' if ro else ' read-write'}; only the costcrew console "
+                                   "reads it, and read only")
                     continue
                 if sub != "streams":
                     bad.append(f"{where}: mounts subPath {sub!r} of stack-events; the bus is subPath streams")

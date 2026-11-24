@@ -1,0 +1,86 @@
+Creating cluster "costcrew-focus" ...
+ • Ensuring node image (kindest/node:v1.37.0) 🖼️  ...
+ ✓ Ensuring node image (kindest/node:v1.37.0) 🖼️
+ • Preparing nodes 📦   ...
+ ✓ Preparing nodes 📦 
+ • Writing configuration 📜  ...
+ ✓ Writing configuration 📜
+ • Starting control-plane 🕹️  ...
+ ✓ Starting control-plane 🕹️
+ • Installing CNI 🔌  ...
+ ✓ Installing CNI 🔌
+ • Installing StorageClass 💾  ...
+ ✓ Installing StorageClass 💾
+ • Waiting ≤ 2m0s for control-plane = Ready ⏳  ...
+ ✓ Waiting ≤ 2m0s for control-plane = Ready ⏳
+ • Ready after 18s 💚
+Set kubectl context to "kind-costcrew-focus"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-costcrew-focus
+
+Thanks for using kind! 😊
+
+== objects, derived from manifests/
+Namespace agent-stack
+PersistentVolumeClaim stack-events
+ConfigMap bus-owner
+Job bus-owner
+Deployment tokenfuse-gateway
+PersistentVolumeClaim costcrew-state
+Deployment costcrew
+ConfigMap stack-wiring
+
+== apply, pass 1 (the second run is the real test)
+ok   bus-owner completed
+ok   gateway pod ready
+ok   costcrew ready
+
+== apply, pass 2 (the second run is the real test)
+ok   bus-owner completed
+ok   gateway pod ready
+ok   costcrew ready
+
+== the owner's directories, as a pod of the gateway's identity sees them
+/bus/focus 20000:10003 2751
+/bus/focus/gateway 20000:20010 2775
+pod "focus-stat" deleted from agent-stack namespace
+ok   focus/ 20000:10003 2751, focus/gateway 20000:20010 2775
+
+== costcrew says where it reads
+Defaulted container "costcrew" out of: costcrew, bus-ready (init)
+2026/11/23 22:38:09 CostCrew: reading the gateway's export from /var/lib/stack/focus/gateway, at start and every 15m0s
+Defaulted container "costcrew" out of: costcrew, bus-ready (init)
+ok   costcrew reads /var/lib/stack/focus/gateway
+
+== one call through the gateway (built-in stub upstream)
+gateway pod: tokenfuse-gateway-58ddff4998-5d8np
+{"stub":true,"usage":{"input_tokens":1000,"output_tokens":500}}
+focus-export: FOCUS_EXPORT_INTERVAL is below 60 seconds; using 60
+focus-export: gateway: nothing exported this window: focus-export error: no calls found in the trace at '/var/lib/stack/traces/gateway' — nothing to export
+focus-export: gateway: wrote /var/lib/stack/focus/gateway/focus-gateway.csv
+ok   focus-export wrote focus-gateway.csv
+
+== the export, as the costcrew pod's mount holds it
+total 12
+drwxrwsr-x    2 20000    20010         4096 Nov 23 22:39 .
+drwxr-s--x    3 20000    10003         4096 Nov 23 22:37 ..
+-rw-r--r--    1 20010    20010          794 Nov 23 22:39 focus-gateway.csv
+BilledCost,EffectiveCost,BillingCurrency,ChargePeriodStart,ChargePeriodEnd,ChargeDescription,ProviderName,PublisherName,InvoiceIssuerName,ServiceName,ServiceCategory,ResourceId,ResourceName,SubAccountId,SubAccountName,x_run_id,x_parent_run_id,x_agent_id,x_model,x_tokens_in,x_tokens_out,x_blocked,x_cost_basis,x_outcome,x_unit,x_tool_calls,x_key_id,x_block_reason,x_identity_reason,x_price_basis,x_pii_findings
+0.010500,0.010500,USD,2026-11-23T22:38:24Z,2026-11-23T22:38:24Z,LLM call model=claude-sonnet-4-5,Anthropic,Anthropic,Anthropic,LLM inference,AI and Machine Learning,agent://acme.example/agents/focus-proof,agent://acme.example/agents/focus-proof,focus-proof-1,focus-proof-1,focus-proof-1,,agent://acme.example/agents/focus-proof,claude-sonnet-4-5,1000,500,false,settled,,,0,,,,known,
+
+REFUSED-WRITE
+pod "focus-read" deleted from agent-stack namespace
+ok   the export carries the agent's call
+ok   costcrew's identity cannot write the export
+ok   no partial file beside the export
+
+== costcrew reads it at start
+Defaulted container "costcrew" out of: costcrew, bus-ready (init)
+Defaulted container "costcrew" out of: costcrew, bus-ready (init)
+2026/11/23 22:39:25 CostCrew: reading the gateway's export from /var/lib/stack/focus/gateway, at start and every 15m0s
+2026/11/23 22:39:25 CostCrew: imported the gateway's export: Read 1 file, 2026-11-23T22:38:24Z to 2026-11-23T22:38:24Z, 1 row, 1 distinct agent, 0.01 total BilledCost.
+Defaulted container "costcrew" out of: costcrew, bus-ready (init)
+ok   costcrew imported the gateway's export
+
+RUN_EXIT=0

@@ -200,7 +200,7 @@ spec:
         - name: bus-ready
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
           securityContext: { runAsNonRoot: true, runAsUser: 20010, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
-          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
+          command: ["sh", "-c", "i=0; until [ -f /bus/streams/.layout ] && [ \"$(stat -c %u:%g:%a /bus/focus/gateway 2>/dev/null)\" = 20000:20010:2775 ]; do i=$((i+1)); if [ $i -gt 300 ]; then echo 'streams/.layout or focus/gateway is not there: the bus-owner Job has not made the bus'; exit 1; fi; sleep 2; done"]
           volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
         - name: fetch-vouchryx-jwks
           image: busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
@@ -469,26 +469,44 @@ spec:
             requests: { cpu: 50m, memory: 96Mi }
             limits: { memory: 512Mi }
         # focus-export, AS A SIDECAR AND NOT A CRONJOB, AND THE REASON IS THE
-        # VOLUME RATHER THAN A PREFERENCE.
+        # VOLUME RATHER THAN A PREFERENCE. `tokenfuse focus-export --traces <dir>`
+        # reads the gateway's local Parquet directory straight off disk, and that
+        # directory is the `traces` emptyDir below, mountable only by containers in
+        # this pod. Giving `traces` a claim of its own would be a billed disk.
         #
-        # 40-routines-and-secrets.yaml recorded this as a finding on
-        # 2026-08-06: four of stack-up's five routines have a CronJob here and
-        # this one does not, so a Kubernetes install produced no focus export
-        # at all. `tokenfuse-gateway focus-export --traces <dir>` reads the
-        # gateway's local Parquet directory straight off disk, and that
-        # directory is the `traces` emptyDir below. An emptyDir is mountable
-        # ONLY by containers inside its own pod, by Kubernetes' own design, so
-        # no CronJob can reach it whatever its affinity says.
+        # WHERE THE EXPORT GOES, AND WHO READS IT (CLAUDE.md invariant 95). Until
+        # 2026-11-23 the CSV went to an emptyDir of its own and nothing read it: the
+        # FinOps console started with its generated estate and kept it beside a
+        # gateway that had priced real agents. Now it goes to focus/gateway on the
+        # events claim, beside the bus and not in it, which the bus owner makes
+        # 20000:20010 2775 (manifests/11-bus.yaml); the costcrew console mounts focus/
+        # read only and starts with -focus-dir pointed at it. No new disk.
         #
-        # The other way out was to give `traces` a PersistentVolumeClaim. That
-        # is a real solution and it provisions a real disk, billed from
-        # creation, so it is a spending decision rather than a fix. A sidecar
-        # is in the pod already and costs nothing.
+        # One file, rewritten whole every window, as stack-single's focus-export does:
+        # `focus-export` with no --from exports every call in the trace, so a new
+        # timestamped file each window would grow the folder by the whole trace every
+        # time. It writes `.focus-gateway.partial` (the console reads only *.csv and
+        # *.csv.gz) and renames it over the old file, which is atomic on one file
+        # system, so the console never reads half an export. A window that exports
+        # nothing keeps the last good file and prints the tool's own words, so a
+        # permission or trace fault is seen in the log rather than read as quiet. The
+        # traces are an emptyDir, so after a gateway restart the file holds only the
+        # calls since; the console keeps the calls it already imported (it removes a
+        # call only when a newer file carries the same call, costcrew's supersede).
+        # It exports first and then waits: a call reaches the console within one
+        # interval plus the console's own reread (15 minutes).
         #
-        # It prints rather than storing, which is what quality-drift does one
-        # file over: in this deployment a routine's artifact is its log. The
-        # CSV goes to an emptyDir of its own so that the export never writes
-        # into the directory it reads.
+        # The binary is `tokenfuse`, the one the gateway container runs. Until 2026-11-23 this
+        # script called `tokenfuse-gateway`, which the image does not ship, and printed
+        # "nothing to export in this window" every hour since 2026-08-28 (GOTCHAS 167).
+        #
+        # NO HEADER-ONLY FILE, ON PURPOSE. costcrew v0.10.2 refuses a whole import when a
+        # configured folder holds no *.csv (a costcrew defect, being fixed there), so
+        # stack-single, with two doors, writes a header-only file into a door that never
+        # exported, beside the other door's real export. Here there is one door and one
+        # folder: the refusal only delays the first import until the first priced call,
+        # and a header-only file before any call would make costcrew wipe its generated
+        # estate with nothing real to show. Revisit when a second door is added.
         - name: focus-export
           # The gateway's image, because this sidecar reads the gateway's own
           # trace directory and runs beside it. It needs a SHELL, which is the
@@ -502,41 +520,49 @@ spec:
             - |
               set -u
               traces=/var/lib/stack/traces/gateway
-              out=/var/lib/stack/focus
-              # First run waits, so the gateway has served something before
-              # the first export asks what it served.
-              sleep "${FOCUS_EXPORT_INTERVAL:-3600}"
+              out=/var/lib/stack/focus/gateway
+              csv="$out/focus-gateway.csv"
+              part="$out/.focus-gateway.partial"
+              interval="${FOCUS_EXPORT_INTERVAL:-900}"
+              case "$interval" in
+                ''|*[!0-9]*) echo "focus-export: FOCUS_EXPORT_INTERVAL is not a whole number of seconds; using 900"; interval=900 ;;
+              esac
+              [ "$interval" -ge 60 ] || { echo "focus-export: FOCUS_EXPORT_INTERVAL is below 60 seconds; using 60"; interval=60; }
               while :; do
-                stamp=$(date -u +%Y%m%dT%H%M%SZ)
                 if [ ! -d "$traces" ]; then
-                  echo "focus-export: skipped, no trace directory at $traces yet"
-                else
-                  # It exits non-zero with "no calls found in the trace" on an
-                  # idle window, which is not a failure of the export. Same
-                  # judgement stack-up's routine makes.
-                  if tokenfuse-gateway focus-export --traces "$traces" \
-                       --out "$out/focus-$stamp.csv" 2>&1; then
-                    echo "focus-export: wrote $out/focus-$stamp.csv"
+                  echo "focus-export: gateway: no trace directory at $traces yet"
+                elif said="$(tokenfuse focus-export --traces "$traces" --out "$part" 2>&1)"; then
+                  # 0644 whatever the tool's umask: the console reads it through "other".
+                  if chmod 0644 "$part" && mv -f "$part" "$csv"; then
+                    echo "focus-export: gateway: wrote $csv"
                   else
-                    echo "focus-export: nothing to export in this window"
+                    echo "focus-export: gateway: could not put the export in place at $csv"
                   fi
+                else
+                  # An idle window exits non-zero with "no calls found in the trace",
+                  # which is not a failure of the export; anything else is printed as
+                  # the tool said it. Either way the last good file stays.
+                  rm -f "$part"
+                  echo "focus-export: gateway: nothing exported this window: $said"
                 fi
-                sleep "${FOCUS_EXPORT_INTERVAL:-3600}"
+                sleep "$interval"
               done
           env:
-            - { name: FOCUS_EXPORT_INTERVAL, value: "3600" }
+            - { name: FOCUS_EXPORT_INTERVAL, value: "900" }
           volumeMounts:
             # Read only: this reads what the gateway wrote and must not be
             # able to edit it. The gateway's own mount above stays writable.
             - { name: traces, mountPath: /var/lib/stack/traces, readOnly: true }
-            - { name: focus, mountPath: /var/lib/stack/focus }
+            # focus/gateway on the events claim, the one directory it writes, made by the bus
+            # owner; the pod's bus-ready waits for it so kubelet never makes it as root.
+            - { name: events, mountPath: /var/lib/stack/focus/gateway, subPath: focus/gateway }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
           resources:
-            requests: { cpu: 10m, memory: 32Mi }
-            limits: { memory: 256Mi }
+            requests: { cpu: 10m, memory: 96Mi }
+            limits: { memory: 512Mi }
         # The error budget (CLAUDE.md invariant 82). A sidecar for the reason focus-export is one: the
         # traces are this pod's emptyDir, and nothing outside the pod can read them. verdryx lives in
         # the console's image, so this is that image with its entrypoint replaced. Every six hours it
@@ -590,11 +616,6 @@ spec:
         - name: events
           persistentVolumeClaim: { claimName: stack-events }
         - name: traces
-          emptyDir: {}
-        # The export's own scratch, so it never writes into the directory it
-        # reads. emptyDir rather than a claim: the artifact is the log line,
-        # and a CSV that outlives the pod would need a disk somebody pays for.
-        - name: focus
           emptyDir: {}
         # The map identity/up.sh writes, and only its map key: the path key stays
         # out of the directory. Optional, so a cluster that named no map starts.

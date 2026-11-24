@@ -9,8 +9,10 @@
 #   this Job, uid 20000, is the only pod that mounts the claim's root read-write. It makes streams/
 #   (20000:10001 2750: the bus group may enter and read, nobody but the owner may add, rename or
 #   remove a name), each stream in it (20000:<producer gid> 0664: the producer appends through its
-#   own group, the bus group reads), wardryx's policy archive (20000:20001 0775) and the chain
-#   verifier's memory beside the bus (conform/, 20000:10002 2770), then writes streams/.layout;
+#   own group, the bus group reads), wardryx's policy archive (20000:20001 0775), the chain
+#   verifier's memory beside the bus (conform/, 20000:10002 2770) and the gateway's FOCUS export
+#   beside it too (focus/ 20000:10003 2751, focus/gateway/ 20000:20010 2775, CLAUDE.md invariant 95),
+#   then writes streams/.layout;
 #
 #   every other pod mounts streams/ by subPath at /var/lib/stack/events, so no path inside it leads to
 #   the root, and waits in an init container `bus-ready` for streams/.layout, because kubelet makes a
@@ -43,6 +45,8 @@ data:
     #   streams/<stream>.ndjson       20000:<producer> 0664  the producer appends through its group
     #   streams/wardryx-policy-archive 20000:20001 0775  wardryx adds versions, the bus group reads them
     #   conform/                      20000:10002 2770  the chain verifier's memory, beside the bus
+    #   focus/                        20000:10003 2751  the FOCUS export, beside the bus; costcrew lists it
+    #   focus/gateway/                20000:20010 2775  the gateway's focus-export writes its CSV here
     #   streams/.layout               written last; every plane's init waits for it
     # A file of the old layout at the volume root is copied in once, so the chains continue. The old
     # files are left where they are, readable by nothing that runs after this.
@@ -128,6 +132,16 @@ data:
     if [ ! -e "$C" ] && [ ! -L "$C" ] && [ -s "$B/agent-conform.state.json" ] && [ ! -L "$B/agent-conform.state.json" ]; then
     	place "$B/agent-conform.state.json" 10002 0660 "$C"
     fi
+
+    # The gateway's FOCUS export (CLAUDE.md invariant 95), beside the bus and not in it: the money a
+    # gateway priced, for the FinOps console. focus-export (uid 20010) writes focus/gateway through the
+    # group; costcrew (uid 10003) enters focus/ through its group and reads the CSV through "other". No
+    # plane mounts either directory but those two, and no file below them is ever written or re-owned
+    # here, so a link planted there cannot turn this script's hand (GOTCHAS 164). focus/ lets others
+    # traverse (the 1) so the gateway pod's bus-ready can see focus/gateway exists before kubelet would
+    # make it as root.
+    own_dir "$B/focus" 10003 2751
+    own_dir "$B/focus/gateway" 20010 2775
 
     echo "bus-layout v1" > "$S/.layout.tmp"
     chgrp 10001 "$S/.layout.tmp"
