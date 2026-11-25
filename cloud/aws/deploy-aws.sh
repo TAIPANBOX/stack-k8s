@@ -18,10 +18,10 @@
 # source tree here, no large checkout. It needs ssh, curl and the terraform and
 # aws CLIs, which is what preflight.sh checks.
 #
-# The stack needs NO credentials: wardryx, idryx, qryx, mockryx, tokenfuse,
-# verdryx, engram and the Genaryx console are all public. The console is cloned
-# from TAIPANBOX/genaryx without a token; `--console-token <github-token>` is only
-# for building it from a private fork of your own.
+# The stack needs NO credentials: every image it runs is public, pinned by tag and
+# digest and pulled by the kubelet, the Genaryx console included
+# (ghcr.io/taipanbox/genaryx since stack-k8s 1.19.0, built and signed by genaryx's own
+# release workflow). Nothing builds the console here any more.
 #
 # `--anthropic-key-file <path>` gives the gateway its provider key: the one file the
 # gateway reads, made into the Secret gateway-upstream-key on the node, on stdin, once. The
@@ -105,7 +105,6 @@ set -euo pipefail
 SERVERS=""; AGENTS=""
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/stack-k8s-aws}"
 SSH_USER="${SSH_USER:-ubuntu}"
-CONSOLE_TOKEN="${CONSOLE_TOKEN:-}"
 # The provider key the gateway holds (CLAUDE.md invariant 53); a file, never a value.
 ANTHROPIC_KEY_FILE="${ANTHROPIC_KEY_FILE:-}"
 # Notifications, exactly as ../../deploy.sh asks for them. There is deliberately
@@ -195,7 +194,6 @@ while [ $# -gt 0 ]; do
     --servers)       SERVERS="$2"; shift 2 ;;
     --agents)        AGENTS="$2"; shift 2 ;;
     --ssh-key)       SSH_KEY="$2"; shift 2 ;;
-    --console-token) CONSOLE_TOKEN="$2"; shift 2 ;;
     --anthropic-key-file) ANTHROPIC_KEY_FILE="$2"; shift 2 ;;
     --copilot-key-file) ANTHROPIC_KEY_FILE="$2"; shift 2 ;;
     --alert-to)      ALERT_TO="$2"; ALERT_ASKED=1; shift 2 ;;
@@ -488,13 +486,12 @@ else
 fi
 
 # ---- 2. sources and images --------------------------------------------------
-# Same layout as the Hetzner run: the repos side by side under /root/src,
-# because one image (the console) legitimately spans five of them. The clone of
-# `genaryx` is named `genaryx-a360` because the console's Dockerfile refers to
-# it by that path.
-# Cloned because something on the node still BUILDS from them: tokenfuse for
-# its own image, and qryx, mockryx, verdryx and engram because the console
-# image bundles those four tools inside itself (see images/console.Dockerfile).
+# Same layout as the Hetzner run: the repos side by side under /root/src.
+# Cloned only with BUILD_FROM_SOURCE=1, because something on the node then
+# BUILDS from them: tokenfuse for its own image, costcrew with --with-finops.
+# The console is pulled since stack-k8s 1.19.0 (ghcr.io/taipanbox/genaryx, built
+# and signed by genaryx's own release workflow), so neither its source nor the
+# four tools it bundles are cloned here any more.
 #
 # wardryx, idryx and heraldyx are gone from this list on purpose: their images
 # are pulled from ghcr.io now, so cloning their source on the node would be
@@ -511,16 +508,11 @@ fi
 # manifest is not in the kustomization: a deployment that clones and builds a
 # plane nobody applied is paying for it in build minutes and node disk to leave
 # it sitting there.
-# What is left here is what the CONSOLE image bundles inside itself, and
-# nothing else: qryx, mockryx, verdryx and engram are four tools the console
-# spawns rather than four pods, so they have to be in its image and its image
-# is built here.
-#
 # tokenfuse, trailryx and costcrew left this list on 2026-09-01, when the
 # manifests started pulling them from ghcr.io by pinned tag. Cloning source
 # nothing builds is fetching something nothing reads.
-OPEN_REPOS="qryx mockryx verdryx engram"
-[ "$BUILD_FROM_SOURCE" = 1 ] && OPEN_REPOS="$OPEN_REPOS tokenfuse"
+OPEN_REPOS=""
+[ "$BUILD_FROM_SOURCE" = 1 ] && OPEN_REPOS="tokenfuse"
 [ "$BUILD_FROM_SOURCE" = 1 ] && [ "$WITH_FINOPS" = 1 ] && OPEN_REPOS="$OPEN_REPOS costcrew"
 # Nothing is built here any more, and this whole step is the one that took the
 # time. Every image the manifests name is published and pinned, so the kubelet
@@ -558,55 +550,6 @@ else
       && echo "   $r ok"
   done
 
-  # The console is the one closed repo, so it is the one clone that needs a
-  # credential. It is fetched HERE, on the operator's machine, and shipped to
-  # the builder as source. The token never reaches the cluster.
-  #
-  # The obvious alternative, handing the token to the node and letting it clone,
-  # is what ../../deploy.sh does and it is worse in a way that is easy to miss:
-  # the token ends up in the node's process list, in its shell history, and in
-  # .git/config, on a machine that is often in someone else's cloud account. A
-  # token with access to every private repository an account owns should not be
-  # somewhere its owner is not.
-  #
-  # --depth 1, and the remote is rewritten before the tarball is made, so the
-  # credential is in no file that leaves this machine.
-  WITH_CONSOLE=0
-  # The console has been public and Apache-2.0 since 2026-07-27, and the root
-  # deploy.sh was taught that the same day. The cloud scripts were not, so every
-  # deployment since built the stack WITHOUT a console while still applying
-  # 20-console.yaml, leaving a pod in ImagePullBackOff and verify.sh reporting a
-  # failure nobody could explain. Measured on live clusters 2026-08-02, on both
-  # clouds: AWS was fixed first and GCP kept the fault for another hour, which
-  # is the same "one path learned, the other did not" that put this whole
-  # section here in the first place.
-  #
-  # So the clone is unconditional now. CONSOLE_TOKEN survives for the one case
-  # it is still good for: building from a private fork of your own.
-  # The token reaches git through its environment and a credential helper, and
-  # the URL stays bare: a URL is an argument of git and of ps (CLAUDE.md
-  # invariant 60). An empty token is an anonymous clone, which is what a public
-  # repository needs; git calls the helper only when the server asks for a login.
-  say "fetching the console source here, so any token stays on this machine"
-  TMP="$(mktemp -d)"
-  if CONSOLE_TOKEN="$CONSOLE_TOKEN" git -c credential.helper= \
-       -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$CONSOLE_TOKEN"; }; f' \
-       clone -q --depth 1 https://github.com/TAIPANBOX/genaryx.git \
-       "$TMP/genaryx-a360" 2>/dev/null; then
-    git -C "$TMP/genaryx-a360" remote set-url origin https://github.com/TAIPANBOX/genaryx.git
-    BUILT_FROM="$(git -C "$TMP/genaryx-a360" rev-parse --short HEAD)"
-    grep -rl 'x-access-token' "$TMP/genaryx-a360/.git" >/dev/null 2>&1 \
-      && { rm -rf "$TMP"; die "the token is still in .git after rewriting the remote; refusing to ship it"; }
-    echo "   console source at $BUILT_FROM, uploading to the builder"
-    tar -cz -C "$TMP" genaryx-a360 | su_ "$BUILDER" 'tar -xz -C /root/src'
-    rm -rf "$TMP"
-    WITH_CONSOLE=1
-    echo "   genaryx (console) staged, no credential on any node"
-  else
-    rm -rf "$TMP"
-    echo "   could not clone the console: continuing WITHOUT it, and 20-console.yaml"
-    echo "   will not be applied, so nothing waits on an image that is not coming"
-  fi
 
   # The five Go planes are NOT built here any more: they are published, pinned
   # by version in the manifests, and pulled by the kubelet from
@@ -622,16 +565,12 @@ else
   # The trade is that every node needs to reach ghcr.io. These nodes already
   # reach the internet for k3s, Longhorn and Calico, so this adds a host to
   # that list rather than a requirement.
-  say "building from source at :dev (the console build is four languages and takes the longest)"
+  say "building from source at :dev"
   su_ "$BUILDER" "sh -c \"set -e
     cd /root/src
     if [ '$BUILD_FROM_SOURCE' = '1' ]; then
       docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
       echo '   built stack/tokenfuse:dev'
-    fi
-    if [ '$WITH_CONSOLE' = '1' ]; then
-      docker build -q -f stack-k8s/images/console.Dockerfile -t stack/genaryx-console:dev . >/dev/null
-      echo '   built stack/genaryx-console:dev'
     fi
     if [ '$WITH_FINOPS' = '1' ] && [ '$BUILD_FROM_SOURCE' = '1' ]; then
       docker build -q -f costcrew/Dockerfile -t stack/costcrew:dev ./costcrew >/dev/null
@@ -681,10 +620,9 @@ else
   # Only what was actually built here goes over the private network. The
   # pulled ones are the kubelet's business and never touch this path, which
   # is the whole saving: this used to distribute every image on every
-  # install, and the console is now the only one left.
+  # install, and only what BUILD_FROM_SOURCE=1 built is left.
   IMAGES=""
   [ "$BUILD_FROM_SOURCE" = 1 ] && IMAGES="stack/tokenfuse:dev"
-  [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
   [ "$BUILD_FROM_SOURCE" = 1 ] && [ "$WITH_FINOPS" = 1 ] && IMAGES="$IMAGES stack/costcrew:dev"
   su_ "$BUILDER" "sh -c \"for img in $IMAGES; do
       docker save \\\$img | k3s ctr images import - >/dev/null 2>&1 && echo '   '\\\$img' -> builder' || echo '   '\\\$img' -> builder FAILED'

@@ -13,7 +13,7 @@
 # Nothing is unpublished any more. As of 2026-09-01 every image the manifests
 # name is on ghcr.io, pinned and multi-arch, so this script is no longer part
 # of an ordinary install: it is the escape hatch. What it still builds here is
-# tokenfuse and the console, at :dev, which the manifests do not name.
+# tokenfuse, at :dev, which the manifests do not name.
 #
 #   ./build.sh                      # build only
 #   ./build.sh root@1.2.3.4 ...     # build, then import into each node
@@ -49,13 +49,14 @@ fi
 say "money plane (one workspace, two binaries)"
 docker build -f images/tokenfuse.Dockerfile -t "stack/tokenfuse:$TAG" "$DEV/tokenfuse"
 
-say "console (four languages, because it hosts the tools it spawns)"
-docker build -f images/console.Dockerfile -t "stack/genaryx-console:$TAG" "$DEV"
+# The console is not built here since stack-k8s 1.19.0: genaryx's own release workflow builds and
+# signs ghcr.io/taipanbox/genaryx, and the manifests pull it by digest. To run an unreleased console,
+# build genaryx's root Dockerfile in its own checkout (its README, "Releases").
 
 # `${PLANES[@]+...}` rather than a bare expansion: under `set -u`, bash 3.2
 # (which is what /bin/bash still is on macOS) treats an empty array's `[@]` as
 # an unbound variable and exits. Caught here before it reached anybody.
-IMAGES=(${PLANES[@]+"${PLANES[@]}"} stack/tokenfuse stack/genaryx-console)
+IMAGES=(${PLANES[@]+"${PLANES[@]}"} stack/tokenfuse)
 
 if [ ${#NODES[@]} -eq 0 ]; then
   say "built: ${IMAGES[*]} (no nodes given, nothing imported)"

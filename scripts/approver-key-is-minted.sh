@@ -115,10 +115,13 @@ else:
     mount = re.search(r"\{ name: approver-jwks, mountPath: ([^,]+), readOnly: true \}", t)
     volume = re.search(r"- name: approver-jwks\n\s+configMap: \{ name: wardryx-approver-jwks \}", t)
     todo = "TODO(approver-jwks)" in m10
-    cpin = re.search(r"image: ghcr\.io/taipanbox/genaryx-console:v(\d+)\.(\d+)\.(\d+)@sha256:[0-9a-f]{64}",
+    # The console image moved from genaryx-console (built here) to genaryx (genaryx's own release) in stack-k8s 1.19.0.
+    # genaryx v0.1.0 is built from genaryx after cb7f779, the commit genaryx-console v1.14.0 was built from, so every
+    # genaryx release carries what genaryx-console v1.14.0 did and is read as at least that version here.
+    cpin = re.search(r"image: ghcr\.io/taipanbox/(genaryx-console|genaryx):v(\d+)\.(\d+)\.(\d+)@sha256:[0-9a-f]{64}",
                      live(read(M20) or ""))
-    console_v160 = cpin is not None and tuple(int(x) for x in cpin.groups()) >= (1, 6, 0)
-    console_pin = ("v" + ".".join(cpin.groups())) if cpin else "no digest pin"
+    console_v160 = cpin is not None and (cpin.group(1) == "genaryx" or tuple(int(x) for x in cpin.groups()[1:]) >= (1, 6, 0))
+    console_pin = (cpin.group(1) + " v" + ".".join(cpin.groups()[1:])) if cpin else "no digest pin"
     if env is None and mount is None and volume is None:
         STATE = "v1.6.0"
         if not todo:
@@ -130,7 +133,7 @@ else:
         if todo:
             bad.append(f"{M10}: wardryx reads the JWK set, but TODO(approver-jwks) still names it as pending: the TODO is stale")
         if not console_v160:
-            bad.append(f"{M10}: wardryx requires a console statement on every approval, and the console in {M20} is not genaryx-console v1.6.0 or later by digest ({console_pin}), so every approval would be refused")
+            bad.append(f"{M10}: wardryx requires a console statement on every approval, and the console in {M20} is not genaryx, nor genaryx-console v1.6.0 or later, by digest ({console_pin}), so every approval would be refused")
     else:
         STATE = "half"
         bad.append(f"{M10}: wardryx's approver wiring is half set: WARDRYX_APPROVER_JWKS, its read-only mount and the wardryx-approver-jwks volume must be present together, or absent together")

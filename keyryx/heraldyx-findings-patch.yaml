@@ -13,6 +13,11 @@
 #
 # HERALDYX_EVENTS names the file itself, never its directory: heraldyx v0.8.1 reads a named *.ndjson entry only
 # while it is a regular file, and opens every stream without following a link or waiting on a FIFO.
+#
+# The same patch gives heraldyx Keyryx custody's own stream (keyryx v0.2.0, CLAUDE.md invariant 97): custody/ on
+# the events claim, mounted read only through subPath custody, and keyryx-custody.ndjson named in HERALDYX_EVENTS.
+# heraldyx v0.10.0 reads it as source keyryx and mails key_revoked (high); key_rotated is info, below the "high"
+# floor 45-heraldyx.yaml sets. The events claim is ReadWriteMany, so this mount adds no placement.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,11 +37,15 @@ spec:
         - name: heraldyx
           env:
             - name: HERALDYX_EVENTS
-              value: "/var/lib/stack/events,/var/lib/keyryx-findings/keyryx.ndjson"
+              value: "/var/lib/stack/events,/var/lib/keyryx-findings/keyryx.ndjson,/var/lib/stack/keyryx-custody/keyryx-custody.ndjson"
           volumeMounts:
             - name: keyryx-findings
               mountPath: /var/lib/keyryx-findings
               subPath: alerts
+              readOnly: true
+            - name: events
+              mountPath: /var/lib/stack/keyryx-custody
+              subPath: custody
               readOnly: true
       volumes:
         - name: keyryx-findings

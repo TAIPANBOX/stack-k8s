@@ -19,7 +19,9 @@
 #      own non-root uid, and the two uids differ;
 #   2. each role mounts only its own state claim (keyryx-state for custody,
 #      keyryx-witness-state for the witness) and only its own root key Secret;
-#   3. the witness mounts the events claim stack-events with readOnly: true;
+#   3. the witness mounts the events claim stack-events with readOnly: true, and custody mounts it
+#      only as subPath custody, its own stream directory beside the bus (invariant 97), or read only
+#      in its bus-ready init, never streams/, the bus the witness reads;
 #   4. the witness writes its alerts outside the events directory;
 #   5. both Deployments set their own data directory and root key file.
 #
@@ -90,8 +92,29 @@ if "claimName: keyryx-witness-state" in custody or "claimName: keyryx-state" in 
     bad.append("a role mounts the other role's state claim")
 if "secretName: keyryx-witness-root" in custody or "secretName: keyryx-root" in witness:
     bad.append("a role mounts the other role's root key Secret")
+# Custody mounts the events claim only as subPath custody, its own stream directory beside the bus
+# (CLAUDE.md invariant 97), or read only at the root in its bus-ready init: never streams/, the bus the
+# witness reads, so custody cannot write what the witness reads.
 if "claimName: stack-events" in custody:
-    bad.append("custody mounts the event streams")
+    sys.path.insert(0, "scripts/lib")
+    import miniyaml
+    cdoc = next(iter(miniyaml.load_all(custody)), {}) or {}
+    cspec = ((cdoc.get("spec") or {}).get("template") or {}).get("spec") or {}
+    evols = {v.get("name") for v in cspec.get("volumes") or []
+             if ((v.get("persistentVolumeClaim") or {}).get("claimName")) == "stack-events"}
+    for ckind in ("initContainers", "containers"):
+        for c in cspec.get(ckind) or []:
+            for m in c.get("volumeMounts") or []:
+                if m.get("name") not in evols:
+                    continue
+                sub = m.get("subPath")
+                if sub == "custody":
+                    continue
+                if sub is None and m.get("readOnly") and ckind == "initContainers" and c.get("name") == "bus-ready":
+                    continue
+                bad.append(f"custody's {c.get('name')} mounts the event streams"
+                           f"{' (subPath ' + str(sub) + ')' if sub else ''}; custody may mount only subPath custody, its own "
+                           "stream directory, never the bus the witness reads")
 rec = re.search(r"-\s*name:\s*trailryx-records\s*\n\s*mountPath:[^\n]*\n(\s*readOnly:\s*true)?", witness)
 if rec is None or rec.group(1) is None:
     bad.append("the witness mounts the trailryx record without readOnly: true")

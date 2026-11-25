@@ -574,7 +574,7 @@ spec:
         # the budget that caused it. No `|| true`: a routine that cannot measure must not look like a
         # fleet with nothing to report, so a failure stops the container and the pod shows it.
         - name: verdryx-slo
-          image: ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca
+          image: ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:

@@ -64,6 +64,9 @@ WRITERS = [
     # The Keyryx witness's findings (CLAUDE.md invariant 75), on its own state claim and not the bus; the
     # console and heraldyx read it in group 10001.
     ("keyryx/manifests/59-keyryx.yaml", "Deployment", "keyryx-witness", "/var/lib/keyryx-witness/alerts/keyryx.ndjson", 20100, 10001, "keyryx-witness-state"),
+    # Keyryx custody's own stream (keyryx v0.2.0, CLAUDE.md invariant 97), in custody/ beside the bus (subPath
+    # custody of the events claim): keyryx writes only into a file its own uid owns, and heraldyx reads it in 10001.
+    ("keyryx/manifests/59-keyryx.yaml", "Deployment", "keyryx-custody", "/var/lib/stack/events/keyryx-custody.ndjson", 20101, 10001, "events"),
 ]
 
 # Pods that mount the stack-events claim WITHOUT group 10001, each with the reason it does not need it.
@@ -242,7 +245,7 @@ for key in EXCEPTIONS:
     if key not in found_keys:
         bad.append(f"{key[0]}: {key[1]} {key[2]}: the EXCEPTIONS entry matches no pod that mounts stack-events; remove it")
 for path, kind, name, target, uid, gid, vol in WRITERS:
-    if vol == "events" and (f"manifests/{path}", kind, name) not in found_keys:
+    if vol == "events" and ((path if os.path.exists(path) else f"manifests/{path}"), kind, name) not in found_keys:
         bad.append(f"{path}: {kind} {name}: writes stack-events but the discovery does not find it mounting the claim")
 
 if bad:

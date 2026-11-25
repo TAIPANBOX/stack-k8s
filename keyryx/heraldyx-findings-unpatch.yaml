@@ -1,5 +1,5 @@
 # Reverses keyryx/heraldyx-findings-patch.yaml (CLAUDE.md invariant 75): heraldyx reads the bus alone again, the
-# witness-state mount and the pod affinity to the witness go. The value of HERALDYX_EVENTS is the one
+# witness-state mount, custody's stream (invariant 97) and the pod affinity to the witness go. The value of HERALDYX_EVENTS is the one
 # manifests/45-heraldyx.yaml declares.
 apiVersion: apps/v1
 kind: Deployment
@@ -19,6 +19,8 @@ spec:
           # Keyed by mountPath, not by name: a delete by name is refused and reverts nothing.
           volumeMounts:
             - mountPath: /var/lib/keyryx-findings
+              $patch: delete
+            - mountPath: /var/lib/stack/keyryx-custody
               $patch: delete
       volumes:
         - name: keyryx-findings

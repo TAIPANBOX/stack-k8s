@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
 # CLAUDE.md invariant 79. The console proves a candidate policy by running `wardryx replay` and a candidate
 # budget by running `tokenfuse backtest` (genaryx invariants 40 and 41), and a proof is only as good as the
-# engine behind it. images/console.Dockerfile copies both binaries from the images the stack itself runs, and
-# the references it copies from are the manifests' own, digest for digest: the engine that replays a decision
-# is the engine that took it, and a stack that moves one without the other has proofs about a different
-# engine than the one it enforces with.
+# engine behind it. Since stack-k8s 1.19.0 the console image is genaryx's own release
+# (ghcr.io/taipanbox/genaryx), built and signed by genaryx's release workflow, which copies both engines out
+# of the TAIPANBOX images by digest and labels each (`dev.taipanbox.engine.<name>`). This repository no longer
+# builds the console, so what it can hold is what the pinned image carries, said where a reader sees it:
+#
+#   images/console-engines.json records the image the manifests pin and the two engines its labels name. An
+#   engine that is not the reference the manifests run for that plane is a LAG, and a lag is allowed only
+#   with its reason written beside it, so it is reported, never hidden: a proof about another engine than
+#   the one the stack enforces with is something the operator must be able to see.
 #
 # WHAT THIS CHECKS
 #
-#   1. console.Dockerfile has a `FROM ghcr.io/taipanbox/<name>:<tag>@sha256:<hex> AS <name>-engine` stage for
-#      wardryx and for tokenfuse, and copies the binary out of each into /usr/local/bin.
-#   2. Each of those references is the one manifests/ names for that image. The manifests are read for every
-#      `image: ghcr.io/taipanbox/<name>:<tag>@sha256:<hex>`; they must name exactly one reference per image,
-#      and the Dockerfile's must be it.
-#   3. The `dev.taipanbox.engine.<name>` label says the same reference, so `docker inspect` answers which engine
-#      replayed a proof.
-#   4. Both jobs of console-image.yml run both engines in their smoke test: a binary built for another
-#      architecture exits with "exec format error", not with a message.
+#   1. Every console image reference in manifests/ and security-tests.sh (genaryx or genaryx-console) is the
+#      one images/console-engines.json names, and they are all the same.
+#   2. For wardryx and tokenfuse, the manifests name exactly one reference each, and the recorded engine is
+#      that reference, or the engine is in `lag` with a reason. A `lag` entry for an engine that matches is
+#      stale and fails, and so does a lag with no reason.
+#   3. Live: the image's own labels, read from the registry for every platform it publishes, are the ones
+#      the file records. Without docker buildx or the registry, this says it measured NOTHING; it does not
+#      pass. GATE_OFFLINE=1 skips only this step, and says so in its last line.
 #
 # A subject that is absent is "measured NOTHING", never a pass.
 set -uo pipefail
@@ -25,74 +29,115 @@ cd "$(dirname "$0")/.."
 
 python3 - <<'PY'
 import glob
+import json
+import os
 import re
+import subprocess
 import sys
 
 ENGINES = ("wardryx", "tokenfuse")
+FILE = "images/console-engines.json"
 REF = r"ghcr\.io/taipanbox/(?P<name>[a-z0-9-]+):(?P<tag>v[0-9][0-9A-Za-z.\-]*)@sha256:(?P<digest>[0-9a-f]{64})"
+CONSOLE = re.compile(r"image:\s*(ghcr\.io/taipanbox/genaryx(?:-console)?:\S+)")
 bad = []
 
-try:
-    dockerfile = open("images/console.Dockerfile").read()
-except OSError:
-    print("FAIL: images/console.Dockerfile is not there, so this measured NOTHING")
+if not os.path.exists(FILE):
+    print(f"FAIL: {FILE} is not there, so this measured NOTHING")
     sys.exit(1)
+try:
+    rec = json.load(open(FILE))
+except ValueError as e:
+    print(f"FAIL: {FILE} is not JSON ({e}), so this measured NOTHING")
+    sys.exit(1)
+image = rec.get("image") or ""
+engines = rec.get("engines") or {}
+lag = rec.get("lag") or {}
+if not re.fullmatch(REF, image):
+    bad.append(f"{FILE}: image {image!r} is not a ghcr.io/taipanbox reference by tag and digest")
 
-# What the manifests name, per image.
-named = {}
-files = sorted(glob.glob("manifests/*.yaml"))
-for path in files:
-    for line in open(path).read().split("\n"):
-        m = re.match(r"^\s*(?:-\s*)?image:\s*" + REF + r"\s*$", line)
-        if m and m.group("name") in ENGINES:
-            named.setdefault(m.group("name"), set()).add(f"{m.group('tag')}@sha256:{m.group('digest')}")
-
-stages = {}
-for m in re.finditer(r"^FROM\s+" + REF + r"\s+AS\s+(?P<alias>\S+)\s*$", dockerfile, re.M):
-    stages[m.group("name")] = (f"{m.group('tag')}@sha256:{m.group('digest')}", m.group("alias"))
-
-checked = 0
-for name in ENGINES:
-    if name not in stages:
-        bad.append(f"images/console.Dockerfile has no `FROM ghcr.io/taipanbox/{name}:<tag>@sha256:<digest> AS {name}-engine` stage, "
-                   f"so the console has no {name} engine for its proofs")
+# 1. every console reference is the recorded one
+consoles = []
+for path in sorted(glob.glob("manifests/*.yaml")) + ["security-tests.sh"]:
+    if not os.path.exists(path):
         continue
-    ref, alias = stages[name]
-    checked += 1
-    if alias != f"{name}-engine":
-        bad.append(f"the {name} stage is named {alias!r}, and the copy below looks for {name}-engine")
-    if not re.search(r"^COPY --from=" + re.escape(alias) + r"\s+\S+\s+/usr/local/bin/" + name + r"\s*$", dockerfile, re.M):
-        bad.append(f"images/console.Dockerfile does not copy the binary out of the {alias} stage to /usr/local/bin/{name}")
-    refs = named.get(name, set())
-    if not refs:
-        bad.append(f"manifests/ names no {name} image by tag and digest, so the console's engine has nothing to equal")
-    elif len(refs) > 1:
-        bad.append(f"manifests/ names {len(refs)} different {name} references ({', '.join(sorted(refs))}): the stack runs one engine, and the console's must be it")
-    elif ref not in refs:
-        bad.append(f"the console's {name} engine is {ref}, which differs from the stack's {next(iter(refs))}")
-    label = re.search(r'^LABEL dev\.taipanbox\.engine\.' + name + r'="([^"]*)"\s*$', dockerfile, re.M)
-    if label is None:
-        bad.append(f"images/console.Dockerfile has no dev.taipanbox.engine.{name} label")
-    elif label.group(1) != ref:
-        bad.append(f"the dev.taipanbox.engine.{name} label says {label.group(1)}, and the stage copies {ref}")
-
-try:
-    workflow = open(".github/workflows/console-image.yml").read()
-except OSError:
-    print("FAIL: .github/workflows/console-image.yml is not there, so this measured NOTHING")
+    for line in open(path).read().split("\n"):
+        if line.lstrip().startswith("#"):
+            continue
+        m = CONSOLE.search(line)
+        if m:
+            consoles.append((path, m.group(1)))
+if not consoles:
+    print("FAIL: no console image is named in manifests/ or security-tests.sh, so this measured NOTHING")
     sys.exit(1)
-loops = re.findall(r"^\s*for t in ([^;]+); do\s*$", workflow, re.M)
-if len(loops) < 2:
-    bad.append(f"console-image.yml has {len(loops)} smoke loop(s), and both the build and the pull-request job run one")
-for loop in loops:
-    if not re.search(r"(^|\s)wardryx(\s|$)", loop):
-        bad.append(f"a smoke loop of console-image.yml does not run wardryx: {loop.strip()}")
-    if '"tokenfuse constants"' not in loop:
-        bad.append(f"a smoke loop of console-image.yml does not run tokenfuse (as `tokenfuse constants`, since with no argument it starts the gateway): {loop.strip()}")
+for path, ref in consoles:
+    if ref != image:
+        bad.append(f"{path}: the console image is {ref}, but {FILE} records {image}")
 
-if checked == 0:
-    print("FAIL: no engine stage found in images/console.Dockerfile, so this measured NOTHING")
-    sys.exit(1)
+# 2. the recorded engines against the manifests
+pins = {}
+for path in sorted(glob.glob("manifests/*.yaml")):
+    text = "\n".join(l for l in open(path).read().split("\n") if not l.lstrip().startswith("#"))
+    for m in re.finditer(r"image:\s*" + REF, text):
+        pins.setdefault(m.group("name"), set()).add(f"{m.group('tag')}@sha256:{m.group('digest')}")
+lags = []
+for name in ENGINES:
+    want = pins.get(name, set())
+    if len(want) != 1:
+        bad.append(f"manifests/ name {len(want)} references for ghcr.io/taipanbox/{name}, so there is no one engine to compare")
+        continue
+    want = next(iter(want))
+    got = engines.get(name)
+    if not got:
+        bad.append(f"{FILE} records no {name} engine")
+        continue
+    if not re.fullmatch(r"v[0-9][0-9A-Za-z.\-]*@sha256:[0-9a-f]{64}", got):
+        bad.append(f"{FILE}: the {name} engine {got!r} is not a tag and digest")
+        continue
+    if got == want:
+        if name in lag:
+            bad.append(f"{FILE}: a lag is recorded for {name}, but the console's {name} is the stack's ({want}): the entry is stale")
+        continue
+    reason = (lag.get(name) or "").strip()
+    if not reason:
+        bad.append(f"the console's {name} is {got}, the stack runs {want}, and {FILE} gives no reason under lag: "
+                   "a proof about another engine than the one that enforces is not to be hidden")
+        continue
+    lags.append(f"{name} {got.split('@')[0]} in the console, {want.split('@')[0]} in the stack")
+for name in lag:
+    if name not in ENGINES:
+        bad.append(f"{FILE}: lag names {name}, which is no engine this gate knows")
+
+# 3. live: the image's own labels
+live = "skipped (GATE_OFFLINE=1)"
+if os.environ.get("GATE_OFFLINE") != "1" and re.fullmatch(REF, image):
+    try:
+        out = subprocess.run(["docker", "buildx", "imagetools", "inspect", image, "--format", "{{json .Image}}"],
+                             capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        out = None
+        err = str(e)
+    if out is None or out.returncode != 0:
+        print(f"FAIL: could not read the labels of {image} ({(out.stderr.strip() if out else err)[:200]}), so the "
+              "image's engines are measured NOTHING. Set GATE_OFFLINE=1 to check the file alone, and say so.")
+        sys.exit(1)
+    try:
+        data = json.loads(out.stdout)
+    except ValueError:
+        print(f"FAIL: the registry's answer for {image} is not JSON, so the image's engines are measured NOTHING")
+        sys.exit(1)
+    if "config" in data:  # a single-platform image answers with one config
+        data = {"default": data}
+    if not data:
+        print(f"FAIL: {image} has no platform image, so its engines are measured NOTHING")
+        sys.exit(1)
+    for plat, img in sorted(data.items()):
+        labels = ((img or {}).get("config") or {}).get("Labels") or {}
+        for name in ENGINES:
+            have = labels.get(f"dev.taipanbox.engine.{name}")
+            if have != engines.get(name):
+                bad.append(f"{image} ({plat}): its label dev.taipanbox.engine.{name} is {have!r}, but {FILE} records "
+                           f"{engines.get(name)!r}")
+    live = f"read from the registry for {len(data)} platform(s)"
 
 if bad:
     for b in bad:
@@ -100,6 +145,7 @@ if bad:
     print(f"{len(bad)} problem(s). See CLAUDE.md invariant 79.")
     sys.exit(1)
 
-print(f"OK: the console's {' and '.join(ENGINES)} engines are the stack's, digest for digest "
-      f"({', '.join(stages[n][0].split('@')[0] for n in ENGINES)}), labelled, copied, and run by both smoke tests.")
+print(f"OK: {len(consoles)} console reference(s), all {image.split('@')[0]}; its engines are the stack's"
+      + (f", with {len(lags)} recorded lag(s): {'; '.join(lags)}" if lags else "")
+      + f"; the labels {live}.")
 PY

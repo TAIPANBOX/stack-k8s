@@ -14,7 +14,7 @@
 # The first version named ONE identity for every TAIPANBOX image: the release workflow of any
 # TAIPANBOX repository. A signature made by one repository's workflow then admitted another
 # repository's image name. So there is one policy per repository, and each names only that
-# repository's workflow (or stack-k8s's console-image.yml or tunnel-images.yml).
+# repository's workflow (or stack-k8s's tunnel-images.yml).
 #
 # WHAT THIS CHECKS
 #
@@ -98,7 +98,7 @@ BINDINGS = {
     "mockryx": ("mockryx", "release.yml"),
     "keyryx": ("keyryx", "release.yml"),
     "agent-conform": ("agent-stack-go", "release.yml"),
-    "genaryx-console": ("stack-k8s", "console-image.yml"),
+    "genaryx": ("genaryx", "release.yml"),
     "stack-caddy": ("stack-k8s", "tunnel-images.yml"),
     "stack-wg": ("stack-k8s", "tunnel-images.yml"),
 }

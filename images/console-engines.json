@@ -1,0 +1,11 @@
+{
+  "comment": "CLAUDE.md invariant 79. The engines inside the console image the manifests pin, as its labels say. Read with: docker buildx imagetools inspect <image> --format '{{json .Image}}' (linux/amd64 and linux/arm64), 2026-11-25. scripts/console-engines-are-the-stacks.sh holds this file to the manifests and, live, to the image's own labels.",
+  "image": "ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee",
+  "engines": {
+    "wardryx": "v2.8.0@sha256:f9b86a82114698f64a3251816ee0be6f80b4a6b2c239082b7035f1b4228f06aa",
+    "tokenfuse": "v1.25.0@sha256:3a81dbcd116557eff54aae29e7d68104af8fc788265d58e71adf3f96fea03317"
+  },
+  "lag": {
+    "tokenfuse": "The console's budget backtest runs tokenfuse v1.25.0 while the gateway runs v1.27.0. genaryx v0.1.0 carries the engine it was built with, as genaryx-console v1.14.0, pinned before it, did since stack-k8s 1.18.0 moved the gateway to v1.26.0. A genaryx release built with tokenfuse v1.27.0 closes it."
+  }
+}

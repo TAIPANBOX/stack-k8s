@@ -95,8 +95,8 @@ else:
     if others != 1:
         bad.append(f"verdryx-slo: uid {uid} is named {others} times in manifests/, so the file is not the routine's alone")
 
-img = re.search(r"image: (ghcr\.io/taipanbox/genaryx-console:\S+)", side)
-console_img = re.search(r"image: (ghcr\.io/taipanbox/genaryx-console:\S+)", code(console))
+img = re.search(r"image: (ghcr\.io/taipanbox/genaryx(?:-console)?:\S+)", side)
+console_img = re.search(r"image: (ghcr\.io/taipanbox/genaryx(?:-console)?:\S+)", code(console))
 if not img or not console_img:
     bad.append("verdryx-slo: the console image is not pinned here or on the console, so nothing says they match")
 elif img.group(1) != console_img.group(1):
