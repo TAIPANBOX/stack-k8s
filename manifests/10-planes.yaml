@@ -66,7 +66,7 @@ spec:
           # 2026-09-02 on v0.4.3, the published
           # image carries /usr/local/bin/tokenfuse-cloud exactly as the local
           # build did.
-          image: ghcr.io/taipanbox/tokenfuse-control-plane:v1.26.0@sha256:a0f292a005863dadf9c96fa800f2dfac6d23eb39e113839e37a3e194e754ec32
+          image: ghcr.io/taipanbox/tokenfuse-control-plane:v1.27.0@sha256:d8ad6e9a779a57b769f65691330badbb14157f8fc883277dc4ffd177d23118b2
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse-cloud"]
           env:
@@ -215,7 +215,7 @@ spec:
           # called `tokenfuse`. Measured 2026-09-01 on v0.4.1 and 2026-09-02 on
           # v0.4.3 by listing /usr/local/bin
           # in the published image, which is the only way to know.
-          image: ghcr.io/taipanbox/tokenfuse:v1.26.0@sha256:7080f9216a2d461ce20f8bd0fabade722dc5eb76b356efd6e22f4eb11aed8dd4
+          image: ghcr.io/taipanbox/tokenfuse:v1.27.0@sha256:9ada89b47a163a5e4fc1a7534302f910abc932dd63cc4fa1499fe3f9df0057a0
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/tokenfuse"]
           env:
@@ -511,7 +511,7 @@ spec:
           # one thing worth checking before swapping a distroless-looking image
           # in underneath it: measured 2026-09-01 on v0.4.1 and 2026-09-02 on
           # v0.4.3, the published image has one (/usr/bin/dash).
-          image: ghcr.io/taipanbox/tokenfuse:v1.26.0@sha256:7080f9216a2d461ce20f8bd0fabade722dc5eb76b356efd6e22f4eb11aed8dd4
+          image: ghcr.io/taipanbox/tokenfuse:v1.27.0@sha256:9ada89b47a163a5e4fc1a7534302f910abc932dd63cc4fa1499fe3f9df0057a0
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
