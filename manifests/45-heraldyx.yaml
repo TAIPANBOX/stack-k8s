@@ -185,7 +185,7 @@ spec:
           resources:
             # It reads a file every two seconds and occasionally opens a socket.
             requests: { cpu: 10m, memory: 32Mi }
-            limits: { memory: 128Mi }
+            limits: { memory: 1Gi }
           # No probes, deliberately, rather than a probe that proves nothing.
           # heraldyx serves no HTTP: there is no port to ask. The honest
           # readiness signal would be "did it read the log recently", which
