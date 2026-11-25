@@ -489,6 +489,9 @@ jobs:
       - name: the Keyryx images and the record seal's trailryx-node are the release pins (invariant 72)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/keyryx-release-pins.sh
 
+      - name: every reader of the whole bus has at least 1Gi of memory (invariant 96)
+        run: ./scripts/bus-readers-have-room.sh
+
       - name: the record seal is pinned to custody's one ES384 key, kept on a re-run (invariant 73)
         run: PATH="$PATH:$(go env GOPATH)/bin" ./scripts/keyryx-kid-is-pinned.sh
 

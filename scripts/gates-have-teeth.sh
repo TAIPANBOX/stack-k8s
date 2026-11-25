@@ -2085,7 +2085,7 @@ run_case "chain-verifier: the verifier writes a stream named for another writer"
 	"$TEETH_EDIT_88" \
 	"inside the bus (its name is the source"
 
-TEETH_EDIT_89="$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events, subPath: streams \x7d\n                - \x7b name: events, mountPath: /var/lib/stack/conform, subPath: conform \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events, subPath: streams \x7d\n                - \x7b name: events, mountPath: /var/lib/stack/conform, subPath: conform \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              emptyDir: \x7b\x7d\n")')"
+TEETH_EDIT_89="$(py 'edit("manifests/40-routines-and-secrets.yaml", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events, subPath: streams \x7d\n                - \x7b name: events, mountPath: /var/lib/stack/conform, subPath: conform \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 1Gi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n", "                - \"/var/lib/stack/events\"\n              volumeMounts:\n                - \x7b name: events, mountPath: /var/lib/stack/events, subPath: streams \x7d\n                - \x7b name: events, mountPath: /var/lib/stack/conform, subPath: conform \x7d\n              securityContext:\n                allowPrivilegeEscalation: false\n                readOnlyRootFilesystem: true\n                capabilities: \x7b drop: [\"ALL\"] \x7d\n              resources:\n                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 1Gi \x7d\n          volumes:\n            - name: events\n              emptyDir: \x7b\x7d\n")')"
 run_case "chain-verifier: the verifier remembers in an emptyDir" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
 	"$TEETH_EDIT_89" \
@@ -2093,7 +2093,7 @@ run_case "chain-verifier: the verifier remembers in an emptyDir" fail \
 
 run_case "chain-verifier: the verifier is given a claim of its own" fail \
 	'./scripts/chain-verifier-watches-the-bus.sh' \
-	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n", "                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 256Mi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n            - name: conform-state\n              persistentVolumeClaim: \x7b claimName: agent-conform-state \x7d\n")')" \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 1Gi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n", "                requests: \x7b cpu: 20m, memory: 32Mi \x7d\n                limits: \x7b memory: 1Gi \x7d\n          volumes:\n            - name: events\n              persistentVolumeClaim: \x7b claimName: stack-events \x7d\n            - name: conform-state\n              persistentVolumeClaim: \x7b claimName: agent-conform-state \x7d\n")')" \
 	"a billed disk"
 
 run_case "chain-verifier: a failed pass is retried into silence" fail \
@@ -6073,6 +6073,36 @@ run_case "piped-tree: the workflow signs a tag that is not on main" fail \
 run_case "piped-tree: a comment reworded in the bootstrap (must pass)" pass \
 	'./scripts/piped-tree-is-verified.sh' \
 	"$(py 'edit("deploy.sh", "# A piped deploy.sh is not the deploy:", "# A piped deploy.sh is not itself the deploy:")')"
+
+# invariant 96: every reader of the whole bus has at least 1Gi of memory.
+run_case "bus-readers: the witness goes back to 512Mi" fail \
+	'./scripts/bus-readers-have-room.sh' \
+	"$(py 'import re
+p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read()
+i = s.index("- name: keyryx-witness\n", s.index("containers:"))
+k = s.index("limits: { memory: 1Gi }", i)
+open(p, "w").write(s[:k] + "limits: { memory: 512Mi }" + s[k + len("limits: { memory: 1Gi }"):])')" \
+	"keyryx-witness is limited to 512Mi"
+
+run_case "bus-readers: the chain verifier goes back to 256Mi" fail \
+	'./scripts/bus-readers-have-room.sh' \
+	"$(py 's = open("manifests/40-routines-and-secrets.yaml").read()
+i = s.index("- name: agent-conform\n")
+k = s.index("limits: { memory: 1Gi }", i)
+open("manifests/40-routines-and-secrets.yaml", "w").write(s[:k] + "limits: { memory: 256Mi }" + s[k + len("limits: { memory: 1Gi }"):])')" \
+	"agent-conform is limited to 256Mi"
+
+run_case "bus-readers: heraldyx is renamed (measured nothing)" fail \
+	'./scripts/bus-readers-have-room.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "        - name: heraldyx\n", "        - name: heraldyx-x\n")')" \
+	"measured NOTHING"
+
+run_case "bus-readers: the witness is given 2Gi (must pass)" pass \
+	'./scripts/bus-readers-have-room.sh' \
+	"$(py 's = open("keyryx/manifests/59-keyryx.yaml").read()
+i = s.index("- name: keyryx-witness\n", s.index("containers:"))
+k = s.index("limits: { memory: 1Gi }", i)
+open("keyryx/manifests/59-keyryx.yaml", "w").write(s[:k] + "limits: { memory: 2Gi }" + s[k + len("limits: { memory: 1Gi }"):])')"
 
 # listing did not take.
 if [ "${TEETH_LIST:-}" = 1 ]; then
