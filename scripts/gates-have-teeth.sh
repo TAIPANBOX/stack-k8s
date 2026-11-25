@@ -358,7 +358,7 @@ else:
 # with nothing noticing. Same fault, same gate, the other file it now reads.
 run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
 	'./scripts/pinned-images.sh' \
-	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee", "image: ghcr.io/taipanbox/genaryx:latest")')" \
 	"moves: a pod can come back different"
 
 # The default apply set must not publish anything to the world, and must not
@@ -1513,7 +1513,7 @@ run_case "slo-signal-is-wired: the sidecar shares a uid" fail \
 	"so the file is not the routine"
 run_case "slo-signal-is-wired: the sidecar runs an older console than the console" fail \
 	'./scripts/slo-signal-is-wired.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:", "image: ghcr.io/taipanbox/genaryx-console:x")')" \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx:", "image: ghcr.io/taipanbox/genaryx:x")')" \
 	"and the console runs"
 run_case "slo-signal-is-wired: a failed measurement is swallowed" fail \
 	'./scripts/slo-signal-is-wired.sh' \
@@ -2181,7 +2181,7 @@ run_case "bus-names: no stream path left to judge" fail \
 	'./scripts/bus-names-match-the-source-rule.sh' \
 	"$(py 'import pathlib
 n = 0
-for path in list(pathlib.Path("manifests").glob("*.yaml")) + list(pathlib.Path("typed").glob("*.sh")):
+for path in list(pathlib.Path("manifests").glob("*.yaml")) + list(pathlib.Path("typed").glob("*.sh")) + list(pathlib.Path("keyryx").rglob("*.yaml")):
     s = path.read_text()
     if "/var/lib/stack/events/" in s:
         path.write_text(s.replace("/var/lib/stack/events/", "/var/lib/stack/evnts/"))
@@ -3824,7 +3824,7 @@ run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)"
 # edits one tracked file the gate reads; the gate's own baseline must be green first.
 run_case "verified-images: a TAIPANBOX image carries a tag only" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee", "image: ghcr.io/taipanbox/genaryx:v0.1.0")')" \
 	"image not pinned by digest"
 run_case "verified-images: an upstream image nobody allowed" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -4261,7 +4261,7 @@ run_case "approver: wardryx reads the JWK set from another file" fail \
 	"but the JWK set is mounted at"
 run_case "approver: the console is left on v1.1.48 while wardryx reads the JWK set" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca", "genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
+	"$(py 'edit("manifests/20-console.yaml", "ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee", "ghcr.io/taipanbox/genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
 	"every approval would be refused"
 run_case "approver: a TODO is left in place after the wiring" fail \
 	'./scripts/approver-key-is-minted.sh' \
