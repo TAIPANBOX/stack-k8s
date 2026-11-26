@@ -2,9 +2,11 @@
 # Measured run of keyryx v0.2.0 custody's own stream on k3s (no cloud, no spend), and of the console image
 # genaryx v0.1.0 under this stack's security context. CLAUDE.md invariant 97, stack-k8s 1.19.0.
 #
-# Runs as root inside a throwaway VM (forge-lab clone of an Ubuntu image on the build machine): installs the
-# k3s release this repository pins, from its tag, checked against the sha256 lib/verified-fetch.sh pins; then
-# applies, unchanged, manifests/11-bus.yaml and keyryx/manifests/59-keyryx.yaml into a namespace that enforces
+# Runs as root inside a throwaway VM (an ephemeral Incus clone of an Ubuntu 24.04 image on the build machine,
+# 2 vCPU, 8 GiB): installs the k3s release and the Longhorn release this repository pins, each checked against
+# the sha256 lib/verified-fetch.sh pins, and the events claim on `stack-rwx` (Longhorn RWX, as install.sh writes
+# it, one replica on one node): the bus's separation rests on Longhorn RWX applying no fsGroup, which k3s's own
+# local-path does (evidence/bus-per-producer-longhorn). Then it applies, unchanged, manifests/11-bus.yaml and keyryx/manifests/59-keyryx.yaml into a namespace that enforces
 # Pod Security `restricted`, with the minting keyryx/up.sh does, and probes:
 #    1. the bus owner makes custody/ 20000:20101 0771 beside streams/, twice (the second run is the real test);
 #    2. custody's init makes keyryx-custody.ndjson as 20101 in group 10001, 0640, and custody starts on v0.2.0
@@ -36,6 +38,14 @@ step() { printf '\n== %s\n' "$*"; }
 ok() { printf 'OK    %s\n' "$*"; }
 fail() { printf 'FAIL  %s\n' "$*"; FAILS=$((FAILS + 1)); }
 k() { kubectl -n "$NS" "$@"; }
+wait_done() { # pod [seconds]: until the pod has Succeeded or Failed
+  local i
+  for i in $(seq "${2:-180}"); do
+    case "$(k get pod "$1" -o jsonpath='{.status.phase}' 2>/dev/null)" in Succeeded|Failed) return 0 ;; esac
+    sleep 1
+  done
+  return 1
+}
 img() { sed -nE "s#^ +image: (ghcr\.io/taipanbox/$1:v[^ ]+@sha256:[0-9a-f]{64})\$#\1#p" "$2" | sed -n 1p; }
 
 step "k3s $K3S_VERSION, from its tag, checked against the pinned sha256"
@@ -50,6 +60,37 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 for _ in $(seq 60); do kubectl get nodes 2>/dev/null | grep -q ' Ready' && break; sleep 2; done
 kubectl get nodes -o wide
 
+step "Longhorn v1.7.2, checked against the pinned sha256, and stack-rwx as install.sh writes it (one replica)"
+if ! kubectl get csidriver driver.longhorn.io >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get install -y -qq open-iscsi nfs-common >/dev/null 2>&1; systemctl enable --now iscsid >/dev/null 2>&1
+  . "$ROOT/lib/verified-fetch.sh"; vf_init || exit 1
+  lh="$(vf_file LONGHORN_SHA256 "Longhorn" v1.7.2 https://raw.githubusercontent.com/longhorn/longhorn/v1.7.2/deploy/longhorn.yaml)" \
+    || { echo "longhorn.yaml did not verify"; exit 1; }
+  kubectl apply -f "$lh" >/dev/null
+fi
+for _ in $(seq 120); do
+  [ "$(kubectl -n longhorn-system get ds longhorn-csi-plugin -o jsonpath='{.status.numberReady}' 2>/dev/null)" = 1 ] && break; sleep 5
+done
+kubectl -n longhorn-system get ds longhorn-csi-plugin
+kubectl apply -f - <<'YAML' >/dev/null
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: stack-rwx
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: "1"
+  staleReplicaTimeout: "30"
+  fsType: "ext4"
+YAML
+kubectl get csidriver driver.longhorn.io -o jsonpath='driver.longhorn.io fsGroupPolicy={.spec.fsGroupPolicy}{"\n"}'
+# the Keyryx state claims stay on k3s's default class, local-path, which is ReadWriteOnce like Longhorn's
+kubectl annotate sc longhorn storageclass.kubernetes.io/is-default-class=false --overwrite >/dev/null 2>&1
+
 step "namespace $NS enforcing Pod Security restricted, and the claims 59-keyryx.yaml does not make"
 kubectl apply -f - <<YAML >/dev/null
 apiVersion: v1
@@ -60,16 +101,24 @@ metadata:
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/enforce-version: latest
 YAML
-for c in stack-events trailryx-records; do
-  k apply -f - <<YAML >/dev/null
+k apply -f - <<YAML >/dev/null
 apiVersion: v1
 kind: PersistentVolumeClaim
-metadata: { name: $c, namespace: $NS }
+metadata: { name: stack-events, namespace: $NS }
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: stack-rwx
+  resources: { requests: { storage: 1Gi } }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: trailryx-records, namespace: $NS }
 spec:
   accessModes: [ReadWriteOnce]
   resources: { requests: { storage: 1Gi } }
 YAML
-done
+for _ in $(seq 60); do [ "$(k get pvc stack-events -o jsonpath='{.status.phase}')" = Bound ] && break; sleep 3; done
+k get pvc
 kubectl get ns "$NS" --show-labels
 
 # A pod that binds the local-path claims now, so the owner Job and every later pod share one node directory.
@@ -93,8 +142,7 @@ spec:
     - name: events
       persistentVolumeClaim: { claimName: stack-events, readOnly: true }
 YAML
-  k wait --for=jsonpath='{.status.phase}'=Succeeded "pod/$1" --timeout=180s >/dev/null 2>&1 \
-    || k wait --for=jsonpath='{.status.phase}'=Failed "pod/$1" --timeout=5s >/dev/null 2>&1
+  wait_done "$1"
   k logs "$1"
   k delete pod "$1" --wait=false >/dev/null 2>&1
 }
@@ -112,10 +160,11 @@ run_owner() {
 step "1. the bus owner, twice"
 run_owner "first run"
 run_owner "second run"
-out="$(probe_root probe-owner 'stat -c "%n %u:%g:%a" /bus/streams /bus/custody /bus/focus/gateway; ls -lan /bus/custody')"
+out="$(probe_root probe-owner 'stat -c "%n %u:%g:%a" /bus/streams /bus/custody /bus/focus/gateway; ls /bus/custody >/dev/null 2>&1 && echo "custody/ lists for others" || echo "custody/ does not list for others"')"
 printf '%s\n' "$out"
 grep -q '^/bus/custody 20000:20101:771$' <<<"$out" && ok "custody/ is 20000:20101 0771" || fail "custody/ is not 20000:20101 0771"
 grep -q '^/bus/streams 20000:10001:2750$' <<<"$out" && ok "streams/ is still 20000:10001 2750" || fail "streams/ changed"
+grep -q 'custody/ does not list for others' <<<"$out" && ok "custody/ does not list for a uid outside its group" || fail "custody/ lists for others"
 
 step "2. keyryx/up.sh's minting, then 59-keyryx.yaml as it is"
 for name in keyryx-root keyryx-witness-root; do
@@ -175,7 +224,7 @@ spec:
     - name: events
       persistentVolumeClaim: { claimName: stack-events }
 YAML
-k wait --for=jsonpath='{.status.phase}'=Succeeded pod/reader --timeout=120s >/dev/null 2>&1
+wait_done reader 120
 out="$(k logs reader)"; printf '%s\n' "$out"
 grep -q '"type":"key_rotated"' <<<"$out" && ok "the reader reads key_rotated" || fail "no key_rotated line"
 grep -q '"type":"key_revoked"' <<<"$out" && ok "the reader reads key_revoked" || fail "no key_revoked line"
@@ -201,7 +250,7 @@ spec:
     - name: events
       persistentVolumeClaim: { claimName: stack-events }
 YAML
-k wait --for=jsonpath='{.status.phase}'=Succeeded pod/other --timeout=120s >/dev/null 2>&1
+wait_done other 120
 out="$(k logs other)"; printf '%s\n' "$out"
 [ "$(tr '\n' ' ' <<<"$out")" = "append-refused create-refused rename-refused " ] && ok "another plane cannot append, add or rename in custody/" || fail "another plane changed custody/"
 
@@ -242,7 +291,7 @@ spec:
     - name: work
       emptyDir: { sizeLimit: 8Mi }
 YAML
-k wait --for=jsonpath='{.status.phase}'=Succeeded pod/heraldyx-once --timeout=180s >/dev/null 2>&1
+wait_done heraldyx-once 180
 k logs heraldyx-once -c heraldyx | tail -8
 mail="$(k logs heraldyx-once -c show)"; printf '%s\n' "$mail" | sed -n 1,40p
 grep -qi 'revok' <<<"$mail" && ok "heraldyx wrote the mail for key_revoked" || fail "heraldyx wrote no mail for key_revoked"
@@ -286,7 +335,7 @@ spec:
     - name: work
       emptyDir: { medium: Memory, sizeLimit: 4Mi }
 YAML
-k wait --for=jsonpath='{.status.phase}'=Succeeded pod/console-image --timeout=300s >/dev/null 2>&1
+wait_done console-image 300
 out="$(k logs console-image)"; printf '%s\n' "$out"
 grep -q '^genaryx-web 0\.1\.0' <<<"$out" && ok "genaryx-web 0.1.0 answers" || fail "genaryx-web did not answer 0.1.0"
 grep -q 'verdryx answers' <<<"$out" && ok "verdryx answers (the quality-drift CronJob and verdryx-slo run it)" || fail "verdryx did not answer"

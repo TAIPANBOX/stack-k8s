@@ -14,7 +14,7 @@ the apply, the same step `deploy.sh` runs, so all three default installs are adm
 |---|---|
 | `policy-controller.yaml` | The Sigstore policy-controller v0.15.1, rendered from its source at tag v0.15.1 (commit `cc75baa`), with its webhook image pinned by digest and `no-match-policy: deny`. |
 | `PIN` | The release, its commit, the image digest and the sha256 of the rendered manifest. The gate holds the manifest to that sha256. |
-| `image-policy.yaml` | One `ClusterImagePolicy` per TAIPANBOX repository (fifteen), and `upstream-pinned`. Each TAIPANBOX policy names the image names of one repository, digest-anchored (`name@sha256:*`), and one keyless identity: that repository's `release.yml` on a version tag, or for stack-k8s, `console-image.yml` (the console) or `tunnel-images.yml` (the tunnel images). `upstream-pinned`: three upstream images, by digest, each with its reason. |
+| `image-policy.yaml` | One `ClusterImagePolicy` per TAIPANBOX repository (fifteen), and `upstream-pinned`. Each TAIPANBOX policy names the image names of one repository, digest-anchored (`name@sha256:*`), and one keyless identity: that repository's `release.yml` on a version tag (the console's is genaryx's own since stack-k8s 1.19.0), or for stack-k8s, `tunnel-images.yml` (the tunnel images). `upstream-pinned`: three upstream images, by digest, each with its reason. |
 | `up.sh` | Installs the controller and the policies, in that order, and waits for the webhook. With `--enforce`, it also opts `agent-stack` in, last. `KUBECTL` names the client (deploy.sh sets it to k3s's kubectl on the node). |
 | `down.sh` | Removes the webhooks first, then the policies and the controller. |
 | `operator-image-policy.example.yaml` | The template for your own agent images, tracked, all comments. See "Your own agent images". |
@@ -39,8 +39,8 @@ The release workflows sign every image with cosign v3.1.3, `cosign sign --yes`. 
 the legacy `sha256-<digest>.sig` tag for image signatures, not the OCI bundle that cosign v3 writes by default, and
 its `signatureFormat: bundle` option fails with `bundle support for image signatures is not yet implemented`.
 So the signing steps write the legacy format: cosign v3.1.3 with `--new-bundle-format=false --use-signing-config=false`
-(the flags are deprecated in cosign v3 and still accepted). stack-k8s's `console-image.yml` and `tunnel-images.yml`
-do this, and so do the TAIPANBOX repositories' image sign lines. Images released before that carry only the bundle,
+(the flags are deprecated in cosign v3 and still accepted). stack-k8s's `tunnel-images.yml` (and `console-image.yml` until 1.19.0)
+does this, and so do the TAIPANBOX repositories' image sign lines. Images released before that carry only the bundle,
 and the controller refuses them: a re-sign run from the release tag, or the next release, makes them admissible.
 `@decided 2026-10-19` (paraphrased): the legacy format is written until the controller reads bundles, and the
 bundle format stays otherwise. Upstream issue sigstore/policy-controller#1968.

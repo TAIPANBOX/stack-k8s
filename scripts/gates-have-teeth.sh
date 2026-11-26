@@ -3623,7 +3623,7 @@ run_case "keyryx-alerts: heraldyx is not placed beside the witness" fail \
 	"is not pod-affined (required, by hostname)"
 run_case "keyryx-alerts: heraldyx is not told to read the findings" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
-	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-findings/keyryx.ndjson\"", "value: \"/var/lib/stack/events\"")')" \
+	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-findings/keyryx.ndjson,", "value: \"/var/lib/stack/events,")')" \
 	"heraldyx does not read the witness's findings"
 run_case "keyryx-alerts: the console is handed the findings directory beside the file" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
@@ -3631,7 +3631,7 @@ run_case "keyryx-alerts: the console is handed the findings directory beside the
 	"under the findings mount, beside the file"
 run_case "keyryx-alerts: heraldyx is handed the findings directory behind a double slash" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
-	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-findings/keyryx.ndjson\"", "value: \"/var/lib/stack/events,//var/lib/keyryx-findings,/var/lib/keyryx-findings/keyryx.ndjson\"")')" \
+	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-findings/keyryx.ndjson,", "value: \"/var/lib/stack/events,//var/lib/keyryx-findings,/var/lib/keyryx-findings/keyryx.ndjson,")')" \
 	"under the findings mount, beside the file"
 run_case "keyryx-alerts: only an init container of heraldyx is in the bus group" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \

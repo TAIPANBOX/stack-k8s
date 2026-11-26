@@ -14,7 +14,7 @@ updates:
   # (CLAUDE.md invariant 80) has a mover. A tag's own new digest and a patch release come here; a move of
   # the toolchain itself (Rust, Node, Python) is a change somebody decides, so it does not. A golang or caddy
   # patch PR is red until its one other line moves, the stage's assertion or the xcaddy build line, and
-  # scripts/base-images-are-pinned.sh names it. The console's two engines move with the manifests (invariant 79).
+  # scripts/base-images-are-pinned.sh names it. The console image is genaryx's own release since 1.19.0, and its engines are its labels (invariant 79).
   - package-ecosystem: docker
     directory: /images
     schedule:

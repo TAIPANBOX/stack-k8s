@@ -120,14 +120,21 @@ EXECUTING them:
 
 A sidecar container cannot be another container's stdin. So these four are not
 pods: they are binaries that must exist **inside the console image**. That is
-why `images/console.Dockerfile` is a four-language build (Rust console, Go
-qryx and mockryx, Python verdryx and engram) rather than four Deployments.
+why the console image is a four-language build (Rust console, Go qryx and
+mockryx, Python verdryx and engram) rather than four Deployments. Since 1.19.0
+the image is genaryx's own release, `ghcr.io/taipanbox/genaryx:v0.1.0`, built,
+smoke-tested and signed by genaryx's release workflow and pulled here by digest;
+this repository no longer builds a console (`console-image.yml` and
+`images/console.Dockerfile` are gone).
 
 Two more binaries sit in that image, and they are not tools in this table:
 `wardryx` (for `replay`) and `tokenfuse` (for `backtest`) are the engines of the
-console's policy and budget proofs, copied out of the very images the stack
-runs, by the same digests the manifests name, so the engine that replays a
-decision is the engine that took it (CLAUDE.md invariant 79). On a cluster the
+console's policy and budget proofs, copied into the image by digest and named
+by its `dev.taipanbox.engine.*` labels. `images/console-engines.json` records
+those labels, and a gate holds them to the planes the manifests run (CLAUDE.md
+invariant 79): wardryx is the stack's own, v2.8.0 digest for digest; tokenfuse
+is v1.25.0 in the console while the gateway runs v1.27.0, a recorded lag that a
+genaryx release built with tokenfuse v1.27.0 closes. On a cluster the
 budget proof has no trace directory to read, because the gateway's traces are
 a pod-local `emptyDir` that no other pod can mount.
 

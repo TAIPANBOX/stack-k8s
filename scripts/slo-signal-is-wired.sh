@@ -24,7 +24,7 @@
 # WHAT THIS DOES NOT SEE
 #
 # Whether the pinned image can read a trace: that is pyarrow in the image, and
-# .github/workflows/console-image.yml runs the import where the image is built.
+# genaryx's release workflow smoke-tests the tools where the image is built (since 1.19.0).
 #
 # AND IT REFUSES TO REPORT OK ON NOTHING
 #
