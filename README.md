@@ -120,14 +120,21 @@ EXECUTING them:
 
 A sidecar container cannot be another container's stdin. So these four are not
 pods: they are binaries that must exist **inside the console image**. That is
-why `images/console.Dockerfile` is a four-language build (Rust console, Go
-qryx and mockryx, Python verdryx and engram) rather than four Deployments.
+why the console image is a four-language build (Rust console, Go qryx and
+mockryx, Python verdryx and engram) rather than four Deployments. Since 1.19.0
+the image is genaryx's own release, `ghcr.io/taipanbox/genaryx:v0.1.0`, built,
+smoke-tested and signed by genaryx's release workflow and pulled here by digest;
+this repository no longer builds a console (`console-image.yml` and
+`images/console.Dockerfile` are gone).
 
 Two more binaries sit in that image, and they are not tools in this table:
 `wardryx` (for `replay`) and `tokenfuse` (for `backtest`) are the engines of the
-console's policy and budget proofs, copied out of the very images the stack
-runs, by the same digests the manifests name, so the engine that replays a
-decision is the engine that took it (CLAUDE.md invariant 79). On a cluster the
+console's policy and budget proofs, copied into the image by digest and named
+by its `dev.taipanbox.engine.*` labels. `images/console-engines.json` records
+those labels, and a gate holds them to the planes the manifests run (CLAUDE.md
+invariant 79): wardryx is the stack's own, v2.8.0 digest for digest; tokenfuse
+is v1.25.0 in the console while the gateway runs v1.27.0, a recorded lag that a
+genaryx release built with tokenfuse v1.27.0 closes. On a cluster the
 budget proof has no trace directory to read, because the gateway's traces are
 a pod-local `emptyDir` that no other pod can mount.
 
@@ -400,9 +407,9 @@ times, each a step correct once and impossible the second time. GOTCHAS 56-62.
 
 Nothing here needs a credential. Every repository this pulls is public and
 Apache-2.0, the Genaryx console included since 2026-07-27, so the console comes
-up by default rather than on production of a token. `--console-token` survives
-for the one case it is still good for: building the console from a private fork
-of your own.
+up by default rather than on production of a token. Since 1.19.0 it is pulled,
+`ghcr.io/taipanbox/genaryx`, pinned by digest; `deploy.sh --console-token` survives
+only as the bearer for a private fork's tree when `INSTALL_FROM_MAIN=1` fetches main.
 
 Then reach the console over your own tunnel (`20-console.yaml` explains why
 there is no public entry point by default), and check the deployment with
@@ -1308,7 +1315,7 @@ kubectl -n agent-stack delete configmap gateway-identity-map
 
 ## Keyryx on the cluster (opt-in)
 
-Keyryx (`ghcr.io/taipanbox/keyryx:v0.1.5`) is the key custody service and the
+Keyryx (`ghcr.io/taipanbox/keyryx:v0.2.0`) is the key custody service and the
 independent witness of the record. Off by default: `kubectl apply -k manifests/`
 never applies it. `keyryx/up.sh` turns it on, `keyryx/down.sh` turns it off and
 keeps every key and claim. v0.1.4 changes only delegated keys (at the bound of four
@@ -1328,6 +1335,30 @@ init container. wardryx is moved to v2.2.0 and signs its approval tokens through
 custody; its bearer key is `keyryx-wardryx-client`. Only pods labelled
 `keyryx-consumer: "true"` may reach custody.
 
+**Rotating and revoking a key (keyryx v0.2.0).** Custody serves rotation and revocation only
+on its admin unix socket, inside its data directory, to its own uid or root; there is no admin key
+on the network, and custody refuses to start when `KEYRYX_ADMIN_KEYS` is set. On a cluster the
+command runs inside custody's container, as custody's own uid:
+
+```bash
+kubectl -n agent-stack exec deploy/keyryx-custody -c keyryx -- keyryx admin rotate wardryx-approval
+kubectl -n agent-stack exec deploy/keyryx-custody -c keyryx -- keyryx admin revoke <kid>
+```
+
+Each change is announced on the bus as `key_rotated` (info) or `key_revoked` (high), in
+custody's own stream `keyryx-custody.ndjson` (`KEYRYX_EVENTS`, required from v0.2.0, the same
+path as stack-single's). Custody writes it only into a file its own uid owns, and every file in
+the bus directory belongs to the bus owner, so the stream sits in `custody/` beside the bus: the
+bus-owner Job makes the directory (owner 20000, group 20101, mode 0771), custody's init makes
+the file as uid 20101 in the bus group, 0640, and heraldyx reads it through a read-only
+`subPath custody` mount and `HERALDYX_EVENTS` (heraldyx v0.10.0 reads it as source `keyryx`).
+heraldyx mails `key_revoked`; `key_rotated` is info, below its `high` floor. Custody's signed
+key statements for heraldyx's checkpoint gate (`KEYRYX_STATEMENTS_DIR`) are not set here: no
+plane in this stack writes signed checkpoints yet, so heraldyx's checkpoint gate stays off.
+heraldyx is the one reader of custody's stream here: it sits beside the bus, so the witness,
+the chain verifier, the record seal and the console do not read it (stack-single keeps it in
+its bus directory, where they do). The console shows custody's state from custody itself.
+
 **The witness's findings reach the console and the notifier.** The witness writes
 `alerts/keyryx.ndjson` on its own state claim, `keyryx-witness-state`, and mounts the
 event streams read only, so it never writes the bus it witnesses. No new volume is
@@ -1337,10 +1368,10 @@ never see the witness key beside it, and each runs on the witness's node, becaus
 claim is ReadWriteOnce, as the record seal does. The wiring is two patches under
 `keyryx/` that the Keyryx install applies and `--without-keyryx` reverses; the default
 manifests do not change. Each reader reads the file only as a regular file, never
-through a link (heraldyx 0.9.0, pinned here, and the console from genaryx#134).
+through a link (heraldyx 0.10.0, pinned here, and the console from genaryx#134).
 heraldyx renders the seven `witness_*` types and mails the high ones. The console is pinned at
-`genaryx-console:v1.14.0`, and from v1.7.0 the image reads `GENARYX_EVENTS_EXTRA` and turns a
-high finding into an incident (TAIPANBOX/genaryx#134).
+`genaryx:v0.1.0`, which reads `GENARYX_EVENTS_EXTRA` and turns a high finding into an incident
+(TAIPANBOX/genaryx#134, in the console image since genaryx-console v1.7.0).
 
 Not wired yet: vouchryx and tokenfuse (their Keyryx releases are not published
 yet, so their pins stay where they are) and trailryx (its next release is later).

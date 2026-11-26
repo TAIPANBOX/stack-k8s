@@ -125,3 +125,12 @@ Feature: the cluster admits only images whose signature verifies
     When the keyless policy is absent from the image policy
     Then verified-images-are-enforced.sh fails and says it measured NOTHING
     # -> gates-have-teeth.sh "verified-images: the keyless policy is absent (measured nothing)"
+
+  Scenario: a release that renames an image is admitted by its own apply
+    Given a cluster that already enforces admission, and a release that names an image for the first time
+    When a launcher applies the manifests before it brings that release's policies in, or the old policy is kept
+    Then verified-images-are-enforced.sh fails
+    # -> gates-have-teeth.sh "verified-images: deploy.sh stops bringing the policies in before its apply"
+    # -> gates-have-teeth.sh "verified-images: the AWS launcher refreshes the policies after its apply"
+    # -> gates-have-teeth.sh "verified-images: refresh.sh applies the policies on a cluster with no controller"
+    # -> gates-have-teeth.sh "verified-images: up.sh keeps the old console policy"

@@ -74,8 +74,12 @@ ALLOWED["tokenfuse-mcp"] = {"tokenfuse"}
 # here needs v0.8.1.
 # Where it is written (the witness, on its own state claim) and where its readers mount it (the
 # keyryx/*-findings-patch.yaml files, subPath alerts).
-ALERTS_DIRS = ["/var/lib/keyryx-witness/alerts", "/var/lib/keyryx-findings"]
-OFF_BUS = {"keyryx": {"keyryx": (0, 8, 1)}}
+ALERTS_DIRS = ["/var/lib/keyryx-witness/alerts", "/var/lib/keyryx-findings", "/var/lib/stack/keyryx-custody"]
+OFF_BUS = {"keyryx": {"keyryx": (0, 8, 1)}, "keyryx-custody": {"keyryx": (0, 10, 0)}}
+# Keyryx custody's own stream (keyryx v0.2.0, CLAUDE.md invariant 97): custody writes keyryx-custody.ndjson as
+# source keyryx in custody/, beside the bus, mounted at /var/lib/stack/events in custody's pod alone and at
+# /var/lib/stack/keyryx-custody in heraldyx's. heraldyx v0.10.0 is the first that reads that stem as keyryx.
+CUSTODY_STEMS = {"keyryx-custody"}
 
 
 def code_of(text):
@@ -113,6 +117,7 @@ for t in texts.values():
         idecl.setdefault(stem, set()).update(srcs)
 
 problems = []
+off_bus = []
 streams = []   # (file, stem)
 for f, t in texts.items():
     for m in re.finditer(re.escape(BUS) + r"/([A-Za-z0-9][A-Za-z0-9._-]*)\.ndjson", t):
@@ -130,18 +135,21 @@ for f, stem in streams:
     seen.add((str(f), stem))
     if stem in ALLOWED or stem in hdecl:
         continue
+    if stem in CUSTODY_STEMS and str(f) == "keyryx/manifests/59-keyryx.yaml":
+        # custody's path in its own pod; heraldyx's reading of it is judged with the off-bus files below
+        off_bus.append((f, stem))
+        continue
     problems.append(f"{f}: the stream {stem}.ndjson is named for no source the readers know, and "
                     "HERALDYX_STREAMS does not declare it, so heraldyx raises it as unknown and a "
                     "line claiming any other source is refused")
 
-off_bus = []
 for f, t in texts.items():
     for m in re.finditer("(?:" + "|".join(map(re.escape, ALERTS_DIRS)) + r")/([A-Za-z0-9][A-Za-z0-9._-]*)\.ndjson", t):
         off_bus.append((f, m.group(1)))
 for f, stem in sorted(set(off_bus)):
     if stem not in OFF_BUS:
-        problems.append(f"{f}: the witness's findings file {stem}.ndjson under {' or '.join(ALERTS_DIRS)} is named for no source "
-                        "heraldyx reads from it; the witness stamps keyryx, so heraldyx would refuse every finding")
+        problems.append(f"{f}: the Keyryx file {stem}.ndjson under {' or '.join(ALERTS_DIRS)} is named for no source "
+                        "heraldyx reads from it; Keyryx stamps keyryx, so heraldyx would refuse every line")
         continue
     least = OFF_BUS[stem]["keyryx"]
     pins = re.findall(r"ghcr\.io/taipanbox/heraldyx:v(\d+)\.(\d+)\.(\d+)", texts.get(pathlib.Path("manifests/45-heraldyx.yaml"), ""))
@@ -150,7 +158,7 @@ for f, stem in sorted(set(off_bus)):
     for pin in pins:
         if tuple(int(x) for x in pin) < least:
             problems.append(f"{f}: {stem}.ndjson is read by heraldyx v{'.'.join(pin)}, older than "
-                            f"v{'.'.join(map(str, least))}, the first that accepts source keyryx and reads the findings file only as a regular file")
+                            f"v{'.'.join(map(str, least))}, the first that accepts source keyryx from {stem}.ndjson and reads it only as a regular file")
 loads = []
 for f, t in texts.items():
     toks = re.findall(r"\"([^\"]*)\"", t)
@@ -182,7 +190,7 @@ if problems:
     print(f"{len(problems)} bus name(s) the readers would refuse. See CLAUDE.md invariant 30.")
     sys.exit(1)
 
-stems = sorted({s for _, s in streams})
+stems = sorted({s for _, s in streams if s not in CUSTODY_STEMS})
 print(f"OK: {len(stems)} stream name(s) on the bus ({', '.join(stems)}), each one the readers accept, "
       f"{len(set(s for _, s in off_bus))} off the bus for heraldyx ({', '.join(sorted(set(s for _, s in off_bus))) or 'none'}), and "
       f"{len(loads)} idryx --load pair(s), each a source its file may carry.")

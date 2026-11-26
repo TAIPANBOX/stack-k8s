@@ -106,7 +106,7 @@ output "next" {
            --servers ${join(",", slice(local.nat_ips, 0, local.n_srv))} \
            --agents ${join(",", slice(local.nat_ips, local.n_srv, local.n_actual))}
 
-       Add --console-token <github-token> for the Genaryx console, and
+       The Genaryx console comes up by default, pulled by digest. Add
        --copilot-key-file <path> to point its copilot at a cloud model.
 
     2. When finished, and this is the part that matters:

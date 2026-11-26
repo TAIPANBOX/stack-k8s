@@ -11,7 +11,8 @@
 #   remove a name), each stream in it (20000:<producer gid> 0664: the producer appends through its
 #   own group, the bus group reads), wardryx's policy archive (20000:20001 0775), the chain
 #   verifier's memory beside the bus (conform/, 20000:10002 2770) and the gateway's FOCUS export
-#   beside it too (focus/ 20000:10003 2751, focus/gateway/ 20000:20010 2775, CLAUDE.md invariant 95),
+#   beside it too (focus/ 20000:10003 2751, focus/gateway/ 20000:20010 2775, CLAUDE.md invariant 95)
+#   and Keyryx custody's own stream directory (custody/ 20000:20101 0771, CLAUDE.md invariant 97),
 #   then writes streams/.layout;
 #
 #   every other pod mounts streams/ by subPath at /var/lib/stack/events, so no path inside it leads to
@@ -21,8 +22,9 @@
 # One uid and one group per producer, numbered as stack-single numbers them where it has one:
 #   wardryx 20001  vouchryx 20002  typryx 20005  gateway 20010  MCP broker 20012  control plane 20013
 #   verdryx-slo 20020  console 20030  drills 20040  chain verifier 10002  costcrew 10003
-# The owner is in all eleven and in 10001: twelve groups. NFS with AUTH_SYS honours sixteen (measured:
-# a chgrp to the seventeenth is refused on Longhorn RWX), so the table has room for four more.
+#   and Keyryx custody 20101, which writes custody/ beside the bus, not streams/
+# The owner is in all twelve and in 10001: thirteen groups. NFS with AUTH_SYS honours sixteen (measured:
+# a chgrp to the seventeenth is refused on Longhorn RWX), so the table has room for three more.
 #
 # The Job runs on every apply: it is idempotent, refuses a streams/ or a stream it does not own, and
 # is deleted ten minutes after it finishes so that the next apply runs it again. A stream of the
@@ -47,6 +49,7 @@ data:
     #   conform/                      20000:10002 2770  the chain verifier's memory, beside the bus
     #   focus/                        20000:10003 2751  the FOCUS export, beside the bus; costcrew lists it
     #   focus/gateway/                20000:20010 2775  the gateway's focus-export writes its CSV here
+    #   custody/                      20000:20101 0771  Keyryx custody makes its own stream here
     #   streams/.layout               written last; every plane's init waits for it
     # A file of the old layout at the volume root is copied in once, so the chains continue. The old
     # files are left where they are, readable by nothing that runs after this.
@@ -143,6 +146,14 @@ data:
     own_dir "$B/focus" 10003 2751
     own_dir "$B/focus/gateway" 20010 2775
 
+    # Keyryx custody's own stream (keyryx v0.2.0, CLAUDE.md invariant 97), beside the bus and not in it: custody
+    # writes its announcements only into a regular file that its own uid owns, so the file cannot be one of the
+    # owner's in streams/. custody (uid 20101) creates keyryx-custody.ndjson here through group 20101, in its
+    # process group 10001 at 0640, and heraldyx reads it through that group. No setgid, so the file keeps the
+    # creator's group; others may traverse (the 1) and open the one name, never list or add one. Nothing below
+    # it is ever written or re-owned here (GOTCHAS 164).
+    own_dir "$B/custody" 20101 0771
+
     echo "bus-layout v1" > "$S/.layout.tmp"
     chgrp 10001 "$S/.layout.tmp"
     chmod 0640 "$S/.layout.tmp"
@@ -170,7 +181,7 @@ spec:
         runAsUser: 20000
         runAsGroup: 10001
         # every producer's group, so the owner can give each stream to its producer (chgrp)
-        supplementalGroups: [20001, 20002, 20005, 20010, 20012, 20013, 20020, 20030, 20040, 10002, 10003]
+        supplementalGroups: [20001, 20002, 20005, 20010, 20012, 20013, 20020, 20030, 20040, 10002, 10003, 20101]
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: owner

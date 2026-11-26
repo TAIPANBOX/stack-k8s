@@ -1,0 +1,24 @@
+### red first on origin/main fd2b096, with this change's gates
+$ ./scripts/keyryx-custody-announces.sh
+FAIL keyryx/manifests/59-keyryx.yaml: custody does not set KEYRYX_EVENTS, and keyryx v0.2.0 refuses to start without it
+FAIL keyryx/manifests/59-keyryx.yaml: custody does not mount the events claim at /var/lib/stack/events as subPath custody, read-write, so the directory of KEYRYX_EVENTS is not custody/ and custody refuses to start or writes where nobody reads
+FAIL keyryx/manifests/59-keyryx.yaml: custody's bus-ready does not wait for /bus/custody to be 20000:20101:771, so on an upgrade kubelet can make custody/ as root first and the bus owner then refuses it on every run
+FAIL keyryx/manifests/59-keyryx.yaml: custody runs in group 20101, not 10001: a stream it makes itself would be unreadable by heraldyx, which reads in the bus group
+FAIL keyryx/heraldyx-findings-patch.yaml: HERALDYX_EVENTS does not name /var/lib/stack/keyryx-custody/keyryx-custody.ndjson, so custody's key_revoked reaches nobody
+FAIL keyryx/heraldyx-findings-patch.yaml: heraldyx does not mount the events volume at /var/lib/stack/keyryx-custody as subPath custody, read only
+FAIL keyryx/heraldyx-findings-unpatch.yaml: the unpatch does not delete the mount at /var/lib/stack/keyryx-custody (by mountPath, the merge key)
+FAIL README.md does not show `kubectl ... exec ... keyryx-custody ... keyryx admin rotate`, the one way to reach the admin socket
+FAIL README.md does not show `kubectl ... exec ... keyryx-custody ... keyryx admin revoke`, the one way to reach the admin socket
+9 problem(s). See CLAUDE.md invariant 97.
+exit 1
+$ GATE_OFFLINE=1 ./scripts/console-engines-are-the-stacks.sh
+FAIL manifests/10-planes.yaml: the console image is ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca, but images/console-engines.json records ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee
+FAIL manifests/20-console.yaml: the console image is ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca, but images/console-engines.json records ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee
+FAIL manifests/40-routines-and-secrets.yaml: the console image is ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca, but images/console-engines.json records ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee
+FAIL security-tests.sh: the console image is ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca, but images/console-engines.json records ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee
+FAIL security-tests.sh: the console image is ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca, but images/console-engines.json records ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee
+FAIL security-tests.sh: the console image is ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca, but images/console-engines.json records ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee
+FAIL security-tests.sh: the console image is ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca, but images/console-engines.json records ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee
+FAIL security-tests.sh: the console image is ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca, but images/console-engines.json records ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee
+8 problem(s). See CLAUDE.md invariant 79.
+exit 1

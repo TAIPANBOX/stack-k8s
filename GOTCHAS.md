@@ -4936,3 +4936,21 @@ here passed, because none of them could know which names an image carries.
 **Fixed by** invariant 95: the script calls `tokenfuse`, and `scripts/costcrew-reads-the-gateway-spend.sh` requires the binary
 the script calls to be the one the gateway container's command names, and runs the script against a stub of that name; a
 failed window now prints what the tool said.
+
+## 168. keyryx v0.2.0 writes its announcements only into a file its own uid owns, and every file on this bus belongs to the bus owner
+
+**The stack's own contract.** Two of our own rules meet and neither is wrong. keyryx v0.2.0 custody announces every rotation
+and revocation into `KEYRYX_EVENTS`, and to keep a link planted on a shared bus from turning its append onto another file it
+writes only into a regular file with one link that custody's own uid owns, and refuses anything else at start
+(`internal/announce/bus.go`, `ownStream`). Here every file in `streams/` belongs to the bus owner, uid 20000 (invariant 89),
+and Pod Security `restricted` forbids the root `chown` stack-single's init uses to give a stream to its writer. So the path
+the briefs gave, `/var/lib/stack/events/keyryx-custody.ndjson` inside `streams/`, would stop custody on every start with
+`belongs to uid 20000, not to custody's uid 20101`.
+
+**Resolved by** invariant 97: the bus owner makes `custody/` `20000:20101 0771` beside `streams/`, custody mounts it by subPath
+at `/var/lib/stack/events` (so the variable is stack-single's string), its init makes the file as 20101 in the bus group, and
+heraldyx mounts `custody/` read only. The second trap in the same place: a cluster upgraded from 1.18 already has the owner's
+marker, so a custody pod that waited for the marker alone could start before the new owner Job ran; kubelet would then make
+`custody/` itself, as root 0777, and the owner refuses a directory it did not make, on every later run. custody's `bus-ready`
+waits for `custody/` as the owner leaves it, `20000:20101:771`, as the gateway pod waits for `focus/gateway` (invariant 95).
+Measured on k3s with Longhorn RWX 2026-11-26, `evidence/keyryx-custody-k3s/output.txt`.

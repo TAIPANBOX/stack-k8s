@@ -14,7 +14,7 @@
 # The first version named ONE identity for every TAIPANBOX image: the release workflow of any
 # TAIPANBOX repository. A signature made by one repository's workflow then admitted another
 # repository's image name. So there is one policy per repository, and each names only that
-# repository's workflow (or stack-k8s's console-image.yml or tunnel-images.yml).
+# repository's workflow (or stack-k8s's tunnel-images.yml).
 #
 # WHAT THIS CHECKS
 #
@@ -98,7 +98,7 @@ BINDINGS = {
     "mockryx": ("mockryx", "release.yml"),
     "keyryx": ("keyryx", "release.yml"),
     "agent-conform": ("agent-stack-go", "release.yml"),
-    "genaryx-console": ("stack-k8s", "console-image.yml"),
+    "genaryx": ("genaryx", "release.yml"),
     "stack-caddy": ("stack-k8s", "tunnel-images.yml"),
     "stack-wg": ("stack-k8s", "tunnel-images.yml"),
 }
@@ -366,12 +366,39 @@ for launcher in LAUNCHERS:
         bad.append(f"{launcher} has no apply of the manifests, so its admission step has nothing to follow")
     elif enforce_at < apply_at:
         bad.append(f"{launcher} turns admission on before it applies the manifests, when the namespace does not exist yet")
+    # On a cluster that already enforces admission, this release's policies go in BEFORE the apply that names
+    # its images (policy/refresh.sh): a renamed image (genaryx-console to genaryx, 1.19.0) is otherwise refused
+    # in the middle of the apply, the launcher stops, and policy/up.sh never runs.
+    refresh_at = next((i for i, l in enumerate(launcher_lines) if re.search(r"bash\s+\S*policy/refresh\.sh", l)), None)
+    if refresh_at is None:
+        bad.append(f"{launcher} does not run policy/refresh.sh, so on a cluster that enforces admission an image this "
+                   "release names for the first time is refused by its own apply")
+    elif apply_at is not None and refresh_at > apply_at:
+        bad.append(f"{launcher} runs policy/refresh.sh after its apply, when the apply has already been refused")
     # the node must hold policy/ for policy/up.sh to run there: the tar that ships the
     # manifests to the node ships policy/ too
     if launcher != "deploy.sh" and enforce_at is not None:
         ships = [l for l in launcher_lines if re.search(r"tar -cz -C \"\$ROOT\" manifests", l)]
         if not any(re.search(r"manifests policy\b", l) for l in ships):
             bad.append(f"{launcher} ships manifests to the node without policy/, so policy/up.sh has nothing to run there")
+
+# 7b. refresh.sh applies this tree's policies only where a controller already runs, and removes nothing;
+#     up.sh removes the policy of the console this repository no longer builds.
+refresh = read("policy/refresh.sh") or ""
+rlive = "\n".join(l for _, l in live_lines(refresh))
+if not refresh:
+    bad.append("policy/refresh.sh is missing, so a release that renames an image is refused by its own apply")
+else:
+    crd_at = rlive.find("crd clusterimagepolicies.policy.sigstore.dev")
+    apply_pol = rlive.find("apply -f policy/image-policy.yaml")
+    if crd_at < 0 or apply_pol < 0 or crd_at > apply_pol:
+        bad.append("policy/refresh.sh does not apply policy/image-policy.yaml behind a check that the controller's CRD exists")
+    if re.search(r"\bdelete\b", rlive):
+        bad.append("policy/refresh.sh deletes something; a policy goes in policy/up.sh, after the apply, so a pod of the old "
+                   "release recreated during the rollout is still admitted")
+if not re.search(r"delete clusterimagepolicy taipanbox-console\b", "\n".join(l for _, l in live_lines(up or ""))):
+    bad.append("policy/up.sh does not remove taipanbox-console, the policy of the console image this repository no "
+               "longer builds, so an upgraded cluster keeps admitting genaryx-console")
 
 # 8. Operator entries: the template is tracked, and the operator's copy is not (it is gitignored, and this gate
 #    reads it when it exists). Each live ClusterImagePolicy in either follows the operator rules, and none covers a

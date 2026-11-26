@@ -151,7 +151,7 @@ for path in sorted(glob.glob("manifests/*.yaml")):
             if vals != ["enforce"]:
                 problems.append(f"{where} sets TOKENFUSE_IDENTITY_STRICT {vals or 'nowhere'}, not the literal enforce once. Under warn or off a key speaking as an agent its binding does not name is only noted.")
         # The console Deployment, not the CronJobs that run the same image for verdryx.
-        is_console = "genaryx-console" in image and path.endswith("20-console.yaml")
+        is_console = re.search(r"ghcr\.io/taipanbox/genaryx(-console)?:", image) is not None and path.endswith("20-console.yaml")
         if is_console:
             r = env_entries(t, "GENARYX_COPILOT_FUSE_KEY_REF")
             if len(r) != 1 or not re.search(r"value:\s*\"?env:GENARYX_COPILOT_FUSE_KEY\"?", r[0]):

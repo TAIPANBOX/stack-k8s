@@ -443,12 +443,10 @@ jobs:
       - name: the gateway's spend reaches the FinOps console (invariant 95)
         run: ./scripts/costcrew-reads-the-gateway-spend.sh
 
-      # Added 2026-11-23 with invariants 92 and 93. Every scenario is bound to a check that exists, and
-      # the console's web assets install only from their lockfile with a pinned pnpm.
+      # Added 2026-11-23 with invariant 92. Every scenario is bound to a check that exists. (Invariant 93,
+      # the console's locked install, left with the console's build in 1.19.0: genaryx builds its image now.)
       - name: every scenario is bound to a check that exists (invariant 92)
         run: ./scripts/features-are-bound.sh
-      - name: the console installs only from its lockfile, with a pinned pnpm (invariant 93)
-        run: ./scripts/console-install-is-locked.sh
       # Added 2026-11-23 with invariant 94. A piped deploy runs only a release tree whose signed bundle
       # cosign verified for this repository's release workflow at that tag.
       - name: a piped deploy runs only a release tree cosign verified (invariant 94)
@@ -513,6 +511,10 @@ jobs:
         run: ./scripts/witness-is-separate.sh
       - name: only labelled consumers reach a Keyryx role, and neither has egress (invariant 57)
         run: ./scripts/keyryx-reaches-only-consumers.sh
+      # Added 2026-11-25 with invariant 97 (keyryx v0.2.0). Custody announces rotations and revocations into
+      # its own stream in custody/ beside the bus, heraldyx reads it, and no network admin key is set.
+      - name: Keyryx custody announces into its own stream, and no admin key is set (invariant 97)
+        run: ./scripts/keyryx-custody-announces.sh
 
       # Added 2026-10-20 with invariant 75. The Keyryx witness's findings stay on its own claim, written by the
       # witness alone and read only by the console and heraldyx through subPath alerts; the witness mounts the bus

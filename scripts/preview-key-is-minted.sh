@@ -113,11 +113,14 @@ else:
         bad.append(f"{M20}: the preview volume is not the Secret console-preview-key at mode 0440")
     if re.search(r"console-preview-key[^\n]*optional: true", t):
         bad.append(f"{M20}: the preview Secret is optional, so the console would start unable to open a preview")
-    cpin = re.search(r"image: ghcr\.io/taipanbox/genaryx-console:v(\d+)\.(\d+)\.(\d+)@sha256:[0-9a-f]{64}", t)
+    # The console image moved from genaryx-console (built here) to genaryx (genaryx's own release) in stack-k8s 1.19.0.
+    # genaryx v0.1.0 is built from genaryx after cb7f779, the commit genaryx-console v1.14.0 was built from, so every
+    # genaryx release carries what genaryx-console v1.14.0 did and is read as at least that version here.
+    cpin = re.search(r"image: ghcr\.io/taipanbox/(genaryx-console|genaryx):v(\d+)\.(\d+)\.(\d+)@sha256:[0-9a-f]{64}", t)
     if cpin is None:
-        bad.append(f"{M20} does not pin genaryx-console by digest")
-    elif tuple(int(x) for x in cpin.groups()) < CONSOLE_MIN:
-        bad.append(f"{M20}: the console is genaryx-console v{'.'.join(cpin.groups())}, older than v{'.'.join(map(str, CONSOLE_MIN))}, which cannot make the preview key or decide a sealed hold")
+        bad.append(f"{M20} does not pin the console (genaryx or genaryx-console) by digest")
+    elif cpin.group(1) == "genaryx-console" and tuple(int(x) for x in cpin.groups()[1:]) < CONSOLE_MIN:
+        bad.append(f"{M20}: the console is genaryx-console v{'.'.join(cpin.groups()[1:])}, older than v{'.'.join(map(str, CONSOLE_MIN))}, which cannot make the preview key or decide a sealed hold")
 
 holders = []
 for dp, _, fns in os.walk("manifests"):
@@ -178,7 +181,7 @@ k_() {
         half) echo "configmap/wardryx-preview-recipient" ;;
       esac ;;
     *"get deployment/genaryx-console"*)
-      [ "$MODE" = noconsole ] || echo "ghcr.io/taipanbox/genaryx-console:v9.9.9@sha256:0000" ;;
+      [ "$MODE" = noconsole ] || echo "ghcr.io/taipanbox/genaryx:v9.9.9@sha256:0000" ;;
     *"create -f -"*)
       body="$(cat)"
       if grep -q '^kind: Pod' <<<"$body"; then printf '%s\n' "$body" >"$DIR/pod"; else printf '%s\n' "$body" >"$DIR/objects"; fi ;;

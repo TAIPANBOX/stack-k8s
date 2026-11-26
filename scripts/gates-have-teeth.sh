@@ -178,6 +178,11 @@ run_case() {
 		printf '%s\n' "$name" >&3
 		return
 	fi
+	# TEETH_MATCH=<regex> runs only the cases whose name matches, for a quick local check of one gate's
+	# cases. It changes no position, so the shards stay as they are; CI never sets it.
+	if [ -n "${TEETH_MATCH:-}" ] && ! grep -Eq -- "$TEETH_MATCH" <<<"$name"; then
+		return
+	fi
 	ran=$((ran + 1))
 
 	# The baseline applies to EVERY case, not only the ones expecting a failure.
@@ -353,7 +358,7 @@ else:
 # with nothing noticing. Same fault, same gate, the other file it now reads.
 run_case "pinned-images: a tag that moves, planted in security-tests.sh" fail \
 	'./scripts/pinned-images.sh' \
-	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca", "image: ghcr.io/taipanbox/genaryx-console:latest")')" \
+	"$(py 'edit("security-tests.sh", "image: ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee", "image: ghcr.io/taipanbox/genaryx:latest")')" \
 	"moves: a pod can come back different"
 
 # The default apply set must not publish anything to the world, and must not
@@ -1508,7 +1513,7 @@ run_case "slo-signal-is-wired: the sidecar shares a uid" fail \
 	"so the file is not the routine"
 run_case "slo-signal-is-wired: the sidecar runs an older console than the console" fail \
 	'./scripts/slo-signal-is-wired.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:", "image: ghcr.io/taipanbox/genaryx-console:x")')" \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx:", "image: ghcr.io/taipanbox/genaryx:x")')" \
 	"and the console runs"
 run_case "slo-signal-is-wired: a failed measurement is swallowed" fail \
 	'./scripts/slo-signal-is-wired.sh' \
@@ -2176,7 +2181,7 @@ run_case "bus-names: no stream path left to judge" fail \
 	'./scripts/bus-names-match-the-source-rule.sh' \
 	"$(py 'import pathlib
 n = 0
-for path in list(pathlib.Path("manifests").glob("*.yaml")) + list(pathlib.Path("typed").glob("*.sh")):
+for path in list(pathlib.Path("manifests").glob("*.yaml")) + list(pathlib.Path("typed").glob("*.sh")) + list(pathlib.Path("keyryx").rglob("*.yaml")):
     s = path.read_text()
     if "/var/lib/stack/events/" in s:
         path.write_text(s.replace("/var/lib/stack/events/", "/var/lib/stack/evnts/"))
@@ -3555,10 +3560,10 @@ run_case "witness-is-separate: the witness event mount is writable" fail \
 	'./scripts/witness-is-separate.sh' \
 	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "              mountPath: /var/lib/stack/events\n              readOnly: true\n", "              mountPath: /var/lib/stack/events\n")')" \
 	"without readOnly: true"
-run_case "witness-is-separate: custody mounts the event streams" fail \
+run_case "witness-is-separate: custody mounts the bus the witness reads" fail \
 	'./scripts/witness-is-separate.sh' \
-	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "      serviceAccountName: keyryx-custody\n", "      serviceAccountName: keyryx-custody\n      # claimName: stack-events\n")')" \
-	"custody mounts the event streams"
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); a = "              mountPath: /var/lib/stack/events\n              subPath: custody\n      volumes:"; assert a in s; open(p, "w").write(s.replace(a, a.replace("subPath: custody", "subPath: streams"), 1))')" \
+	"custody may mount only subPath custody"
 run_case "witness-is-separate: the witness writes its alerts into the event directory" fail \
 	'./scripts/witness-is-separate.sh' \
 	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "value: /var/lib/keyryx-witness/alerts/keyryx.ndjson", "value: /var/lib/stack/events/keyryx.ndjson")')" \
@@ -3618,7 +3623,7 @@ run_case "keyryx-alerts: heraldyx is not placed beside the witness" fail \
 	"is not pod-affined (required, by hostname)"
 run_case "keyryx-alerts: heraldyx is not told to read the findings" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
-	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-findings/keyryx.ndjson\"", "value: \"/var/lib/stack/events\"")')" \
+	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-findings/keyryx.ndjson,", "value: \"/var/lib/stack/events,")')" \
 	"heraldyx does not read the witness's findings"
 run_case "keyryx-alerts: the console is handed the findings directory beside the file" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
@@ -3626,7 +3631,7 @@ run_case "keyryx-alerts: the console is handed the findings directory beside the
 	"under the findings mount, beside the file"
 run_case "keyryx-alerts: heraldyx is handed the findings directory behind a double slash" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
-	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-findings/keyryx.ndjson\"", "value: \"/var/lib/stack/events,//var/lib/keyryx-findings,/var/lib/keyryx-findings/keyryx.ndjson\"")')" \
+	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", "value: \"/var/lib/stack/events,/var/lib/keyryx-findings/keyryx.ndjson,", "value: \"/var/lib/stack/events,//var/lib/keyryx-findings,/var/lib/keyryx-findings/keyryx.ndjson,")')" \
 	"under the findings mount, beside the file"
 run_case "keyryx-alerts: only an init container of heraldyx is in the bus group" fail \
 	'./scripts/keyryx-alerts-reach-readers.sh' \
@@ -3783,11 +3788,11 @@ run_case "bus-names: the witness's findings file loses its keyryx stem" fail \
 	"is named for no source heraldyx reads from it"
 run_case "bus-names: the heraldyx pin goes back before the findings are read safely" fail \
 	'./scripts/bus-names-match-the-source-rule.sh' \
-	"$(py 'edit("manifests/45-heraldyx.yaml", "ghcr.io/taipanbox/heraldyx:v0.9.1@", "ghcr.io/taipanbox/heraldyx:v0.8.0@")')" \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "ghcr.io/taipanbox/heraldyx:v0.10.0@", "ghcr.io/taipanbox/heraldyx:v0.8.0@")')" \
 	"older than v0.8.1"
 run_case "stream-files-are-precreated: the witness's findings file is not made before it starts" fail \
 	'./scripts/stream-files-are-precreated.sh' \
-	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "        - name: precreate-streams\n", "        - name: make-findings-later\n")')" \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("        - name: precreate-streams\n"); open(p, "w").write(s[:i] + "        - name: make-findings-later\n" + s[i + len("        - name: precreate-streams\n"):])')" \
 	"keyryx-witness -> /var/lib/keyryx-witness/alerts/keyryx.ndjson: no precreate-streams init container"
 run_case "stream-files-are-precreated: the witness's init mounts its claim and never makes alerts/" fail \
 	'./scripts/stream-files-are-precreated.sh' \
@@ -3817,9 +3822,25 @@ run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)"
 
 # Verified images (invariant 58, policy/ and scripts/verified-images-are-enforced.sh). Every case
 # edits one tracked file the gate reads; the gate's own baseline must be green first.
+run_case "verified-images: deploy.sh stops bringing the policies in before its apply" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("deploy.sh", "bash policy/refresh.sh\x27 \\\n  || die", "bash policy/refreshx.sh\x27 \\\n  || die")')" \
+	"does not run policy/refresh.sh"
+run_case "verified-images: the AWS launcher refreshes the policies after its apply" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'p = "cloud/aws/deploy-aws.sh"; s = open(p).read(); a = "su_ \"$FIRST\" \x27KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/refresh.sh\x27 \\\n  || die \"could not bring this release\x27s admission policies in before its manifests (policy/refresh.sh)\"\n"; assert a in s; s = s.replace(a, "", 1); s = s.replace("k_ \"apply -k /root/stack-k8s/manifests\"\n", "k_ \"apply -k /root/stack-k8s/manifests\"\n" + a, 1); open(p, "w").write(s)')" \
+	"runs policy/refresh.sh after its apply"
+run_case "verified-images: refresh.sh applies the policies on a cluster with no controller" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/refresh.sh", "crd clusterimagepolicies.policy.sigstore.dev", "crd clusterimagepolicies.example.invalid")')" \
+	"behind a check that the controller"
+run_case "verified-images: up.sh keeps the old console policy" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/up.sh", "$KUBECTL delete clusterimagepolicy taipanbox-console --ignore-not-found >/dev/null\n", "")')" \
+	"does not remove taipanbox-console"
 run_case "verified-images: a TAIPANBOX image carries a tag only" fail \
 	'./scripts/verified-images-are-enforced.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca", "image: ghcr.io/taipanbox/genaryx-console:v1.1.48")')" \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee", "image: ghcr.io/taipanbox/genaryx:v0.1.0")')" \
 	"image not pinned by digest"
 run_case "verified-images: an upstream image nobody allowed" fail \
 	'./scripts/verified-images-are-enforced.sh' \
@@ -4065,10 +4086,92 @@ run_case "keyryx-kid: a comment reworded in the library (must pass)" pass \
 	'./scripts/keyryx-kid-is-pinned.sh' \
 	"$(py 'edit("lib/keyryx-install.sh", "# keyryx_probe_jwks NAME: prints custody", "# keyryx_probe_jwks NAME: prints the custody")')"
 
+# Keyryx custody announces into its own stream in custody/ beside the bus, heraldyx reads it, and no network admin
+# key is set (CLAUDE.md invariant 97, keyryx v0.2.0), with the owner's directory, the precreate and the stem.
+run_case "custody-announces: custody loses KEYRYX_EVENTS" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "            - name: KEYRYX_EVENTS\n              value: /var/lib/stack/events/keyryx-custody.ndjson\n", "")')" \
+	"does not set KEYRYX_EVENTS"
+run_case "custody-announces: the stream is moved inside KEYRYX_DATA" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "              value: /var/lib/stack/events/keyryx-custody.ndjson", "              value: /var/lib/keyryx/data/keyryx-custody.ndjson")')" \
+	"is inside KEYRYX_DATA"
+run_case "custody-announces: custody mounts custody/ read only" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); a = "              mountPath: /var/lib/stack/events\n              subPath: custody\n      volumes:"; assert a in s; open(p, "w").write(s.replace(a, "              mountPath: /var/lib/stack/events\n              subPath: custody\n              readOnly: true\n      volumes:", 1))')" \
+	"as subPath custody, read-write"
+run_case "custody-announces: custody runs in its own group again" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "        runAsUser: 20101\n        runAsGroup: 10001\n        fsGroup: 20101", "        runAsUser: 20101\n        runAsGroup: 20101\n        fsGroup: 20101")')" \
+	"not 10001"
+run_case "custody-announces: a manifest sets KEYRYX_ADMIN_KEYS" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "            - name: KEYRYX_ADDR\n", "            - name: KEYRYX_ADMIN_KEYS\n              value: admin-key\n            - name: KEYRYX_ADDR\n")')" \
+	"sets KEYRYX_ADMIN_KEYS"
+run_case "custody-announces: a script exports KEYRYX_ADMIN_KEYS" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("keyryx/down.sh", "set -", "KEYRYX_ADMIN_KEYS=x\nset -")')" \
+	"sets KEYRYX_ADMIN_KEYS"
+run_case "custody-announces: heraldyx stops reading custody's stream" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", ",/var/lib/stack/keyryx-custody/keyryx-custody.ndjson\"", "\"")')" \
+	"does not name /var/lib/stack/keyryx-custody/keyryx-custody.ndjson"
+run_case "custody-announces: the unpatch leaves heraldyx's custody mount" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("keyryx/heraldyx-findings-unpatch.yaml", "            - mountPath: /var/lib/stack/keyryx-custody\n              $patch: delete\n", "")')" \
+	"the unpatch does not delete the mount"
+run_case "custody-announces: custody's bus-ready waits for the marker alone" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", " && [ \\\"$(stat -c %u:%g:%a /bus/custody 2>/dev/null)\\\" = 20000:20101:771 ]", "")')" \
+	"does not wait for /bus/custody"
+run_case "custody-announces: the heraldyx patch carries an older heraldyx than the pin" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", "image: ghcr.io/taipanbox/heraldyx:v0.10.0@", "image: ghcr.io/taipanbox/heraldyx:v0.9.1@")')" \
+	"not the pin of manifests/45-heraldyx.yaml"
+run_case "custody-announces: the README stops showing how to revoke" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("README.md", "-c keyryx -- keyryx admin revoke", "-c keyryx -- keyryx admin rm")')" \
+	"keyryx admin revoke"
+run_case "custody-announces: the custody Deployment is gone (measured nothing)" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "  name: keyryx-custody\n  namespace: agent-stack\n  labels: { app.kubernetes.io/part-of: agent-stack, app.kubernetes.io/name: keyryx-custody }", "  name: keyryx-custodx\n  namespace: agent-stack\n  labels: { app.kubernetes.io/part-of: agent-stack, app.kubernetes.io/name: keyryx-custody }")')" \
+	"measured NOTHING"
+run_case "custody-announces: a comment reworded beside KEYRYX_EVENTS (must pass)" pass \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "# Required from keyryx v0.2.0: every rotation", "# Required since keyryx v0.2.0: every rotation")')"
+run_case "bus-writers: the owner stops making custody/" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/11-bus.yaml", "    own_dir \"$B/custody\" 20101 0771\n", "")')" \
+	"does not make custody/"
+run_case "bus-writers: the owner leaves custody's group" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("manifests/11-bus.yaml", "10002, 10003, 20101]", "10002, 10003]")')" \
+	"not in the group of 20101"
+run_case "bus-writers: the witness mounts custody/" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "              readOnly: true\n              subPath: streams\n", "              readOnly: true\n              subPath: custody\n")')" \
+	"mounts subPath custody"
+run_case "bus-writers: custody carries a producer's group" fail \
+	'./scripts/bus-writers-are-separate.sh' \
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "        runAsUser: 20101\n        runAsGroup: 10001\n        fsGroup: 20101\n", "        runAsUser: 20101\n        runAsGroup: 10001\n        fsGroup: 20101\n        supplementalGroups: [20001]\n")')" \
+	"carries the group of a producer on the bus"
+run_case "stream-files-are-precreated: custody's stream is not made before custody starts" fail \
+	'./scripts/stream-files-are-precreated.sh' \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.index("        - name: precreate-streams\n"); open(p, "w").write(s[:i] + "        - name: make-stream-later\n" + s[i + len("        - name: precreate-streams\n"):])')" \
+	"keyryx-custody -> /var/lib/stack/events/keyryx-custody.ndjson: no precreate-streams init container"
+run_case "bus-names: heraldyx reads custody's stream under a name it does not know" fail \
+	'./scripts/bus-names-match-the-source-rule.sh' \
+	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", "/var/lib/stack/keyryx-custody/keyryx-custody.ndjson", "/var/lib/stack/keyryx-custody/custody.ndjson")')" \
+	"is named for no source heraldyx reads from it"
+run_case "bus-names: heraldyx goes back before it reads custody's stream" fail \
+	'./scripts/bus-names-match-the-source-rule.sh' \
+	"$(py 'edit("manifests/45-heraldyx.yaml", "ghcr.io/taipanbox/heraldyx:v0.10.0@", "ghcr.io/taipanbox/heraldyx:v0.9.1@")')" \
+	"older than v0.10.0"
+
 # The Keyryx images and the record seal's trailryx-node are the release pins, by tag and digest (CLAUDE.md invariant 72).
-run_case "keyryx-release-pins: the witness is left on keyryx v0.1.3" fail \
+run_case "keyryx-release-pins: the witness is left on keyryx v0.1.5" fail \
 	'./scripts/keyryx-release-pins.sh' \
-	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("keyryx:v0.1.5@sha256:967d"); open(p, "w").write(s[:i] + "keyryx:v0.1.3@sha256:967d" + s[i + len("keyryx:v0.1.5@sha256:967d"):])')" \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); i = s.rindex("keyryx:v0.2.0@sha256:ead0"); open(p, "w").write(s[:i] + "keyryx:v0.1.5@sha256:ead0" + s[i + len("keyryx:v0.2.0@sha256:ead0"):])')" \
 	"is not the release pin"
 run_case "keyryx-release-pins: the record seal is left on trailryx-node v1.4.0" fail \
 	'./scripts/keyryx-release-pins.sh' \
@@ -4076,7 +4179,7 @@ run_case "keyryx-release-pins: the record seal is left on trailryx-node v1.4.0" 
 	"is not the release pin"
 run_case "keyryx-release-pins: one keyryx digest is not the tag's" fail \
 	'./scripts/keyryx-release-pins.sh' \
-	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); s = s.replace("967dd49907d48ede", "967dd49907d48edf", 1); open(p, "w").write(s)')" \
+	"$(py 'p = "keyryx/manifests/59-keyryx.yaml"; s = open(p).read(); s = s.replace("ead031a117958ce3", "ead031a117958ce4", 1); open(p, "w").write(s)')" \
 	"is not the release pin"
 run_case "keyryx-release-pins: the record seal's image is absent (measured nothing)" fail \
 	'./scripts/keyryx-release-pins.sh' \
@@ -4084,9 +4187,13 @@ run_case "keyryx-release-pins: the record seal's image is absent (measured nothi
 	"measured NOTHING"
 run_case "keyryx-release-pins: a comment reworded in the Keyryx manifest (must pass)" pass \
 	'./scripts/keyryx-release-pins.sh' \
-	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "# Images: keyryx v0.1.0, pinned by the index digest of the tag.", "# Images: keyryx, pinned by the index digest of the tag.")')"
+	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "# Images: keyryx v0.2.0, pinned by the index digest of the tag.", "# Images: keyryx, pinned by the index digest of the tag.")')"
 
 # The console's preview key and wardryx's recipient (CLAUDE.md invariant 91).
+run_case "preview: the mint looks for the console under its old image name only" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("lib/preview-mint.sh", "*/genaryx:*|*/genaryx@*|*genaryx-console*)", "*genaryx-console*)")')" \
+	"the Secret does not carry the key the pod made"
 run_case "preview: the mint applies over an existing key" fail \
 	'./scripts/preview-key-is-minted.sh' \
 	"$(py 'edit("lib/preview-mint.sh", "} | k_ \"-n $PREVIEW_NS create -f -\" >/dev/null \\\n    || preview_mint_fail", "} | k_ \"-n $PREVIEW_NS apply -f -\" >/dev/null \\\n    || preview_mint_fail")')" \
@@ -4178,7 +4285,7 @@ run_case "approver: wardryx reads the JWK set from another file" fail \
 	"but the JWK set is mounted at"
 run_case "approver: the console is left on v1.1.48 while wardryx reads the JWK set" fail \
 	'./scripts/approver-key-is-minted.sh' \
-	"$(py 'edit("manifests/20-console.yaml", "genaryx-console:v1.14.0@sha256:583fcbe19330c461c6de7784f383620feaabf3f7474f977917570b6dfd3641ca", "genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
+	"$(py 'edit("manifests/20-console.yaml", "ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee", "ghcr.io/taipanbox/genaryx-console:v1.1.48@sha256:311625121ba911746aa9a52b9fac7ae1a4730a89546636c86d6543214ea5dd07")')" \
 	"every approval would be refused"
 run_case "approver: a TODO is left in place after the wiring" fail \
 	'./scripts/approver-key-is-minted.sh' \
@@ -4347,68 +4454,73 @@ run_case "witness-records: a comment reworded in the record-seal patch (must pas
 # Workflow checkouts of other repositories are pinned to a full commit (CLAUDE.md invariant 68).
 run_case "workflow-checkouts: a checkout of another repository has no ref" fail \
 	'./scripts/workflow-checkouts-are-pinned.sh' \
-	"$(py 'edit(".github/workflows/console-image.yml", "          ref: $\x7b\x7b env.QRYX_REF \x7d\x7d\n", "")')" \
-	"checkout of TAIPANBOX/qryx has no ref:"
+	"$(py 'p = ".github/workflows/tunnel-images.yml"; s = open(p).read(); open(p, "w").write(s + "\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          repository: TAIPANBOX/newtool\n          path: newtool\n")')" \
+	"checkout of TAIPANBOX/newtool has no ref:"
 run_case "workflow-checkouts: a checkout reads a branch" fail \
 	'./scripts/workflow-checkouts-are-pinned.sh' \
-	"$(py 'edit(".github/workflows/console-image.yml", "ref: $\x7b\x7b env.GENARYX_REF \x7d\x7d", "ref: main")')" \
+	"$(py 'p = ".github/workflows/tunnel-images.yml"; s = open(p).read(); open(p, "w").write(s + "\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          repository: TAIPANBOX/newtool\n          path: newtool\n          ref: main\n")')" \
 	"is not a full 40-hex commit"
 run_case "workflow-checkouts: a pinned commit is shortened" fail \
 	'./scripts/workflow-checkouts-are-pinned.sh' \
-	"$(py 'edit(".github/workflows/console-image.yml", "QRYX_REF: 912724d6611cf18332c4788d84f9348e6d476a71", "QRYX_REF: 912724d6611cf18332")')" \
+	"$(py 'p = ".github/workflows/tunnel-images.yml"; s = open(p).read(); open(p, "w").write(s + "\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          repository: TAIPANBOX/newtool\n          path: newtool\n          ref: 912724d6611cf18332\n")')" \
 	"not a full 40-hex commit"
-run_case "workflow-checkouts: a sixth repository is checked out with no ref" fail \
+run_case "workflow-checkouts: a ref read from an env block the workflow does not have" fail \
 	'./scripts/workflow-checkouts-are-pinned.sh' \
-	"$(py 'p = ".github/workflows/console-image.yml"; s = open(p).read(); open(p, "w").write(s + "\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          repository: TAIPANBOX/newtool\n          path: newtool\n")')" \
-	"checkout of TAIPANBOX/newtool has no ref:"
-run_case "workflow-checkouts: the env block that holds the commits is taken away" fail \
-	'./scripts/workflow-checkouts-are-pinned.sh' \
-	"$(py 'edit(".github/workflows/console-image.yml", "env:\n  QRYX_REF:", "env_:\n  QRYX_REF:")')" \
+	"$(py 'p = ".github/workflows/tunnel-images.yml"; s = open(p).read(); open(p, "w").write(s + "\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          repository: TAIPANBOX/newtool\n          path: newtool\n          ref: $\x7b\x7b env.NEWTOOL_REF \x7d\x7d\n")')" \
 	"does not set"
-run_case "workflow-checkouts: a comment reworded in the workflow (must pass)" pass \
+run_case "workflow-checkouts: every checkout step is taken away (measured nothing)" fail \
 	'./scripts/workflow-checkouts-are-pinned.sh' \
-	"$(py 'edit(".github/workflows/console-image.yml", "# The commits this image is built from, in one place", "# The commits this image is built from, pinned in one place")')"
+	"$(py 'import glob
+for p in glob.glob(".github/workflows/*.yml"):
+    s = open(p).read(); open(p, "w").write(s.replace("actions/checkout@", "actions/checkoux@"))')" \
+	"measured NOTHING"
+run_case "workflow-checkouts: another repository checked out at a full commit (must pass)" pass \
+	'./scripts/workflow-checkouts-are-pinned.sh' \
+	"$(py 'p = ".github/workflows/tunnel-images.yml"; s = open(p).read(); open(p, "w").write(s + "\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          repository: TAIPANBOX/newtool\n          path: newtool\n          ref: 912724d6611cf18332c4788d84f9348e6d476a71\n")')"
 
-# The console's two proof engines are the stack's own, digest for digest (CLAUDE.md invariant 79).
-run_case "console-engines: the console's wardryx differs from the stack's" fail \
-	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("images/console.Dockerfile", "wardryx:v2.8.0@sha256:f9b86a82", "wardryx:v2.8.0@sha256:2101d23c")')" \
-	"differs from the stack's"
-run_case "console-engines: the console's tokenfuse is an older tag than the stack's" fail \
-	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("images/console.Dockerfile", "tokenfuse:v1.27.0@sha256:9ada", "tokenfuse:v1.23.0@sha256:7080")')" \
-	"differs from the stack's"
+# The console's two proof engines are the stack's own, or a recorded lag (CLAUDE.md invariant 79). The static cases
+# run with GATE_OFFLINE=1; the live case reads the image's labels from the registry.
+run_case "console-engines: the stack moves wardryx and the console's stays behind, with no lag recorded" fail \
+	'GATE_OFFLINE=1 ./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("manifests/10-planes.yaml", "ghcr.io/taipanbox/wardryx:v2.8.0@sha256:f9b86a82", "ghcr.io/taipanbox/wardryx:v2.8.0@sha256:2101d23c")')" \
+	"gives no reason under lag"
+run_case "console-engines: the tokenfuse lag loses its reason" fail \
+	'GATE_OFFLINE=1 ./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'import json
+d = json.load(open("images/console-engines.json")); d["lag"]["tokenfuse"] = " "; open("images/console-engines.json", "w").write(json.dumps(d))')" \
+	"gives no reason under lag"
+run_case "console-engines: a lag is recorded for an engine that matches" fail \
+	'GATE_OFFLINE=1 ./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'import json
+d = json.load(open("images/console-engines.json")); d["lag"]["wardryx"] = "no reason left"; open("images/console-engines.json", "w").write(json.dumps(d))')" \
+	"the entry is stale"
 run_case "console-engines: the manifests name two tokenfuse digests" fail \
-	'./scripts/console-engines-are-the-stacks.sh' \
+	'GATE_OFFLINE=1 ./scripts/console-engines-are-the-stacks.sh' \
 	"$(py 'edit("manifests/10-planes.yaml", "ghcr.io/taipanbox/tokenfuse:v1.27.0@sha256:9ada89b4", "ghcr.io/taipanbox/tokenfuse:v1.27.0@sha256:9ada89b5")')" \
-	"names 2 different tokenfuse references"
-run_case "console-engines: an engine stage is named something the copy does not look for" fail \
+	"name 2 references for ghcr.io/taipanbox/tokenfuse"
+run_case "console-engines: one console reference moves alone" fail \
+	'GATE_OFFLINE=1 ./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("manifests/40-routines-and-secrets.yaml", "ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc81", "ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc82")')" \
+	"but images/console-engines.json records"
+run_case "console-engines: the console goes back to genaryx-console in one manifest" fail \
+	'GATE_OFFLINE=1 ./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx:v0.1.0@", "image: ghcr.io/taipanbox/genaryx-console:v0.1.0@")')" \
+	"but images/console-engines.json records"
+run_case "console-engines: the record of the engines is taken away (measured nothing)" fail \
+	'GATE_OFFLINE=1 ./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'import os
+os.remove("images/console-engines.json")')" \
+	"measured NOTHING"
+run_case "console-engines: the file records a wardryx the image does not carry, and the stack runs it too" fail \
 	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("images/console.Dockerfile", " AS tokenfuse-engine", " AS other")')" \
-	"is named 'other'"
-run_case "console-engines: the wardryx binary is no longer copied" fail \
-	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("images/console.Dockerfile", "COPY --from=wardryx-engine /usr/local/bin/service /usr/local/bin/wardryx\n", "")')" \
-	"does not copy the binary out of the wardryx-engine stage"
-run_case "console-engines: the tokenfuse label is gone" fail \
-	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("images/console.Dockerfile", "dev.taipanbox.engine.tokenfuse", "dev.taipanbox.engine.tokenfusx")')" \
-	"has no dev.taipanbox.engine.tokenfuse label"
-run_case "console-engines: a smoke loop stops running wardryx" fail \
-	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit(".github/workflows/console-image.yml", "verdryx wardryx \"tokenfuse constants\" genaryx-web; do", "verdryx \"tokenfuse constants\" genaryx-web; do")')" \
-	"does not run wardryx"
-run_case "console-engines: a smoke loop runs tokenfuse with no argument, which starts the gateway" fail \
-	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit(".github/workflows/console-image.yml", "wardryx \"tokenfuse constants\" genaryx-web; do", "wardryx tokenfuse genaryx-web; do")')" \
-	"does not run tokenfuse"
-run_case "console-engines: no engine stage at all measures nothing" fail \
-	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'p = "images/console.Dockerfile"; s = open(p).read(); open(p, "w").write("\n".join(l for l in s.split("\n") if not l.startswith("FROM ghcr.io/taipanbox/")))')" \
-	"this measured NOTHING"
-run_case "console-engines: a comment reworded in the Dockerfile (must pass)" pass \
-	'./scripts/console-engines-are-the-stacks.sh' \
-	"$(py 'edit("images/console.Dockerfile", "# --- the two engines the console\x27s proofs run", "# --- the two engines that the console\x27s proofs run")')"
+	"$(py 'import json
+d = json.load(open("images/console-engines.json")); d["engines"]["wardryx"] = d["engines"]["wardryx"].replace("f9b86a82", "f9b86a83"); open("images/console-engines.json", "w").write(json.dumps(d))
+edit("manifests/10-planes.yaml", "wardryx:v2.8.0@sha256:f9b86a82", "wardryx:v2.8.0@sha256:f9b86a83")')" \
+	"its label dev.taipanbox.engine.wardryx is"
+run_case "console-engines: the lag reason reworded (must pass)" pass \
+	'GATE_OFFLINE=1 ./scripts/console-engines-are-the-stacks.sh' \
+	"$(py 'import json
+d = json.load(open("images/console-engines.json")); d["lag"]["tokenfuse"] = d["lag"]["tokenfuse"].replace("closes it", "would close it"); open("images/console-engines.json", "w").write(json.dumps(d))')"
 
 # Every image this repository builds from is pinned whole (CLAUDE.md invariant 80).
 run_case "base-images: a moving tag comes back on the runtime base" fail \
@@ -4421,7 +4533,7 @@ run_case "base-images: a digest one character short" fail \
 	"has no digest"
 run_case "base-images: a variable comes back into a FROM" fail \
 	'./scripts/base-images-are-pinned.sh' \
-	"$(py 'edit("images/console.Dockerfile", "FROM rust:1.85-slim@", "FROM rust:${RUST_VERSION}-slim@")')" \
+	"$(py 'edit("images/tokenfuse.Dockerfile", "FROM rust:1.85-slim@", "FROM rust:${RUST_VERSION}-slim@")')" \
 	"has a variable"
 run_case "base-images: a digest with no version beside it" fail \
 	'./scripts/base-images-are-pinned.sh' \
@@ -4441,7 +4553,7 @@ run_case "base-images: a new Dockerfile on a moving tag, found by discovery" fai
 	"has no digest"
 run_case "base-images: a lower-case from on a moving tag" fail \
 	'./scripts/base-images-are-pinned.sh' \
-	"$(py 'edit("images/console.Dockerfile", "FROM node:22-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d", "from node:22-slim")')" \
+	"$(py 'edit("images/wg.Dockerfile", "FROM alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc", "from alpine:3.20")')" \
 	"has no digest"
 run_case "base-images: a COPY reaches for an image no stage names" fail \
 	'./scripts/base-images-are-pinned.sh' \
@@ -4461,7 +4573,7 @@ run_case "base-images: a golang stage loses its assertion" fail \
 	"does not start with"
 run_case "base-images: the tag moves and the digest and assertion stay" fail \
 	'./scripts/base-images-are-pinned.sh' \
-	"$(py 'edit("images/console.Dockerfile", "FROM golang:1.27.4-alpine@", "FROM golang:1.27.5-alpine@")')" \
+	"$(py 'edit("images/caddy.Dockerfile", "FROM golang:1.27.4-alpine@", "FROM golang:1.27.5-alpine@")')" \
 	"asserts go1.27.4 on a golang:1.27.5 base"
 run_case "base-images: xcaddy loses Caddy's version" fail \
 	'./scripts/base-images-are-pinned.sh' \
@@ -5982,36 +6094,6 @@ run_case "risk-hold: a launcher header says again that the flag seeds no policy"
 	"$(py 'edit("cloud/gcp/deploy-gcp.sh", "# It seeds one hold rule, \x60typed-risk-hold\x60", "# It seeds NO policy, not \x60typed-risk-hold\x60")')" \
 	"says the risk flag seeds no hold"
 
-# The console installs its web assets only from the lockfile, with a pinned pnpm (CLAUDE.md invariant 93).
-run_case "console-install-is-locked: the lockfile is copied through a glob again" fail \
-	'./scripts/console-install-is-locked.sh' \
-	"$(py 'edit("images/console.Dockerfile", "genaryx-a360/apps/web/pnpm-lock.yaml ./", "genaryx-a360/apps/web/pnpm-lock.yam[l] ./")')" \
-	"a pattern a missing file passes"
-run_case "console-install-is-locked: the install falls back to npm" fail \
-	'./scripts/console-install-is-locked.sh' \
-	"$(py 'edit("images/console.Dockerfile", " && pnpm install --frozen-lockfile\n", " && (pnpm install --frozen-lockfile || npm install)\n")')" \
-	"fallback"
-run_case "console-install-is-locked: pnpm is pinned by version alone" fail \
-	'./scripts/console-install-is-locked.sh' \
-	"$(py 'import re
-s = open("images/console.Dockerfile").read(); t = re.sub(r"pnpm@11\.29\.0\+sha512\.[0-9a-f]+", "pnpm@11.29.0", s); assert t != s; open("images/console.Dockerfile", "w").write(t)')" \
-	"not as an exact version with the sha512"
-run_case "console-install-is-locked: the frozen install is dropped" fail \
-	'./scripts/console-install-is-locked.sh' \
-	"$(py 'edit("images/console.Dockerfile", " && pnpm install --frozen-lockfile\n", " && pnpm install\n")')" \
-	"without --frozen-lockfile"
-run_case "console-install-is-locked: corepack takes whichever pnpm it likes" fail \
-	'./scripts/console-install-is-locked.sh' \
-	"$(py 'import re
-s = open("images/console.Dockerfile").read(); t = re.sub(r" && corepack prepare pnpm@\S+ --activate \\\n", "", s); assert t != s; open("images/console.Dockerfile", "w").write(t)')" \
-	"is not activated by"
-run_case "console-install-is-locked: no stage installs JavaScript, which must say it measured nothing" fail \
-	'./scripts/console-install-is-locked.sh' \
-	"$(py 'edit("images/console.Dockerfile", " && pnpm install --frozen-lockfile\n", " && true\n")')" \
-	"measured NOTHING"
-run_case "console-install-is-locked: a comment reworded beside the install (must pass)" pass \
-	'./scripts/console-install-is-locked.sh' \
-	"$(py 'edit("images/console.Dockerfile", "# pnpm itself is pinned by version and by the sha512 of its tarball", "# pnpm is pinned by version and by the sha512 of its tarball")')"
 # A piped deploy runs only a release tree cosign verified (CLAUDE.md invariant 94). Each case takes one
 # property away; the braces in the py bodies are \x7b and \x7d.
 run_case "piped-tree: the tree is extracted before cosign verifies it" fail \

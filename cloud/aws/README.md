@@ -163,9 +163,9 @@ an ordinary run is unchanged). Give it on every run: `apply -k` puts the declare
 figure back, and the flag is applied after it. See "The run-budget ceiling" in
 the root README.
 
-Add `--console-token <github-token>` if the Genaryx console is wanted. Without
-it the open stack still deploys and still enforces, but there is no control
-room, and the browser freeze proof cannot be reproduced.
+The Genaryx console comes up by default: it is pulled, `ghcr.io/taipanbox/genaryx`,
+pinned by digest, and nothing builds it here (`--console-token` is gone since
+1.19.0).
 
 This does five things: the cluster (`install-aws.sh`), the sources and images
 built **on a node** rather than locally, the manifests, `verify.sh` and

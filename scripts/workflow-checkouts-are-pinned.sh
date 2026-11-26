@@ -15,7 +15,10 @@
 #
 # A checkout of this repository itself (no `repository:`) is not judged: it is the commit the tag names.
 #
-# A subject that is absent is "measured NOTHING", never a pass.
+# Since stack-k8s 1.19.0 no workflow here checks out another repository: the console image, which was a
+# composition of five, is built and signed by genaryx's own release workflow. The rule stays, as a guard on
+# the next workflow that does. So the subject is every checkout step: none at all is "measured NOTHING",
+# never a pass, and checkouts that all name this repository are counted and reported, not hidden.
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
@@ -28,6 +31,7 @@ import sys
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 bad = []
 checked = 0
+steps = 0
 files = sorted(glob.glob(".github/workflows/*.yml"))
 if not files:
     print("FAIL: no workflow under .github/workflows/, so this measured NOTHING")
@@ -56,6 +60,7 @@ for path in files:
         if not m:
             i += 1
             continue
+        steps += 1
         indent = len(m.group(1))
         j = i + 1
         block = []
@@ -91,8 +96,8 @@ for path in files:
         if not HEX40.match(ref):
             bad.append(f"{where}: ref {ref!r} is not a full 40-hex commit (a branch, a tag or a short SHA moves)")
 
-if checked == 0:
-    print("FAIL: no checkout of another repository found in any workflow, so this measured NOTHING")
+if steps == 0:
+    print("FAIL: no actions/checkout step found in any workflow, so this measured NOTHING")
     sys.exit(1)
 
 if bad:
@@ -101,6 +106,6 @@ if bad:
     print(f"{len(bad)} problem(s). See CLAUDE.md invariant 68.")
     sys.exit(1)
 
-print(f"OK: {checked} checkout(s) of another repository in {len(files)} workflow(s), each at a full 40-hex commit "
-      "named in its workflow's top-level env: block.")
+print(f"OK: {steps} checkout step(s) in {len(files)} workflow(s); {checked} of them check out another repository, "
+      "each at a full 40-hex commit (literal, or named in its workflow's top-level env: block).")
 PY

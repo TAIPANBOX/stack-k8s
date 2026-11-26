@@ -45,3 +45,9 @@ Feature: the console's preview key is minted once, and wardryx seals held calls'
     When they are read
     Then each sources lib/preview-mint.sh and calls preview_mint_settle after its last apply
     # -> gates-have-teeth.sh "preview: a cloud launcher never mints the preview key"
+
+  Scenario: the mint finds the console under its new image name
+    Given the console image is genaryx's own release, ghcr.io/taipanbox/genaryx, since 1.19.0
+    When the mint looks for the console under the old image name only
+    Then preview-key-is-minted.sh fails, because a fresh cluster would mint no key and the console would wait for it
+    # -> gates-have-teeth.sh "preview: the mint looks for the console under its old image name only"

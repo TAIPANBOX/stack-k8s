@@ -21,16 +21,17 @@
 #
 #   1. a container mounts the claim only as subPath `streams`, or subPath `conform` for the chain
 #      verifier alone, or subPath `focus/gateway` read-write for the gateway's focus-export alone, or
-#      subPath `focus` read only for the costcrew console alone (CLAUDE.md invariant 95), or at the
-#      root read only in an init container named bus-ready, or at the root read-write in the Job
-#      bus-owner alone;
+#      subPath `focus` read only for the costcrew console alone (CLAUDE.md invariant 95), or subPath
+#      `custody` read-write for Keyryx custody and its precreate-streams init alone (CLAUDE.md invariant
+#      97), or at the root read only in an init container named bus-ready, or at the root read-write in
+#      the Job bus-owner alone;
 #   2. every container that mounts streams/ read-write is a writer in WRITERS; its uid is its
 #      producer's number, no other stream's writer has that uid, its groups hold its producer's group
 #      and no other producer's group;
 #   3. every pod but the owner has bus-ready as its FIRST init container, and it waits for the marker;
 #   4. the owner runs as 20000, in every producer's group and in at most 16 groups in all (the AUTH_SYS
 #      limit, measured: a 17th group is not honoured over NFS), and its script makes the table WRITERS
-#      names, gid for gid, streams/ 2750 and each stream 0664;
+#      names, gid for gid, streams/ 2750 and each stream 0664, and custody/ 20000:20101 0771;
 #   5. no pod anywhere in the manifests runs as the owner's uid.
 #
 # A subject that is absent is "measured NOTHING", never a pass.
@@ -68,12 +69,17 @@ WRITERS = {
     "tokenfuse-mcp.ndjson": (20012, [("manifests/52-tokenfuse-mcp-broker.yaml", "Deployment", "tokenfuse-mcp-broker", "broker")]),
     "vouchryx.ndjson": (20002, [("manifests/54-delegation.yaml", "Deployment", "vouchryx", "vouchryx")]),
 }
-PRODUCER_GIDS = {gid for gid, _ in WRITERS.values()}
+PRODUCER_GIDS = {gid for gid, _ in WRITERS.values()} | {20101}
 CONFORM = ("manifests/40-routines-and-secrets.yaml", "CronJob", "agent-conform", "agent-conform")
 # The gateway's FOCUS export (CLAUDE.md invariant 95): focus-export writes focus/gateway, the costcrew
 # console reads focus/, and nobody else mounts either.
 FOCUS_WRITER = ("manifests/10-planes.yaml", "Deployment", "tokenfuse-gateway", "focus-export")
 FOCUS_READER = ("manifests/49-costcrew.yaml", "Deployment", "costcrew", "costcrew")
+# Keyryx custody's own stream (CLAUDE.md invariant 97): keyryx v0.2.0 writes only into a file its own uid owns,
+# so custody makes keyryx-custody.ndjson in custody/, beside the bus, through group 20101. Only custody's own
+# container and its precreate init mount custody/ read-write, and its uid and group are no plane's.
+CUSTODY_UID = 20101
+CUSTODY = {("keyryx/manifests/59-keyryx.yaml", "Deployment", "keyryx-custody", c) for c in ("keyryx", "precreate-streams")}
 # Pods that take a plane's identity ON PURPOSE, to show what that identity cannot do. Keyed by file, kind and
 # name; each must still exist, or the entry is stale.
 PROBES = {
@@ -240,6 +246,22 @@ for f, d, spec, vols, claim_ro in bus_pods:
                         bad.append(f"{where}: mounts subPath focus{'' if ro else ' read-write'}; only the costcrew console "
                                    "reads it, and read only")
                     continue
+                if sub == "custody":
+                    if (f, kind, name, cname) not in CUSTODY or ro:
+                        bad.append(f"{where}: mounts subPath custody{'' if ro else ' read-write'}, Keyryx custody's own "
+                                   "stream directory, which only custody writes")
+                        continue
+                    uid, groups = eff(c, spec)
+                    if uid != CUSTODY_UID:
+                        bad.append(f"{where}: writes custody/ as uid {uid}; custody's uid is {CUSTODY_UID}")
+                    if CUSTODY_UID not in groups:
+                        bad.append(f"{where}: is not in group {CUSTODY_UID}, so it cannot make keyryx-custody.ndjson in custody/")
+                    foreign = sorted((groups & PRODUCER_GIDS) - {CUSTODY_UID})
+                    if foreign:
+                        bad.append(f"{where}: carries the group of a producer on the bus ({', '.join(map(str, foreign))}), so "
+                                   "custody could append to that producer's stream")
+                    found_writers.add((f, kind, name, cname))
+                    continue
                 if sub != "streams":
                     bad.append(f"{where}: mounts subPath {sub!r} of stack-events; the bus is subPath streams")
                     continue
@@ -277,6 +299,10 @@ for f, d, spec, vols, claim_ro in bus_pods:
             if not re.search(r"until \[ -f /bus/streams/\.layout \]", cmd):
                 bad.append(f"{label}: its bus-ready init does not wait for streams/.layout, the owner's marker")
 
+for o in sorted(CUSTODY):
+    if o not in found_writers:
+        bad.append(f"{o[0]}: {o[1]} {o[2]}, container {o[3]}: Keyryx custody's stream directory custody/ is not mounted "
+                   "read-write there; the table is stale, or custody has nowhere to announce")
 for stream, (uid, objs) in WRITERS.items():
     for o in objs:
         if o not in found_writers:
@@ -324,6 +350,9 @@ else:
         if not re.search(r'own_dir "\$S" ' + str(BUS_GID) + r" 2750\b", live):
             bad.append(f"{f}: the owner does not make streams/ {OWNER_UID}:{BUS_GID} 2750, so the bus directory is not "
                        "closed to everybody but the owner")
+        if not re.search(r'own_dir "\$B/custody" ' + str(CUSTODY_UID) + r" 0771\b", live):
+            bad.append(f"{f}: the owner does not make custody/ {OWNER_UID}:{CUSTODY_UID} 0771, Keyryx custody's own stream "
+                       "directory beside the bus")
         if not re.search(r'own_file "\$S" "\$\{row%%:\*\}" "\$\{row##\*:\}" 0664\b', live):
             bad.append(f"{f}: the owner does not make each stream 0664 in its producer's group")
         # A producer's group can write the archive and conform/, so a link it plants where the owner writes

@@ -1,0 +1,138 @@
+
+== k3s v1.36.2+k3s1, from its tag, checked against the pinned sha256
+NAME      STATUS   ROLES           AGE     VERSION        INTERNAL-IP      EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION              CONTAINER-RUNTIME
+p16-k3s   Ready    control-plane   4m14s   v1.36.2+k3s1   10.166.170.152   <none>        Ubuntu 24.04.5 LTS   6.8.0-149-generic (amd64)   containerd://2.3.2-k3s2
+
+== Longhorn v1.7.2, checked against the pinned sha256, and stack-rwx as install.sh writes it (one replica)
+NAME                  DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+longhorn-csi-plugin   1         1         1       1            1           <none>          2m49s
+driver.longhorn.io fsGroupPolicy=ReadWriteOnceWithFSType
+
+== namespace agent-stack enforcing Pod Security restricted, and the claims 59-keyryx.yaml does not make
+NAME                   STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+keyryx-state           Bound    pvc-c8bc2f93-190e-4953-a026-48b130dce4b5   1Gi        RWO            local-path     <unset>                 98s
+keyryx-witness-state   Bound    pvc-5d3071e4-74e6-4813-ae0b-c92197acc799   1Gi        RWO            local-path     <unset>                 98s
+stack-events           Bound    pvc-e8f9646c-c788-4f50-aca2-629978a6f831   1Gi        RWX            stack-rwx      <unset>                 2m35s
+trailryx-records       Bound    pvc-70878876-27ce-4565-90ce-5bed89806a54   1Gi        RWO            local-path     <unset>                 2m35s
+NAME          STATUS   AGE     LABELS
+agent-stack   Active   2m35s   kubernetes.io/metadata.name=agent-stack,pod-security.kubernetes.io/enforce-version=latest,pod-security.kubernetes.io/enforce=restricted
+
+== 1. the bus owner, twice
+OK    the bus-owner Job completed (first run)
+OK    the bus-owner Job completed (second run)
+/bus/streams 20000:10001:2750
+/bus/custody 20000:20101:771
+/bus/focus/gateway 20000:20010:2775
+custody/ does not list for others
+OK    custody/ is 20000:20101 0771
+OK    streams/ is still 20000:10001 2750
+OK    custody/ does not list for a uid outside its group
+
+== 2. keyryx/up.sh's minting, then 59-keyryx.yaml as it is
+serviceaccount/keyryx-custody unchanged
+serviceaccount/keyryx-witness unchanged
+persistentvolumeclaim/keyryx-state unchanged
+persistentvolumeclaim/keyryx-witness-state unchanged
+deployment.apps/keyryx-custody unchanged
+deployment.apps/keyryx-witness unchanged
+service/keyryx-custody unchanged
+service/keyryx-witness unchanged
+networkpolicy.networking.k8s.io/keyryx-custody-ingress configured
+networkpolicy.networking.k8s.io/keyryx-witness-ingress configured
+OK    59-keyryx.yaml applied under restricted with no warning
+OK    custody v0.2.0 is Ready
+OK    the witness is Ready
+NAME                              READY   STATUS      RESTARTS   AGE    IP           NODE      NOMINATED NODE   READINESS GATES
+bus-owner-4fj2m                   0/1     Completed   0          12s    10.42.0.48   p16-k3s   <none>           <none>
+console-image                     0/1     Completed   0          57s    10.42.0.46   p16-k3s   <none>           <none>
+heraldyx-once                     0/2     Completed   0          75s    10.42.0.42   p16-k3s   <none>           <none>
+keyryx-custody-7bc5559949-jpgxz   1/1     Running     0          69s    10.42.0.43   p16-k3s   <none>           <none>
+keyryx-witness-5c9947f56b-sgt2g   1/1     Running     0          114s   10.42.0.38   p16-k3s   <none>           <none>
+other                             0/1     Error       0          78s    10.42.0.41   p16-k3s   <none>           <none>
+reader                            0/1     Error       0          81s    10.42.0.40   p16-k3s   <none>           <none>
+total 4
+-rw-r-----    1 20101    10001          705 Nov 26 00:10 keyryx-custody.ndjson
+2026/11/26 00:10:55 keyryx custody v0.2.0: listening on 0.0.0.0:4340, 0 consumer sockets and the admin socket /var/lib/keyryx/data/admin.sock; 2 keys held; announcing to /var/lib/stack/events/keyryx-custody.ndjson
+OK    custody announces to /var/lib/stack/events/keyryx-custody.ndjson
+/bus/custody/keyryx-custody.ndjson 20101:10001:640 1
+OK    the stream is 20101:10001 0640 with one link
+
+== 3. rotate and revoke on the admin socket, as custody's uid
+(no id in the distroless image)
+rotate: {"activate_at":1795652826,"alg":"ES256","created":1795651926,"kid":"f4tZkBG-1_NQtiWRhnbUu2wmcJFEB6oh-JgVxqxR33E","name":"wardryx-approval","retired":0,"revoked":0,"state":"next"} (exit 0)
+OK    keyryx admin rotate wardryx-approval answered
+revoking kid f4tZkBG-1_NQtiWRhnbUu2wmcJFEB6oh-JgVxqxR33E
+revoke: {"activate_at":1795652826,"alg":"ES256","created":1795651926,"kid":"f4tZkBG-1_NQtiWRhnbUu2wmcJFEB6oh-JgVxqxR33E","name":"wardryx-approval","retired":0,"revoked":1795651926,"state":"revoked"} (exit 0)
+OK    keyryx admin revoke answered
+
+== 4. a reader shaped as heraldyx's patch
+{"schema":"taipanbox.dev/agent-event/v1.0","ts":"2026-11-26T00:10:35.718Z","source":"keyryx","type":"key_rotated","agent_id":"agent://keyryx.internal/custody","severity":"info","data":{"alg":"ES256","kid":"PxyUK9_uCVti9YqzK4CCj9mMfnheX0Hp5ner4ZQ4yjs","name":"wardryx-approval","previous_kid":"wNLIauhlHe3vixgQAuM81zZe4AyKAUbHHV1Ch7EcNpQ"}}
+{"schema":"taipanbox.dev/agent-event/v1.0","ts":"2026-11-26T00:10:36.339Z","source":"keyryx","type":"key_revoked","agent_id":"agent://keyryx.internal/custody","severity":"high","data":{"alg":"ES256","kid":"PxyUK9_uCVti9YqzK4CCj9mMfnheX0Hp5ner4ZQ4yjs","name":"wardryx-approval"},"prev_hash":"sha256:ddf70f65cad4acc89bb298f3dcfb5a998d41d0d3a503656c31c94bbf23b3e003"}
+{"schema":"taipanbox.dev/agent-event/v1.0","ts":"2026-11-26T00:12:06.072Z","source":"keyryx","type":"key_rotated","agent_id":"agent://keyryx.internal/custody","severity":"info","data":{"alg":"ES256","kid":"f4tZkBG-1_NQtiWRhnbUu2wmcJFEB6oh-JgVxqxR33E","name":"wardryx-approval","previous_kid":"wNLIauhlHe3vixgQAuM81zZe4AyKAUbHHV1Ch7EcNpQ"},"prev_hash":"sha256:44055829a2db43efda9abcabf1828682b301fcf732b6b3b65b1f0e8eb8cad9ca"}
+{"schema":"taipanbox.dev/agent-event/v1.0","ts":"2026-11-26T00:12:06.368Z","source":"keyryx","type":"key_revoked","agent_id":"agent://keyryx.internal/custody","severity":"high","data":{"alg":"ES256","kid":"f4tZkBG-1_NQtiWRhnbUu2wmcJFEB6oh-JgVxqxR33E","name":"wardryx-approval"},"prev_hash":"sha256:93cda3cdcc3669526a53cfd6875df7fc8108d4f62e98be0bdf2b9cdf2d01f4af"}
+
+append-refused
+create-refused
+OK    the reader reads key_rotated
+OK    the reader reads key_revoked
+OK    the reader can neither append nor add a name
+
+== 5. another plane's identity, custody/ mounted read-write
+append-refused
+create-refused
+rename-refused
+OK    another plane cannot append, add or rename in custody/
+
+== 6. heraldyx v0.10.0 reads custody's stream as the patch names it
+image ghcr.io/taipanbox/heraldyx:v0.10.0@sha256:7baa8cdb8508afde33b8366141f433ae4bea1688caefde6b4f5d48a21af183c1
+2026/11/26 00:12:17 record: record: open /work/sent.ndjson: event: open /work/sent.ndjson: event: /work/sent.ndjson does not exist and its directory is not owned by this process, so it is not created here
+2026/11/26 00:12:17 watching 1 file(s) under 1 path(s), floor high, dedup 10m0s, ceiling 20/hour
+2026/11/26 00:12:17 sending via file to 1 recipient(s)
+To: ops@example.invalid
+Subject: [agent stack] agent://keyryx.internal/custody revoked the signing key wardryx-approval
+
+Agent agent://keyryx.internal/custody revoked the signing key wardryx-approval.
+Key name wardryx-approval, kid PxyUK9_uCVti9YqzK4CCj9mMfnheX0Hp5ner4ZQ4yjs, algorithm ES256.
+Key: key_revoked:agent://keyryx.internal/custody
+
+What this box already did: Nothing here. keyryx took the key out of every key set it publishes at once, so the key is no longer published and nothing new is accepted under it. This box holds no keys and did nothing to them.
+
+If nobody acts: Check whether the revocation was planned. For a held key, a verifier stops accepting what it signed once it refreshes its copy of the key set. For a delegated key, keyryx keeps serving the statement that certified it together with revoked_at, so a verifier can still tell what it signed before that time from what came after. Either way, check what the key was used for, and anything it signed after it was compromised, if that is why it was revoked.
+
+No console address is configured for this box, so this mail carries no link.
+
+Raised by keyryx at 2026-11-26 00:10:36 UTC. This mail carries identifiers and numbers only, never the content of a call.
+
+----
+OK    heraldyx wrote the mail for key_revoked
+
+== 7. custody restarted keeps its stream
+OK    custody started again
+/bus/custody/keyryx-custody.ndjson 20101:10001:640 1
+4
+OK    the stream is kept, 20101:10001 0640
+OK    the bus-owner Job completed (third run, over a custody/ that holds a stream)
+
+== 8. the console image genaryx v0.1.0, as verdryx-slo runs it
+image ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee
+genaryx-web 0.1.0
+verdryx answers
+usage: wardryx <command> [flags]
+{
+trailryx-verify 1.6.0
+preview-key exit 0
+1633
+OK    genaryx-web 0.1.0 answers
+OK    verdryx answers (the quality-drift CronJob and verdryx-slo run it)
+OK    genaryx-web preview-key made a key (the mint lib/preview-mint.sh runs)
+
+== result
+NAME                              READY   STATUS      RESTARTS   AGE     IP           NODE      NOMINATED NODE   READINESS GATES
+bus-owner-t7vj9                   0/1     Completed   0          9s      10.42.0.56   p16-k3s   <none>           <none>
+console-image                     0/1     Completed   0          4s      10.42.0.57   p16-k3s   <none>           <none>
+heraldyx-once                     0/2     Completed   0          21s     10.42.0.53   p16-k3s   <none>           <none>
+keyryx-custody-695d96fdf5-snm46   1/1     Running     0          16s     10.42.0.54   p16-k3s   <none>           <none>
+keyryx-witness-5c9947f56b-sgt2g   1/1     Running     0          2m31s   10.42.0.38   p16-k3s   <none>           <none>
+other                             0/1     Completed   0          24s     10.42.0.52   p16-k3s   <none>           <none>
+reader                            0/1     Completed   0          28s     10.42.0.51   p16-k3s   <none>           <none>
+RUN_EXIT=0 (0 failed)

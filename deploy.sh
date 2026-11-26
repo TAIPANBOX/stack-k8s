@@ -30,10 +30,9 @@
 #
 # Nothing here needs a credential. Every repository this pulls is public and
 # Apache-2.0, the Genaryx console included since 2026-07-27.
-# `--console-token` survives for the one case it is still good for: building
-# the console from a private fork of your own. Without the console you get the
-# governed stack and no control room, which is a real deployment and not a
-# crippled one: the planes enforce with or without a UI in front of them.
+# The console is not built here: it is pulled, `ghcr.io/taipanbox/genaryx`, pinned by tag
+# and digest like every other plane (stack-k8s 1.19.0). `--console-token` survives only as
+# the bearer for a private fork's tree when INSTALL_FROM_MAIN=1 fetches main.
 #
 # `--anthropic-key-file <path>` gives the gateway its provider key: the one file the gateway
 # reads, made into the Secret gateway-upstream-key on the cluster, on stdin, once. A re-run
@@ -63,10 +62,6 @@
 # `set-me.invalid` stands and the record plane refuses every event the cluster
 # produces, silently. The two cloud deploys have taken this flag since
 # 2026-09-01; this one did not until now.
-#
-# `--console-ref <branch>` builds the console from a branch instead of main.
-# The console is a separate repository, so a change proven on a branch there
-# was, until this flag, undeployable by this script at any version.
 #
 # `--with-typed` additionally applies typryx, the typed-answer plane: it answers a
 # typed question (a choice, a score, a yes or no) with a probability, and
@@ -117,12 +112,6 @@ set -euo pipefail
 SERVERS=""; AGENTS=""; SSH_KEY="${SSH_KEY:-}"
 HCLOUD_TOKEN="${HCLOUD_TOKEN:-}"
 CONSOLE_TOKEN="${CONSOLE_TOKEN:-}"
-# The console is its OWN repository with its own branches, and until this
-# existed there was no way to deploy one: the clone below took whatever `main`
-# happened to be. A console change could be written, reviewed and proven on a
-# branch and still be undeployable, which is a strange thing for a deployment
-# script to enforce.
-CONSOLE_REF="${CONSOLE_REF:-main}"
 # The operator tunnel, which is how anyone reaches the console afterwards. Empty
 # means "ask, if there is a terminal to ask on"; 0 means the operator said no
 # and will use `ssh -L` instead, which is a real way to run this.
@@ -218,7 +207,6 @@ while [ $# -gt 0 ]; do
     --ssh-key)       SSH_KEY="$2"; shift 2 ;;
     --hcloud-token)  HCLOUD_TOKEN="$2"; shift 2 ;;
     --console-token) CONSOLE_TOKEN="$2"; shift 2 ;;
-    --console-ref)   CONSOLE_REF="$2"; shift 2 ;;
     --console-domain) CONSOLE_DOMAIN="$2"; WANT_TUNNEL=1; shift 2 ;;
     --endpoint-host)  ENDPOINT_HOST="$2";  WANT_TUNNEL=1; shift 2 ;;
     --no-tunnel)      WANT_TUNNEL=0; shift ;;
@@ -664,23 +652,17 @@ else
 fi
 
 # ---- 2. sources and images --------------------------------------------------
-# The Dockerfiles build from a directory holding the repos side by side, because
-# one image (the console) legitimately spans five of them. So the layout is
-# reproduced on the builder rather than invented here.
-#
-# Note the directory name `genaryx-a360` for the `genaryx` repo: the console's
-# Dockerfile refers to it by that path, which is the name it has in the
-# development tree these images were first built from. Renaming it is a change
-# to every Dockerfile and every build script, so the clone is named to match.
-# Cloned because something on the node still BUILDS from them: tokenfuse for
-# its own image, and qryx, mockryx, verdryx and engram because the console
-# image bundles those four tools inside itself (see images/console.Dockerfile).
+# Cloned because something on the node still BUILDS from it: tokenfuse, for its
+# own image. The console is pulled since stack-k8s 1.19.0 (ghcr.io/taipanbox/
+# genaryx, built and signed by genaryx's own release workflow), so neither its
+# source nor the four tools it bundles (qryx, mockryx, verdryx, engram) are
+# cloned here any more.
 #
 # wardryx, idryx and heraldyx are gone from this list on purpose: their images
 # are pulled from ghcr.io now, so cloning their source on the node would be
 # fetching something nothing reads. Their policy and config come from the
 # manifests, not from their repositories.
-OPEN_REPOS="qryx mockryx tokenfuse verdryx engram"
+OPEN_REPOS="tokenfuse"
 if [ "$SKIP_IMAGES" = 1 ]; then
   say "skipping the image build (--skip-images)"
 else
@@ -698,46 +680,6 @@ else
     sh_ "$BUILDER" "cd /root/src && if [ -d $r ]; then git -C $r pull -q --ff-only || true; else git clone -q --depth 1 https://github.com/TAIPANBOX/$r.git; fi && echo '   $r ok'"
   done
 
-  WITH_CONSOLE=0
-  # The console is public now, so the URL carries a token only when one was
-  # given (a private fork). An empty CONSOLE_TOKEN must not produce
-  # `https://x-access-token:@github.com/...`, which git treats as an empty
-  # credential and fails on rather than falling back to anonymous.
-  # The console token goes to the builder on stdin: the first two lines are the
-  # token and the ref, read by the builder's shell, and the clone script follows on
-  # the same stream. The token is in no URL and on no command line (CLAUDE.md
-  # invariant 60); git gets it through its environment and a credential helper.
-  # An empty token is an anonymous clone, which a public repository needs.
-  if true; then
-    # `--branch` on both paths, and a hard reset rather than a pull on the
-    # second: `git pull --ff-only` on a checkout sitting on a DIFFERENT branch
-    # fails, gets swallowed by `|| true`, and the build then quietly produces
-    # the previous branch's console while reporting success.
-    if { printf '%s\n%s\n' "$CONSOLE_TOKEN" "$CONSOLE_REF"; cat <<'REMOTE'
-cd /root/src || exit 1
-console_git() {
-  if [ -n "$CT" ]; then
-    git -c credential.helper= -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$CT"; }; f' "$@"
-  else
-    git "$@"
-  fi
-}
-if [ -d genaryx-a360/.git ]; then
-  console_git -C genaryx-a360 fetch -q --depth 1 origin "$REF" || exit 1
-  git -C genaryx-a360 checkout -q -B "$REF" FETCH_HEAD || exit 1
-else
-  rm -rf genaryx-a360 && console_git clone -q --depth 1 --branch "$REF" https://github.com/TAIPANBOX/genaryx.git genaryx-a360 || exit 1
-fi
-echo "   genaryx (console) ok, at $(git -C genaryx-a360 rev-parse --short HEAD) on $REF"
-REMOTE
-       } | sh_ "$BUILDER" 'IFS= read -r CT; IFS= read -r REF; export CT REF; sh -s'; then
-      WITH_CONSOLE=1
-    else
-      echo "   could not clone the console with that token: continuing WITHOUT it"
-    fi
-  else
-    echo "   no --console-token: deploying the open stack without the Genaryx console"
-  fi
 
   # The five Go planes are NOT built here any more. They are published, pinned
   # by version in the manifests, and pulled by the kubelet:
@@ -750,13 +692,13 @@ REMOTE
   # live run found on 2026-08-02 lived in that path rather than in any service.
   # What nobody builds, nobody breaks.
   #
-  # What is still built is what is not published: tokenfuse (Rust) and the
-  # console (built from source per install), plus the two tiny tunnel images.
+  # What is still built is tokenfuse (Rust) and the two tiny tunnel images. The
+  # console is pulled, ghcr.io/taipanbox/genaryx, pinned by digest.
   #
   # The trade is that every node now needs to reach ghcr.io. These nodes
   # already reach the internet to install k3s, Longhorn and Calico, so this
   # adds a host to that list rather than a requirement.
-  say "building what is not published (the console build is four languages and takes the longest)"
+  say "building tokenfuse and the two tunnel images"
   sh_ "$BUILDER" "set -e
     cd /root/src
     docker build -q -f stack-k8s/images/tokenfuse.Dockerfile -t stack/tokenfuse:dev ./tokenfuse >/dev/null
@@ -765,19 +707,14 @@ REMOTE
     # out, ./tunnel/up.sh reaches a running cluster and then sits in
     # ImagePullBackOff for images that were never built anywhere, which reads
     # like a registry problem rather than a missing build. Cheap: one Go binary
-    # and one xcaddy build, both tiny beside the console.
+    # and one xcaddy build, both tiny.
     docker build -q -f stack-k8s/images/wg.Dockerfile -t stack/wg:dev stack-k8s >/dev/null
     echo '   built stack/wg:dev'
     docker build -q -f stack-k8s/images/caddy.Dockerfile -t stack/caddy:dev stack-k8s >/dev/null
-    echo '   built stack/caddy:dev'
-    if [ '$WITH_CONSOLE' = '1' ]; then
-      docker build -q -f stack-k8s/images/console.Dockerfile -t stack/genaryx-console:dev . >/dev/null
-      echo '   built stack/genaryx-console:dev'
-    fi"
+    echo '   built stack/caddy:dev'"
 
   say "importing images into every node's containerd"
   IMAGES="stack/tokenfuse:dev stack/wg:dev stack/caddy:dev"
-  [ "$WITH_CONSOLE" = 1 ] && IMAGES="$IMAGES stack/genaryx-console:dev"
   PRIVS=""
   PEER_PAIRS=()
   for n in "${ALL_NODES[@]}"; do
@@ -818,6 +755,10 @@ tar -cz -C "$ROOT" manifests policy | sh_ "$FIRST" 'mkdir -p /root/stack-k8s && 
 # minutes ago is still there, and apply leaves an unchanged Job alone: a new directory in its script (focus/,
 # 1.17) would then never be made and the pods that wait for it would wait for ever. So the old one goes first.
 k_ "-n agent-stack delete job bus-owner --ignore-not-found"
+# On a cluster that already enforces admission, this release's policies go in before the manifests that name
+# its images (policy/refresh.sh, CLAUDE.md invariant 58); on a new cluster it does nothing.
+sh_ "$FIRST" 'cd /root/stack-k8s && KUBECTL="/usr/local/bin/k3s kubectl" bash policy/refresh.sh' \
+  || die "could not bring this release's admission policies in before its manifests (policy/refresh.sh)"
 k_ "apply -k /root/stack-k8s/manifests"
 
 # Admission (CLAUDE.md invariant 58): from here on the stack's namespace admits an image only when its
