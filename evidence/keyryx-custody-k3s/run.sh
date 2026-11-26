@@ -219,7 +219,7 @@ spec:
   containers:
     - name: c
       image: $BUSYBOX
-      command: ["sh", "-c", "cat /var/lib/stack/keyryx-custody/keyryx-custody.ndjson; echo; if echo x >> /var/lib/stack/keyryx-custody/keyryx-custody.ndjson 2>/dev/null; then echo APPENDED; else echo append-refused; fi; if : > /var/lib/stack/keyryx-custody/planted 2>/dev/null; then echo CREATED; else echo create-refused; fi"]
+      command: ["sh", "-c", "cat /var/lib/stack/keyryx-custody/keyryx-custody.ndjson; echo; if (echo x >> /var/lib/stack/keyryx-custody/keyryx-custody.ndjson) 2>/dev/null; then echo APPENDED; else echo append-refused; fi; if (: > /var/lib/stack/keyryx-custody/planted) 2>/dev/null; then echo CREATED; else echo create-refused; fi"]
       securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
       volumeMounts: [{ name: events, mountPath: /var/lib/stack/keyryx-custody, subPath: custody, readOnly: true }]
   volumes:
@@ -245,7 +245,7 @@ spec:
   containers:
     - name: c
       image: $BUSYBOX
-      command: ["sh", "-c", "if echo x >> /c/keyryx-custody.ndjson 2>/dev/null; then echo APPENDED; else echo append-refused; fi; if : > /c/keyryx-custody.ndjson.new 2>/dev/null; then echo CREATED; else echo create-refused; fi; if mv /c/keyryx-custody.ndjson /c/moved 2>/dev/null; then echo RENAMED; else echo rename-refused; fi"]
+      command: ["sh", "-c", "if (echo x >> /c/keyryx-custody.ndjson) 2>/dev/null; then echo APPENDED; else echo append-refused; fi; if (: > /c/keyryx-custody.ndjson.new) 2>/dev/null; then echo CREATED; else echo create-refused; fi; if mv /c/keyryx-custody.ndjson /c/moved 2>/dev/null; then echo RENAMED; else echo rename-refused; fi"]
       securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
       volumeMounts: [{ name: events, mountPath: /c, subPath: custody }]
   volumes:
