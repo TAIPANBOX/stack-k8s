@@ -57,7 +57,7 @@ if ! command -v k3s >/dev/null 2>&1; then
   INSTALL_K3S_VERSION="$K3S_VERSION" sh "$f" --write-kubeconfig-mode 0600 >/dev/null || { echo "k3s install failed"; exit 1; }
 fi
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-for _ in $(seq 60); do kubectl get nodes 2>/dev/null | grep -q ' Ready' && break; sleep 2; done
+for _ in $(seq 60); do grep -q ' Ready' <<<"$(kubectl get nodes 2>/dev/null)" && break; sleep 2; done
 kubectl get nodes -o wide
 
 step "Longhorn v1.7.2, checked against the pinned sha256, and stack-rwx as install.sh writes it (one replica)"
@@ -179,13 +179,15 @@ wd="$(k get secret keyryx-wardryx-client -o jsonpath='{.data.credential}' | base
 td="$(k get secret keyryx-trailryx-client -o jsonpath='{.data.credential}' | base64 -d | sha256sum | cut -d' ' -f1)"
 sed -e "s/@WARDRYX_DIGEST@/$wd/" -e "s/@TRAILRYX_DIGEST@/$td/" "$ROOT/keyryx/policy.json.tmpl" >/tmp/policy.json
 k create configmap keyryx-policy --from-file=policy.json=/tmp/policy.json --dry-run=client -o yaml | k apply -f - >/dev/null
-k apply -f "$ROOT/keyryx/manifests/59-keyryx.yaml" 2>&1 | grep -iv 'unchanged' | grep -i 'warning\|forbidden\|error' && fail "the apply printed a warning or a refusal" || ok "59-keyryx.yaml applied under restricted with no warning"
+applied="$(k apply -f "$ROOT/keyryx/manifests/59-keyryx.yaml" 2>&1)"; printf '%s\n' "$applied"
+grep -i 'warning\|forbidden\|error' <<<"$applied" && fail "the apply printed a warning or a refusal" || ok "59-keyryx.yaml applied under restricted with no warning"
 if k rollout status deployment/keyryx-custody --timeout=300s >/dev/null; then ok "custody v0.2.0 is Ready"; else fail "custody is not Ready"; k describe pod -l app=keyryx-custody | tail -20; k logs deploy/keyryx-custody --all-containers --tail=30; fi
 k rollout status deployment/keyryx-witness --timeout=300s >/dev/null && ok "the witness is Ready" || fail "the witness is not Ready"
 k get pods -o wide
 k logs deploy/keyryx-custody -c precreate-streams
-k logs deploy/keyryx-custody -c keyryx | grep -i 'announcing to' | tail -1
-k logs deploy/keyryx-custody -c keyryx | grep -q 'announcing to /var/lib/stack/events/keyryx-custody.ndjson' \
+clog="$(k logs deploy/keyryx-custody -c keyryx)"
+grep -i 'announcing to' <<<"$clog" | tail -1
+grep -q 'announcing to /var/lib/stack/events/keyryx-custody.ndjson' <<<"$clog" \
   && ok "custody announces to /var/lib/stack/events/keyryx-custody.ndjson" || fail "custody does not say it announces there"
 out="$(probe_root probe-file 'stat -c "%n %u:%g:%a %h" /bus/custody/keyryx-custody.ndjson')"
 printf '%s\n' "$out"
