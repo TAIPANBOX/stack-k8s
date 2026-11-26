@@ -33,7 +33,7 @@
 # Go, xcaddy, Caddy and the plugin are each named, so a rebuild of one tag compiles
 # the same inputs (invariant 80). XCADDY_SETCAP is what the builder image set, and
 # the published binary carries it: cap_net_bind_service.
-FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS build
+FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 # A digest outranks the tag beside it, so a bump that moved the tag alone would
 # keep the old Go under the new name. This line stops that build (invariant 80).
 RUN test "$(go env GOVERSION)" = go1.27.4
@@ -44,7 +44,7 @@ RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@v0.4.7
 # other provider is a one-word change here plus the matching credential.
 RUN xcaddy build v2.11.8 --with github.com/caddy-dns/cloudflare@v0.2.4 --output /usr/bin/caddy
 
-FROM caddy:2.11.8-alpine@sha256:f6228111e5fafa1a5238258d0858e103f10599b8d1659a146e7726681a002bb9
+FROM caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
 COPY --from=build /usr/bin/caddy /usr/bin/caddy
 
 RUN cat > /usr/local/bin/caddy-entrypoint.sh <<'ENTRY' && chmod +x /usr/local/bin/caddy-entrypoint.sh

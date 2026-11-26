@@ -9,7 +9,7 @@
 #
 # Static binary, distroless runtime, non-root: nothing in the final layer can
 # run a shell, which matters more than usual for a policy decision point.
-FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS build
+FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 # A digest outranks the tag beside it, so a bump that moved the tag alone would
 # keep the old Go under the new name. This line stops that build (invariant 80).
 RUN test "$(go env GOVERSION)" = go1.27.4
