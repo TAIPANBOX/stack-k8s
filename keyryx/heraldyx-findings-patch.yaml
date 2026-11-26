@@ -35,6 +35,11 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: heraldyx
+          # The pin manifests/45-heraldyx.yaml names, carried here too: heraldyx is applied only on a run that names a
+          # recipient, so a later run without one would otherwise patch an older heraldyx, which does not know
+          # keyryx-custody.ndjson (v0.10.0 is the first) and drops every line of it as foreign. The unpatch leaves the
+          # image as it is, which is the pin. scripts/keyryx-custody-announces.sh holds the two equal.
+          image: ghcr.io/taipanbox/heraldyx:v0.10.0@sha256:7baa8cdb8508afde33b8366141f433ae4bea1688caefde6b4f5d48a21af183c1
           env:
             - name: HERALDYX_EVENTS
               value: "/var/lib/stack/events,/var/lib/keyryx-findings/keyryx.ndjson,/var/lib/stack/keyryx-custody/keyryx-custody.ndjson"

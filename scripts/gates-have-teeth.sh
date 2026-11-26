@@ -3822,6 +3822,22 @@ run_case "keyryx-reaches-only-consumers: a comment naming the label (must pass)"
 
 # Verified images (invariant 58, policy/ and scripts/verified-images-are-enforced.sh). Every case
 # edits one tracked file the gate reads; the gate's own baseline must be green first.
+run_case "verified-images: deploy.sh stops bringing the policies in before its apply" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("deploy.sh", "bash policy/refresh.sh\x27 \\\n  || die", "bash policy/refreshx.sh\x27 \\\n  || die")')" \
+	"does not run policy/refresh.sh"
+run_case "verified-images: the AWS launcher refreshes the policies after its apply" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'p = "cloud/aws/deploy-aws.sh"; s = open(p).read(); a = "su_ \"$FIRST\" \x27KUBECTL=\"/usr/local/bin/k3s kubectl\" bash /root/stack-k8s/policy/refresh.sh\x27 \\\n  || die \"could not bring this release\x27s admission policies in before its manifests (policy/refresh.sh)\"\n"; assert a in s; s = s.replace(a, "", 1); s = s.replace("k_ \"apply -k /root/stack-k8s/manifests\"\n", "k_ \"apply -k /root/stack-k8s/manifests\"\n" + a, 1); open(p, "w").write(s)')" \
+	"runs policy/refresh.sh after its apply"
+run_case "verified-images: refresh.sh applies the policies on a cluster with no controller" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/refresh.sh", "crd clusterimagepolicies.policy.sigstore.dev", "crd clusterimagepolicies.example.invalid")')" \
+	"behind a check that the controller"
+run_case "verified-images: up.sh keeps the old console policy" fail \
+	'./scripts/verified-images-are-enforced.sh' \
+	"$(py 'edit("policy/up.sh", "$KUBECTL delete clusterimagepolicy taipanbox-console --ignore-not-found >/dev/null\n", "")')" \
+	"does not remove taipanbox-console"
 run_case "verified-images: a TAIPANBOX image carries a tag only" fail \
 	'./scripts/verified-images-are-enforced.sh' \
 	"$(py 'edit("manifests/20-console.yaml", "image: ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee", "image: ghcr.io/taipanbox/genaryx:v0.1.0")')" \
@@ -4108,6 +4124,10 @@ run_case "custody-announces: custody's bus-ready waits for the marker alone" fai
 	'./scripts/keyryx-custody-announces.sh' \
 	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", " && [ \\\"$(stat -c %u:%g:%a /bus/custody 2>/dev/null)\\\" = 20000:20101:771 ]", "")')" \
 	"does not wait for /bus/custody"
+run_case "custody-announces: the heraldyx patch carries an older heraldyx than the pin" fail \
+	'./scripts/keyryx-custody-announces.sh' \
+	"$(py 'edit("keyryx/heraldyx-findings-patch.yaml", "image: ghcr.io/taipanbox/heraldyx:v0.10.0@", "image: ghcr.io/taipanbox/heraldyx:v0.9.1@")')" \
+	"not the pin of manifests/45-heraldyx.yaml"
 run_case "custody-announces: the README stops showing how to revoke" fail \
 	'./scripts/keyryx-custody-announces.sh' \
 	"$(py 'edit("README.md", "-c keyryx -- keyryx admin revoke", "-c keyryx -- keyryx admin rm")')" \
@@ -4170,6 +4190,10 @@ run_case "keyryx-release-pins: a comment reworded in the Keyryx manifest (must p
 	"$(py 'edit("keyryx/manifests/59-keyryx.yaml", "# Images: keyryx v0.2.0, pinned by the index digest of the tag.", "# Images: keyryx, pinned by the index digest of the tag.")')"
 
 # The console's preview key and wardryx's recipient (CLAUDE.md invariant 91).
+run_case "preview: the mint looks for the console under its old image name only" fail \
+	'./scripts/preview-key-is-minted.sh' \
+	"$(py 'edit("lib/preview-mint.sh", "*/genaryx:*|*/genaryx@*|*genaryx-console*)", "*genaryx-console*)")')" \
+	"the Secret does not carry the key the pod made"
 run_case "preview: the mint applies over an existing key" fail \
 	'./scripts/preview-key-is-minted.sh' \
 	"$(py 'edit("lib/preview-mint.sh", "} | k_ \"-n $PREVIEW_NS create -f -\" >/dev/null \\\n    || preview_mint_fail", "} | k_ \"-n $PREVIEW_NS apply -f -\" >/dev/null \\\n    || preview_mint_fail")')" \

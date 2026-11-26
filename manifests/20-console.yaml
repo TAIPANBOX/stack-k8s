@@ -56,12 +56,11 @@ spec:
           volumeMounts: [{ name: events, mountPath: /bus, readOnly: true }]
       containers:
         - name: console
-          # Pulled since stack-k8s v0.1.0, which is the tag that publishes
-          # it. The image is a composition of FIVE repositories rather than
-          # one, which is why it carries this repository's version and why the
-          # five source commits are labels on it: `docker inspect` answers
-          # "which qryx is in this console", and that is the question an
-          # incident asks.
+          # genaryx's own release since stack-k8s 1.19.0 (genaryx-console, built
+          # by this repository, before it). The image is a composition of five
+          # repositories, which is why the four bundled tools' source commits
+          # and its engines are labels on it: `docker inspect` answers "which
+          # qryx is in this console", and that is the question an incident asks.
           image: ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee
           imagePullPolicy: IfNotPresent
           envFrom:

@@ -58,7 +58,8 @@ preview_mint_settle() {
     || die "could not read the console's image"
   local word found=""
   for word in $img; do
-    case "$word" in *genaryx-console*) found="$word"; break ;; esac
+    # ghcr.io/taipanbox/genaryx since stack-k8s 1.19.0 (genaryx's own release), genaryx-console before it
+    case "$word" in */genaryx:*|*/genaryx@*|*genaryx-console*) found="$word"; break ;; esac
   done
   img="$found"
   if [ -z "$img" ]; then

@@ -32,10 +32,11 @@ Feature: Keyryx custody announces every key change into its own stream, and hera
 
   Scenario: heraldyx reads custody's stream, and turning Keyryx off takes it away
     Given heraldyx v0.10.0 reads keyryx-custody.ndjson as source keyryx
-    When the patch stops naming the file, or the unpatch leaves the mount behind
+    When the patch stops naming the file or carries an older heraldyx, or the unpatch leaves the mount behind
     Then keyryx-custody-announces.sh fails
     # -> gates-have-teeth.sh "custody-announces: heraldyx stops reading custody's stream"
     # -> gates-have-teeth.sh "custody-announces: the unpatch leaves heraldyx's custody mount"
+    # -> gates-have-teeth.sh "custody-announces: the heraldyx patch carries an older heraldyx than the pin"
 
   Scenario: the operator is shown how to rotate and revoke
     Given the admin socket is reached only from inside custody's container

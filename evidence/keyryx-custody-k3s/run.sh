@@ -26,7 +26,7 @@
 #
 # Each failed probe prints FAIL and the run ends with RUN_EXIT=1; RUN_EXIT=0 means every probe held.
 #
-# output.txt is the second run over the same cluster (2026-11-25, k3s v1.36.2+k3s1, Longhorn v1.7.2): 23 of 23.
+# output.txt is the second run over the same cluster (2026-11-26, k3s v1.36.2+k3s1, Longhorn v1.7.2): 23 of 23.
 # The first run held every property and failed two probes of its own: busybox sh ends at a failed redirection
 # on the special builtin `:`, so the reader's and the other plane's shells stopped after their first refusal;
 # those probes run the redirection in a subshell now. gate-red-on-fd2b096.txt: the two gates this change adds or

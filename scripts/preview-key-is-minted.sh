@@ -181,7 +181,7 @@ k_() {
         half) echo "configmap/wardryx-preview-recipient" ;;
       esac ;;
     *"get deployment/genaryx-console"*)
-      [ "$MODE" = noconsole ] || echo "ghcr.io/taipanbox/genaryx-console:v9.9.9@sha256:0000" ;;
+      [ "$MODE" = noconsole ] || echo "ghcr.io/taipanbox/genaryx:v9.9.9@sha256:0000" ;;
     *"create -f -"*)
       body="$(cat)"
       if grep -q '^kind: Pod' <<<"$body"; then printf '%s\n' "$body" >"$DIR/pod"; else printf '%s\n' "$body" >"$DIR/objects"; fi ;;

@@ -121,7 +121,7 @@ else:
     cpin = re.search(r"image: ghcr\.io/taipanbox/(genaryx-console|genaryx):v(\d+)\.(\d+)\.(\d+)@sha256:[0-9a-f]{64}",
                      live(read(M20) or ""))
     console_v160 = cpin is not None and (cpin.group(1) == "genaryx" or tuple(int(x) for x in cpin.groups()[1:]) >= (1, 6, 0))
-    console_pin = (cpin.group(1) + " v" + ".".join(cpin.groups()[1:])) if cpin else "no digest pin"
+    console_pin = ("v" + ".".join(cpin.groups()[1:])) if cpin else "no digest pin"
     if env is None and mount is None and volume is None:
         STATE = "v1.6.0"
         if not todo:

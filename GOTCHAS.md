@@ -4953,4 +4953,4 @@ heraldyx mounts `custody/` read only. The second trap in the same place: a clust
 marker, so a custody pod that waited for the marker alone could start before the new owner Job ran; kubelet would then make
 `custody/` itself, as root 0777, and the owner refuses a directory it did not make, on every later run. custody's `bus-ready`
 waits for `custody/` as the owner leaves it, `20000:20101:771`, as the gateway pod waits for `focus/gateway` (invariant 95).
-Measured on k3s 2026-11-25, `evidence/keyryx-custody-k3s/output.txt`.
+Measured on k3s with Longhorn RWX 2026-11-26, `evidence/keyryx-custody-k3s/output.txt`.

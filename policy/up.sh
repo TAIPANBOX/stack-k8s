@@ -38,6 +38,10 @@ $KUBECTL -n cosign-system rollout status deployment/webhook --timeout=300s
 # The single policy this file used to apply, before one per repository: a cluster that ran it would keep
 # admitting any repository's signature for every TAIPANBOX image, because apply does not prune.
 $KUBECTL delete clusterimagepolicy taipanbox-signed --ignore-not-found >/dev/null
+# The console's policy before stack-k8s 1.19.0, when this repository built genaryx-console: no manifest names that
+# image any more, and genaryx's own release is admitted by taipanbox-genaryx. Removed here, after the apply, so a
+# pod of the old release recreated during the rollout was still admitted (policy/refresh.sh runs before it).
+$KUBECTL delete clusterimagepolicy taipanbox-console --ignore-not-found >/dev/null
 $KUBECTL apply -f policy/image-policy.yaml
 # The operator's own entries (policy/operator-image-policy.example.yaml is the template): applied when the
 # copy is present and holds an entry, before the namespace is labelled, so an agent image the operator

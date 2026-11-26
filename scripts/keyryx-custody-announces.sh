@@ -148,6 +148,13 @@ for path, adds in ((PATCH, True), (UNPATCH, False)):
         bad.append(f"{path}: no heraldyx container, so what heraldyx reads is measured NOTHING")
         continue
     hev = (env_of(hc).get("HERALDYX_EVENTS") or "").split(",")
+    if adds:
+        # heraldyx is applied only on a run that names a recipient; the patch moves it to the pin too, so it never
+        # lands on an older heraldyx that drops keyryx-custody.ndjson as foreign
+        pin = re.search(r"image:\s*(ghcr\.io/taipanbox/heraldyx:\S+)", open("manifests/45-heraldyx.yaml").read())
+        if pin is None or hc.get("image") != pin.group(1):
+            bad.append(f"{path}: heraldyx's image is {hc.get('image')!r}, not the pin of manifests/45-heraldyx.yaml "
+                       f"({pin.group(1) if pin else 'none'}), so the patch can land on a heraldyx that does not know custody's stream")
     mounts = hc.get("volumeMounts") or []
     if adds:
         if want_file not in hev:

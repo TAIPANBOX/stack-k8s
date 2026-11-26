@@ -755,6 +755,10 @@ tar -cz -C "$ROOT" manifests policy | sh_ "$FIRST" 'mkdir -p /root/stack-k8s && 
 # minutes ago is still there, and apply leaves an unchanged Job alone: a new directory in its script (focus/,
 # 1.17) would then never be made and the pods that wait for it would wait for ever. So the old one goes first.
 k_ "-n agent-stack delete job bus-owner --ignore-not-found"
+# On a cluster that already enforces admission, this release's policies go in before the manifests that name
+# its images (policy/refresh.sh, CLAUDE.md invariant 58); on a new cluster it does nothing.
+sh_ "$FIRST" 'cd /root/stack-k8s && KUBECTL="/usr/local/bin/k3s kubectl" bash policy/refresh.sh' \
+  || die "could not bring this release's admission policies in before its manifests (policy/refresh.sh)"
 k_ "apply -k /root/stack-k8s/manifests"
 
 # Admission (CLAUDE.md invariant 58): from here on the stack's namespace admits an image only when its

@@ -407,9 +407,9 @@ times, each a step correct once and impossible the second time. GOTCHAS 56-62.
 
 Nothing here needs a credential. Every repository this pulls is public and
 Apache-2.0, the Genaryx console included since 2026-07-27, so the console comes
-up by default rather than on production of a token. `--console-token` survives
-for the one case it is still good for: building the console from a private fork
-of your own.
+up by default rather than on production of a token. Since 1.19.0 it is pulled,
+`ghcr.io/taipanbox/genaryx`, pinned by digest; `deploy.sh --console-token` survives
+only as the bearer for a private fork's tree when `INSTALL_FROM_MAIN=1` fetches main.
 
 Then reach the console over your own tunnel (`20-console.yaml` explains why
 there is no public entry point by default), and check the deployment with
@@ -1355,6 +1355,9 @@ the file as uid 20101 in the bus group, 0640, and heraldyx reads it through a re
 heraldyx mails `key_revoked`; `key_rotated` is info, below its `high` floor. Custody's signed
 key statements for heraldyx's checkpoint gate (`KEYRYX_STATEMENTS_DIR`) are not set here: no
 plane in this stack writes signed checkpoints yet, so heraldyx's checkpoint gate stays off.
+heraldyx is the one reader of custody's stream here: it sits beside the bus, so the witness,
+the chain verifier, the record seal and the console do not read it (stack-single keeps it in
+its bus directory, where they do). The console shows custody's state from custody itself.
 
 **The witness's findings reach the console and the notifier.** The witness writes
 `alerts/keyryx.ndjson` on its own state claim, `keyryx-witness-state`, and mounts the
@@ -1367,8 +1370,8 @@ claim is ReadWriteOnce, as the record seal does. The wiring is two patches under
 manifests do not change. Each reader reads the file only as a regular file, never
 through a link (heraldyx 0.10.0, pinned here, and the console from genaryx#134).
 heraldyx renders the seven `witness_*` types and mails the high ones. The console is pinned at
-`genaryx-console:v1.14.0`, and from v1.7.0 the image reads `GENARYX_EVENTS_EXTRA` and turns a
-high finding into an incident (TAIPANBOX/genaryx#134).
+`genaryx:v0.1.0`, which reads `GENARYX_EVENTS_EXTRA` and turns a high finding into an incident
+(TAIPANBOX/genaryx#134, in the console image since genaryx-console v1.7.0).
 
 Not wired yet: vouchryx and tokenfuse (their Keyryx releases are not published
 yet, so their pins stay where they are) and trailryx (its next release is later).
