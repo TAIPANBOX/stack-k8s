@@ -1,0 +1,113 @@
+dir=/opt/agent-stack
+status of the stack in /opt/agent-stack
+   ok    gateway answers on <public-ip>:4100
+   ok    gateway exports agent events
+   ok    gateway clamps a run budget to a ceiling
+   ok    cloud answers inside
+   ok    wardryx answers inside
+   ok    idryx answers inside
+   ok    policy store is up
+   ok    policy plane reaches its store
+   ok    policy plane accepts its admin key
+   ok    policy plane rejects an unknown key
+   ok    gateway's key cannot write policy
+   ok    gateway refuses /v1/runs without the admin key
+   ok    gateway serves /v1/runs with the admin key
+   ok    client keys: the gateway holds 6
+   skip  client keys: a call with no key is refused  (install only: it writes to the stack)
+   skip  client keys: a call with an unknown key is refused  (install only: it writes to the stack)
+   ok    identity map: the gateway reads it
+   ok    identity map: every key is bound and every binding has a key
+   ok    client keys: the agents' key is in /opt/agent-stack/agent-key, readable by its owner alone
+   ok    client keys: Felyx holds its own key, bound to the id the console names it with
+   ok    cloud is NOT on the host
+   ok    wardryx is NOT on the host
+   ok    gateway has a port mapping
+   ok    gateway published on <public-ip> only
+   ok    chain verifier is running and has read the bus
+   skip  chain verifier can write its own stream  (install only: it writes to the stack)
+   skip  chain verifier cannot write another plane's stream  (install only: it writes to the stack)
+   skip  chain verifier cannot create a file on the bus  (install only: it writes to the stack)
+   skip  no producer can write, rename or link another plane's stream, or create a file on the bus  (install only: it writes to the stack)
+   ok    focus-export is running, with a folder per door
+   ok    wireguard interface is up
+   ok    console can manage peers over UAPI
+   ok    console can read its own revoke key
+   ok    console TLS is listening
+   ok    console TLS names console.genaryx.internal
+   ok    tunnel accepts on 51820/udp
+   ok    console answers on loopback
+   ok    console resolves the money plane
+   ok    console resolves the policy plane
+   ok    console's bus is live
+   ok    console knows its operator
+   ok    vouchryx is NOT on the host
+   ok    vouchryx answers inside
+   ok    vouchryx holds a certified key, so it can issue a token
+   ok    gateway resolves the delegation door
+   skip  vouchryx accepts the console's revoke key (nothing revoked)  (install only: it writes to the stack)
+   skip  vouchryx refuses a revoke key it does not hold  (install only: it writes to the stack)
+   ok    guests: no door is on agent-stack_guests
+   ok    guests: guest-door forwards a guest's call to the gateway
+   ok    guests: guest-door answers a route a guest is not given itself
+   ok    policy plane: wardryx loaded the tool hold
+
+   drift check: what runs, as the Docker on this box reports it, against the pins in /opt/agent-stack/compose.yaml
+   ok    agent-conform             running      sha256:f2a5bcbadf41  pin sha256:f2a5bcbadf41  compose
+   ok    caddy                     running      sha256:d9376051cc5a  pin sha256:d9376051cc5a  compose
+   ok    console                   running      sha256:4030bc819e7d  pin sha256:4030bc819e7d  compose
+   skip  costcrew                               not started, profile finops is off
+   skip  costcrew-init                          not started, profile finops is off
+   skip  costcrew-run                           not started, profile crew is off
+   ok    focus-export              running      sha256:9ada89b47a16  pin sha256:9ada89b47a16  compose
+   ok    guest-callback            running      sha256:d9376051cc5a  pin sha256:d9376051cc5a  compose
+   ok    guest-door                running      sha256:d9376051cc5a  pin sha256:d9376051cc5a  compose
+   ok    heraldyx                  running      sha256:7baa8cdb8508  pin sha256:7baa8cdb8508  compose
+   ok    idryx                     running      sha256:7ace674b5c44  pin sha256:7ace674b5c44  compose
+   skip  idryx-detect                           not started, profile manual is off
+   ok    init-volumes              exited 0     sha256:73aaf090f3d8  pin sha256:73aaf090f3d8  compose
+   ok    keyryx                    running      sha256:ead031a11795  pin sha256:ead031a11795  compose
+   ok    keyryx-witness            running      sha256:ead031a11795  pin sha256:ead031a11795  compose
+   skip  mockryx-drill                          not started, profile manual is off
+   ok    policy-db                 running      sha256:721873c34ceb  pin sha256:721873c34ceb  compose
+   ok    record-seal               running      sha256:a9b7ef893e42  pin sha256:a9b7ef893e42  compose
+   skip  scopyx                                 not started, profile egress is off
+   skip  scopyx-browser                         not started, profile egress-browser is off
+   ok    tokenfuse-cloud           running      sha256:d8ad6e9a779a  pin sha256:d8ad6e9a779a  compose
+   ok    tokenfuse-gateway         running      sha256:9ada89b47a16  pin sha256:9ada89b47a16  compose
+   skip  tokenfuse-gateway-openai               not started, profile openai-door is off
+   skip  tokenfuse-mcp-broker                   not started, profiles typed egress egress-browser are off
+   skip  typryx                                 not started, profile typed is off
+   skip  typryx-wardryx-proxy                   not started, profile typed-risk-signal is off
+   skip  verdryx-drift                          not started, profile routines is off
+   ok    verdryx-slo               running      sha256:4030bc819e7d  pin sha256:4030bc819e7d  compose
+   ok    vouchryx                  running      sha256:341cc2c5d22d  pin sha256:341cc2c5d22d  compose
+   ok    wardryx                   running      sha256:f9b86a821146  pin sha256:f9b86a821146  compose
+   ok    wg                        running      sha256:8996ce01a5b8  pin sha256:8996ce01a5b8  compose
+   drift check: 19 on their pin, 0 failed, 12 skipped, 0 noted
+   this is a drift check: it compares what Docker on this box says with what compose.yaml on this box says, and a person with root on this box can change either side.
+   skip  browser AppArmor profile  (no scopyx-browser runs here)
+   install journal: last good install 2026-11-27T05:05:50Z, version 1.15.0, commit v1.15.0, index 1 (floor 1); last override none
+   tool hold: on, grants: 2 in policy.yaml, 0 through agent-allow
+
+every check passed
+status exit=0 in 93s
+agent-stack-agent-conform-1 Up 5 minutes
+agent-stack-caddy-1 Up 5 minutes
+agent-stack-console-1 Up 4 minutes (healthy)
+agent-stack-focus-export-1 Up 5 minutes
+agent-stack-guest-callback-1 Up 5 minutes
+agent-stack-guest-door-1 Up 5 minutes
+agent-stack-heraldyx-1 Up 5 minutes
+agent-stack-idryx-1 Up 5 minutes
+agent-stack-keyryx-1 Up 5 minutes
+agent-stack-keyryx-witness-1 Up 5 minutes
+agent-stack-policy-db-1 Up 5 minutes (healthy)
+agent-stack-record-seal-1 Up 5 minutes
+agent-stack-tokenfuse-cloud-1 Up 5 minutes (healthy)
+agent-stack-tokenfuse-gateway-1 Up 5 minutes (healthy)
+agent-stack-verdryx-slo-1 Up 5 minutes
+agent-stack-vouchryx-1 Up 5 minutes
+agent-stack-wardryx-1 Up 5 minutes
+agent-stack-wg-1 Up 5 minutes
+ 05:07:51 up 9 min,  1 user,  load average: 0.29, 0.40, 0.25

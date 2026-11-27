@@ -1,0 +1,12 @@
+
+== running now, in eu-central-1
+   5 running instance(s)                          2.0370 USD/hour
+   5 x public IPv4                                0.0250 USD/hour
+   500 GB gp3                                     0.0652 USD/hour
+   ---------------------------------------------------------------------
+   TOTAL                                          2.1272 USD/hour
+   an 8 hour session                               17.02 USD
+   a 30 day month at this rate                   1552.86 USD
+
+   Hetzner baseline, measured: EUR 144.49/month for the same shape
+   (5 x CPX42 at EUR 137, plus the lb11 load balancer at EUR 7.49)

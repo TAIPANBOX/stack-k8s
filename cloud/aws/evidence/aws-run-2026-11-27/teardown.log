@@ -1,0 +1,1371 @@
+
+== account
+   <account>  arn:aws:iam::<account>:user/stack-k8s-deploy
+   region eu-central-1, cluster stack-k8s
+
+== what exists right now
+   vpc: vpc-01b077ec56955f7de
+   instances:
+     i-0c0b98d55e8843f7e	c7i.2xlarge	running
+     i-0b59ca2c895726948	c7i.2xlarge	running
+     i-048bcf3bd46f81f8e	c7i.2xlarge	running
+     i-0c94bfb898e95c68b	c7i.2xlarge	running
+     i-0bd3f61830b435617	c7i.2xlarge	running
+   load balancers in the vpc:
+     none
+   efs:
+     none
+   unattached volumes:
+     none
+   unassociated elastic IPs (bill at USD 0.005/hour doing nothing):
+     none
+
+== removing type=LoadBalancer Services, so the controller deletes its NLB
+   deleting svc agent-stack/genaryx-console-lb
+service "genaryx-console-lb" deleted from agent-stack namespace
+   waiting 30s for the controller to finish deleting the balancer
+
+== deleting security groups the controller created
+
+== terraform destroy
+aws_key_pair.operator: Refreshing state... [id=stack-k8s-operator]
+aws_vpc.this: Refreshing state... [id=vpc-01b077ec56955f7de]
+aws_iam_role.node: Refreshing state... [id=stack-k8s-node]
+aws_internet_gateway.this: Refreshing state... [id=igw-0252730db58c53251]
+aws_subnet.nodes: Refreshing state... [id=subnet-05b61f32039a042da]
+aws_security_group.nodes: Refreshing state... [id=sg-0c2b2bad28a3aae88]
+aws_iam_role_policy.node: Refreshing state... [id=stack-k8s-node:stack-k8s-ccm]
+aws_iam_instance_profile.node: Refreshing state... [id=stack-k8s-node]
+aws_route_table.public: Refreshing state... [id=rtb-0d39b19ecd6e94eba]
+aws_route_table_association.nodes: Refreshing state... [id=rtbassoc-03b0faa7075be7839]
+aws_vpc_security_group_ingress_rule.nodeports: Refreshing state... [id=sgr-0acc05d1e0533ab17]
+aws_vpc_security_group_egress_rule.all: Refreshing state... [id=sgr-05dd24a35320d1f09]
+aws_vpc_security_group_ingress_rule.cluster: Refreshing state... [id=sgr-00311f261424abe37]
+aws_vpc_security_group_ingress_rule.kubeapi: Refreshing state... [id=sgr-021be68038d8de246]
+aws_vpc_security_group_ingress_rule.ssh: Refreshing state... [id=sgr-01f6ffb2579514a62]
+aws_vpc_security_group_ingress_rule.icmp: Refreshing state... [id=sgr-01ebebfe5d9ebb6fa]
+aws_instance.node[1]: Refreshing state... [id=i-048bcf3bd46f81f8e]
+aws_instance.node[4]: Refreshing state... [id=i-0bd3f61830b435617]
+aws_instance.node[0]: Refreshing state... [id=i-0c0b98d55e8843f7e]
+aws_instance.node[2]: Refreshing state... [id=i-0c94bfb898e95c68b]
+aws_instance.node[3]: Refreshing state... [id=i-0b59ca2c895726948]
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  - destroy
+
+Terraform will perform the following actions:
+
+  # aws_iam_instance_profile.node will be destroyed
+  - resource "aws_iam_instance_profile" "node" {
+      - arn         = "arn:aws:iam::<account>:instance-profile/stack-k8s-node" -> null
+      - create_date = "2026-11-27T04:57:08Z" -> null
+      - id          = "stack-k8s-node" -> null
+      - name        = "stack-k8s-node" -> null
+      - path        = "/" -> null
+      - role        = "stack-k8s-node" -> null
+      - tags        = {} -> null
+      - tags_all    = {
+          - "Cluster"   = "stack-k8s"
+          - "Ephemeral" = "true"
+          - "ManagedBy" = "terraform"
+          - "Project"   = "stack-k8s"
+        } -> null
+      - unique_id   = "AIPAYZE4E6CKZUOUY7IEU" -> null
+        # (1 unchanged attribute hidden)
+    }
+
+  # aws_iam_role.node will be destroyed
+  - resource "aws_iam_role" "node" {
+      - arn                   = "arn:aws:iam::<account>:role/stack-k8s-node" -> null
+      - assume_role_policy    = jsonencode(
+            {
+              - Statement = [
+                  - {
+                      - Action    = "sts:AssumeRole"
+                      - Effect    = "Allow"
+                      - Principal = {
+                          - Service = "ec2.amazonaws.com"
+                        }
+                    },
+                ]
+              - Version   = "2012-10-17"
+            }
+        ) -> null
+      - create_date           = "2026-11-27T04:57:07Z" -> null
+      - force_detach_policies = false -> null
+      - id                    = "stack-k8s-node" -> null
+      - managed_policy_arns   = [] -> null
+      - max_session_duration  = 3600 -> null
+      - name                  = "stack-k8s-node" -> null
+      - path                  = "/" -> null
+      - tags                  = {} -> null
+      - tags_all              = {
+          - "Cluster"   = "stack-k8s"
+          - "Ephemeral" = "true"
+          - "ManagedBy" = "terraform"
+          - "Project"   = "stack-k8s"
+        } -> null
+      - unique_id             = "AROAYZE4E6CK6PSRFAH6H" -> null
+        # (3 unchanged attributes hidden)
+
+      - inline_policy {
+          - name   = "stack-k8s-ccm" -> null
+          - policy = jsonencode(
+                {
+                  - Statement = [
+                      - {
+                          - Action   = [
+                              - "ec2:DescribeInstances",
+                              - "ec2:DescribeRegions",
+                              - "ec2:DescribeRouteTables",
+                              - "ec2:DescribeSecurityGroups",
+                              - "ec2:DescribeSubnets",
+                              - "ec2:DescribeVpcs",
+                              - "ec2:DescribeAvailabilityZones",
+                              - "ec2:CreateSecurityGroup",
+                              - "ec2:CreateTags",
+                              - "ec2:AuthorizeSecurityGroupIngress",
+                              - "ec2:RevokeSecurityGroupIngress",
+                              - "ec2:DeleteSecurityGroup",
+                              - "elasticloadbalancing:*",
+                            ]
+                          - Effect   = "Allow"
+                          - Resource = "*"
+                        },
+                      - {
+                          - Action   = [
+                              - "elasticfilesystem:DescribeFileSystems",
+                              - "elasticfilesystem:DescribeMountTargets",
+                              - "elasticfilesystem:DescribeAccessPoints",
+                              - "elasticfilesystem:CreateAccessPoint",
+                              - "elasticfilesystem:DeleteAccessPoint",
+                            ]
+                          - Effect   = "Allow"
+                          - Resource = "*"
+                        },
+                    ]
+                  - Version   = "2012-10-17"
+                }
+            ) -> null
+        }
+    }
+
+  # aws_iam_role_policy.node will be destroyed
+  - resource "aws_iam_role_policy" "node" {
+      - id          = "stack-k8s-node:stack-k8s-ccm" -> null
+      - name        = "stack-k8s-ccm" -> null
+      - policy      = jsonencode(
+            {
+              - Statement = [
+                  - {
+                      - Action   = [
+                          - "ec2:DescribeInstances",
+                          - "ec2:DescribeRegions",
+                          - "ec2:DescribeRouteTables",
+                          - "ec2:DescribeSecurityGroups",
+                          - "ec2:DescribeSubnets",
+                          - "ec2:DescribeVpcs",
+                          - "ec2:DescribeAvailabilityZones",
+                          - "ec2:CreateSecurityGroup",
+                          - "ec2:CreateTags",
+                          - "ec2:AuthorizeSecurityGroupIngress",
+                          - "ec2:RevokeSecurityGroupIngress",
+                          - "ec2:DeleteSecurityGroup",
+                          - "elasticloadbalancing:*",
+                        ]
+                      - Effect   = "Allow"
+                      - Resource = "*"
+                    },
+                  - {
+                      - Action   = [
+                          - "elasticfilesystem:DescribeFileSystems",
+                          - "elasticfilesystem:DescribeMountTargets",
+                          - "elasticfilesystem:DescribeAccessPoints",
+                          - "elasticfilesystem:CreateAccessPoint",
+                          - "elasticfilesystem:DeleteAccessPoint",
+                        ]
+                      - Effect   = "Allow"
+                      - Resource = "*"
+                    },
+                ]
+              - Version   = "2012-10-17"
+            }
+        ) -> null
+      - role        = "stack-k8s-node" -> null
+        # (1 unchanged attribute hidden)
+    }
+
+  # aws_instance.node[0] will be destroyed
+  - resource "aws_instance" "node" {
+      - ami                                  = "ami-0cd55f248a7e891a7" -> null
+      - arn                                  = "arn:aws:ec2:eu-central-1:<account>:instance/i-0c0b98d55e8843f7e" -> null
+      - associate_public_ip_address          = true -> null
+      - availability_zone                    = "eu-central-1a" -> null
+      - disable_api_stop                     = false -> null
+      - disable_api_termination              = false -> null
+      - ebs_optimized                        = false -> null
+      - force_destroy                        = false -> null
+      - get_password_data                    = false -> null
+      - hibernation                          = false -> null
+      - iam_instance_profile                 = "stack-k8s-node" -> null
+      - id                                   = "i-0c0b98d55e8843f7e" -> null
+      - instance_initiated_shutdown_behavior = "stop" -> null
+      - instance_state                       = "running" -> null
+      - instance_type                        = "c7i.2xlarge" -> null
+      - ipv6_address_count                   = 0 -> null
+      - ipv6_addresses                       = [] -> null
+      - key_name                             = "stack-k8s-operator" -> null
+      - monitoring                           = false -> null
+      - placement_partition_number           = 0 -> null
+      - primary_network_interface_id         = "eni-0dafbd8047930f355" -> null
+      - private_dns                          = "ip-10-10-0-51.eu-central-1.compute.internal" -> null
+      - private_ip                           = "10.10.0.51" -> null
+      - public_dns                           = "ec2-63-179-0-172.eu-central-1.compute.amazonaws.com" -> null
+      - public_ip                            = "<public-ip>" -> null
+      - region                               = "eu-central-1" -> null
+      - secondary_private_ips                = [] -> null
+      - security_groups                      = [] -> null
+      - source_dest_check                    = false -> null
+      - subnet_id                            = "subnet-05b61f32039a042da" -> null
+      - tags                                 = {
+          - "Name"                            = "stack-k8s-server-1"
+          - "Role"                            = "server"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+        } -> null
+      - tags_all                             = {
+          - "Cluster"                         = "stack-k8s"
+          - "Ephemeral"                       = "true"
+          - "ManagedBy"                       = "terraform"
+          - "Name"                            = "stack-k8s-server-1"
+          - "Project"                         = "stack-k8s"
+          - "Role"                            = "server"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+        } -> null
+      - tenancy                              = "default" -> null
+      - user_data_replace_on_change          = false -> null
+      - vpc_security_group_ids               = [
+          - "sg-0c2b2bad28a3aae88",
+        ] -> null
+        # (7 unchanged attributes hidden)
+
+      - capacity_reservation_specification {
+          - capacity_reservation_preference = "open" -> null
+        }
+
+      - cpu_options {
+          - core_count            = 4 -> null
+          - threads_per_core      = 2 -> null
+            # (2 unchanged attributes hidden)
+        }
+
+      - enclave_options {
+          - enabled = false -> null
+        }
+
+      - maintenance_options {
+          - auto_recovery = "default" -> null
+        }
+
+      - metadata_options {
+          - http_endpoint               = "enabled" -> null
+          - http_protocol_ipv6          = "disabled" -> null
+          - http_put_response_hop_limit = 2 -> null
+          - http_tokens                 = "required" -> null
+          - instance_metadata_tags      = "disabled" -> null
+        }
+
+      - primary_network_interface {
+          - delete_on_termination = true -> null
+          - network_interface_id  = "eni-0dafbd8047930f355" -> null
+        }
+
+      - private_dns_name_options {
+          - enable_resource_name_dns_a_record    = false -> null
+          - enable_resource_name_dns_aaaa_record = false -> null
+          - hostname_type                        = "ip-name" -> null
+        }
+
+      - root_block_device {
+          - delete_on_termination = true -> null
+          - device_name           = "/dev/sda1" -> null
+          - encrypted             = true -> null
+          - iops                  = 3000 -> null
+          - kms_key_id            = "arn:aws:kms:eu-central-1:<account>:key/86efb5c4-6a6f-44dc-9292-2455b3aa1e8d" -> null
+          - tags                  = {
+              - "Name" = "stack-k8s-server-1"
+            } -> null
+          - tags_all              = {
+              - "Cluster"   = "stack-k8s"
+              - "Ephemeral" = "true"
+              - "ManagedBy" = "terraform"
+              - "Name"      = "stack-k8s-server-1"
+              - "Project"   = "stack-k8s"
+            } -> null
+          - throughput            = 125 -> null
+          - volume_id             = "vol-0a144d81e03d9766a" -> null
+          - volume_size           = 100 -> null
+          - volume_type           = "gp3" -> null
+        }
+    }
+
+  # aws_instance.node[1] will be destroyed
+  - resource "aws_instance" "node" {
+      - ami                                  = "ami-0cd55f248a7e891a7" -> null
+      - arn                                  = "arn:aws:ec2:eu-central-1:<account>:instance/i-048bcf3bd46f81f8e" -> null
+      - associate_public_ip_address          = true -> null
+      - availability_zone                    = "eu-central-1a" -> null
+      - disable_api_stop                     = false -> null
+      - disable_api_termination              = false -> null
+      - ebs_optimized                        = false -> null
+      - force_destroy                        = false -> null
+      - get_password_data                    = false -> null
+      - hibernation                          = false -> null
+      - iam_instance_profile                 = "stack-k8s-node" -> null
+      - id                                   = "i-048bcf3bd46f81f8e" -> null
+      - instance_initiated_shutdown_behavior = "stop" -> null
+      - instance_state                       = "running" -> null
+      - instance_type                        = "c7i.2xlarge" -> null
+      - ipv6_address_count                   = 0 -> null
+      - ipv6_addresses                       = [] -> null
+      - key_name                             = "stack-k8s-operator" -> null
+      - monitoring                           = false -> null
+      - placement_partition_number           = 0 -> null
+      - primary_network_interface_id         = "eni-01acc0f7c9ba4d531" -> null
+      - private_dns                          = "ip-10-10-0-25.eu-central-1.compute.internal" -> null
+      - private_ip                           = "10.10.0.25" -> null
+      - public_dns                           = "ec2-63-180-205-107.eu-central-1.compute.amazonaws.com" -> null
+      - public_ip                            = "<public-ip>" -> null
+      - region                               = "eu-central-1" -> null
+      - secondary_private_ips                = [] -> null
+      - security_groups                      = [] -> null
+      - source_dest_check                    = false -> null
+      - subnet_id                            = "subnet-05b61f32039a042da" -> null
+      - tags                                 = {
+          - "Name"                            = "stack-k8s-server-2"
+          - "Role"                            = "server"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+        } -> null
+      - tags_all                             = {
+          - "Cluster"                         = "stack-k8s"
+          - "Ephemeral"                       = "true"
+          - "ManagedBy"                       = "terraform"
+          - "Name"                            = "stack-k8s-server-2"
+          - "Project"                         = "stack-k8s"
+          - "Role"                            = "server"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+        } -> null
+      - tenancy                              = "default" -> null
+      - user_data_replace_on_change          = false -> null
+      - vpc_security_group_ids               = [
+          - "sg-0c2b2bad28a3aae88",
+        ] -> null
+        # (7 unchanged attributes hidden)
+
+      - capacity_reservation_specification {
+          - capacity_reservation_preference = "open" -> null
+        }
+
+      - cpu_options {
+          - core_count            = 4 -> null
+          - threads_per_core      = 2 -> null
+            # (2 unchanged attributes hidden)
+        }
+
+      - enclave_options {
+          - enabled = false -> null
+        }
+
+      - maintenance_options {
+          - auto_recovery = "default" -> null
+        }
+
+      - metadata_options {
+          - http_endpoint               = "enabled" -> null
+          - http_protocol_ipv6          = "disabled" -> null
+          - http_put_response_hop_limit = 2 -> null
+          - http_tokens                 = "required" -> null
+          - instance_metadata_tags      = "disabled" -> null
+        }
+
+      - primary_network_interface {
+          - delete_on_termination = true -> null
+          - network_interface_id  = "eni-01acc0f7c9ba4d531" -> null
+        }
+
+      - private_dns_name_options {
+          - enable_resource_name_dns_a_record    = false -> null
+          - enable_resource_name_dns_aaaa_record = false -> null
+          - hostname_type                        = "ip-name" -> null
+        }
+
+      - root_block_device {
+          - delete_on_termination = true -> null
+          - device_name           = "/dev/sda1" -> null
+          - encrypted             = true -> null
+          - iops                  = 3000 -> null
+          - kms_key_id            = "arn:aws:kms:eu-central-1:<account>:key/86efb5c4-6a6f-44dc-9292-2455b3aa1e8d" -> null
+          - tags                  = {
+              - "Name" = "stack-k8s-server-2"
+            } -> null
+          - tags_all              = {
+              - "Cluster"   = "stack-k8s"
+              - "Ephemeral" = "true"
+              - "ManagedBy" = "terraform"
+              - "Name"      = "stack-k8s-server-2"
+              - "Project"   = "stack-k8s"
+            } -> null
+          - throughput            = 125 -> null
+          - volume_id             = "vol-0d32549a8d77861fe" -> null
+          - volume_size           = 100 -> null
+          - volume_type           = "gp3" -> null
+        }
+    }
+
+  # aws_instance.node[2] will be destroyed
+  - resource "aws_instance" "node" {
+      - ami                                  = "ami-0cd55f248a7e891a7" -> null
+      - arn                                  = "arn:aws:ec2:eu-central-1:<account>:instance/i-0c94bfb898e95c68b" -> null
+      - associate_public_ip_address          = true -> null
+      - availability_zone                    = "eu-central-1a" -> null
+      - disable_api_stop                     = false -> null
+      - disable_api_termination              = false -> null
+      - ebs_optimized                        = false -> null
+      - force_destroy                        = false -> null
+      - get_password_data                    = false -> null
+      - hibernation                          = false -> null
+      - iam_instance_profile                 = "stack-k8s-node" -> null
+      - id                                   = "i-0c94bfb898e95c68b" -> null
+      - instance_initiated_shutdown_behavior = "stop" -> null
+      - instance_state                       = "running" -> null
+      - instance_type                        = "c7i.2xlarge" -> null
+      - ipv6_address_count                   = 0 -> null
+      - ipv6_addresses                       = [] -> null
+      - key_name                             = "stack-k8s-operator" -> null
+      - monitoring                           = false -> null
+      - placement_partition_number           = 0 -> null
+      - primary_network_interface_id         = "eni-097052f8b39858cd7" -> null
+      - private_dns                          = "ip-10-10-0-209.eu-central-1.compute.internal" -> null
+      - private_ip                           = "10.10.0.209" -> null
+      - public_dns                           = "ec2-3-64-12-133.eu-central-1.compute.amazonaws.com" -> null
+      - public_ip                            = "<public-ip>" -> null
+      - region                               = "eu-central-1" -> null
+      - secondary_private_ips                = [] -> null
+      - security_groups                      = [] -> null
+      - source_dest_check                    = false -> null
+      - subnet_id                            = "subnet-05b61f32039a042da" -> null
+      - tags                                 = {
+          - "Name"                            = "stack-k8s-server-3"
+          - "Role"                            = "server"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+        } -> null
+      - tags_all                             = {
+          - "Cluster"                         = "stack-k8s"
+          - "Ephemeral"                       = "true"
+          - "ManagedBy"                       = "terraform"
+          - "Name"                            = "stack-k8s-server-3"
+          - "Project"                         = "stack-k8s"
+          - "Role"                            = "server"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+        } -> null
+      - tenancy                              = "default" -> null
+      - user_data_replace_on_change          = false -> null
+      - vpc_security_group_ids               = [
+          - "sg-0c2b2bad28a3aae88",
+        ] -> null
+        # (7 unchanged attributes hidden)
+
+      - capacity_reservation_specification {
+          - capacity_reservation_preference = "open" -> null
+        }
+
+      - cpu_options {
+          - core_count            = 4 -> null
+          - threads_per_core      = 2 -> null
+            # (2 unchanged attributes hidden)
+        }
+
+      - enclave_options {
+          - enabled = false -> null
+        }
+
+      - maintenance_options {
+          - auto_recovery = "default" -> null
+        }
+
+      - metadata_options {
+          - http_endpoint               = "enabled" -> null
+          - http_protocol_ipv6          = "disabled" -> null
+          - http_put_response_hop_limit = 2 -> null
+          - http_tokens                 = "required" -> null
+          - instance_metadata_tags      = "disabled" -> null
+        }
+
+      - primary_network_interface {
+          - delete_on_termination = true -> null
+          - network_interface_id  = "eni-097052f8b39858cd7" -> null
+        }
+
+      - private_dns_name_options {
+          - enable_resource_name_dns_a_record    = false -> null
+          - enable_resource_name_dns_aaaa_record = false -> null
+          - hostname_type                        = "ip-name" -> null
+        }
+
+      - root_block_device {
+          - delete_on_termination = true -> null
+          - device_name           = "/dev/sda1" -> null
+          - encrypted             = true -> null
+          - iops                  = 3000 -> null
+          - kms_key_id            = "arn:aws:kms:eu-central-1:<account>:key/86efb5c4-6a6f-44dc-9292-2455b3aa1e8d" -> null
+          - tags                  = {
+              - "Name" = "stack-k8s-server-3"
+            } -> null
+          - tags_all              = {
+              - "Cluster"   = "stack-k8s"
+              - "Ephemeral" = "true"
+              - "ManagedBy" = "terraform"
+              - "Name"      = "stack-k8s-server-3"
+              - "Project"   = "stack-k8s"
+            } -> null
+          - throughput            = 125 -> null
+          - volume_id             = "vol-024b589b4a1ca8bc3" -> null
+          - volume_size           = 100 -> null
+          - volume_type           = "gp3" -> null
+        }
+    }
+
+  # aws_instance.node[3] will be destroyed
+  - resource "aws_instance" "node" {
+      - ami                                  = "ami-0cd55f248a7e891a7" -> null
+      - arn                                  = "arn:aws:ec2:eu-central-1:<account>:instance/i-0b59ca2c895726948" -> null
+      - associate_public_ip_address          = true -> null
+      - availability_zone                    = "eu-central-1a" -> null
+      - disable_api_stop                     = false -> null
+      - disable_api_termination              = false -> null
+      - ebs_optimized                        = false -> null
+      - force_destroy                        = false -> null
+      - get_password_data                    = false -> null
+      - hibernation                          = false -> null
+      - iam_instance_profile                 = "stack-k8s-node" -> null
+      - id                                   = "i-0b59ca2c895726948" -> null
+      - instance_initiated_shutdown_behavior = "stop" -> null
+      - instance_state                       = "running" -> null
+      - instance_type                        = "c7i.2xlarge" -> null
+      - ipv6_address_count                   = 0 -> null
+      - ipv6_addresses                       = [] -> null
+      - key_name                             = "stack-k8s-operator" -> null
+      - monitoring                           = false -> null
+      - placement_partition_number           = 0 -> null
+      - primary_network_interface_id         = "eni-0ed1df3f02fe765a6" -> null
+      - private_dns                          = "ip-10-10-0-155.eu-central-1.compute.internal" -> null
+      - private_ip                           = "10.10.0.155" -> null
+      - public_dns                           = "ec2-3-121-185-29.eu-central-1.compute.amazonaws.com" -> null
+      - public_ip                            = "<public-ip>" -> null
+      - region                               = "eu-central-1" -> null
+      - secondary_private_ips                = [] -> null
+      - security_groups                      = [] -> null
+      - source_dest_check                    = false -> null
+      - subnet_id                            = "subnet-05b61f32039a042da" -> null
+      - tags                                 = {
+          - "Name"                            = "stack-k8s-agent-1"
+          - "Role"                            = "agent"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+        } -> null
+      - tags_all                             = {
+          - "Cluster"                         = "stack-k8s"
+          - "Ephemeral"                       = "true"
+          - "ManagedBy"                       = "terraform"
+          - "Name"                            = "stack-k8s-agent-1"
+          - "Project"                         = "stack-k8s"
+          - "Role"                            = "agent"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+        } -> null
+      - tenancy                              = "default" -> null
+      - user_data_replace_on_change          = false -> null
+      - vpc_security_group_ids               = [
+          - "sg-0c2b2bad28a3aae88",
+        ] -> null
+        # (7 unchanged attributes hidden)
+
+      - capacity_reservation_specification {
+          - capacity_reservation_preference = "open" -> null
+        }
+
+      - cpu_options {
+          - core_count            = 4 -> null
+          - threads_per_core      = 2 -> null
+            # (2 unchanged attributes hidden)
+        }
+
+      - enclave_options {
+          - enabled = false -> null
+        }
+
+      - maintenance_options {
+          - auto_recovery = "default" -> null
+        }
+
+      - metadata_options {
+          - http_endpoint               = "enabled" -> null
+          - http_protocol_ipv6          = "disabled" -> null
+          - http_put_response_hop_limit = 2 -> null
+          - http_tokens                 = "required" -> null
+          - instance_metadata_tags      = "disabled" -> null
+        }
+
+      - primary_network_interface {
+          - delete_on_termination = true -> null
+          - network_interface_id  = "eni-0ed1df3f02fe765a6" -> null
+        }
+
+      - private_dns_name_options {
+          - enable_resource_name_dns_a_record    = false -> null
+          - enable_resource_name_dns_aaaa_record = false -> null
+          - hostname_type                        = "ip-name" -> null
+        }
+
+      - root_block_device {
+          - delete_on_termination = true -> null
+          - device_name           = "/dev/sda1" -> null
+          - encrypted             = true -> null
+          - iops                  = 3000 -> null
+          - kms_key_id            = "arn:aws:kms:eu-central-1:<account>:key/86efb5c4-6a6f-44dc-9292-2455b3aa1e8d" -> null
+          - tags                  = {
+              - "Name" = "stack-k8s-agent-1"
+            } -> null
+          - tags_all              = {
+              - "Cluster"   = "stack-k8s"
+              - "Ephemeral" = "true"
+              - "ManagedBy" = "terraform"
+              - "Name"      = "stack-k8s-agent-1"
+              - "Project"   = "stack-k8s"
+            } -> null
+          - throughput            = 125 -> null
+          - volume_id             = "vol-0e7fd9e7334a9c694" -> null
+          - volume_size           = 100 -> null
+          - volume_type           = "gp3" -> null
+        }
+    }
+
+  # aws_instance.node[4] will be destroyed
+  - resource "aws_instance" "node" {
+      - ami                                  = "ami-0cd55f248a7e891a7" -> null
+      - arn                                  = "arn:aws:ec2:eu-central-1:<account>:instance/i-0bd3f61830b435617" -> null
+      - associate_public_ip_address          = true -> null
+      - availability_zone                    = "eu-central-1a" -> null
+      - disable_api_stop                     = false -> null
+      - disable_api_termination              = false -> null
+      - ebs_optimized                        = false -> null
+      - force_destroy                        = false -> null
+      - get_password_data                    = false -> null
+      - hibernation                          = false -> null
+      - iam_instance_profile                 = "stack-k8s-node" -> null
+      - id                                   = "i-0bd3f61830b435617" -> null
+      - instance_initiated_shutdown_behavior = "stop" -> null
+      - instance_state                       = "running" -> null
+      - instance_type                        = "c7i.2xlarge" -> null
+      - ipv6_address_count                   = 0 -> null
+      - ipv6_addresses                       = [] -> null
+      - key_name                             = "stack-k8s-operator" -> null
+      - monitoring                           = false -> null
+      - placement_partition_number           = 0 -> null
+      - primary_network_interface_id         = "eni-0150987eb3d61f2ad" -> null
+      - private_dns                          = "ip-10-10-0-67.eu-central-1.compute.internal" -> null
+      - private_ip                           = "10.10.0.67" -> null
+      - public_dns                           = "ec2-3-71-52-56.eu-central-1.compute.amazonaws.com" -> null
+      - public_ip                            = "<public-ip>" -> null
+      - region                               = "eu-central-1" -> null
+      - secondary_private_ips                = [] -> null
+      - security_groups                      = [] -> null
+      - source_dest_check                    = false -> null
+      - subnet_id                            = "subnet-05b61f32039a042da" -> null
+      - tags                                 = {
+          - "Name"                            = "stack-k8s-agent-2"
+          - "Role"                            = "agent"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+        } -> null
+      - tags_all                             = {
+          - "Cluster"                         = "stack-k8s"
+          - "Ephemeral"                       = "true"
+          - "ManagedBy"                       = "terraform"
+          - "Name"                            = "stack-k8s-agent-2"
+          - "Project"                         = "stack-k8s"
+          - "Role"                            = "agent"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+        } -> null
+      - tenancy                              = "default" -> null
+      - user_data_replace_on_change          = false -> null
+      - vpc_security_group_ids               = [
+          - "sg-0c2b2bad28a3aae88",
+        ] -> null
+        # (7 unchanged attributes hidden)
+
+      - capacity_reservation_specification {
+          - capacity_reservation_preference = "open" -> null
+        }
+
+      - cpu_options {
+          - core_count            = 4 -> null
+          - threads_per_core      = 2 -> null
+            # (2 unchanged attributes hidden)
+        }
+
+      - enclave_options {
+          - enabled = false -> null
+        }
+
+      - maintenance_options {
+          - auto_recovery = "default" -> null
+        }
+
+      - metadata_options {
+          - http_endpoint               = "enabled" -> null
+          - http_protocol_ipv6          = "disabled" -> null
+          - http_put_response_hop_limit = 2 -> null
+          - http_tokens                 = "required" -> null
+          - instance_metadata_tags      = "disabled" -> null
+        }
+
+      - primary_network_interface {
+          - delete_on_termination = true -> null
+          - network_interface_id  = "eni-0150987eb3d61f2ad" -> null
+        }
+
+      - private_dns_name_options {
+          - enable_resource_name_dns_a_record    = false -> null
+          - enable_resource_name_dns_aaaa_record = false -> null
+          - hostname_type                        = "ip-name" -> null
+        }
+
+      - root_block_device {
+          - delete_on_termination = true -> null
+          - device_name           = "/dev/sda1" -> null
+          - encrypted             = true -> null
+          - iops                  = 3000 -> null
+          - kms_key_id            = "arn:aws:kms:eu-central-1:<account>:key/86efb5c4-6a6f-44dc-9292-2455b3aa1e8d" -> null
+          - tags                  = {
+              - "Name" = "stack-k8s-agent-2"
+            } -> null
+          - tags_all              = {
+              - "Cluster"   = "stack-k8s"
+              - "Ephemeral" = "true"
+              - "ManagedBy" = "terraform"
+              - "Name"      = "stack-k8s-agent-2"
+              - "Project"   = "stack-k8s"
+            } -> null
+          - throughput            = 125 -> null
+          - volume_id             = "vol-0c0e3ba1efb26ff53" -> null
+          - volume_size           = 100 -> null
+          - volume_type           = "gp3" -> null
+        }
+    }
+
+  # aws_internet_gateway.this will be destroyed
+  - resource "aws_internet_gateway" "this" {
+      - arn      = "arn:aws:ec2:eu-central-1:<account>:internet-gateway/igw-0252730db58c53251" -> null
+      - id       = "igw-0252730db58c53251" -> null
+      - owner_id = "<account>" -> null
+      - region   = "eu-central-1" -> null
+      - tags     = {
+          - "Name" = "stack-k8s"
+        } -> null
+      - tags_all = {
+          - "Cluster"   = "stack-k8s"
+          - "Ephemeral" = "true"
+          - "ManagedBy" = "terraform"
+          - "Name"      = "stack-k8s"
+          - "Project"   = "stack-k8s"
+        } -> null
+      - vpc_id   = "vpc-01b077ec56955f7de" -> null
+    }
+
+  # aws_key_pair.operator will be destroyed
+  - resource "aws_key_pair" "operator" {
+      - arn             = "arn:aws:ec2:eu-central-1:<account>:key-pair/stack-k8s-operator" -> null
+      - fingerprint     = "kRiJOESMVVtBDlkh1Fc2CxvlaICXjCtO3khKU7ecg74=" -> null
+      - id              = "stack-k8s-operator" -> null
+      - key_name        = "stack-k8s-operator" -> null
+      - key_pair_id     = "key-04b259a102d47551f" -> null
+      - key_type        = "ed25519" -> null
+      - public_key      = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHuAy73qr6KwZfei2mStefuwLhlKr9PsuXuXZaEhGLkO stack-k8s aws 2026-11-27" -> null
+      - region          = "eu-central-1" -> null
+      - tags            = {} -> null
+      - tags_all        = {
+          - "Cluster"   = "stack-k8s"
+          - "Ephemeral" = "true"
+          - "ManagedBy" = "terraform"
+          - "Project"   = "stack-k8s"
+        } -> null
+        # (1 unchanged attribute hidden)
+    }
+
+  # aws_route_table.public will be destroyed
+  - resource "aws_route_table" "public" {
+      - arn              = "arn:aws:ec2:eu-central-1:<account>:route-table/rtb-0d39b19ecd6e94eba" -> null
+      - id               = "rtb-0d39b19ecd6e94eba" -> null
+      - owner_id         = "<account>" -> null
+      - propagating_vgws = [] -> null
+      - region           = "eu-central-1" -> null
+      - route            = [
+          - {
+              - cidr_block                 = "<public-ip>/0"
+              - gateway_id                 = "igw-0252730db58c53251"
+                # (12 unchanged attributes hidden)
+            },
+        ] -> null
+      - tags             = {
+          - "Name" = "stack-k8s-public"
+        } -> null
+      - tags_all         = {
+          - "Cluster"   = "stack-k8s"
+          - "Ephemeral" = "true"
+          - "ManagedBy" = "terraform"
+          - "Name"      = "stack-k8s-public"
+          - "Project"   = "stack-k8s"
+        } -> null
+      - vpc_id           = "vpc-01b077ec56955f7de" -> null
+    }
+
+  # aws_route_table_association.nodes will be destroyed
+  - resource "aws_route_table_association" "nodes" {
+      - id             = "rtbassoc-03b0faa7075be7839" -> null
+      - region         = "eu-central-1" -> null
+      - route_table_id = "rtb-0d39b19ecd6e94eba" -> null
+      - subnet_id      = "subnet-05b61f32039a042da" -> null
+        # (1 unchanged attribute hidden)
+    }
+
+  # aws_security_group.nodes will be destroyed
+  - resource "aws_security_group" "nodes" {
+      - arn                    = "arn:aws:ec2:eu-central-1:<account>:security-group/sg-0c2b2bad28a3aae88" -> null
+      - description            = "stack-k8s nodes: operator access in, cluster traffic between nodes" -> null
+      - egress                 = [
+          - {
+              - cidr_blocks      = [
+                  - "<public-ip>/0",
+                ]
+              - description      = "all outbound"
+              - from_port        = 0
+              - ipv6_cidr_blocks = []
+              - prefix_list_ids  = []
+              - protocol         = "-1"
+              - security_groups  = []
+              - self             = false
+              - to_port          = 0
+            },
+        ] -> null
+      - id                     = "sg-0c2b2bad28a3aae88" -> null
+      - ingress                = [
+          - {
+              - cidr_blocks      = [
+                  - "10.10.0.0/24",
+                ]
+              - description      = "NodePort range, for the load balancer and its health checks"
+              - from_port        = 30000
+              - ipv6_cidr_blocks = []
+              - prefix_list_ids  = []
+              - protocol         = "tcp"
+              - security_groups  = []
+              - self             = false
+              - to_port          = 32767
+            },
+          - {
+              - cidr_blocks      = [
+                  - "<public-ip>/32",
+                ]
+              - description      = "kube api, operator only"
+              - from_port        = 6443
+              - ipv6_cidr_blocks = []
+              - prefix_list_ids  = []
+              - protocol         = "tcp"
+              - security_groups  = []
+              - self             = false
+              - to_port          = 6443
+            },
+          - {
+              - cidr_blocks      = [
+                  - "<public-ip>/32",
+                ]
+              - description      = "ping, operator only"
+              - from_port        = -1
+              - ipv6_cidr_blocks = []
+              - prefix_list_ids  = []
+              - protocol         = "icmp"
+              - security_groups  = []
+              - self             = false
+              - to_port          = -1
+            },
+          - {
+              - cidr_blocks      = [
+                  - "<public-ip>/32",
+                ]
+              - description      = "ssh, operator only"
+              - from_port        = 22
+              - ipv6_cidr_blocks = []
+              - prefix_list_ids  = []
+              - protocol         = "tcp"
+              - security_groups  = []
+              - self             = false
+              - to_port          = 22
+            },
+          - {
+              - cidr_blocks      = []
+              - description      = "all cluster traffic between nodes"
+              - from_port        = 0
+              - ipv6_cidr_blocks = []
+              - prefix_list_ids  = []
+              - protocol         = "-1"
+              - security_groups  = []
+              - self             = true
+              - to_port          = 0
+            },
+        ] -> null
+      - name                   = "stack-k8s-nodes" -> null
+      - owner_id               = "<account>" -> null
+      - region                 = "eu-central-1" -> null
+      - revoke_rules_on_delete = false -> null
+      - tags                   = {
+          - "Name"                            = "stack-k8s-nodes"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+        } -> null
+      - tags_all               = {
+          - "Cluster"                         = "stack-k8s"
+          - "Ephemeral"                       = "true"
+          - "ManagedBy"                       = "terraform"
+          - "Name"                            = "stack-k8s-nodes"
+          - "Project"                         = "stack-k8s"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+        } -> null
+      - vpc_id                 = "vpc-01b077ec56955f7de" -> null
+        # (1 unchanged attribute hidden)
+    }
+
+  # aws_subnet.nodes will be destroyed
+  - resource "aws_subnet" "nodes" {
+      - arn                                            = "arn:aws:ec2:eu-central-1:<account>:subnet/subnet-05b61f32039a042da" -> null
+      - assign_ipv6_address_on_creation                = false -> null
+      - availability_zone                              = "eu-central-1a" -> null
+      - availability_zone_id                           = "euc1-az2" -> null
+      - cidr_block                                     = "10.10.0.0/24" -> null
+      - enable_dns64                                   = false -> null
+      - enable_lni_at_device_index                     = 0 -> null
+      - enable_resource_name_dns_a_record_on_launch    = false -> null
+      - enable_resource_name_dns_aaaa_record_on_launch = false -> null
+      - id                                             = "subnet-05b61f32039a042da" -> null
+      - ipv6_native                                    = false -> null
+      - map_customer_owned_ip_on_launch                = false -> null
+      - map_public_ip_on_launch                        = true -> null
+      - owner_id                                       = "<account>" -> null
+      - private_dns_hostname_type_on_launch            = "ip-name" -> null
+      - region                                         = "eu-central-1" -> null
+      - tags                                           = {
+          - "Name"                            = "stack-k8s-nodes"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+          - "kubernetes.io/role/elb"          = "1"
+        } -> null
+      - tags_all                                       = {
+          - "Cluster"                         = "stack-k8s"
+          - "Ephemeral"                       = "true"
+          - "ManagedBy"                       = "terraform"
+          - "Name"                            = "stack-k8s-nodes"
+          - "Project"                         = "stack-k8s"
+          - "kubernetes.io/cluster/stack-k8s" = "owned"
+          - "kubernetes.io/role/elb"          = "1"
+        } -> null
+      - vpc_id                                         = "vpc-01b077ec56955f7de" -> null
+        # (4 unchanged attributes hidden)
+    }
+
+  # aws_vpc.this will be destroyed
+  - resource "aws_vpc" "this" {
+      - arn                                  = "arn:aws:ec2:eu-central-1:<account>:vpc/vpc-01b077ec56955f7de" -> null
+      - assign_generated_ipv6_cidr_block     = false -> null
+      - cidr_block                           = "10.10.0.0/16" -> null
+      - default_network_acl_id               = "acl-07130520eddd916f6" -> null
+      - default_route_table_id               = "rtb-0547958596121d1a7" -> null
+      - default_security_group_id            = "sg-05a84072c00e1c8a7" -> null
+      - dhcp_options_id                      = "dopt-047392bb032758bbb" -> null
+      - enable_dns_hostnames                 = true -> null
+      - enable_dns_support                   = true -> null
+      - enable_network_address_usage_metrics = false -> null
+      - id                                   = "vpc-01b077ec56955f7de" -> null
+      - instance_tenancy                     = "default" -> null
+      - ipv6_netmask_length                  = 0 -> null
+      - main_route_table_id                  = "rtb-0547958596121d1a7" -> null
+      - owner_id                             = "<account>" -> null
+      - region                               = "eu-central-1" -> null
+      - tags                                 = {
+          - "Name" = "stack-k8s"
+        } -> null
+      - tags_all                             = {
+          - "Cluster"   = "stack-k8s"
+          - "Ephemeral" = "true"
+          - "ManagedBy" = "terraform"
+          - "Name"      = "stack-k8s"
+          - "Project"   = "stack-k8s"
+        } -> null
+        # (4 unchanged attributes hidden)
+    }
+
+  # aws_vpc_security_group_egress_rule.all will be destroyed
+  - resource "aws_vpc_security_group_egress_rule" "all" {
+      - arn                    = "arn:aws:ec2:eu-central-1:<account>:security-group-rule/sgr-05dd24a35320d1f09" -> null
+      - cidr_ipv4              = "<public-ip>/0" -> null
+      - description            = "all outbound" -> null
+      - id                     = "sgr-05dd24a35320d1f09" -> null
+      - ip_protocol            = "-1" -> null
+      - region                 = "eu-central-1" -> null
+      - security_group_id      = "sg-0c2b2bad28a3aae88" -> null
+      - security_group_rule_id = "sgr-05dd24a35320d1f09" -> null
+      - tags_all               = {
+          - "Cluster"   = "stack-k8s"
+          - "Ephemeral" = "true"
+          - "ManagedBy" = "terraform"
+          - "Project"   = "stack-k8s"
+        } -> null
+    }
+
+  # aws_vpc_security_group_ingress_rule.cluster will be destroyed
+  - resource "aws_vpc_security_group_ingress_rule" "cluster" {
+      - arn                          = "arn:aws:ec2:eu-central-1:<account>:security-group-rule/sgr-00311f261424abe37" -> null
+      - description                  = "all cluster traffic between nodes" -> null
+      - id                           = "sgr-00311f261424abe37" -> null
+      - ip_protocol                  = "-1" -> null
+      - referenced_security_group_id = "sg-0c2b2bad28a3aae88" -> null
+      - region                       = "eu-central-1" -> null
+      - security_group_id            = "sg-0c2b2bad28a3aae88" -> null
+      - security_group_rule_id       = "sgr-00311f261424abe37" -> null
+      - tags_all                     = {
+          - "Cluster"   = "stack-k8s"
+          - "Ephemeral" = "true"
+          - "ManagedBy" = "terraform"
+          - "Project"   = "stack-k8s"
+        } -> null
+    }
+
+  # aws_vpc_security_group_ingress_rule.icmp will be destroyed
+  - resource "aws_vpc_security_group_ingress_rule" "icmp" {
+      - arn                    = "arn:aws:ec2:eu-central-1:<account>:security-group-rule/sgr-01ebebfe5d9ebb6fa" -> null
+      - cidr_ipv4              = "<public-ip>/32" -> null
+      - description            = "ping, operator only" -> null
+      - from_port              = -1 -> null
+      - id                     = "sgr-01ebebfe5d9ebb6fa" -> null
+      - ip_protocol            = "icmp" -> null
+      - region                 = "eu-central-1" -> null
+      - security_group_id      = "sg-0c2b2bad28a3aae88" -> null
+      - security_group_rule_id = "sgr-01ebebfe5d9ebb6fa" -> null
+      - tags_all               = {
+          - "Cluster"   = "stack-k8s"
+          - "Ephemeral" = "true"
+          - "ManagedBy" = "terraform"
+          - "Project"   = "stack-k8s"
+        } -> null
+      - to_port                = -1 -> null
+    }
+
+  # aws_vpc_security_group_ingress_rule.kubeapi will be destroyed
+  - resource "aws_vpc_security_group_ingress_rule" "kubeapi" {
+      - arn                    = "arn:aws:ec2:eu-central-1:<account>:security-group-rule/sgr-021be68038d8de246" -> null
+      - cidr_ipv4              = "<public-ip>/32" -> null
+      - description            = "kube api, operator only" -> null
+      - from_port              = 6443 -> null
+      - id                     = "sgr-021be68038d8de246" -> null
+      - ip_protocol            = "tcp" -> null
+      - region                 = "eu-central-1" -> null
+      - security_group_id      = "sg-0c2b2bad28a3aae88" -> null
+      - security_group_rule_id = "sgr-021be68038d8de246" -> null
+      - tags_all               = {
+          - "Cluster"   = "stack-k8s"
+          - "Ephemeral" = "true"
+          - "ManagedBy" = "terraform"
+          - "Project"   = "stack-k8s"
+        } -> null
+      - to_port                = 6443 -> null
+    }
+
+  # aws_vpc_security_group_ingress_rule.nodeports will be destroyed
+  - resource "aws_vpc_security_group_ingress_rule" "nodeports" {
+      - arn                    = "arn:aws:ec2:eu-central-1:<account>:security-group-rule/sgr-0acc05d1e0533ab17" -> null
+      - cidr_ipv4              = "10.10.0.0/24" -> null
+      - description            = "NodePort range, for the load balancer and its health checks" -> null
+      - from_port              = 30000 -> null
+      - id                     = "sgr-0acc05d1e0533ab17" -> null
+      - ip_protocol            = "tcp" -> null
+      - region                 = "eu-central-1" -> null
+      - security_group_id      = "sg-0c2b2bad28a3aae88" -> null
+      - security_group_rule_id = "sgr-0acc05d1e0533ab17" -> null
+      - tags_all               = {
+          - "Cluster"   = "stack-k8s"
+          - "Ephemeral" = "true"
+          - "ManagedBy" = "terraform"
+          - "Project"   = "stack-k8s"
+        } -> null
+      - to_port                = 32767 -> null
+    }
+
+  # aws_vpc_security_group_ingress_rule.ssh will be destroyed
+  - resource "aws_vpc_security_group_ingress_rule" "ssh" {
+      - arn                    = "arn:aws:ec2:eu-central-1:<account>:security-group-rule/sgr-01f6ffb2579514a62" -> null
+      - cidr_ipv4              = "<public-ip>/32" -> null
+      - description            = "ssh, operator only" -> null
+      - from_port              = 22 -> null
+      - id                     = "sgr-01f6ffb2579514a62" -> null
+      - ip_protocol            = "tcp" -> null
+      - region                 = "eu-central-1" -> null
+      - security_group_id      = "sg-0c2b2bad28a3aae88" -> null
+      - security_group_rule_id = "sgr-01f6ffb2579514a62" -> null
+      - tags_all               = {
+          - "Cluster"   = "stack-k8s"
+          - "Ephemeral" = "true"
+          - "ManagedBy" = "terraform"
+          - "Project"   = "stack-k8s"
+        } -> null
+      - to_port                = 22 -> null
+    }
+
+Plan: 0 to add, 0 to change, 21 to destroy.
+
+Changes to Outputs:
+  - agents       = [
+      - "<public-ip>",
+      - "<public-ip>",
+    ] -> null
+  - all_nodes    = [
+      - "<public-ip>",
+      - "<public-ip>",
+      - "<public-ip>",
+      - "<public-ip>",
+      - "<public-ip>",
+    ] -> null
+  - ccm_config   = {
+      - cluster_name = "stack-k8s"
+      - sg_id        = "sg-0c2b2bad28a3aae88"
+      - subnet_id    = "subnet-05b61f32039a042da"
+      - vpc_id       = "vpc-01b077ec56955f7de"
+      - zone         = "eu-central-1a"
+    } -> null
+  - efs_id       = "" -> null
+  - hourly_usd   = "2.1272" -> null
+  - instance_ids = {
+      - agent-1  = "i-0b59ca2c895726948"
+      - agent-2  = "i-0bd3f61830b435617"
+      - server-1 = "i-0c0b98d55e8843f7e"
+      - server-2 = "i-048bcf3bd46f81f8e"
+      - server-3 = "i-0c94bfb898e95c68b"
+    } -> null
+  - next         = <<-EOT
+        Platform is provisioned. About USD 2.13/hour is now being spent.
+        
+        1. Bring up the cluster:
+        
+             ./install-aws.sh \
+               --servers <public-ip>,<public-ip>,<public-ip> \
+               --agents <public-ip>,<public-ip> \
+               --ssh-key ~/.ssh/stack-k8s-aws
+        
+        2. Build and distribute the images (unchanged from the Hetzner run, this
+           part of the repo is not cloud-specific):
+        
+             cd ../.. && ./build.sh ubuntu@<public-ip> ubuntu@<public-ip> ubuntu@<public-ip> ubuntu@<public-ip> ubuntu@<public-ip>
+        
+        3. Apply the workload:
+        
+             KUBECONFIG=cloud/aws/kubeconfig.yaml kubectl apply -k manifests/
+        
+        When finished, and this is the part that matters:
+        
+             ./teardown.sh
+    EOT -> null
+  - private_ips  = {
+      - agent-1  = "10.10.0.155"
+      - agent-2  = "10.10.0.67"
+      - server-1 = "10.10.0.51"
+      - server-2 = "10.10.0.25"
+      - server-3 = "10.10.0.209"
+    } -> null
+  - servers      = [
+      - "<public-ip>",
+      - "<public-ip>",
+      - "<public-ip>",
+    ] -> null
+aws_iam_role_policy.node: Destroying... [id=stack-k8s-node:stack-k8s-ccm]
+aws_route_table_association.nodes: Destroying... [id=rtbassoc-03b0faa7075be7839]
+aws_vpc_security_group_ingress_rule.icmp: Destroying... [id=sgr-01ebebfe5d9ebb6fa]
+aws_vpc_security_group_egress_rule.all: Destroying... [id=sgr-05dd24a35320d1f09]
+aws_vpc_security_group_ingress_rule.ssh: Destroying... [id=sgr-01f6ffb2579514a62]
+aws_vpc_security_group_ingress_rule.cluster: Destroying... [id=sgr-00311f261424abe37]
+aws_vpc_security_group_ingress_rule.nodeports: Destroying... [id=sgr-0acc05d1e0533ab17]
+aws_instance.node[1]: Destroying... [id=i-048bcf3bd46f81f8e]
+aws_instance.node[0]: Destroying... [id=i-0c0b98d55e8843f7e]
+aws_instance.node[2]: Destroying... [id=i-0c94bfb898e95c68b]
+aws_vpc_security_group_ingress_rule.icmp: Destruction complete after 0s
+aws_route_table_association.nodes: Destruction complete after 0s
+aws_instance.node[4]: Destroying... [id=i-0bd3f61830b435617]
+aws_vpc_security_group_egress_rule.all: Destruction complete after 0s
+aws_vpc_security_group_ingress_rule.kubeapi: Destroying... [id=sgr-021be68038d8de246]
+aws_instance.node[3]: Destroying... [id=i-0b59ca2c895726948]
+aws_iam_role_policy.node: Destruction complete after 0s
+aws_vpc_security_group_ingress_rule.cluster: Destruction complete after 0s
+aws_route_table.public: Destroying... [id=rtb-0d39b19ecd6e94eba]
+aws_vpc_security_group_ingress_rule.nodeports: Destruction complete after 0s
+aws_vpc_security_group_ingress_rule.ssh: Destruction complete after 0s
+aws_vpc_security_group_ingress_rule.kubeapi: Destruction complete after 0s
+aws_route_table.public: Destruction complete after 1s
+aws_internet_gateway.this: Destroying... [id=igw-0252730db58c53251]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 00m10s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 00m10s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 00m10s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 00m10s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 00m10s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 00m10s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 00m20s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 00m20s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 00m20s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 00m20s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 00m20s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 00m20s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 00m30s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 00m30s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 00m30s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 00m30s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 00m30s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 00m30s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 00m40s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 00m40s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 00m40s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 00m40s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 00m40s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 00m40s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 00m50s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 00m50s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 00m50s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 00m50s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 00m50s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 00m50s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 01m00s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 01m00s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 01m00s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 01m00s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 01m00s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 01m00s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 01m10s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 01m10s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 01m10s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 01m10s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 01m10s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 01m10s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 01m20s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 01m20s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 01m20s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 01m20s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 01m20s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 01m20s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 01m30s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 01m30s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 01m30s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 01m30s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 01m30s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 01m30s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 01m40s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 01m40s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 01m40s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 01m40s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 01m40s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 01m40s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 01m50s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 01m50s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 01m50s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 01m50s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 01m50s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 01m50s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 02m00s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 02m00s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 02m00s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 02m00s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 02m00s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 02m00s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 02m10s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 02m10s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 02m10s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 02m10s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 02m10s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 02m10s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 02m20s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 02m20s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 02m20s elapsed]
+aws_instance.node[4]: Still destroying... [id=i-0bd3f61830b435617, 02m20s elapsed]
+aws_instance.node[3]: Still destroying... [id=i-0b59ca2c895726948, 02m20s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 02m20s elapsed]
+aws_instance.node[4]: Destruction complete after 2m21s
+aws_instance.node[3]: Destruction complete after 2m21s
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 02m30s elapsed]
+aws_instance.node[0]: Still destroying... [id=i-0c0b98d55e8843f7e, 02m30s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 02m30s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 02m30s elapsed]
+aws_instance.node[0]: Destruction complete after 2m31s
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 02m40s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 02m40s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 02m40s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 02m50s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 02m50s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 02m50s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 03m00s elapsed]
+aws_instance.node[2]: Still destroying... [id=i-0c94bfb898e95c68b, 03m00s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 03m00s elapsed]
+aws_instance.node[2]: Destruction complete after 3m1s
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 03m10s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 03m10s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 03m20s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 03m20s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 03m30s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 03m30s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 03m40s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 03m40s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 03m50s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 03m50s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 04m00s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 04m00s elapsed]
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 04m10s elapsed]
+aws_internet_gateway.this: Still destroying... [id=igw-0252730db58c53251, 04m10s elapsed]
+aws_internet_gateway.this: Destruction complete after 4m11s
+aws_instance.node[1]: Still destroying... [id=i-048bcf3bd46f81f8e, 04m20s elapsed]
+aws_instance.node[1]: Destruction complete after 4m23s
+aws_iam_instance_profile.node: Destroying... [id=stack-k8s-node]
+aws_key_pair.operator: Destroying... [id=stack-k8s-operator]
+aws_subnet.nodes: Destroying... [id=subnet-05b61f32039a042da]
+aws_security_group.nodes: Destroying... [id=sg-0c2b2bad28a3aae88]
+aws_key_pair.operator: Destruction complete after 0s
+aws_iam_instance_profile.node: Destruction complete after 0s
+aws_iam_role.node: Destroying... [id=stack-k8s-node]
+aws_subnet.nodes: Destruction complete after 0s
+aws_security_group.nodes: Destruction complete after 0s
+aws_vpc.this: Destroying... [id=vpc-01b077ec56955f7de]
+aws_iam_role.node: Destruction complete after 1s
+aws_vpc.this: Destruction complete after 1s
+
+Destroy complete! Resources: 21 destroyed.
+
+== sweep: what is left in eu-central-1 tagged Cluster=stack-k8s
+   clear: instances
+   clear: volumes
+   clear: snapshots
+   clear: vpcs
+   clear: efs
+   clear: unassociated elastic IPs
+   clear: load balancers tagged for this cluster
+
+   Nothing left. The meter is at zero for this cluster.
+
+  Two things this script deliberately does NOT delete:
+
+    - your SSH keypair (~/.ssh/stack-k8s-aws), which costs nothing and is
+      yours
+    - the IAM user and its access key, which cost nothing and are reused for
+      the next run. Delete the ACCESS KEY yourself when the comparison is
+      finished, in the console under IAM > Users > stack-k8s-deploy.
+
+  Check the bill tomorrow, not just this output:
+
+    ./cost-live.sh
+exit=0
