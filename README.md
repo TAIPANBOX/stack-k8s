@@ -715,7 +715,7 @@ original set against a stand-in server, and requires every drill to pass.
 `manifests/52-tokenfuse-mcp-broker.yaml` has the full story: why two Secrets
 rather than one, what its NetworkPolicies admit, and what was measured
 through it on kind (it needs typryx v0.2.0 or later; `51-typryx.yaml` pins
-v0.4.1; GOTCHAS 106). Reaching typryx directly,
+v0.6.1; GOTCHAS 106). Reaching typryx directly,
 without the broker, is unchanged, over your own tunnel or
 
 ```bash
