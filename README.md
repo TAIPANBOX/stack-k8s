@@ -133,8 +133,8 @@ console's policy and budget proofs, copied into the image by digest and named
 by its `dev.taipanbox.engine.*` labels. `images/console-engines.json` records
 those labels, and a gate holds them to the planes the manifests run (CLAUDE.md
 invariant 79): wardryx is the stack's own, v2.8.0 digest for digest; tokenfuse
-is v1.25.0 in the console while the gateway runs v1.27.0, a recorded lag that a
-genaryx release built with tokenfuse v1.27.0 closes. On a cluster the
+is v1.25.0 in the console while the gateway runs v1.27.1, a recorded lag that a
+genaryx release built with tokenfuse v1.27.1 closes. On a cluster the
 budget proof has no trace directory to read, because the gateway's traces are
 a pod-local `emptyDir` that no other pod can mount.
 
@@ -1130,7 +1130,7 @@ sides use one secret, and it is off unless you turn it on:
 ```
 
 A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
-console v1.1.34 or later. The images pinned here are tokenfuse v1.27.0 and, since 1.19.0, the console
+console v1.1.34 or later. The images pinned here are tokenfuse v1.27.1 and, since 1.19.0, the console
 from genaryx v0.1.0 (which replaced genaryx-console, last pinned as v1.14.0);
 tokenfuse is later than its minimum, and an older image
 ignores the setting.
