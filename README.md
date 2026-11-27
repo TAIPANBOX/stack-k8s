@@ -1130,8 +1130,9 @@ sides use one secret, and it is off unless you turn it on:
 ```
 
 A re-run of `up.sh` reuses the secret. It needs tokenfuse v1.9.0 or later and
-console v1.1.34 or later. The images pinned here are tokenfuse v1.27.0 and console v1.8.8,
-both later than those minimums; an older image
+console v1.1.34 or later. The images pinned here are tokenfuse v1.27.0 and, since 1.19.0, the console
+from genaryx v0.1.0 (which replaced genaryx-console, last pinned as v1.14.0);
+tokenfuse is later than its minimum, and an older image
 ignores the setting.
 
 ## The provider key
@@ -1226,7 +1227,7 @@ open, and the map runs strict (`TOKENFUSE_IDENTITY_STRICT: enforce`).
 |---|---|---|---|
 | `felyx` | `console` | `agent://<trust domain>/genaryx/felyx`, exactly | the Secret `felyx-client-key`, which the console sends for Felyx |
 | `agents` | `agents` | `agent://<trust domain>/agents/*` | `agent-key` beside the deploy script, 0600, on the machine you deployed from |
-| `costcrew` | `costcrew` | `agent://<trust domain>/costcrew/*`, the crew's analysts (CostCrew v0.8.0) | the Secret `costcrew-client-key`, which the scheduled crew reads as its client key |
+| `costcrew` | `costcrew` | `agent://<trust domain>/costcrew/*`, the crew's analysts (CostCrew, v0.11.0 as pinned here) | the Secret `costcrew-client-key`, which the scheduled crew reads as its client key |
 | `drills` | `drills` | `agent://mockryx.local/*`, the drill's own namespace | the Secret `drills-client-key`, mounted into the suspended drill job, which sends it to the gateway |
 | `broker` | `broker` | `agent://<trust domain>/*` | the Secret `broker-taint-key`, which the MCP broker presents to the gateway's tool-call check when it relays an agent token |
 | `drills-broker` | `drills` | `agent://mockryx.local/*` | the Secret `drills-broker-key`, mounted into the suspended `drills-broker` job; the MCP broker admits the same secret under the same id |
@@ -1446,10 +1447,20 @@ down:
   returned identical results. That is a property of k3s installed with the
   right flag, not of either cloud.
 
+On 2026-11-27 the installers were run again on AWS (`eu-central-1`, five
+`c7i.2xlarge`, k3s v1.36.2) with stack-k8s v1.19.0. On the Ubuntu 26.04 image of
+July the deploy took 16 min 30 s; on the current Ubuntu 26.04.1 image (kernel
+7.0) it first failed, on AppArmor and on an NFS directory-delegation call the
+Longhorn v1.7.2 server rejects (GOTCHAS 170), and after the host setup in
+`lib/host-runtime.sh` (CLAUDE.md invariant 98) every node passed: deploy 11 min,
+`security-tests.sh` 28 passed, 0 failed, `verify.sh` 21 passed, 0 failed and
+`verify.sh --freeze` 21 passed, 0 failed. The output is in
+`cloud/aws/evidence/aws-run-2026-11-27/` and `aws-run-2026-11-27-current-image/`.
+
 The command output behind every sentence above is in `evidence/` and
 `cloud/*/evidence/`. Every trap the runs cost us is written up in
-`GOTCHAS.md`, now **132 items** (48 platform, 61 ours, 16 the stack's own
-contract, 7 upstream; `scripts/gotchas-classified.sh` prints the current split). Almost all are already fixed here, which is the whole
+`GOTCHAS.md`, now **170 items** (52 platform, 87 ours, 19 the stack's own
+contract, 12 upstream; `scripts/gotchas-classified.sh` prints the current split). Almost all are already fixed here, which is the whole
 point: the next person to run this should not meet any of them. A small
 number (69, 81) are recorded rather than solved, and say so plainly rather
 than letting the ledger look cleaner than the deployment is. The split matters
