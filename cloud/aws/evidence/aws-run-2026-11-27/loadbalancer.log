@@ -1,0 +1,4 @@
+service/genaryx-console-lb created
+genaryx-console-lb <elb>.eu-central-1.elb.amazonaws.com after 15s
+http 200 0.056288s after ~105s
+OutOfService	OutOfService	OutOfService	OutOfService	InService

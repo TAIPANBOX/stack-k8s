@@ -1,0 +1,32 @@
+== ganesha errors
+27/11/2026 05:29:52 : epoch 6b091550 : share-manager-pvc-484d9de3-c948-4e94-b6b1-187805c4f589 : nfs-ganesha-38[main] gsh_dbus_register_path :DBUS :CRIT :dbus_connection_register_object_path called with no DBUS connection
+27/11/2026 05:29:52 : epoch 6b091550 : share-manager-pvc-484d9de3-c948-4e94-b6b1-187805c4f589 : nfs-ganesha-38[main] nfs_Init_admin_thread :NFS CB :EVENT :Admin thread initialized
+27/11/2026 05:29:52 : epoch 6b091550 : share-manager-pvc-484d9de3-c948-4e94-b6b1-187805c4f589 : nfs-ganesha-38[main] nfs_Start_threads :THREAD :EVENT :Starting delayed executor.
+27/11/2026 05:29:52 : epoch 6b091550 : share-manager-pvc-484d9de3-c948-4e94-b6b1-187805c4f589 : nfs-ganesha-38[main] nfs_Start_threads :THREAD :EVENT :gsh_dbusthread was started successfully
+27/11/2026 05:29:52 : epoch 6b091550 : share-manager-pvc-484d9de3-c948-4e94-b6b1-187805c4f589 : nfs-ganesha-38[dbus] gsh_dbus_thread :DBUS :CRIT :DBUS not initialized, service thread exiting
+27/11/2026 05:29:52 : epoch 6b091550 : share-manager-pvc-484d9de3-c948-4e94-b6b1-187805c4f589 : nfs-ganesha-38[main] nfs_Start_threads :THREAD :EVENT :admin thread was started successfully
+27/11/2026 05:29:52 : epoch 6b091550 : share-manager-pvc-484d9de3-c948-4e94-b6b1-187805c4f589 : nfs-ganesha-38[dbus] gsh_dbus_thread :DBUS :EVENT :shutdown
+27/11/2026 05:29:52 : epoch 6b091550 : share-manager-pvc-484d9de3-c948-4e94-b6b1-187805c4f589 : nfs-ganesha-38[main] nfs_Start_threads :THREAD :EVENT :reaper thread was started successfully
+27/11/2026 05:29:52 : epoch 6b091550 : share-manager-pvc-484d9de3-c948-4e94-b6b1-187805c4f589 : nfs-ganesha-38[main] nfs_Start_threads :THREAD :EVENT :General fridge was started successfully
+27/11/2026 05:29:52 : epoch 6b091550 : share-manager-pvc-484d9de3-c948-4e94-b6b1-187805c4f589 : nfs-ganesha-38[main] nfs_start :NFS STARTUP :EVENT :-------------------------------------------------
+27/11/2026 05:29:52 : epoch 6b091550 : share-manager-pvc-484d9de3-c948-4e94-b6b1-187805c4f589 : nfs-ganesha-38[main] nfs_start :NFS STARTUP :EVENT :             NFS SERVER INITIALIZED
+27/11/2026 05:29:52 : epoch 6b091550 : share-manager-pvc-484d9de3-c948-4e94-b6b1-187805c4f589 : nfs-ganesha-38[main] nfs_start :NFS STARTUP :EVENT :-------------------------------------------------
+== export dir in share-manager
+total 40
+drwxrwxrwx 7     0     0  4096 Nov 27 05:39 .
+drwxr-xr-x 1     0     0  4096 Nov 27 05:29 ..
+drwxrws--- 2 20000 10002  4096 Nov 27 05:30 conform
+drwxrwx--x 2 20000 20101  4096 Nov 27 05:30 custody
+drwxr-s--x 3 20000 10003  4096 Nov 27 05:30 focus
+drwx------ 2     0     0 16384 Nov 27 05:29 lost+found
+drwxr-s--- 3 20000 10001  4096 Nov 27 05:41 streams
+sh: getfattr: command not found
+  File: /export/pvc-484d9de3-c948-4e94-b6b1-187805c4f589/streams
+  Size: 4096      	Blocks: 8          IO Block: 4096   directory
+Device: 800h/2048d	Inode: 131073      Links: 3
+Access: (2750/drwxr-s---)  Uid: (20000/ UNKNOWN)   Gid: (10001/ UNKNOWN)
+Access: 2026-11-27 05:41:31.045741135 +0000
+Modify: 2026-11-27 05:41:29.927742111 +0000
+== longhorn version
+longhornio/longhorn-manager:v1.7.2
+error: timed out waiting for the condition

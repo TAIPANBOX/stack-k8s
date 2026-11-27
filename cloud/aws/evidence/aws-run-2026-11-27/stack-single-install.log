@@ -1,0 +1,705 @@
+start 2026-11-27T05:00:38Z
+cosign-linux-amd64: OK
+latest release: v1.15.0
+Verified OK
+bootstrap matches the signed tree
+
+>> fetching release v1.15.0 and checking its signature
+   fetching cosign v3.1.3 for amd64
+   signature verified: stack-single.tar.gz of v1.15.0, signed by the release workflow on v1.15.0
+
+>> installing docker and git
+   docker 29.1.3, compose present
+   no terminal to ask on: no notifications. Set ALERT_TO and SMTP_HOST in the
+   environment and re-run, or edit .env afterwards, to add them.
+   no terminal to ask on: typed answers stay off. Set TYPED_MODE=jev or TYPED_MODE=own-model
+   in the environment and re-run to choose where they come from (README has the variables).
+
+>> credentials
+   generated .env (0600)
+   added CONSOLE_DOMAIN to .env (new in this release)
+   added GATEWAY_ADMIN to .env (new in this release)
+   added GATEWAY_DECLASSIFY_KEY to .env (new in this release)
+   added ALERT_TO to .env (new in this release)
+   added SMTP_HOST to .env (new in this release)
+   added SMTP_FROM to .env (new in this release)
+   added SMTP_USER to .env (new in this release)
+   added SMTP_PASS to .env (new in this release)
+   added SMTP_TLS to .env (new in this release)
+   added ALERT_MIN_SEVERITY to .env (new in this release)
+   added ALERT_CONSOLE_URL to .env (new in this release)
+   added SCOPYX_KEYS to .env (new in this release)
+   added SCOPYX_WARDRYX_KEY to .env (new in this release)
+   added SCOPYX_MAX_FETCHES_PER_HOUR to .env (new in this release)
+   added TYPRYX_KEYS to .env (new in this release)
+   added TOKENFUSE_MCP_KEYS to .env (new in this release)
+   added TOKENFUSE_MCP_SECRETS to .env (new in this release)
+   added TOKENFUSE_MCP_SECRET_SCOPES to .env (new in this release)
+   CostCrew runner: ceiling 0, so a run spends nothing. The runner is not started by this install.
+   minted the agent's enrolment secret into /opt/agent-stack/agent-token.key (0600, never printed)
+   minted GATEWAY_BROKER_KEY into .env (never printed)
+   the broker's key: in /opt/agent-stack/broker/key (0400, uid 20012, never printed)
+   scopyx: the key of agent://local/agents/operator is in the broker's vault as scopyx_key_operator, scoped to that agent and to browse and fetch_url (never printed)
+   fire drills: their key at the MCP broker is drills-broker, in /opt/agent-stack/drills/broker.key (0400, uid 65532, never printed); run them with: docker compose run --rm mockryx-drill
+   minted GENARYX_COPILOT_FUSE_KEY into .env (never printed)
+   minted GATEWAY_AGENT_KEY into .env (never printed)
+   minted GATEWAY_DRILLS_KEY into .env (never printed)
+   added VOUCHRYX_REVOKE_KEYS to .env (new in this release)
+   added CONSOLE_REVOKE_KEY to .env (new in this release)
+   keyryx root key written at /opt/agent-stack/keyryx/root.key (32 bytes, 0400, uid 20101; its contents are never shown)
+   keyryx root key written at /opt/agent-stack/keyryx/witness-root.key (32 bytes, 0400, uid 20100; its contents are never shown)
+   approver key minted at /opt/agent-stack/approver/approver.pem (PKCS#8 P-256, never printed)
+   console revoke key written to /opt/agent-stack/console-revoke/revoke.key (never printed)
+
+>> delegation
+   vouchryx: minting a signing key
+Unable to find image 'ghcr.io/taipanbox/vouchryx:v0.9.0@sha256:341cc2c5d22d2f690ae98e9c26c509f7e590ea5b9786d958a74dfb7753513c05' locally
+ghcr.io/taipanbox/vouchryx@sha256:341cc2c5d22d2f690ae98e9c26c509f7e590ea5b9786d958a74dfb7753513c05: Pulling from taipanbox/vouchryx
+990a9c434e5e: Pulling fs layer
+2780920e5dbf: Pulling fs layer
+bf7a4185f015: Pulling fs layer
+52630fc75a18: Pulling fs layer
+7c12895b777b: Pulling fs layer
+ecd45fb034e6: Pulling fs layer
+b839dfae01f6: Pulling fs layer
+a5789fc40e82: Pulling fs layer
+dcaa5a89b0cc: Pulling fs layer
+39dc083afc39: Pulling fs layer
+dd64bf2dd177: Pulling fs layer
+96ed2737ae31: Pulling fs layer
+3214acf345c0: Pulling fs layer
+05f493d48e57: Pulling fs layer
+44136fa355b3: Download complete
+dd64bf2dd177: Download complete
+b839dfae01f6: Download complete
+bf7a4185f015: Download complete
+7c12895b777b: Download complete
+990a9c434e5e: Download complete
+a5789fc40e82: Download complete
+2780920e5dbf: Download complete
+52630fc75a18: Download complete
+3214acf345c0: Download complete
+96ed2737ae31: Download complete
+429d0ff1cc34: Download complete
+39dc083afc39: Download complete
+dcaa5a89b0cc: Download complete
+990a9c434e5e: Pull complete
+a5789fc40e82: Pull complete
+05f493d48e57: Download complete
+bf7a4185f015: Pull complete
+2780920e5dbf: Pull complete
+39dc083afc39: Pull complete
+ecd45fb034e6: Download complete
+dd64bf2dd177: Pull complete
+b839dfae01f6: Pull complete
+7c12895b777b: Pull complete
+52630fc75a18: Pull complete
+3214acf345c0: Pull complete
+96ed2737ae31: Pull complete
+dcaa5a89b0cc: Pull complete
+05f493d48e57: Pull complete
+ecd45fb034e6: Pull complete
+Digest: sha256:341cc2c5d22d2f690ae98e9c26c509f7e590ea5b9786d958a74dfb7753513c05
+Status: Downloaded newer image for ghcr.io/taipanbox/vouchryx@sha256:341cc2c5d22d2f690ae98e9c26c509f7e590ea5b9786d958a74dfb7753513c05
+   added VOUCHRYX_TRUSTED_ISSUERS to .env (new in this release)
+
+>> pulling published images
+   fetching cosign v3.1.3 for amd64
+   signature verified: ghcr.io/taipanbox/agent-conform:v2.0.3
+   pulling ghcr.io/taipanbox/agent-conform:v2.0.3@sha256:f2a5bcbadf4189d2b4979669703aa8b6ef3bfc93a68b90ac6d1f61ac110ed3e4
+   signature verified: ghcr.io/taipanbox/genaryx:v0.1.0
+   pulling ghcr.io/taipanbox/genaryx:v0.1.0@sha256:4030bc819e7df40c2a307e68f33519476d0858570bbdccb9326fd5fad256d2ee
+   signature verified: ghcr.io/taipanbox/heraldyx:v0.10.0
+   pulling ghcr.io/taipanbox/heraldyx:v0.10.0@sha256:7baa8cdb8508afde33b8366141f433ae4bea1688caefde6b4f5d48a21af183c1
+   signature verified: ghcr.io/taipanbox/idryx:v1.4.1
+   pulling ghcr.io/taipanbox/idryx:v1.4.1@sha256:7ace674b5c44bf2ec65a22399315e1e8e71d71e75cfd933dcd0ddec53a9c20a6
+   signature verified: ghcr.io/taipanbox/keyryx:v0.2.0
+   pulling ghcr.io/taipanbox/keyryx:v0.2.0@sha256:ead031a117958ce34c9157937713c000a3d6a0cea86e0ce1d0bc05fce5270c38
+   signature verified: ghcr.io/taipanbox/stack-caddy:v1.8.1
+   pulling ghcr.io/taipanbox/stack-caddy:v1.8.1@sha256:d9376051cc5ac9bb83de557bf3e7e861e26f6f6ae4556cd6ed5a32d1ce352c0a
+   signature verified: ghcr.io/taipanbox/stack-wg:v1.8.1
+   pulling ghcr.io/taipanbox/stack-wg:v1.8.1@sha256:8996ce01a5b8a9d38a71b711f06653e23b54d5ad3e1578669be49ae8c79ba3ae
+   signature verified: ghcr.io/taipanbox/tokenfuse-control-plane:v1.27.0
+   pulling ghcr.io/taipanbox/tokenfuse-control-plane:v1.27.0@sha256:d8ad6e9a779a57b769f65691330badbb14157f8fc883277dc4ffd177d23118b2
+   signature verified: ghcr.io/taipanbox/tokenfuse:v1.27.0
+   pulling ghcr.io/taipanbox/tokenfuse:v1.27.0@sha256:9ada89b47a163a5e4fc1a7534302f910abc932dd63cc4fa1499fe3f9df0057a0
+   signature verified: ghcr.io/taipanbox/trailryx-node:v1.7.0
+   pulling ghcr.io/taipanbox/trailryx-node:v1.7.0@sha256:a9b7ef893e422c18dd463cd9a54756ebfbff9d3f35ac592bbee8c59fc4d0105b
+   signature verified: ghcr.io/taipanbox/vouchryx:v0.9.0
+   pulling ghcr.io/taipanbox/vouchryx:v0.9.0@sha256:341cc2c5d22d2f690ae98e9c26c509f7e590ea5b9786d958a74dfb7753513c05
+   signature verified: ghcr.io/taipanbox/wardryx:v2.8.0
+   pulling ghcr.io/taipanbox/wardryx:v2.8.0@sha256:f9b86a82114698f64a3251816ee0be6f80b4a6b2c239082b7035f1b4228f06aa
+   signature verified: ghcr.io/taipanbox/mockryx:v0.5.1
+   pulling ghcr.io/taipanbox/mockryx:v0.5.1@sha256:3926512211a4609a402d3812ae0321df46baaa90406ea439e3f5c89316ef85ef (the fire drills, run by a person)
+   pulled 13 published image(s); nothing was compiled
+   client keys (the gateway): 6 key(s), kept in .env as GATEWAY_CLIENT_KEYS (never printed)
+   identity map (the gateway): installed at /opt/agent-stack/identity/identity.json (read only for tokenfuse-gateway)
+   the agents' client key: in /opt/agent-stack/agent-key (0600), never printed
+   wrote policy.yaml
+   tool hold: policy.yaml now holds, for a person, a tool call nothing grants
+   error budget: policy.yaml now holds agent://* for a person while its budget is spent (slo-burn-hold)
+   wrote environments/single.json
+   browser sandbox: loaded AppArmor profile scopyx-browser from apparmor/scopyx-browser, kept as /etc/apparmor.d/scopyx-browser
+   browser sandbox: apparmor=scopyx-browser is the narrowest line Chrome's sandbox starts under on this host (measured, saved in .env)
+
+>> starting the stack
+
+>> vouchryx
+   vouchryx: signs with the key keyryx certifies (VOUCHRYX_SIGNER=keyryx; file in .env keeps the file key)
+ Network agent-stack_core  Creating
+ Network agent-stack_core  Created
+ Volume agent-stack_events  Creating
+ Volume agent-stack_events  Created
+ Volume agent-stack_records  Creating
+ Volume agent-stack_records  Created
+ Volume agent-stack_heraldyxstate  Creating
+ Volume agent-stack_heraldyxstate  Created
+ Volume agent-stack_typryxdata  Creating
+ Volume agent-stack_typryxdata  Created
+ Volume agent-stack_vouchryxdata  Creating
+ Volume agent-stack_vouchryxdata  Created
+ Volume agent-stack_keyryxstate  Creating
+ Volume agent-stack_keyryxstate  Created
+ Volume agent-stack_keyryxwitness  Creating
+ Volume agent-stack_keyryxwitness  Created
+ Volume agent-stack_checkpoints  Creating
+ Volume agent-stack_checkpoints  Created
+ Volume agent-stack_keyryxattest  Creating
+ Volume agent-stack_keyryxattest  Created
+ Volume agent-stack_focus  Creating
+ Volume agent-stack_focus  Created
+ Volume agent-stack_keyryxalerts  Creating
+ Volume agent-stack_keyryxalerts  Created
+ Volume agent-stack_traces  Creating
+ Volume agent-stack_traces  Created
+ Volume agent-stack_cloudstate  Creating
+ Volume agent-stack_cloudstate  Created
+ Volume agent-stack_consolestate  Creating
+ Volume agent-stack_consolestate  Created
+ Volume agent-stack_conformstate  Creating
+ Volume agent-stack_conformstate  Created
+ Volume agent-stack_scopyxevents  Creating
+ Volume agent-stack_scopyxevents  Created
+ Container agent-stack-init-volumes-1  Creating
+ Container agent-stack-init-volumes-1  Created
+ Container agent-stack-keyryx-1  Creating
+ Container agent-stack-keyryx-1  Created
+ Container agent-stack-init-volumes-1  Starting
+ Container agent-stack-init-volumes-1  Started
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-keyryx-1  Starting
+ Container agent-stack-keyryx-1  Started
+   vouchryx: pinned the kids of keyryx's delegation root from this box (VOUCHRYX_KEYRYX_ROOT_PIN in .env, kept on every run)
+ Container agent-stack-keyryx-1  Running
+ Container agent-stack-vouchryx-1  Creating
+ Container agent-stack-vouchryx-1  Created
+ Container agent-stack-init-volumes-1  Starting
+ Container agent-stack-init-volumes-1  Started
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-vouchryx-1  Starting
+ Container agent-stack-vouchryx-1  Started
+   approver statements: on. wardryx checks each approval's statement against the console's public key set. A console without a passkey enrolled cannot sign one, so its approvals are refused (CLAUDE.md invariant 61).
+   preview key minted at /opt/agent-stack/preview/preview.key (X-Wing, never printed)
+   argument preview: on. wardryx seals each held call's arguments to the console's preview key, and the console shows them to the person deciding (CLAUDE.md invariant 78).
+ Container agent-stack-keyryx-1  Running
+ Container agent-stack-init-volumes-1  Starting
+ Container agent-stack-init-volumes-1  Started
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Exited
+   record seal: pinned the kid of keyryx's trailryx-root set (TRAILRYX_KEYRYX_KID in .env, kept on every run)
+ policy-db Pulling 
+ e2de96513ba9 Pulling fs layer 
+ 1b7f9cd581ee Pulling fs layer 
+ 25b77f59fd95 Pulling fs layer 
+ 210b280f9556 Pulling fs layer 
+ 81717818649a Pulling fs layer 
+ 3ae6141cfd99 Pulling fs layer 
+ 509688edf37b Pulling fs layer 
+ a88782f92806 Pulling fs layer 
+ d8d21be4bf02 Pulling fs layer 
+ 6117bd39f23f Pulling fs layer 
+ 6c25da34e03f Pulling fs layer 
+ e2de96513ba9 Download complete 
+ e2de96513ba9 Extracting 1 s
+ 6c25da34e03f Download complete 
+ 1b7f9cd581ee Download complete 
+ 509688edf37b Downloading [==================================================>]     185B/185B
+ 210b280f9556 Download complete 
+ 81717818649a Download complete 
+ 3ae6141cfd99 Download complete 
+ e2de96513ba9 Extracting 1 s
+ 509688edf37b Download complete 
+ a88782f92806 Download complete 
+ d8d21be4bf02 Download complete 
+ 6117bd39f23f Download complete 
+ 25b77f59fd95 Downloading [===========>                                       ]  25.17MB/111.3MB
+ e2de96513ba9 Extracting 1 s
+ 25b77f59fd95 Downloading [=========================>                         ]  56.62MB/111.3MB
+ e2de96513ba9 Extracting 1 s
+ e6b147246a89 Download complete 
+ 25b77f59fd95 Downloading [=======================================>           ]  88.08MB/111.3MB
+ e2de96513ba9 Pull complete 
+ 1b7f9cd581ee Pull complete 
+ 210b280f9556 Pull complete 
+ 81717818649a Pull complete 
+ 3ae6141cfd99 Pull complete 
+ 25b77f59fd95 Downloading [==================================================>]  111.3MB/111.3MB
+ 021b01ea4cc2 Download complete 
+ 25b77f59fd95 Download complete 
+ 25b77f59fd95 Extracting 1 s
+ 25b77f59fd95 Extracting 1 s
+ 25b77f59fd95 Extracting 1 s
+ 25b77f59fd95 Extracting 1 s
+ 25b77f59fd95 Extracting 1 s
+ 25b77f59fd95 Extracting 1 s
+ 25b77f59fd95 Extracting 1 s
+ 25b77f59fd95 Extracting 1 s
+ 25b77f59fd95 Extracting 1 s
+ 25b77f59fd95 Extracting 1 s
+ 25b77f59fd95 Extracting 2 s
+ 25b77f59fd95 Extracting 2 s
+ 25b77f59fd95 Extracting 2 s
+ 25b77f59fd95 Extracting 2 s
+ 25b77f59fd95 Pull complete 
+ 6c25da34e03f Pull complete 
+ 509688edf37b Pull complete 
+ a88782f92806 Pull complete 
+ d8d21be4bf02 Pull complete 
+ 6117bd39f23f Pull complete 
+ policy-db Pulled 
+ Network agent-stack_edge  Creating
+ Network agent-stack_edge  Created
+ Network agent-stack_callbacks  Creating
+ Network agent-stack_callbacks  Created
+ Network agent-stack_front  Creating
+ Network agent-stack_front  Created
+ Network agent-stack_agents  Creating
+ Network agent-stack_agents  Created
+ Network agent-stack_browser-policy  Creating
+ Network agent-stack_browser-policy  Created
+ Network agent-stack_risk-signal  Creating
+ Network agent-stack_risk-signal  Created
+ Network agent-stack_guests  Creating
+ Network agent-stack_guests  Created
+ Volume agent-stack_wgstate  Creating
+ Volume agent-stack_wgstate  Created
+ Volume agent-stack_caddyconfig  Creating
+ Volume agent-stack_caddyconfig  Created
+ Volume agent-stack_pgdata  Creating
+ Volume agent-stack_pgdata  Created
+ Volume agent-stack_caddydata  Creating
+ Volume agent-stack_caddydata  Created
+ Volume agent-stack_wgapi  Creating
+ Volume agent-stack_wgapi  Created
+ Container agent-stack-wg-1  Creating
+ Container agent-stack-guest-door-1  Creating
+ Container agent-stack-policy-db-1  Creating
+ Container agent-stack-guest-callback-1  Creating
+ Container agent-stack-tokenfuse-cloud-1  Creating
+ Container agent-stack-keyryx-1  Running
+ Container agent-stack-record-seal-1  Creating
+ Container agent-stack-agent-conform-1  Creating
+ Container agent-stack-vouchryx-1  Running
+ Container agent-stack-idryx-1  Creating
+ Container agent-stack-focus-export-1  Creating
+ Container agent-stack-verdryx-slo-1  Creating
+ Container agent-stack-keyryx-witness-1  Creating
+ Container agent-stack-heraldyx-1  Creating
+ Container agent-stack-focus-export-1  Created
+ Container agent-stack-policy-db-1  Created
+ Container agent-stack-wardryx-1  Creating
+ Container agent-stack-guest-door-1  Created
+ Container agent-stack-agent-conform-1  Created
+ Container agent-stack-heraldyx-1  Created
+ Container agent-stack-record-seal-1  Created
+ Container agent-stack-keyryx-witness-1  Created
+ Container agent-stack-verdryx-slo-1  Created
+ Container agent-stack-wg-1  Created
+ Container agent-stack-idryx-1  Created
+ Container agent-stack-tokenfuse-cloud-1  Created
+ Container agent-stack-guest-callback-1  Created
+ Container agent-stack-wardryx-1  Created
+ Container agent-stack-console-1  Creating
+ Container agent-stack-tokenfuse-gateway-1  Creating
+ Container agent-stack-tokenfuse-gateway-1  Created
+ Container agent-stack-console-1  Created
+ Container agent-stack-caddy-1  Creating
+ Container agent-stack-caddy-1  Created
+ Container agent-stack-policy-db-1  Starting
+ Container agent-stack-init-volumes-1  Starting
+ Container agent-stack-wg-1  Starting
+ Container agent-stack-guest-door-1  Starting
+ Container agent-stack-guest-callback-1  Starting
+ Container agent-stack-policy-db-1  Started
+ Container agent-stack-init-volumes-1  Started
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-policy-db-1  Waiting
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-guest-callback-1  Started
+ Container agent-stack-wg-1  Started
+ Container agent-stack-guest-door-1  Started
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-tokenfuse-cloud-1  Starting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-idryx-1  Starting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-record-seal-1  Starting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-keyryx-witness-1  Starting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-focus-export-1  Starting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-agent-conform-1  Starting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-verdryx-slo-1  Starting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-heraldyx-1  Starting
+ Container agent-stack-tokenfuse-cloud-1  Started
+ Container agent-stack-verdryx-slo-1  Started
+ Container agent-stack-idryx-1  Started
+ Container agent-stack-keyryx-witness-1  Started
+ Container agent-stack-focus-export-1  Started
+ Container agent-stack-agent-conform-1  Started
+ Container agent-stack-record-seal-1  Started
+ Container agent-stack-heraldyx-1  Started
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-policy-db-1  Healthy
+ Container agent-stack-wardryx-1  Starting
+ Container agent-stack-wardryx-1  Started
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Waiting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-console-1  Starting
+ Container agent-stack-init-volumes-1  Exited
+ Container agent-stack-tokenfuse-gateway-1  Starting
+ Container agent-stack-tokenfuse-gateway-1  Started
+ Container agent-stack-console-1  Started
+ Container agent-stack-caddy-1  Starting
+ Container agent-stack-caddy-1  Started
+ Container agent-stack-tokenfuse-gateway-1  Restarting
+   gateway restarted to read the new identity map
+   guest-callback: 0 call back(s) from guest-callbacks.txt, each for a caller on agent-stack_core only
+ Container agent-stack-tokenfuse-gateway-1  Started
+
+>> network boundary
+   loopback only: 4100 (gateway), 7420 (console)
+   no machine other than this one can reach any plane. That is the default.
+   to let agents elsewhere call the gateway, see the end of this run
+   the operator's tunnel: 51820/udp, open on purpose
+     WireGuard answers nothing without a valid key: no banner, no handshake,
+     nothing for a scanner to find. It is the road in, not an exposed plane.
+   not published at all: cloud, wardryx, idryx, postgres
+
+>> console account
+   created operator 'ops'; its password is in /opt/agent-stack/console-password (mode 0600), not printed
+ Container agent-stack-console-1  Restarting
+ Container agent-stack-console-1  Started
+
+>> verify
+   ok    gateway answers on <public-ip>:4100
+   ok    gateway exports agent events
+   ok    gateway clamps a run budget to a ceiling
+   ok    cloud answers inside
+   ok    wardryx answers inside
+   ok    idryx answers inside
+   ok    policy store is up
+   ok    policy plane reaches its store
+   ok    policy plane accepts its admin key
+   ok    policy plane rejects an unknown key
+   ok    gateway's key cannot write policy
+   ok    gateway refuses /v1/runs without the admin key
+   ok    gateway serves /v1/runs with the admin key
+   ok    client keys: the gateway holds 6
+   ok    client keys: a call with no key is refused
+   ok    client keys: a call with an unknown key is refused
+   ok    identity map: the gateway reads it
+   ok    identity map: every key is bound and every binding has a key
+   ok    client keys: the agents' key is in /opt/agent-stack/agent-key, readable by its owner alone
+   ok    client keys: Felyx holds its own key, bound to the id the console names it with
+   ok    cloud is NOT on the host
+   ok    wardryx is NOT on the host
+   ok    gateway has a port mapping
+   ok    gateway published on <public-ip> only
+   ok    chain verifier is running and has read the bus
+   ok    chain verifier can write its own stream
+   ok    chain verifier cannot write another plane's stream
+   ok    chain verifier cannot create a file on the bus
+   ok    no producer can write, rename or link another plane's stream, or create a file on the bus
+   ok    focus-export is running, with a folder per door
+   ok    wireguard interface is up
+   ok    console can manage peers over UAPI
+   ok    console can read its own revoke key
+   ok    console TLS is listening
+   ok    console TLS names console.genaryx.internal
+   ok    tunnel accepts on 51820/udp
+   ok    console answers on loopback
+   ok    console resolves the money plane
+   ok    console resolves the policy plane
+   ok    console's bus is live
+   ok    console knows its operator
+   ok    vouchryx is NOT on the host
+   ok    vouchryx answers inside
+   ok    vouchryx holds a certified key, so it can issue a token
+   ok    gateway resolves the delegation door
+   ok    vouchryx accepts the console's revoke key (nothing revoked)
+   ok    vouchryx refuses a revoke key it does not hold
+   ok    guests: no door is on agent-stack_guests
+   ok    guests: guest-door forwards a guest's call to the gateway
+   ok    guests: guest-door answers a route a guest is not given itself
+   ok    policy plane: wardryx loaded the tool hold
+
+   drift check: what runs, as the Docker on this box reports it, against the pins in /opt/agent-stack/compose.yaml
+   ok    agent-conform             running      sha256:f2a5bcbadf41  pin sha256:f2a5bcbadf41  compose
+   ok    caddy                     running      sha256:d9376051cc5a  pin sha256:d9376051cc5a  compose
+   ok    console                   running      sha256:4030bc819e7d  pin sha256:4030bc819e7d  compose
+   skip  costcrew                               not started, profile finops is off
+   skip  costcrew-init                          not started, profile finops is off
+   skip  costcrew-run                           not started, profile crew is off
+   ok    focus-export              running      sha256:9ada89b47a16  pin sha256:9ada89b47a16  compose
+   ok    guest-callback            running      sha256:d9376051cc5a  pin sha256:d9376051cc5a  compose
+   ok    guest-door                running      sha256:d9376051cc5a  pin sha256:d9376051cc5a  compose
+   ok    heraldyx                  running      sha256:7baa8cdb8508  pin sha256:7baa8cdb8508  compose
+   ok    idryx                     running      sha256:7ace674b5c44  pin sha256:7ace674b5c44  compose
+   skip  idryx-detect                           not started, profile manual is off
+   ok    init-volumes              exited 0     sha256:73aaf090f3d8  pin sha256:73aaf090f3d8  compose
+   ok    keyryx                    running      sha256:ead031a11795  pin sha256:ead031a11795  compose
+   ok    keyryx-witness            running      sha256:ead031a11795  pin sha256:ead031a11795  compose
+   skip  mockryx-drill                          not started, profile manual is off
+   ok    policy-db                 running      sha256:721873c34ceb  pin sha256:721873c34ceb  compose
+   ok    record-seal               running      sha256:a9b7ef893e42  pin sha256:a9b7ef893e42  compose
+   skip  scopyx                                 not started, profile egress is off
+   skip  scopyx-browser                         not started, profile egress-browser is off
+   ok    tokenfuse-cloud           running      sha256:d8ad6e9a779a  pin sha256:d8ad6e9a779a  compose
+   ok    tokenfuse-gateway         running      sha256:9ada89b47a16  pin sha256:9ada89b47a16  compose
+   skip  tokenfuse-gateway-openai               not started, profile openai-door is off
+   skip  tokenfuse-mcp-broker                   not started, profiles typed egress egress-browser are off
+   skip  typryx                                 not started, profile typed is off
+   skip  typryx-wardryx-proxy                   not started, profile typed-risk-signal is off
+   skip  verdryx-drift                          not started, profile routines is off
+   ok    verdryx-slo               running      sha256:4030bc819e7d  pin sha256:4030bc819e7d  compose
+   ok    vouchryx                  running      sha256:341cc2c5d22d  pin sha256:341cc2c5d22d  compose
+   ok    wardryx                   running      sha256:f9b86a821146  pin sha256:f9b86a821146  compose
+   ok    wg                        running      sha256:8996ce01a5b8  pin sha256:8996ce01a5b8  compose
+   drift check: 19 on their pin, 0 failed, 12 skipped, 0 noted
+   this is a drift check: it compares what Docker on this box says with what compose.yaml on this box says, and a person with root on this box can change either side.
+
+>> your first device
+   saved to /opt/agent-stack/console.genaryx.internal.conf (mode 0600)
+genaryx: console.issue_wg_peer on 2u9rRf/o2bQ3RHUAGIZBJfAWIyLaOHxC4aIjQxEBghs= was NOT journaled: no live event bus
+
+                                                                     
+                                                                     
+    █▀▀▀▀▀█ █ █▀▀▄█  ▄▄██▀█▄▄▄▀█▀ ▀▀▀▀  █▀▀▀ █▀█▀▀█▄▀▀ ██ █▀▀▀▀▀█    
+    █ ███ █ ▀▄ ▀  ▀▀█ ██▄▄ ███▄▀▀█▀█▀█▄▀▄█▀ ▄▄▀▄██▀██ █▀█ █ ███ █    
+    █ ▀▀▀ █ ▀█▀ █▄▄  █▄  █▄█▄ █▀█▀▀▀█▀▄██▀█▀ █ ▀▀██ ▄▄█▀  █ ▀▀▀ █    
+    ▀▀▀▀▀▀▀ ▀▄▀▄▀▄█ █▄█▄█▄▀ █ ▀▄█ ▀ █▄▀▄▀▄▀ █ ▀▄▀▄▀ ▀ █ █ ▀▀▀▀▀▀▀    
+    ▀▄ █▀▀▀▀██ ▀▀█ █ ██▄▄▄▀▄ ▄▄ ▀█▀▀█▄▄ ▀▄▄█▀▀█▄▄█▄▀█▄▄█▄█▄ █ ██▀    
+    ▀█▀██ ▀ █▀▄██▀▀▀███  ██▀▀▄ ▄█▄▄ █  ▄▄  █ ▀▄▄█▀▀▀ ██▀▄█▄▄▄██▄█    
+    █▀▀ ▀▄▀▀▄▀▄▀  ▀  ▄▀▀ ▄█▄█▄█▄▄▄▄▀▀ ▀▄███▀███ █▀ ▄█ █  ▄▄ █ ▀▀▀    
+    ▄█▄▄█▄▀  ▄▄▀▀  █▄ █▄▀██▄ █▀▄█▄█▀ █▄   █▀▄  ▄ ▄▄▄▄█▀▀█ ▀▄  ▀▀▀    
+     ▀ █▀▀▀▀▄▀█▀▀█▀▀  █▀▀█ ▀▀ █▀▀█  █ █ ▄▄ █ █▄██▄▄▀ ▀▀█▄▀▄█▀▀ ▀█    
+    ▀█▀▀ ▄▀▀██▀█▀▄█  ▄▀█ ▄  ▄▄ █ ▄▄█▀ ▄▀█████▄▄▀ ▀ █ ▀   ▀██▄▄  ▀    
+    ▄▄▀▀█▄▀▀▄▀▄▄  ▀▄█▀ ▀▄▄▀█▄ █ ▀ ▄█ ▀▄▄▄▀█▀▀ ██▄▀█ █▄██▄▀▀█▄██▀█    
+    █▄▄██▄▀▄ █▀▄  ▀▄ ▄█ ███▄▄ ▄█ ▄███▀█ █▀ ▄▀█▄ █ ▀▀▀ ▄ ███▀▄▄▄▀█    
+    █▀▀█ █▀  ▀▀█▀▄█▄▄ ██▀█▀█▀▄▀█▄ █▄█ █▄█ ▄▄▀█▄ █▄ █▀▄▀▄ █▄ ██ █     
+    ████▄ ▀▄▀██▀▀ ██▄ █ ▀ ▄▄ ▀▄  ██▀▄▄█▀ ▀▄█ ▀█ ▄▀█▄▀▄  ▀▄▄▀▀▄█▄▀    
+    ▄█▀ █▀▀▀█▀▀  ▄▀▄  █  ████▀█▄█▀▀▀██▄███▀▄ ██▀█▄▄▄▀▀▀▄█▀▀▀█▀▀ █    
+    ▀  ██ ▀ █▀▄▄█▀ ▄▀▄ █ █▀ ▀▄███ ▀ █▄▄█▀ ▀▀▀▄▄█    ▀▀▀ █ ▀ ██  ▀    
+    ▀█▀ █▀▀▀█▀█ █ ▄▀▀▄  ▀▀█▀▄█ ▀▀▀▀▀█▀▄▄▀ ▄▄▀▄█▄ ▄▄▀▀▄▄▀▀▀▀██▀ ▄     
+    █▀█ ▀▀▀▀█▀▄ ▀▄  ▄█ █▄██▀  █▀▄▀▀█▀▄██▄▄▄ ▄▄  ▄  █▀▀ █▄ ▀▄█  ▀▀    
+    ██▄█▀█▀██▄▄▄ ██▀█▀█▀  ▀▄█▄█▀▀█▀█▀▄ ██ ▄█▄▄█▀▀ ▀█▀▀█▀ █ ▀▄▀██▀    
+    ▄█▀▄█▄▀▀▄▀█▀▄▀ ▀▀█ █▄█▀ ▄█▄████ █ █ ▄▀▄▀ █▀█  ▄ ▀▀ ▄▀▀▀█▄▄█ ▄    
+     ▀   ▄▀  █▄ ███ █▄▀▄▀▀ ▄█▄▀▄▀▀▀ ▄▀▄██ ▀▀ █▄ █ ▄███▀██ █▄████▀    
+     ▀▀▄ ▄▀▀▄▀██ ▀█▄█▄█ ▀█▀ █▀██▀█▀▄▄▀▀▀▀▄ ▄█  ▄  ▄▄██▄▄█ ▀▄█▄ ▄▄    
+    █▀▄ ██▀█▀▀▄▀██ ▄ ▀▀ ▀█ ▀▀ ▄ ▄▀▀█▀ ▀█▀ ▀▄▀▀▄    ███▄▀▄▄█ █ █ ▀    
+    ▀▀██  ▀▀▀▀ ▄ ▀█ ▄ ▀ █▀█▄▄█▀▀█▄ █▀▀█  ▀ █ ▀  ▀▄▄ ▄▀█▀▄ ▀▀ ██▄▀    
+    ▄▄▄▀  ▀ █▀█▄▀▄▄█▄ █▀▀▀███▄▀█▄ ▄█▄▀▀██▀█▄▀ █▀██▀▄▀▀▄   ▀▀▄▀▄ █    
+    ▄▄█▀█▀▀▀ ███  ███ █▀▄ ▄▀▀  █▄▄█▄▄ ▄ ▀ █▄█ ▄ █▀▄█  ▄█▀▀▀█ ▄▄▄█    
+    ▀▀▀▀  ▀ █  ▄██▄▀▄  █▄ █ ▄█▀██▀▀▀█▀▄ ▀ ▀ ▄▀▄█▀ ▄▄██ ▀█▀▀▀█ █▄▄    
+    █▀▀▀▀▀█ ██▄██▄█▄█▀█ ▄▀█▄██  █ ▀ ██ ▀▀  ▀██▄▄▀  ▀█▀▀▄█ ▀ █▄▀ █    
+    █ ███ █ █▀▀█▀█▄██▄▀▄ █ ▀▄▀█████▀███▄▀ ▄█▀ ██▀▄█  ▄█▄▀▀█▀▀▄ ▀█    
+    █ ▀▀▀ █  ▀▀ ▀▀▄▀▄ █ ▄█   ▀▄▀▄▄▄▄  ▄▀█ ▄█▀▄  ▄  ▀▀▄█▄▄▄███████    
+    ▀▀▀▀▀▀▀ ▀  ▀▀  ▀▀ ▀  ▀▀▀▀  ▀▀▀ ▀  ▀▀▀▀ ▀▀▀▀▀▀▀▀ ▀▀  ▀▀ ▀▀   ▀    
+                                                                     
+                                                                     
+
+  device      2u9rRf/o2bQ3RHUAGIZBJfAWIyLaOHxC4aIjQxEBghs=
+  address     10.9.0.2
+  endpoint    <public-ip>:51820
+  console     https://console.genaryx.internal
+
+  The config on stdout carries this device's PRIVATE key. It is not
+  stored here and cannot be shown again: issue another device if it is
+  lost, and revoke 2u9rRf/o2bQ3RHUAGIZBJfAWIyLaOHxC4aIjQxEBghs= from the console.
+
+
+>> delegation
+   vouchryx issues delegation tokens and answers revocations on the compose
+     network only, never published to the host (see the service's own comment
+     in compose.yaml). The gateway polls its revocations at
+     http://vouchryx:4310/v1/revocations and verifies a chain against the key set it polls
+     there (or, with VOUCHRYX_SIGNER=file, the copy at /opt/agent-stack/delegation-public/vouchryx.jwks.json).
+     vouchryx signs with the key keyryx certifies (VOUCHRYX_SIGNER); the root pin is
+     kept in .env as VOUCHRYX_KEYRYX_ROOT_PIN, named here, never its value.
+     POST /v1/revoke needs VOUCHRYX_REVOKE_KEYS from .env as a bearer key, and
+     reaches vouchryx only from inside this compose network, the same way an
+     operator revokes a policy plane key today: from a container on it, not the host.
+
+Up, and every check passed.
+
+  The gateway answers on this box only. Nothing here is reachable from another
+  machine, which is the default on purpose. On the box itself:
+
+      ANTHROPIC_BASE_URL=http://<public-ip>:4100
+
+  When you want agents elsewhere to call it, publish it deliberately. Editing
+  .env is the way; re-running this script will not do it for you:
+
+      cd /opt/agent-stack
+      sed -i 's/^GATEWAY_BIND=.*/GATEWAY_BIND=<public-ip>/' .env
+      docker compose up -d
+      # then, from anywhere: ANTHROPIC_BASE_URL=http://<public-ip>:4100
+
+  Port 4100 is then open to the internet. Put a cloud security group in front
+  of it: ufw will not do it, because Docker's own iptables rules bypass ufw's
+  INPUT chain and a published container port stays reachable through a 'deny'.
+  Client keys are ON, minted by this installer because it was given no keys file.
+  Your agents now need a key: every call to the gateway carries
+
+      x-fuse-key       the secret in /opt/agent-stack/agent-key (it is not printed here)
+      x-fuse-agent-id  an id under agent://local/agents/, such as agent://local/agents/support-bot
+      x-fuse-run-id    its run, as before
+
+  A call with no key, or one the gateway does not hold, is refused 401, and the key
+  speaking as an id outside agents/ is refused 403 identity_mismatch. To give each
+  agent its own key and unit, bring a keys file and an identity map, both together
+  (README, "Client keys and the identity map").
+  Felyx, the console's copilot, calls this gateway too, with the key this
+  installer minted for it (GENARYX_COPILOT_FUSE_KEY in .env, sent as x-fuse-key and
+  not printed here), bound in the identity map to its own agent id and no other.
+  The gateway holds no provider key: it forwards the caller's own key, as before, and
+  says so at startup. Give ANTHROPIC_KEY_FILE to hold the key on the gateway (CLAUDE.md
+  invariant 39).
+  Agent tokens are ON (the default). The agent agent://local/agents/operator enrols at vouchryx, not published to the
+  host, with the secret in /opt/agent-stack/agent-token.key (0600, never printed). It
+  exchanges that for a five-minute token bound to its DPoP key. It asks for the
+  audience with resource=https://stack-single.local (RFC 8707; audience= works too). A request that
+  names none is refused audience_not_allowed. It then sends
+  Authorization: DPoP <token> with a proof (carrying ath, RFC 9449). Stop the agent with one call:
+  POST http://vouchryx:4310/v1/revoke with ban, using VOUCHRYX_REVOKE_KEYS from .env.
+  The MCP broker's tool-call check fails closed (CLAUDE.md invariant 75): a tools/call the gateway's check does not answer,
+  or that names no x-fuse-run-id, is refused. Each static key the broker admits is also a gateway key of the same id and
+  secret, bound to the one agent it speaks as, and named on the gateway's static list below.
+  Static keys still admitted at the gateway: felyx,broker,stack-single,drills-broker
+  Static keys still admitted at the MCP broker: stack-single,drills-broker (stack-single is the installer's own check key there; felyx and broker at the gateway are the console and the broker's taint relay)
+  static keys still admitted; move these agents to tokens, or name each one in STATIC_KEY_IDS on purpose.
+  Operator-started profiles kept on this run. This installer never removes them; a running
+  container of one is re-upped at this run's pinned image.
+  none running on this box
+
+  The tool hold is ON: an agent's tool call that nothing grants waits for a person, and model
+  calls pass. Give an agent a tool: ./install.sh agent-allow <agent> <tool[,tool]|all> --why 'text'.
+
+  Console sign-in, created on this run. The password is not printed here: it is in one
+  file, mode 0600, that holds nothing else:
+
+      user      ops
+      file      /opt/agent-stack/console-password
+      read it   sudo cat /opt/agent-stack/console-password    (delete the file once you have saved the password)
+
+  The console is on loopback by design, so it is reached over a tunnel. This
+  box runs the WireGuard side and issues your device its own peer config:
+  sign in, open Remote, and take the QR. The config is shown once.
+
+      console  https://console.genaryx.internal   (once your tunnel is up)
+      tunnel   <public-ip>:51820/udp
+
+  That name is private and its certificate is self-issued, so each device you
+  use needs two one-time steps:
+
+      echo "10.9.0.1 console.genaryx.internal" | sudo tee -a /etc/hosts
+      # then trust this box's own CA:
+      #   docker compose exec caddy cat /data/caddy/pki/authorities/local/root.crt
+
+  Both disappear once you set a real domain and CLOUDFLARE_API_TOKEN in .env:
+  the certificate becomes publicly trusted and nothing needs installing.
+  A passkey cannot be enrolled until one of these is done - WebAuthn refuses a
+  bare IP and refuses an untrusted certificate, so http://10.9.0.1 is not a
+  place the ceremony can run.
+
+  Clearing a run's taint label (POST /v1/fuse/declassify on the gateway) needs
+  its own key, GATEWAY_DECLASSIFY_KEY in /opt/agent-stack/.env, sent as the
+  x-fuse-declassify-key header. It is not the console or admin key, and it is
+  not printed here.
+
+  The gateway clamps the budget a caller declares for one run (the
+  x-fuse-budget-usd header, or a policy's default) to 5.00 USD,
+  so an agent cannot give its own run a bigger one. A budget set in the Cloud
+  is yours and is never clamped. To move it, set RUN_BUDGET_CEILING_USD in
+  /opt/agent-stack/.env (a positive number of dollars, at most six decimals) and run
+  docker compose up -d. It bounds one run, not an agent: a new run id starts a new one.
+
+  The gateway's agent firewall runs in enforce: when a run has read untrusted
+  input and the model then asks for an exec, write or network-egress action, the
+  answer is withheld (HTTP 403, taint_blocked). To run it in shadow (record only)
+  or off instead, set TOKENFUSE_FIREWALL to shadow or off in /opt/agent-stack/.env and
+  run docker compose up -d tokenfuse-gateway. Running ./install.sh with the same
+  variable checks the value before it writes it.
+
+  A chain verifier (agent-conform) re-checks the hash chain of every event
+  stream on this box every five minutes. A break becomes a high alert on the
+  same bus your notifier already reads. It can write one file, its own, and
+  nothing else on the bus.
+
+  Killing a run, setting a budget, deciding an approval, and issuing or
+  revoking a device all need a passkey: a road into the control plane is not
+  something a stolen session should be able to mint quietly. That passkey can
+  only be enrolled at https://console.genaryx.internal over the tunnel, so the sequence
+  for your first session is:
+
+      1. import /opt/agent-stack/console.genaryx.internal.conf (or scan the QR this run
+         printed above) into your WireGuard client, and connect
+      2. open https://console.genaryx.internal, trusting this box's own CA first if
+         no CLOUDFLARE_API_TOKEN was set (see above)
+      3. sign in with the password above
+      4. enrol a passkey under Session > Passkeys
+
+  Only after step 4 do kill, budget, approval and device commands work. A
+  passkey cannot be enrolled over the SSH forward below: WebAuthn checks the
+  origin, and that forward is http://localhost, never console.genaryx.internal.
+
+  SSH stays as the way to read the console before the tunnel exists, not to
+  act on it:
+
+      ssh -L 17420:<public-ip>:7420 root@<public-ip>
+      open http://localhost:17420
+
+  Manage it:
+
+      cd /opt/agent-stack && docker compose ps
+      cd /opt/agent-stack && docker compose logs -f tokenfuse-gateway
+      cd /opt/agent-stack && docker compose down     # stop, keeping every volume
+
+  The error budget is measured every six hours (verdryx-slo; SLO_SIGNAL=0 turns
+  it off), and the gateway's spend is exported for FinOps every 15 minutes, over
+  both doors (focus-export), where the FinOps console reads it once you start it.
+  Nothing on this box runs the other governance routines (crypto trend, quality
+  drift, identity sweep) on a schedule. Run one by hand with docker compose exec,
+  or see the README for how stack-up and stack-k8s do it.
+
+exit=0

@@ -1,0 +1,779 @@
+run-budget-ceiling: 1.00 USD per run. A budget a CALLER declares (x-fuse-budget-usd), or a policy default, or the built-in default is lowered to this on every call; a caller may always ask for less.
+                    It does NOT lower a budget the Cloud sets, and it bounds each run, not an agent's total spend: an agent that opens a new run id gets a new ceiling's worth.
+
+>> using this checkout: /Users/yukos/Development/stack-k8s-aws-run
+   45 host key line(s) for 5 node(s), in /var/folders/gb/j93d3cmn3wngwn_7j39136xw0000gn/T//stack-k8s-known-hosts.fPMsHw
+   no terminal to ask on: SKIPPING notifications. Pass --alert-to and
+   --smtp-host, or apply manifests/45-heraldyx.yaml yourself later.
+
+>> step 1/5: the cluster
+
+== preflight on 5 node(s)
+
+== forgetting host keys for addresses this cloud may have recycled
+   45 host key line(s) for 5 node(s), in /var/folders/gb/j93d3cmn3wngwn_7j39136xw0000gn/T//stack-k8s-known-hosts.4vIcEU
+   <public-ip>     private 10.10.0.51   i-0c0b98d55e8843f7e  eu-central-1a
+   <public-ip>   private 10.10.0.25   i-048bcf3bd46f81f8e  eu-central-1a
+   <public-ip>      private 10.10.0.209  i-0c94bfb898e95c68b  eu-central-1a
+   <public-ip>     private 10.10.0.155  i-0b59ca2c895726948  eu-central-1a
+   <public-ip>       private 10.10.0.67   i-0bd3f61830b435617  eu-central-1a
+
+== firewall
+   the security group Terraform created is already enforcing ssh, 6443 and icmp
+   from your address only. Nothing to do here, which is the AWS difference.
+
+== sshd: keys only
+   <public-ip> hardened
+   <public-ip> hardened
+   <public-ip> hardened
+   <public-ip> hardened
+   <public-ip> hardened
+
+== node prep: iscsi + nfs client on every node
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+   done
+
+== k3s server on <public-ip> (10.10.0.51)
+[INFO]  Using v1.36.2+k3s1 as release
+[INFO]  Downloading hash https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/sha256sum-amd64.txt
+[INFO]  Downloading binary https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/k3s
+[INFO]  Verifying binary download
+[INFO]  Installing k3s to /usr/local/bin/k3s
+[INFO]  Skipping installation of SELinux RPM
+[INFO]  Creating /usr/local/bin/kubectl symlink to k3s
+[INFO]  Creating /usr/local/bin/crictl symlink to k3s
+[INFO]  Creating /usr/local/bin/ctr symlink to k3s
+[INFO]  Creating killall script /usr/local/bin/k3s-killall.sh
+[INFO]  Creating uninstall script /usr/local/bin/k3s-uninstall.sh
+[INFO]  env: Creating environment file /etc/systemd/system/k3s.service.env
+[INFO]  systemd: Creating service file /etc/systemd/system/k3s.service
+[INFO]  systemd: Enabling k3s unit
+Created symlink '/etc/systemd/system/multi-user.target.wants/k3s.service' → '/etc/systemd/system/k3s.service'.
+[INFO]  systemd: Starting k3s
+
+== waiting for the API server
+   ready
+
+== k3s server joining: <public-ip> (10.10.0.25)
+[INFO]  Using v1.36.2+k3s1 as release
+[INFO]  Downloading hash https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/sha256sum-amd64.txt
+[INFO]  Downloading binary https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/k3s
+[INFO]  Verifying binary download
+[INFO]  Installing k3s to /usr/local/bin/k3s
+[INFO]  Skipping installation of SELinux RPM
+[INFO]  Creating /usr/local/bin/kubectl symlink to k3s
+[INFO]  Creating /usr/local/bin/crictl symlink to k3s
+[INFO]  Creating /usr/local/bin/ctr symlink to k3s
+[INFO]  Creating killall script /usr/local/bin/k3s-killall.sh
+[INFO]  Creating uninstall script /usr/local/bin/k3s-uninstall.sh
+[INFO]  env: Creating environment file /etc/systemd/system/k3s.service.env
+[INFO]  systemd: Creating service file /etc/systemd/system/k3s.service
+[INFO]  systemd: Enabling k3s unit
+Created symlink '/etc/systemd/system/multi-user.target.wants/k3s.service' → '/etc/systemd/system/k3s.service'.
+[INFO]  systemd: Starting k3s
+
+== k3s server joining: <public-ip> (10.10.0.209)
+[INFO]  Using v1.36.2+k3s1 as release
+[INFO]  Downloading hash https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/sha256sum-amd64.txt
+[INFO]  Downloading binary https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/k3s
+[INFO]  Verifying binary download
+[INFO]  Installing k3s to /usr/local/bin/k3s
+[INFO]  Skipping installation of SELinux RPM
+[INFO]  Creating /usr/local/bin/kubectl symlink to k3s
+[INFO]  Creating /usr/local/bin/crictl symlink to k3s
+[INFO]  Creating /usr/local/bin/ctr symlink to k3s
+[INFO]  Creating killall script /usr/local/bin/k3s-killall.sh
+[INFO]  Creating uninstall script /usr/local/bin/k3s-uninstall.sh
+[INFO]  env: Creating environment file /etc/systemd/system/k3s.service.env
+[INFO]  systemd: Creating service file /etc/systemd/system/k3s.service
+[INFO]  systemd: Enabling k3s unit
+Created symlink '/etc/systemd/system/multi-user.target.wants/k3s.service' → '/etc/systemd/system/k3s.service'.
+[INFO]  systemd: Starting k3s
+
+== k3s agent: <public-ip> (10.10.0.155)
+[INFO]  Using v1.36.2+k3s1 as release
+[INFO]  Downloading hash https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/sha256sum-amd64.txt
+[INFO]  Downloading binary https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/k3s
+[INFO]  Verifying binary download
+[INFO]  Installing k3s to /usr/local/bin/k3s
+[INFO]  Skipping installation of SELinux RPM
+[INFO]  Creating /usr/local/bin/kubectl symlink to k3s
+[INFO]  Creating /usr/local/bin/crictl symlink to k3s
+[INFO]  Creating /usr/local/bin/ctr symlink to k3s
+[INFO]  Creating killall script /usr/local/bin/k3s-killall.sh
+[INFO]  Creating uninstall script /usr/local/bin/k3s-agent-uninstall.sh
+[INFO]  env: Creating environment file /etc/systemd/system/k3s-agent.service.env
+[INFO]  systemd: Creating service file /etc/systemd/system/k3s-agent.service
+[INFO]  systemd: Enabling k3s-agent unit
+[INFO]  systemd: Starting k3s-agent
+Created symlink '/etc/systemd/system/multi-user.target.wants/k3s-agent.service' → '/etc/systemd/system/k3s-agent.service'.
+
+== k3s agent: <public-ip> (10.10.0.67)
+[INFO]  Using v1.36.2+k3s1 as release
+[INFO]  Downloading hash https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/sha256sum-amd64.txt
+[INFO]  Downloading binary https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/k3s
+[INFO]  Verifying binary download
+[INFO]  Installing k3s to /usr/local/bin/k3s
+[INFO]  Skipping installation of SELinux RPM
+[INFO]  Creating /usr/local/bin/kubectl symlink to k3s
+[INFO]  Creating /usr/local/bin/crictl symlink to k3s
+[INFO]  Creating /usr/local/bin/ctr symlink to k3s
+[INFO]  Creating killall script /usr/local/bin/k3s-killall.sh
+[INFO]  Creating uninstall script /usr/local/bin/k3s-agent-uninstall.sh
+[INFO]  env: Creating environment file /etc/systemd/system/k3s-agent.service.env
+[INFO]  systemd: Creating service file /etc/systemd/system/k3s-agent.service
+[INFO]  systemd: Enabling k3s-agent unit
+Created symlink '/etc/systemd/system/multi-user.target.wants/k3s-agent.service' → '/etc/systemd/system/k3s-agent.service'.
+[INFO]  systemd: Starting k3s-agent
+
+== nodes
+NAME             STATUS   PROVIDER
+ip-10-10-0-155   Ready    aws:///eu-central-1a/i-0b59ca2c895726948
+ip-10-10-0-209   Ready    aws:///eu-central-1a/i-0c94bfb898e95c68b
+ip-10-10-0-25    Ready    aws:///eu-central-1a/i-048bcf3bd46f81f8e
+ip-10-10-0-51    Ready    aws:///eu-central-1a/i-0c0b98d55e8843f7e
+ip-10-10-0-67    Ready    aws:///eu-central-1a/i-0bd3f61830b435617
+
+== graceful node shutdown: each kubelet holds its inhibitor
+   <public-ip>: NO kubelet shutdown inhibitor (is systemd-logind running, and D-Bus?):
+   a reboot of this node can hang on a pod writing to the shared volume (GOTCHAS 130)
+   <public-ip>: NO kubelet shutdown inhibitor (is systemd-logind running, and D-Bus?):
+   a reboot of this node can hang on a pod writing to the shared volume (GOTCHAS 130)
+   <public-ip>: NO kubelet shutdown inhibitor (is systemd-logind running, and D-Bus?):
+   a reboot of this node can hang on a pod writing to the shared volume (GOTCHAS 130)
+   <public-ip>: NO kubelet shutdown inhibitor (is systemd-logind running, and D-Bus?):
+   a reboot of this node can hang on a pod writing to the shared volume (GOTCHAS 130)
+   <public-ip>: NO kubelet shutdown inhibitor (is systemd-logind running, and D-Bus?):
+   a reboot of this node can hang on a pod writing to the shared volume (GOTCHAS 130)
+
+== Calico v3.29.1
+namespace/tigera-operator created
+customresourcedefinition.apiextensions.k8s.io/bgpconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/bgpfilters.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/bgppeers.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/blockaffinities.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/caliconodestatuses.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/clusterinformations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/felixconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/globalnetworkpolicies.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/globalnetworksets.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/hostendpoints.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipamblocks.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipamconfigs.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipamhandles.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ippools.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ipreservations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/kubecontrollersconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/networkpolicies.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/networksets.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/tiers.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/adminnetworkpolicies.policy.networking.k8s.io created
+customresourcedefinition.apiextensions.k8s.io/apiservers.operator.tigera.io created
+customresourcedefinition.apiextensions.k8s.io/imagesets.operator.tigera.io created
+customresourcedefinition.apiextensions.k8s.io/installations.operator.tigera.io created
+customresourcedefinition.apiextensions.k8s.io/tigerastatuses.operator.tigera.io created
+serviceaccount/tigera-operator created
+clusterrole.rbac.authorization.k8s.io/tigera-operator created
+clusterrolebinding.rbac.authorization.k8s.io/tigera-operator created
+deployment.apps/tigera-operator created
+
+== waiting for Calico to make every node Ready
+   all nodes Ready
+
+== cluster DNS: two replicas, three from five nodes, and a budget for drains
+   coredns replicas=3
+   coredns disruption budget: one replica stays up through a drain
+
+== Longhorn v1.7.2
+namespace/longhorn-system created
+priorityclass.scheduling.k8s.io/longhorn-critical created
+serviceaccount/longhorn-service-account created
+serviceaccount/longhorn-ui-service-account created
+serviceaccount/longhorn-support-bundle created
+configmap/longhorn-default-setting created
+configmap/longhorn-storageclass created
+customresourcedefinition.apiextensions.k8s.io/backingimagedatasources.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/backingimagemanagers.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/backingimages.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/backupbackingimages.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/backups.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/backuptargets.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/backupvolumes.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/engineimages.longhorn.io created
+Warning: unrecognized format "int64"
+customresourcedefinition.apiextensions.k8s.io/engines.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/instancemanagers.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/nodes.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/orphans.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/recurringjobs.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/replicas.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/settings.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/sharemanagers.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/snapshots.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/supportbundles.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/systembackups.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/systemrestores.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/volumeattachments.longhorn.io created
+customresourcedefinition.apiextensions.k8s.io/volumes.longhorn.io created
+clusterrole.rbac.authorization.k8s.io/longhorn-role created
+clusterrolebinding.rbac.authorization.k8s.io/longhorn-bind created
+clusterrolebinding.rbac.authorization.k8s.io/longhorn-support-bundle created
+service/longhorn-backend created
+service/longhorn-frontend created
+service/longhorn-conversion-webhook created
+service/longhorn-admission-webhook created
+service/longhorn-recovery-backend created
+daemonset.apps/longhorn-manager created
+deployment.apps/longhorn-driver-deployer created
+deployment.apps/longhorn-ui created
+
+== waiting for Longhorn (this takes a few minutes on a fresh node)
+   longhorn-manager ready on 5/5 nodes
+
+== Longhorn: release a dead node's volumes
+   node-down-pod-deletion-policy=delete-both-statefulset-and-deployment-pod
+
+== one default StorageClass
+NAME                 PROVISIONER          RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+longhorn (default)   driver.longhorn.io   Delete          Immediate           true                   7s
+longhorn-static      driver.longhorn.io   Delete          Immediate           true                   7s
+
+== stack-rwx StorageClass
+storageclass.storage.k8s.io/stack-rwx created
+
+== stack-policy StorageClass
+storageclass.storage.k8s.io/stack-policy created
+
+== aws-cloud-controller-manager v1.35.2 (load balancers only)
+   vpc vpc-01b077ec56955f7de  subnet subnet-05b61f32039a042da  zone eu-central-1a  cluster stack-k8s
+configmap/aws-cloud-config created
+serviceaccount/cloud-controller-manager created
+clusterrole.rbac.authorization.k8s.io/stack-aws-cloud-controller-manager created
+clusterrolebinding.rbac.authorization.k8s.io/stack-aws-cloud-controller-manager created
+rolebinding.rbac.authorization.k8s.io/stack-aws-ccm-authentication-reader created
+daemonset.apps/aws-cloud-controller-manager created
+Waiting for daemon set "aws-cloud-controller-manager" rollout to finish: 0 of 3 updated pods are available...
+Waiting for daemon set "aws-cloud-controller-manager" rollout to finish: 1 of 3 updated pods are available...
+Waiting for daemon set "aws-cloud-controller-manager" rollout to finish: 2 of 3 updated pods are available...
+daemon set "aws-cloud-controller-manager" successfully rolled out
+
+== confirming the cloud controller is actually running, not merely started
+   3/3 running, restart counts stable
+
+== policy-store credentials (generated, never committed)
+   created secret stack-policy-db
+
+== plane credentials (generated, never committed)
+   created secret stack-keys
+   declassify_key in it is what clearing a run's taint label needs (POST /v1/fuse/declassify on the gateway,
+   sent as x-fuse-declassify-key). Nothing prints it; read it with:
+     kubectl -n agent-stack get secret stack-keys -o jsonpath='{.data.declassify_key}' | base64 -d
+
+== kubeconfig -> ./kubeconfig.yaml
+
+== verify
+NAME             STATUS   PROVIDER                                   IP
+ip-10-10-0-155   Ready    aws:///eu-central-1a/i-0b59ca2c895726948   10.10.0.155
+ip-10-10-0-209   Ready    aws:///eu-central-1a/i-0c94bfb898e95c68b   10.10.0.209
+ip-10-10-0-25    Ready    aws:///eu-central-1a/i-048bcf3bd46f81f8e   10.10.0.25
+ip-10-10-0-51    Ready    aws:///eu-central-1a/i-0c0b98d55e8843f7e   10.10.0.51
+ip-10-10-0-67    Ready    aws:///eu-central-1a/i-0bd3f61830b435617   10.10.0.67
+
+NAME                 PROVISIONER          RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+longhorn (default)   driver.longhorn.io   Delete          Immediate           true                   38s
+longhorn-static      driver.longhorn.io   Delete          Immediate           true                   38s
+stack-policy         driver.longhorn.io   Retain          Immediate           true                   30s
+stack-rwx            driver.longhorn.io   Retain          Immediate           true                   30s
+
+NAME                           DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                                AGE
+aws-cloud-controller-manager   3         3         3       3            3           node-role.kubernetes.io/control-plane=true   28s
+
+Platform is up, and billing. Two commands left:
+
+  1. Build the stack's images and import them into every node:
+
+       cd ../.. && ./build.sh ubuntu@<public-ip> ubuntu@<public-ip> ubuntu@<public-ip> ubuntu@<public-ip> ubuntu@<public-ip> 
+
+  2. Apply the workload:
+
+       KUBECONFIG=cloud/aws/./kubeconfig.yaml kubectl apply -k manifests/
+
+  Then the tunnel, unchanged from Hetzner (GOTCHAS.md item 13: it has to land
+  on the node running the console pod):
+
+       ssh -i /Users/yukos/.ssh/stack-k8s-aws -L 17420:$(kubectl -n agent-stack get svc genaryx-console -o jsonpath='{.spec.clusterIP}'):7420 ubuntu@<node running the console>
+
+  A public entry point is a separate, metered decision: manifests/50-loadbalancer.yaml,
+  and on AWS it is an NLB at USD 0.027/hour plus capacity units.
+
+  When done: ./teardown.sh  (the hourly figure terraform apply printed says so)
+
+>> step 2/5: nothing to build, every image is published and pinned
+   set BUILD_FROM_SOURCE=1 to build on a node instead
+
+>> step 3/5: the workload
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+admission: no policy controller on this cluster yet, so nothing to refresh before the apply
+namespace/agent-stack configured
+configmap/bus-owner created
+configmap/drills-scenarios created
+configmap/stack-environment created
+configmap/stack-wiring created
+configmap/wardryx-policy created
+service/genaryx-console created
+service/idryx created
+service/policy-db created
+service/tokenfuse-cloud created
+service/tokenfuse-gateway created
+service/vouchryx created
+service/wardryx created
+persistentvolumeclaim/cloud-state created
+persistentvolumeclaim/console-state created
+persistentvolumeclaim/stack-events created
+persistentvolumeclaim/trailryx-records created
+persistentvolumeclaim/vouchryx-state created
+deployment.apps/genaryx-console created
+deployment.apps/idryx created
+deployment.apps/tokenfuse-cloud created
+deployment.apps/tokenfuse-gateway created
+deployment.apps/vouchryx created
+deployment.apps/wardryx created
+statefulset.apps/policy-db created
+cronjob.batch/agent-conform created
+cronjob.batch/crypto-trend created
+cronjob.batch/drills created
+cronjob.batch/identity-sweep created
+cronjob.batch/quality-drift created
+cronjob.batch/record-seal created
+job.batch/bus-owner created
+networkpolicy.networking.k8s.io/agent-token-pods-egress created
+networkpolicy.networking.k8s.io/allow-dns created
+networkpolicy.networking.k8s.io/broker-egress-vouchryx created
+networkpolicy.networking.k8s.io/broker-ingress-agent-token-pods created
+networkpolicy.networking.k8s.io/console-egress created
+networkpolicy.networking.k8s.io/console-egress-vouchryx created
+networkpolicy.networking.k8s.io/console-ingress-lb created
+networkpolicy.networking.k8s.io/default-deny created
+networkpolicy.networking.k8s.io/drills-egress-gateway created
+networkpolicy.networking.k8s.io/gateway-egress-internet created
+networkpolicy.networking.k8s.io/gateway-egress-vouchryx created
+networkpolicy.networking.k8s.io/gateway-ingress-agent-token-pods created
+networkpolicy.networking.k8s.io/gateway-ingress-costcrew created
+networkpolicy.networking.k8s.io/gateway-ingress-drills created
+networkpolicy.networking.k8s.io/gateway-ingress-mcp-broker created
+networkpolicy.networking.k8s.io/planes-ingress created
+networkpolicy.networking.k8s.io/policy-store created
+networkpolicy.networking.k8s.io/vouchryx-ingress created
+networkpolicy.networking.k8s.io/vouchryx-ingress-agent-token-pods created
+networkpolicy.networking.k8s.io/wardryx-egress-store created
+networkpolicy.networking.k8s.io/wardryx-egress-vouchryx created
+
+>> admission: the stack's namespace admits only images signed by their own repository
+namespace/cosign-system created
+customresourcedefinition.apiextensions.k8s.io/clusterimagepolicies.policy.sigstore.dev created
+customresourcedefinition.apiextensions.k8s.io/trustroots.policy.sigstore.dev created
+serviceaccount/webhook created
+role.rbac.authorization.k8s.io/policy-controller-namespace-rbac created
+clusterrole.rbac.authorization.k8s.io/policy-controller-rbac created
+rolebinding.rbac.authorization.k8s.io/policy-controller-webhook created
+clusterrolebinding.rbac.authorization.k8s.io/policy-controller-webhook created
+configmap/config-image-policies created
+configmap/config-leader-election created
+configmap/config-logging created
+configmap/config-observability created
+configmap/config-policy-controller created
+configmap/config-sigstore-keys created
+secret/webhook-certs created
+service/webhook created
+mutatingwebhookconfiguration.admissionregistration.k8s.io/defaulting.clusterimagepolicy.sigstore.dev created
+mutatingwebhookconfiguration.admissionregistration.k8s.io/policy.sigstore.dev created
+validatingwebhookconfiguration.admissionregistration.k8s.io/policy.sigstore.dev created
+validatingwebhookconfiguration.admissionregistration.k8s.io/validating.clusterimagepolicy.sigstore.dev created
+deployment.apps/webhook created
+Waiting for deployment "webhook" rollout to finish: 0 of 1 updated replicas are available...
+deployment "webhook" successfully rolled out
+clusterimagepolicy.policy.sigstore.dev/taipanbox-tokenfuse created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-wardryx created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-idryx created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-heraldyx created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-vouchryx created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-scopyx created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-typryx created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-costcrew created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-qryx created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-trailryx created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-mockryx created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-keyryx created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-agent-stack-go created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-genaryx created
+clusterimagepolicy.policy.sigstore.dev/taipanbox-tunnel created
+clusterimagepolicy.policy.sigstore.dev/upstream-pinned created
+namespace/agent-stack labeled
+agent-stack is opted in: an image under ghcr.io/taipanbox/ must carry a signature the controller can
+verify, and an upstream image must be pinned by digest and listed in policy/image-policy.yaml.
+
+>> provider key: the gateway holds it, no agent does
+   provider key: Secret gateway-upstream-key made from /Users/yukos/.claude/secrets/anthropic-aws-run.key (never printed); the gateway reads it when it starts
+
+>> trust domain: acme.example (set after apply, which is what makes it stick)
+
+>> client keys: the gateway answers no caller without one
+   created Secret vouchryx-keys (signing.pem, revoke_key); neither value is printed
+   created ConfigMap vouchryx-agents with one enrolled agent (agent://acme.example/agents/operator); its enrolment key is in /Users/yukos/Development/stack-k8s-aws-run/agent-enrol-key (0600, not printed)
+   created ConfigMap gateway-static-keys with an empty operator list (the stack's own keys are on the list in 10-planes.yaml)
+   client keys: minted for Felyx and for your agents, in Secret gateway-client-keys (never printed)
+   identity map: felyx bound to agent://acme.example/genaryx/felyx, agents to agent://acme.example/agents/*
+   approver key: minted (console-approver-key, and wardryx-approver-jwks with the public half). The private key was never printed.
+   preview key: minted (console-preview-key, and wardryx-preview-recipient with the public half). The private key was never printed.
+
+>> Keyryx, on by default (--without-keyryx turns it off, the weaker setting)
+   keyryx-root: minted
+   keyryx-witness-root: minted
+   keyryx-wardryx-client: minted
+   keyryx-trailryx-client: minted
+   keyryx-policy: applied (trailryx-root and wardryx-approval; two consumers)
+   keyryx-custody and keyryx-witness: rolled out
+   wardryx: approval signer is keyryx (rolled out)
+   trailryx-kid: pinned to custody's ES384 key OumLkAZJ_zikGZIWa0c7tHwSDBJPCSaC1oG0waKyo1c (the record seal signs under it)
+   record-seal: signs through keyryx (TRAILRYX_SIGNER=keyryx)
+   genaryx-console: reads the witness findings, read only, beside the witness (rolled out)
+   heraldyx: not installed, its findings patch waits until it is
+   Keyryx is on. Custody keyryx-custody:4340, witness keyryx-witness:4341.
+
+>> run-budget ceiling: 1.00 USD per run (set after apply, which is what makes it stick)
+   tool hold: on. A tool call nothing grants waits for a person, and model calls pass. Give an agent a tool: ./tool-hold/agents.sh agent-allow <agent> <tool[,tool]|all> --why 'text'
+
+>> waiting for rollouts
+deployment "genaryx-console" successfully rolled out
+deployment "idryx" successfully rolled out
+deployment "keyryx-custody" successfully rolled out
+deployment "keyryx-witness" successfully rolled out
+deployment "tokenfuse-cloud" successfully rolled out
+Waiting for deployment "tokenfuse-gateway" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "tokenfuse-gateway" rollout to finish: 1 old replicas are pending termination...
+deployment "tokenfuse-gateway" successfully rolled out
+deployment "vouchryx" successfully rolled out
+deployment "wardryx" successfully rolled out
+partitioned roll out complete: 1 new pods have been updated...
+   Felyx keeps its configured model (claude-haiku-4-5 by default); the provider key is the gateway's
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+
+>> step 4/5: is it running
+
+nodes
+NAME             READY   PROVIDER                                   IP
+ip-10-10-0-155   Ready   aws:///eu-central-1a/i-0b59ca2c895726948   10.10.0.155
+ip-10-10-0-209   Ready   aws:///eu-central-1a/i-0c94bfb898e95c68b   10.10.0.209
+ip-10-10-0-25    Ready   aws:///eu-central-1a/i-048bcf3bd46f81f8e   10.10.0.25
+ip-10-10-0-51    Ready   aws:///eu-central-1a/i-0c0b98d55e8843f7e   10.10.0.51
+ip-10-10-0-67    Ready   aws:///eu-central-1a/i-0bd3f61830b435617   10.10.0.67
+  ok   every node Ready
+  ok   no machine is registered under two node names
+  ok   cluster DNS has 3 ready replicas
+  ok   cluster DNS keeps 1 replica(s) up through a drain (PodDisruptionBudget coredns)
+
+pods
+POD                                  NODE             READY   STATUS
+agent-conform-29929290-nt7rz         ip-10-10-0-67    false   Succeeded
+bus-owner-rjrrk                      ip-10-10-0-25    false   Running
+genaryx-console-67b46df64d-z2tqb     ip-10-10-0-209   true    Running
+idryx-565fbc48f4-r7ffn               ip-10-10-0-67    true    Running
+keyryx-custody-599474fbb5-9qq8r      ip-10-10-0-25    true    Running
+keyryx-witness-5c9947f56b-5dzpl      ip-10-10-0-209   true    Running
+policy-db-0                          ip-10-10-0-209   true    Running
+tokenfuse-cloud-54885f7fb7-dq8ml     ip-10-10-0-25    true    Running
+tokenfuse-gateway-5dcc96cbd4-qglbq   ip-10-10-0-155   true    Running
+tokenfuse-gateway-7dc5ff4fc6-chczn   ip-10-10-0-51    true    Running
+vouchryx-6bfddd766b-ln6ml            ip-10-10-0-209   true    Running
+wardryx-77886d896c-rl7m8             ip-10-10-0-25    true    Running
+  FAIL 2 pod(s) neither Running nor Completed
+  ok   workload spread over 5 nodes
+
+storage
+CLAIM                  MODE              CLASS          STATUS   SIZE
+cloud-state            [ReadWriteOnce]   longhorn       Bound    2Gi
+console-state          [ReadWriteOnce]   longhorn       Bound    2Gi
+data-policy-db-0       [ReadWriteOnce]   stack-policy   Bound    5Gi
+keyryx-state           [ReadWriteOnce]   longhorn       Bound    1Gi
+keyryx-witness-state   [ReadWriteOnce]   longhorn       Bound    1Gi
+stack-events           [ReadWriteMany]   stack-rwx      Bound    5Gi
+trailryx-records       [ReadWriteOnce]   longhorn       Bound    2Gi
+vouchryx-state         [ReadWriteOnce]   longhorn       Bound    1Gi
+  ok   the RWX event volume is Bound
+  ok   1 default StorageClass
+
+network policy is actually enforced
+  ok   24 NetworkPolicies present
+  ok   default-deny holds (the console cannot reach the policy store)
+
+every plane answers
+  cloud 200
+  gateway 200
+  wardryx 200
+  wardryx store 200
+  idryx 200
+  console 200
+  ok   all five planes answer 200, and wardryx reaches its store
+
+the data the console governs
+  money    0 runs, $0.00 settled, 0 budget alerts
+  policy   0 policies (0 console blocks), 0 approvals
+  identity 0 identities
+  ok   the console can read all three planes it governs
+  ok   the console's bus is live
+
+the gateway's admin key is enforced
+  nokey 401
+  withkey 200
+  ok   gateway refuses /v1/runs without the admin key (401)
+  ok   gateway serves /v1/runs with the admin key
+
+client keys and the identity map
+  ok   the gateway runs the identity map ConfigMap gateway-identity-map holds
+  ok   the gateway runs the client keys Secret gateway-client-keys holds
+  nokey 401 unauthorized
+  badkey 401 unauthorized
+  ok   the gateway refuses a call with no client key (401)
+  ok   the gateway refuses a call with an unknown client key (401)
+
+the console is reading a real environment, not fixtures
+  ok   an environment descriptor is mounted
+  ok   trust domain is set: acme.example
+
+the notifier
+  note heraldyx is not deployed: this box was not asked to write to anyone
+
+result
+  20 passed, 1 failed, 1 noted
+
+
+>> step 5/5: is it contained
+
+0. the notifier's way out goes outward only
+  note heraldyx is not deployed: no egress rule to test
+
+1. a compromised pod in this namespace reaches nothing
+    blocked tokenfuse-cloud:8080
+    blocked tokenfuse-gateway:4100
+    blocked wardryx:8090
+    blocked idryx:8081
+    blocked genaryx-console:7420
+    blocked policy-db:5432
+  ok   an unlabelled pod in the namespace reached none of the six services
+
+2. the console's own reach is exactly what it needs
+  ok   console -> money plane (open, as designed)
+  ok   console -> policy plane (open, as designed)
+  ok   console -> identity plane (open, as designed)
+  ok   console -> the policy STORE (only wardryx may) (blocked, as designed)
+
+3. nothing leaves the cluster except the metered path
+  ok   console -> the model provider (must go through the gateway) (blocked, as designed)
+  ok   console -> the open internet (blocked, as designed)
+    open api.anthropic.com:443
+    blocked api.anthropic.com:80
+    blocked 10.10.0.2:6443
+  ok   gateway -> provider on 443 (the metered path is open)
+  ok   gateway -> provider on 80 is blocked (443 only)
+  ok   gateway cannot turn around and hit the cluster's own API
+
+4. the namespace refuses a privileged pod
+  ok   a privileged, hostNetwork, hostPath pod was REJECTED by admission
+    privileged" is forbidden: violates PodSecurity "restricted:latest": host namespaces (hostNetwork=true
+    hostPID=true)
+    privileged (container "p" must not set securityContext.privileged=true)
+    allowPrivilegeEscalation != false (container "p" must set securityContext.allowPrivilegeEscalation=false)
+
+5. the workload runs as the manifests claim
+  ok   every Deployment and StatefulSet: non-root, no privilege escalation, all capabilities dropped, RuntimeDefault seccomp, no host namespaces, no hostPath
+
+5b. the console namespace holds exactly the exceptions it is allowed
+  ok   the console itself runs inside agent-stack under enforced restricted
+  ok   no namespace holds NET_ADMIN: there is no privileged half to audit
+
+6. nothing in this namespace is published
+  ok   every Service is ClusterIP (the operator reaches the console over their own tunnel)
+
+7. secrets are not readable from a copy of etcd
+  note read the datastore on disk directly (no etcdctl on this node); control: the Secret's NAME appears 6 times, its VALUE none
+  ok   a freshly written Secret is NOT plaintext in etcd (an encryption provider is active)
+
+8. no credential is hiding in a ConfigMap
+  ok   no ConfigMap key looks like a credential
+
+9. the hosts themselves
+  ok   ip-10-10-0-51 (local): sshd refuses passwords
+  ok   ip-10-10-0-51 (local): etcd is not listening on a public address
+
+10. a forged pod label buys nothing without a credential
+    reach=yes
+    inherited_credential=no
+    read_policies=401
+    delete_freeze=401
+    read_fleet=401
+    gw_runs=401
+    gw_runs_noauth=401
+    gw_keys=401
+    gw_keys_noauth=401
+  ok   the forged pod inherits no credential from the cluster
+  ok   every admin verb from the forged pod was refused, wardryx, tokenfuse-cloud and the gateway alike
+
+11. the policy plane is on the data path, not only on the console
+  ok   the gateway asks the PDP on every call (mode=enforce)
+  ok   the gateway knows where the PDP is (http://wardryx:8090)
+  ok   an unreachable PDP denies (failmode=closed)
+  ok   the gateway has a real upstream (https://api.anthropic.com/v1/messages)
+
+11b. the policy plane has actually decided something
+  note unexpected allow-probe result, read it by hand: ALLOWPROBE HTTP/1.1 401 Unauthorized
+  note deny-probe inconclusive, read it by hand: DENYPROBE HTTP/1.1 401 Unauthorized 
+
+11c. a plane writes only its own stream, and only the bus owner changes a name on the bus
+    BUSPROBE read ok
+    BUSPROBE dir 20000:10001 2750
+    BUSPROBE append refused
+    BUSPROBE create refused
+    BUSPROBE rename refused
+  ok   streams/ is the bus owner's, 20000:10001 2750
+  ok   a plane cannot write another plane's stream (costcrew's identity refused on wardryx.ndjson)
+  ok   a plane cannot rename a name in the bus, nor add one
+
+12. the neighbouring namespaces
+  note namespace cosign-system: Pod Security 'none', 0 NetworkPolicies - a privileged pod can run there (fix: kubectl apply -f manifests/60-harden-neighbours.yaml, read its header first)
+  note namespace default: Pod Security 'none', 0 NetworkPolicies - a privileged pod can run there (fix: kubectl apply -f manifests/60-harden-neighbours.yaml, read its header first)
+
+result
+  28 passed, 0 failed, 6 noted
+
+
+>> operator 'ops' created
+
+Finished, but this deploy ends RED: a check failed.
+
+  FAILED  verify.sh (is it running), exit 1
+  Read the lines above, fix what they name, and re-run the check (command below).
+  This script exits non-zero because of it.
+
+  Your console sign-in, shown once and stored nowhere:
+
+      user      ops
+      password  5o2775oY4uE69TcB8AX9PUuUQhCP
+
+  Reach the console over YOUR tunnel. There is no public entry point by
+  design, and the tunnel has to land on the node running the console pod
+  (GOTCHAS.md item 13), currently ip-10-10-0-209:
+
+      ssh -i /Users/yukos/.ssh/stack-k8s-aws -L 17420:10.43.49.131:7420 ubuntu@<public-ip>
+      open http://localhost:17420
+
+  Re-check any time:
+
+      ssh -i /Users/yukos/.ssh/stack-k8s-aws ubuntu@<public-ip> 'sudo KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/verify.sh --freeze'
+      ssh -i /Users/yukos/.ssh/stack-k8s-aws ubuntu@<public-ip> 'sudo KUBECTL="/usr/local/bin/k3s kubectl" bash /root/stack-k8s/security-tests.sh'
+
+  What it is costing right now:
+
+      ./cost-live.sh
+
+  When finished: ./teardown.sh
+
+Client keys are ON, minted by this deploy because identity/up.sh was given no files.
+Your agents now need a key: every call to the gateway carries
+
+    x-fuse-key       the secret in /Users/yukos/Development/stack-k8s-aws-run/agent-key (it is not printed here)
+    x-fuse-agent-id  an id under agent://acme.example/agents/, such as agent://acme.example/agents/support-bot
+    x-fuse-run-id    its run, as before
+
+A call with no key, or one the gateway does not hold, is refused 401, and the key
+speaking as an id outside agents/ is refused 403 identity_mismatch. To read it
+again on another machine: kubectl -n agent-stack get secret gateway-client-keys -o jsonpath='{.data.client_keys}' | base64 --decode
+(the entry ending :agents). To give each agent its own key and unit, run
+identity/up.sh with a keys file and an identity map, both together.
+exit=1
