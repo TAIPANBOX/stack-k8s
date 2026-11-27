@@ -408,7 +408,7 @@ times, each a step correct once and impossible the second time. GOTCHAS 56-62.
 Nothing here needs a credential. Every repository this pulls is public and
 Apache-2.0, the Genaryx console included since 2026-07-27, so the console comes
 up by default rather than on production of a token. Since 1.19.0 it is pulled,
-`ghcr.io/taipanbox/genaryx`, pinned by digest; `deploy.sh --console-token` survives
+`ghcr.io/taipanbox/genaryx:v0.1.0`, pinned by digest; `deploy.sh --console-token` survives
 only as the bearer for a private fork's tree when `INSTALL_FROM_MAIN=1` fetches main.
 
 Then reach the console over your own tunnel (`20-console.yaml` explains why
