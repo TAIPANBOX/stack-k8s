@@ -1213,7 +1213,7 @@ run_case "agent-tokens-are-required: the gateway drops the governed profile" fai
 
 run_case "agent-tokens-are-required: the gateway runs a tokenfuse that predates the governed profile" fail \
 	"$AGT" \
-	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.27\.0@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
+	"$(py 'import re; p = "manifests/10-planes.yaml"; s = open(p).read(); s, n = re.subn(r"tokenfuse:v1\.27\.1@sha256", "tokenfuse:v1.18.0@sha256", s); assert n >= 1, n; open(p, "w").write(s)')" \
 	"predates the governed profile and the static-key list"
 
 TEETH_EDIT_27="$(py 'edit("manifests/10-planes.yaml", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"https://vouchryx.agent-stack.invalid\" }", "{ name: TOKENFUSE_DELEGATION_AUDIENCE, value: \"\" }")')"
@@ -4395,7 +4395,7 @@ run_case "tokenfuse-door-origins: the gateway is left on tokenfuse v1.22.0" fail
 	"is not the release pin"
 run_case "tokenfuse-door-origins: the control plane digest is not the release pin" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
-	"$(py 'edit("manifests/10-planes.yaml", "d8ad6e9a779a57b769f65691330badbb14157f8fc883277dc4ffd177d23118b2", "3f3b9831ec1c222d776ebfbf706e207a098aff80e550494f4c78b52c1784ed8e")')" \
+	"$(py 'edit("manifests/10-planes.yaml", "c277be8e01a8bc2e35e776ea0109f2324e1c1fe6bb3dc5c0c64e63c2baa9e60a", "3f3b9831ec1c222d776ebfbf706e207a098aff80e550494f4c78b52c1784ed8e")')" \
 	"is not the release pin"
 run_case "tokenfuse-door-origins: the gateway's list names the broker's origin" fail \
 	'./scripts/tokenfuse-door-origins.sh' \
