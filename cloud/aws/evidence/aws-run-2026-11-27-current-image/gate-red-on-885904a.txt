@@ -1,0 +1,4 @@
+$ ./scripts/nodes-fit-the-current-kernel.sh   # on 885904a, the tree before this change
+FAIL: lib/host-runtime.sh does not exist, so no installer can give a node the fixed profile or the NFS
+      option, and this gate measured NOTHING. That is not a clean run.
+exit 1

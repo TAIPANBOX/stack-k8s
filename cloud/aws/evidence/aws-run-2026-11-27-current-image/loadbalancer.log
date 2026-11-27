@@ -1,0 +1,27 @@
+
+== creating the Service
+service/genaryx-console-lb created
+
+== waiting for the balancer to get an address
+
+!! the Service never got an address. Is the cloud controller running?
+   kubectl -n kube-system get pods -l k8s-app=aws-cloud-controller-manager
+== type by the elbv2 API
+== classic ELBs in the region
+0
+== target health
+== https through it
+000 0.553075s
+== Service events (deduplicated)
+   3 EnsuringLoadBalancer: Ensuring load balancer
+  18 SyncLoadBalancerFailed: Error syncing load balancer: failed to ensure load balancer: error creating load balancer: "operation error Elastic Load Balancing v2: CreateLoadBalancer, https response error StatusCode: 400, RequestID: <id>, OperationNotPermitted: This AWS account currently does not support creating load balancers. For more information, please contact AWS Support."
+== annotation on the Service
+nlb
+
+== deleting genaryx-console-lb (this deletes the balancer and stops the meter)
+service "genaryx-console-lb" deleted from agent-stack namespace
+   gone. ./teardown.sh --check will confirm nothing is left billing.
+== after --down: elbv2 load balancers, target groups, classic ELBs
+0
+0
+0

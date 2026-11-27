@@ -263,6 +263,11 @@ jobs:
         run: ./scripts/cluster-dns-has-a-budget.sh
       - name: every node stops its pods before its network goes
         run: ./scripts/nodes-stop-their-pods-first.sh
+      # Added 2026-11-27, in BOTH callers on the same commit: containerd's profile with the stacked
+      # peer and the NFS client without directory delegations, before k3s (invariant 98, GOTCHAS 169, 170).
+      # The runner has apparmor_parser, so both profiles are parsed here.
+      - name: every node gets the kernel 7.0 AppArmor and NFS settings before k3s (invariant 98)
+        run: ./scripts/nodes-fit-the-current-kernel.sh
       - name: every shell script parses under the bash a Mac ships
         run: ./scripts/shell-scripts-parse.sh
 

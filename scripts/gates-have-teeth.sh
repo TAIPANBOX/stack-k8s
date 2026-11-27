@@ -3186,6 +3186,62 @@ run_case "nodes-stop-their-pods-first: no installer is left to judge" fail \
     assert k in s
     open(p, "w").write(s.replace(k, "INSTALL_K3S_" + "VERSIONX="))')" \
 	"measured NOTHING"
+# Invariant 98: every node gets containerd's profile with the stacked peer and an NFS client without directory delegations, before k3s.
+run_case "nodes-fit-the-current-kernel: the profile loses the stacked signal rule" fail \
+	'./scripts/nodes-fit-the-current-kernel.sh' \
+	"$(py 'edit("lib/host-runtime.sh", "  signal (send,receive) peer=${name}//&unconfined,\n", "")')" \
+	"could not signal each other"
+
+run_case "nodes-fit-the-current-kernel: the profile allows every stacked peer" fail \
+	'./scripts/nodes-fit-the-current-kernel.sh' \
+	"$(py 'edit("lib/host-runtime.sh", "  signal (send,receive) peer=${name}//&unconfined,\n", "  signal (send,receive) peer=${name}//&unconfined,\n  signal (send,receive) peer=${name}//&*,\n")')" \
+	"wider than the stacked peer"
+
+run_case "nodes-fit-the-current-kernel: the profile drops one of containerd's denies" fail \
+	'./scripts/nodes-fit-the-current-kernel.sh' \
+	"$(py 'edit("lib/host-runtime.sh", "  deny mount,\n", "")')" \
+	"lost containerd's rule \`deny mount,\`"
+
+run_case "nodes-fit-the-current-kernel: the NFS option leaves directory delegations on" fail \
+	'./scripts/nodes-fit-the-current-kernel.sh' \
+	"$(py 'edit("lib/host-runtime.sh", "options nfsv4 directory_delegations=N", "options nfsv4 directory_delegations=Y")')" \
+	"nfs_client_modprobe prints"
+
+run_case "nodes-fit-the-current-kernel: a still-denied probe does not stop the install" fail \
+	'./scripts/nodes-fit-the-current-kernel.sh' \
+	"$(py 'edit("lib/host-runtime.sh", "is still denied a signal to its own child\" >&2\n    exit 1\n", "is still denied a signal to its own child\" >&2\n    true\n")')" \
+	"does not stop when the signal is still denied"
+
+run_case "nodes-fit-the-current-kernel: an installer stops giving the nodes the settings" fail \
+	'./scripts/nodes-fit-the-current-kernel.sh' \
+	"$(py 'edit("cloud/gcp/install-gcp.sh", "  host_runtime_script | su_ \"$n\" \"sh -s\" || die", "  : || die")')" \
+	"never pipes host_runtime_script"
+
+run_case "nodes-fit-the-current-kernel: a node that fails the settings does not stop the install" fail \
+	'./scripts/nodes-fit-the-current-kernel.sh' \
+	"$(py 'edit("cloud/aws/install-aws.sh", "  host_runtime_script | su_ \"$n\" \"sh -s\" || die \"the kernel 7.0 host settings failed on $n: read the line it printed above\"", "  host_runtime_script | su_ \"$n\" \"sh -s\" || true")')" \
+	"does not stop the install when host_runtime_script fails"
+
+run_case "nodes-fit-the-current-kernel: the agents get no settings" fail \
+	'./scripts/nodes-fit-the-current-kernel.sh' \
+	"$(py 'edit("install.sh", "for n in \"${ALL_NODES[@]}\"; do\n  host_runtime_script", "for n in \"${SERVER_LIST[@]}\"; do\n  host_runtime_script")')" \
+	"is not in a loop over every node"
+
+run_case "nodes-fit-the-current-kernel: the settings come after the first k3s install" fail \
+	'./scripts/nodes-fit-the-current-kernel.sh' \
+	"$(py 'edit("install.sh", "  host_runtime_script | sh_ \"$n\" \"sh -s\" || die", "  : || die")
+edit("install.sh", "  put_graceful_shutdown \"$n\"\n", "  put_graceful_shutdown \"$n\"\n  host_runtime_script | sh_ \"$n\" \"sh -s\" || die \"late\"\n")')" \
+	"runs after the first k3s install"
+
+run_case "nodes-fit-the-current-kernel: no library is left to judge" fail \
+	'./scripts/nodes-fit-the-current-kernel.sh' \
+	"$(py 'import os
+os.remove("lib/host-runtime.sh")')" \
+	"measured NOTHING"
+
+run_case "nodes-fit-the-current-kernel: a reworded comment is not a fault" pass \
+	'./scripts/nodes-fit-the-current-kernel.sh' \
+	"$(py 'edit("lib/host-runtime.sh", "# Same stacked-label peer as the signal rule above.", "# The same stacked peer as the signal rule above.")')"
 # Invariant 47: every shell script parses under /bin/bash (3.2 on a Mac) and uses no bash-4-only construct.
 run_case "shell-scripts-parse: a script does not parse" fail \
 	'./scripts/shell-scripts-parse.sh' \

@@ -4954,3 +4954,43 @@ marker, so a custody pod that waited for the marker alone could start before the
 `custody/` itself, as root 0777, and the owner refuses a directory it did not make, on every later run. custody's `bus-ready`
 waits for `custody/` as the owner leaves it, `20000:20101:771`, as the gateway pod waits for `focus/gateway` (invariant 95).
 Measured on k3s with Longhorn RWX 2026-11-26, `evidence/keyryx-custody-k3s/output.txt`.
+
+## 169. On Ubuntu 26.04's kernel 7.0 images a container's own processes cannot signal each other under containerd's default AppArmor profile
+
+**Platform.** Ubuntu ships `kernel.apparmor_restrict_unprivileged_unconfined=1` (`/usr/lib/sysctl.d/10-apparmor.conf`). runc
+runs unconfined and without `CAP_MAC_OVERRIDE`, so its change to the container profile is converted to a stack, and every
+process in the container carries `cri-containerd.apparmor.d//&unconfined`. containerd's default profile allows `signal` and
+`ptrace` only to the literal name (`signal (send,receive) peer=cri-containerd.apparmor.d,`), so a container's processes are
+denied signals to each other: on the AWS run of 2026-11-27 (`ami-05e5fa80bad7f28e0`, kernel `7.0.0-1018-aws`) Postgres could
+not stop the server its entrypoint started (`pg_ctl: could not send stop signal: Permission denied`), `policy-db-0` stayed in
+recovery and wardryx never became ready; every Go binary's SIGURG preemption was denied too
+(`cloud/aws/evidence/aws-run-2026-11-27/failure-ami-20261127-apparmor.txt`). Earlier kernel 7.0 builds stacked rarely; the
+reports in containerd#14485 put the change between `7.0.0-38` and `7.0.0-42`. The fix upstream is containerd#14487 (merged
+2026-11-16, backported to release/2.3 in #14590 and release/2.4 in #14591), which adds `peer=<name>//&unconfined` to exactly
+those two rules. As of 2026-11-27 no containerd tag (latest v2.3.7, v2.4.2) and no k3s release carries it; k3s v1.36.2+k3s1
+embeds k3s-io/containerd v2.3.2-k3s2.
+
+**Resolved by** invariant 98: containerd loads its default profile only when no profile of that name is loaded
+(`contrib/apparmor/apparmor.go`, `LoadDefaultProfile`), so every installer loads containerd's own profile with the two rules of
+#14487 before k3s starts, from `lib/host-runtime.sh`, and keeps it in `/etc/apparmor.d/stack-cri-containerd`, where
+apparmor.service loads it on every boot. Each node first loads the profile as containerd ships it under a probe name and
+signals a child from an unprivileged process in it, then does the same in the fixed profile, and the install stops if that is
+still denied. Not `Unconfined` and not the sysctl: both drop confinement that the fix keeps. Once a k3s release ships a
+containerd with #14487, the host copy is the profile containerd would load itself and can be removed.
+
+## 170. A Linux 7.0 NFS client gets EREMOTEIO listing a Longhorn v1.7.2 RWX volume, because ganesha answers its directory delegation request with OP_ILLEGAL
+
+**Upstream.** Linux 6.19 and later ask for a directory delegation: when revalidating a directory the client appends
+`GET_DIR_DELEGATION` (NFSv4.1 op 46) to its GETATTR compound (`fs/nfs/nfs4proc.c`, `should_request_dir_deleg`). The nfs-ganesha
+in Longhorn v1.7.2's share-manager answers that op with `OP_ILLEGAL` instead of `NFS4ERR_NOTSUPP`; the client cannot decode the
+reply and the whole call fails with EREMOTEIO (121). On the AWS run of 2026-11-27 the `bus-owner` Job, the one pod that mounts
+the events claim's root, got `ls: /bus/streams: Remote I/O error` on every retry while the export on disk was whole and the
+planes, which open known files by subPath, kept writing (`cloud/aws/evidence/aws-run-2026-11-27/bus-owner-rwx-evidence.txt`).
+It happened on the July image as well, which also runs kernel 7.0. Fixed in nfs-ganesha 9.11 (nfs-ganesha#1385); Longhorn ships
+a fixed ganesha from v1.11.3 (longhorn#13268).
+
+**Resolved by** invariant 98: every installer sets the nfsv4 module's own parameter `directory_delegations=N`
+(`fs/nfs/delegation.c`, default on, mode 0644) in `/etc/modprobe.d` and in `/sys/module/nfsv4/parameters` before k3s starts, and
+the install stops if it does not read back `N`. A directory delegation is a client cache; without it the client behaves as every
+kernel before 6.19 did. Moving Longhorn to a release with the fixed ganesha is the other half and a change of its own: v1.7.2 is
+long out of support, and the jump touches the classes invariant 43 describes.
