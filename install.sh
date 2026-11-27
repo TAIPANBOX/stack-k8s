@@ -67,6 +67,7 @@ esac
 . "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/secret-doc.sh"
 . "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/browser-seccomp.sh"
 . "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/verified-fetch.sh"
+. "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/host-runtime.sh"
 # CLAUDE.md invariant 61. SSH_KNOWN_HOSTS=<file> pins the operator's own host
 # keys: every connection is then strict, and a node whose key is not in that file
 # is refused. Without it the first connection to each node is accepted (accept-new,
@@ -320,6 +321,22 @@ MP
 done
 wait
 echo "   done"
+
+# ---- 1b. the kernel 7.0 host settings --------------------------------------
+# Ubuntu 26.04's kernel 7.0 images broke two things on a k3s node (CLAUDE.md
+# invariant 98, GOTCHAS 169 and 170, the AWS run of 2026-11-27): AppArmor stacks
+# `//&unconfined` onto the container profile, so a container's processes cannot
+# signal each other under containerd's default profile, and the NFS client asks
+# Longhorn v1.7.2's ganesha for directory delegations it answers with OP_ILLEGAL,
+# so listing the RWX volume fails with EREMOTEIO. lib/host-runtime.sh loads
+# containerd's own profile with the upstream fix (containerd#14487) before k3s
+# starts, and turns the nfsv4 client's directory delegations off. Each node says
+# what its kernel did with containerd's profile as shipped, and the install stops
+# if a container process would still be denied.
+say "host settings for the current kernel on every node"
+for n in "${ALL_NODES[@]}"; do
+  host_runtime_script | sh_ "$n" "sh -s" || die "the kernel 7.0 host settings failed on $n: read the line it printed above"
+done
 
 # ---- graceful node shutdown ------------------------------------------------
 # A node that is rebooted or stopped (a VM stop, a maintenance reboot, a spot

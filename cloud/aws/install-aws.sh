@@ -80,6 +80,7 @@ SSH_OPTS=(-o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20)
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/secret-doc.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/browser-seccomp.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/verified-fetch.sh"
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)/lib/host-runtime.sh"
 sh_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "${@:2}"; }
 su_() { ssh "${SSH_OPTS[@]}" "$SSH_USER@$1" "sudo ${*:2}"; }
 k_()  { su_ "$FIRST" "/usr/local/bin/k3s kubectl $*"; }
@@ -254,6 +255,22 @@ for n in "${ALL_NODES[@]}"; do
 done
 wait
 echo "   done"
+
+# ---- 1b. the kernel 7.0 host settings --------------------------------------
+# Ubuntu 26.04's kernel 7.0 images broke two things on a k3s node (CLAUDE.md
+# invariant 98, GOTCHAS 169 and 170, the AWS run of 2026-11-27): AppArmor stacks
+# `//&unconfined` onto the container profile, so a container's processes cannot
+# signal each other under containerd's default profile, and the NFS client asks
+# Longhorn v1.7.2's ganesha for directory delegations it answers with OP_ILLEGAL,
+# so listing the RWX volume fails with EREMOTEIO. lib/host-runtime.sh loads
+# containerd's own profile with the upstream fix (containerd#14487) before k3s
+# starts, and turns the nfsv4 client's directory delegations off. Each node says
+# what its kernel did with containerd's profile as shipped, and the install stops
+# if a container process would still be denied.
+say "host settings for the current kernel on every node"
+for n in "${ALL_NODES[@]}"; do
+  host_runtime_script | su_ "$n" "sh -s" || die "the kernel 7.0 host settings failed on $n: read the line it printed above"
+done
 
 # ---- graceful node shutdown ------------------------------------------------
 # A node that is rebooted or stopped (a VM stop, a maintenance reboot, a spot

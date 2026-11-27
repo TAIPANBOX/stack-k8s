@@ -115,6 +115,15 @@ kc get pods -o custom-columns=POD:.metadata.name,NODE:.spec.nodeName,READY:.stat
 # kubelets), and its controller has already started the replacement, which this
 # count does judge. Found by its phase and reason, not by the STATUS column, which
 # shows its container's exit reason instead. Noted, with the command that clears it.
+# A pod of a ReplicaSet the deploy has just replaced (the run-budget patch after apply rolls
+# the gateway again) can still be Terminating when the rollout reports done, and counted
+# then it failed a healthy deploy (AWS run 2026-11-27, the old gateway pod). So the count
+# waits up to 90 s for pods that are on their way out; one still Terminating after that
+# is counted below like any other pod that is not Running.
+for _ in $(seq 1 18); do
+  kc get pods --no-headers 2>/dev/null | awk '$3 == "Terminating" { f = 1 } END { exit !f }' || break
+  sleep 5
+done
 # pods: begin
 shutdown_pods="$(kc get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.phase}{" "}{.status.reason}{"\n"}{end}' 2>/dev/null \
   | awk '$2 == "Failed" && ($3 == "Terminated" || $3 == "NodeShutdown") { printf "%s ", $1 }')"

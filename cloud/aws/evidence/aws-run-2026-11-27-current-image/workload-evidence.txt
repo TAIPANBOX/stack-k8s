@@ -1,0 +1,23 @@
+== bus-owner job
+1 succeeded,  failed
+total 16
+drwxr-s---    3 20000    10001         4096 Nov 27 07:21 .
+drwxrwxrwx    7 0        0             4096 Nov 27 07:21 ..
+-rw-r-----    1 20000    10001           14 Nov 27 07:21 .layout
+-rw-rw-r--    1 20000    10002            0 Nov 27 07:21 agent-conform.ndjson
+-rw-rw-r--    1 20000    20030            0 Nov 27 07:21 console.ndjson
+-rw-rw-r--    1 20000    10003            0 Nov 27 07:21 costcrew.ndjson
+-rw-rw-r--    1 20000    20040            0 Nov 27 07:21 mockryx.ndjson
+-rw-rw-r--    1 20000    20013            0 Nov 27 07:21 tokenfuse-cloud.ndjson
+-rw-rw-r--    1 20000    20012            0 Nov 27 07:21 tokenfuse-mcp.ndjson
+-rw-rw-r--    1 20000    20010            0 Nov 27 07:21 tokenfuse.ndjson
+-rw-rw-r--    1 20000    20005            0 Nov 27 07:21 typryx.ndjson
+-rw-rw-r--    1 20000    20020            0 Nov 27 07:21 verdryx.ndjson
+-rw-rw-r--    1 20000    20002            0 Nov 27 07:21 vouchryx.ndjson
+drwxrwxr-x    2 20000    20001         4096 Nov 27 07:21 wardryx-policy-archive
+-rw-rw-r--    1 20000    20001            0 Nov 27 07:21 wardryx.ndjson
+bus ready
+== policy-db-0
+2026-11-27 07:21:27.520 UTC [28] LOG:  database system is ready to accept connections
+2026-11-27 07:21:28.302 UTC [1] LOG:  database system is ready to accept connections
+pg_is_in_recovery: f

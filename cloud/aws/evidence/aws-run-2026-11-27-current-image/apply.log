@@ -1,0 +1,118 @@
+aws_vpc.this: Creating...
+aws_key_pair.operator: Creating...
+aws_iam_role.node: Creating...
+aws_key_pair.operator: Creation complete after 0s [id=stack-k8s-operator]
+aws_iam_role.node: Creation complete after 1s [id=stack-k8s-node]
+aws_iam_role_policy.node: Creating...
+aws_iam_instance_profile.node: Creating...
+aws_iam_role_policy.node: Creation complete after 0s [id=stack-k8s-node:stack-k8s-ccm]
+aws_vpc.this: Creation complete after 2s [id=vpc-0dcbe739cd849d0a5]
+aws_internet_gateway.this: Creating...
+aws_security_group.nodes: Creating...
+aws_subnet.nodes: Creating...
+aws_internet_gateway.this: Creation complete after 0s [id=igw-0f068378cd326422c]
+aws_route_table.public: Creating...
+aws_route_table.public: Creation complete after 1s [id=rtb-06c261845e1cd43d7]
+aws_security_group.nodes: Creation complete after 2s [id=sg-02483e0d7b641fa1d]
+aws_vpc_security_group_ingress_rule.cluster: Creating...
+aws_vpc_security_group_ingress_rule.icmp: Creating...
+aws_vpc_security_group_ingress_rule.kubeapi: Creating...
+aws_vpc_security_group_egress_rule.all: Creating...
+aws_vpc_security_group_ingress_rule.ssh: Creating...
+aws_vpc_security_group_ingress_rule.icmp: Creation complete after 0s [id=sgr-0e2de3d7820a80ee5]
+aws_vpc_security_group_ingress_rule.cluster: Creation complete after 0s [id=sgr-04afa4b708f49902b]
+aws_vpc_security_group_ingress_rule.ssh: Creation complete after 0s [id=sgr-0f6b0d6699e15534c]
+aws_vpc_security_group_egress_rule.all: Creation complete after 0s [id=sgr-021452bde7ff4b273]
+aws_vpc_security_group_ingress_rule.kubeapi: Creation complete after 0s [id=sgr-09d71b8fb973abb2e]
+aws_iam_instance_profile.node: Creation complete after 6s [id=stack-k8s-node]
+aws_subnet.nodes: Still creating... [00m10s elapsed]
+aws_subnet.nodes: Creation complete after 11s [id=subnet-0856a9a6934ae1a12]
+aws_route_table_association.nodes: Creating...
+aws_vpc_security_group_ingress_rule.nodeports: Creating...
+aws_instance.node[4]: Creating...
+aws_instance.node[1]: Creating...
+aws_instance.node[2]: Creating...
+aws_instance.node[3]: Creating...
+aws_instance.node[0]: Creating...
+aws_vpc_security_group_ingress_rule.nodeports: Creation complete after 0s [id=sgr-0072fe4b9868aa06b]
+aws_route_table_association.nodes: Creation complete after 0s [id=rtbassoc-0b67831c5dbea3e35]
+aws_instance.node[4]: Still creating... [00m10s elapsed]
+aws_instance.node[1]: Still creating... [00m10s elapsed]
+aws_instance.node[3]: Still creating... [00m10s elapsed]
+aws_instance.node[2]: Still creating... [00m10s elapsed]
+aws_instance.node[0]: Still creating... [00m10s elapsed]
+aws_instance.node[3]: Creation complete after 13s [id=i-0ce61fd22d042537f]
+aws_instance.node[0]: Creation complete after 13s [id=i-05bb0136b466ec727]
+aws_instance.node[4]: Creation complete after 13s [id=i-0ac2e802cbb913f62]
+aws_instance.node[1]: Creation complete after 13s [id=i-009c909d1dfdb3784]
+aws_instance.node[2]: Creation complete after 13s [id=i-0255f640b6cbd6a43]
+
+Apply complete! Resources: 21 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+agents = [
+  "<public-ip>",
+  "<public-ip>",
+]
+all_nodes = [
+  "<public-ip>",
+  "<public-ip>",
+  "<public-ip>",
+  "<public-ip>",
+  "<public-ip>",
+]
+ccm_config = {
+  "cluster_name" = "stack-k8s"
+  "sg_id" = "sg-02483e0d7b641fa1d"
+  "subnet_id" = "subnet-0856a9a6934ae1a12"
+  "vpc_id" = "vpc-0dcbe739cd849d0a5"
+  "zone" = "eu-central-1a"
+}
+efs_id = ""
+hourly_usd = "2.1272"
+instance_ids = {
+  "agent-1" = "i-0ce61fd22d042537f"
+  "agent-2" = "i-0ac2e802cbb913f62"
+  "server-1" = "i-05bb0136b466ec727"
+  "server-2" = "i-009c909d1dfdb3784"
+  "server-3" = "i-0255f640b6cbd6a43"
+}
+next = <<EOT
+
+Platform is provisioned. About USD 2.13/hour is now being spent.
+
+1. Bring up the cluster:
+
+     ./install-aws.sh \
+       --servers <public-ip>,<public-ip>,<public-ip> \
+       --agents <public-ip>,<public-ip> \
+       --ssh-key ~/.ssh/stack-k8s-aws
+
+2. Build and distribute the images (unchanged from the Hetzner run, this
+   part of the repo is not cloud-specific):
+
+     cd ../.. && ./build.sh ubuntu@<public-ip> ubuntu@<public-ip> ubuntu@<public-ip> ubuntu@<public-ip> ubuntu@<public-ip>
+
+3. Apply the workload:
+
+     KUBECONFIG=cloud/aws/kubeconfig.yaml kubectl apply -k manifests/
+
+When finished, and this is the part that matters:
+
+     ./teardown.sh
+
+
+EOT
+private_ips = {
+  "agent-1" = "10.10.0.231"
+  "agent-2" = "10.10.0.148"
+  "server-1" = "10.10.0.241"
+  "server-2" = "10.10.0.81"
+  "server-3" = "10.10.0.253"
+}
+servers = [
+  "<public-ip>",
+  "<public-ip>",
+  "<public-ip>",
+]

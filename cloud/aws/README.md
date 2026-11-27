@@ -89,6 +89,13 @@ If that prints the account id, everything below works.
 - **The AMI**: resolved at apply time from Canonical's public SSM parameter.
   Verified 2026-07-25 that Ubuntu 26.04 LTS, the release the Hetzner nodes ran,
   is published for `eu-central-1` (`ami-0cd55f248a7e891a7`, built 2026-07-22).
+  The current image runs kernel 7.0, where Ubuntu stacks `//&unconfined` onto
+  containerd's AppArmor profile and the NFS client asks Longhorn v1.7.2's
+  ganesha for directory delegations it cannot answer. `install-aws.sh` gives
+  every node the two host settings for that from `../../lib/host-runtime.sh`
+  before k3s starts (CLAUDE.md invariant 98, GOTCHAS 169 and 170); proven on
+  `ami-0f4f39f350a940148` (Ubuntu 26.04.1, build 20261127) on 2026-11-27,
+  `evidence/aws-run-2026-11-27-current-image/`.
 - **`install-aws.sh`**: `../../install.sh` with the five AWS-specific
   differences marked `[AWS]` in the source and explained where they appear.
 - **`teardown.sh`**: deletes the load balancer the cloud controller made behind
@@ -185,16 +192,28 @@ ssh -i ~/.ssh/stack-k8s-aws ubuntu@<first server> \
 ```
 
 Then the load balancer, which is a separate metered decision at USD
-0.027/hour:
+0.027/hour plus capacity units:
 
 ```bash
-# from cloud/aws, with the local kubectl:
-KUBECONFIG=kubeconfig.yaml kubectl apply -f ../../manifests/50-loadbalancer.yaml
-
-# or without a local kubectl, straight on the first server:
-ssh -i ~/.ssh/stack-k8s-aws ubuntu@<first server> \
-  'sudo /usr/local/bin/k3s kubectl apply -f /root/stack-k8s/manifests/50-loadbalancer.yaml'
+# from cloud/aws, with a local kubectl and the AWS CLI:
+./loadbalancer.sh            # creates the NLB, turns off client-IP preservation, proves HTTP through it
+./loadbalancer.sh --down     # deletes it and stops the meter
 ```
+
+It applies `loadbalancer-aws.yaml`, not `../../manifests/50-loadbalancer.yaml`.
+That one is the Hetzner object: it carries only `load-balancer.hetzner.cloud/*`
+annotations, so on AWS the in-tree controller makes a Classic Load Balancer
+from it, a different product with a different health check model. The run of
+2026-11-27 applied it by this section's earlier text and got exactly that. A
+Service that already exists as a Classic one is deleted first
+(`./loadbalancer.sh --down`), then created again by the script.
+
+An account where AWS has not enabled ELBv2 refuses the NLB outright: the
+Service's events say `OperationNotPermitted: This AWS account currently does
+not support creating load balancers`, and only AWS Support can lift it. The
+account of the 2026-11-27 runs is one (`evidence/aws-run-2026-11-27-current-image/loadbalancer.log`).
+Nothing is created and nothing bills; `./loadbalancer.sh --down` removes the
+Service.
 
 Watch for the two things the sheet asks about: whether the Service gets an
 address without being told anything, and what source address the health check

@@ -1,0 +1,92 @@
+
+nodes
+NAME             READY   PROVIDER                                   IP
+ip-10-10-0-148   Ready   aws:///eu-central-1a/i-0ac2e802cbb913f62   10.10.0.148
+ip-10-10-0-231   Ready   aws:///eu-central-1a/i-0ce61fd22d042537f   10.10.0.231
+ip-10-10-0-241   Ready   aws:///eu-central-1a/i-05bb0136b466ec727   10.10.0.241
+ip-10-10-0-253   Ready   aws:///eu-central-1a/i-0255f640b6cbd6a43   10.10.0.253
+ip-10-10-0-81    Ready   aws:///eu-central-1a/i-009c909d1dfdb3784   10.10.0.81
+  ok   every node Ready
+  ok   no machine is registered under two node names
+  ok   cluster DNS has 3 ready replicas
+  ok   cluster DNS keeps 1 replica(s) up through a drain (PodDisruptionBudget coredns)
+
+pods
+POD                                  NODE             READY   STATUS
+bus-owner-sp7qr                      ip-10-10-0-81    false   Succeeded
+genaryx-console-6d65778478-qjtdd     ip-10-10-0-253   true    Running
+idryx-565fbc48f4-bk4zn               ip-10-10-0-253   true    Running
+keyryx-custody-599474fbb5-brx5h      ip-10-10-0-148   true    Running
+keyryx-witness-5c9947f56b-6bmpr      ip-10-10-0-253   true    Running
+policy-db-0                          ip-10-10-0-231   true    Running
+tokenfuse-cloud-54885f7fb7-dlwkn     ip-10-10-0-253   true    Running
+tokenfuse-gateway-6996f486ff-9drb6   ip-10-10-0-241   true    Running
+vouchryx-6bfddd766b-mwj8b            ip-10-10-0-231   true    Running
+wardryx-667d9d8f79-wbm9f             ip-10-10-0-148   true    Running
+  ok   every pod Running (finished Job pods ignored)
+  ok   workload spread over 5 nodes
+
+storage
+CLAIM                  MODE              CLASS          STATUS   SIZE
+cloud-state            [ReadWriteOnce]   longhorn       Bound    2Gi
+console-state          [ReadWriteOnce]   longhorn       Bound    2Gi
+data-policy-db-0       [ReadWriteOnce]   stack-policy   Bound    5Gi
+keyryx-state           [ReadWriteOnce]   longhorn       Bound    1Gi
+keyryx-witness-state   [ReadWriteOnce]   longhorn       Bound    1Gi
+stack-events           [ReadWriteMany]   stack-rwx      Bound    5Gi
+trailryx-records       [ReadWriteOnce]   longhorn       Bound    2Gi
+vouchryx-state         [ReadWriteOnce]   longhorn       Bound    1Gi
+  ok   the RWX event volume is Bound
+  ok   1 default StorageClass
+
+network policy is actually enforced
+  ok   24 NetworkPolicies present
+  ok   default-deny holds (the console cannot reach the policy store)
+
+every plane answers
+  cloud 200
+  gateway 200
+  wardryx 200
+  wardryx store 200
+  idryx 200
+  console 200
+  ok   all five planes answer 200, and wardryx reaches its store
+
+the data the console governs
+  money    0 runs, $0.00 settled, 0 budget alerts
+  policy   0 policies (0 console blocks), 0 approvals
+  identity 2 identities
+  ok   the console can read all three planes it governs
+  ok   the console's bus is live
+
+the gateway's admin key is enforced
+  nokey 401
+  withkey 200
+  ok   gateway refuses /v1/runs without the admin key (401)
+  ok   gateway serves /v1/runs with the admin key
+
+client keys and the identity map
+  ok   the gateway runs the identity map ConfigMap gateway-identity-map holds
+  ok   the gateway runs the client keys Secret gateway-client-keys holds
+  nokey 401 unauthorized
+  badkey 401 unauthorized
+  ok   the gateway refuses a call with no client key (401)
+  ok   the gateway refuses a call with an unknown client key (401)
+
+the console is reading a real environment, not fixtures
+  ok   an environment descriptor is mounted
+  ok   trust domain is set: acme.example
+
+freeze, restart, and check the freeze survived
+  before restart, the PDP says: allow
+  note nothing is frozen, so there is nothing for a restart to lose
+     Freeze agent://meridian.example/treasury/reconciliation-batch in the console (or PUT a policy that denies it) and
+     run this again. Reporting a pass here would prove nothing, and
+     reporting a failure would name a bug that has not happened.
+
+the notifier
+  note heraldyx is not deployed: this box was not asked to write to anyone
+
+result
+  21 passed, 0 failed, 2 noted
+

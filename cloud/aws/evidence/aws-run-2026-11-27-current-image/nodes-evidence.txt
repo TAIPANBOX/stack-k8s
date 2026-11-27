@@ -1,0 +1,54 @@
+== ip-10-10-0-241 7.0.0-1018-aws Ubuntu 26.04.1 LTS
+restrict_unprivileged_unconfined=1
+profile: cri-containerd.apparmor.d (enforce) from /etc/apparmor.d/stack-cri-containerd
+denials for cri-containerd.apparmor.d since boot: 0
+denials for the probe profile as shipped: 2
+[   31.365630] audit: type=1400 audit(1795763714.737:197): apparmor="DENIED" operation="signal" class="signal" profile="stack-probe-cri-upstream" pid=1541 comm="sh" requested_mask="send" denied_mask="send" signal=urg peer="stack-probe-cri-upstream//&unconfined"
+container processes by label:
+     14 cri-containerd.apparmor.d//&unconfined (enforce)
+nfsv4 directory_delegations=N modprobe: options nfsv4 directory_delegations=N
+k3s: k3s version v1.36.2+k3s1 (01b6f04a) containerd: Version: v2.3.2-k3s2
+Warning: Permanently added '<public-ip>' (ED25519) to the list of known hosts.
+== ip-10-10-0-81 7.0.0-1018-aws Ubuntu 26.04.1 LTS
+restrict_unprivileged_unconfined=1
+profile: cri-containerd.apparmor.d (enforce) from /etc/apparmor.d/stack-cri-containerd
+denials for cri-containerd.apparmor.d since boot: 0
+denials for the probe profile as shipped: 1
+[  146.465454] audit: type=1400 audit(1795763829.813:205): apparmor="DENIED" operation="signal" class="signal" profile="stack-probe-cri-upstream" pid=3027 comm="sh" requested_mask="send" denied_mask="send" signal=urg peer="stack-probe-cri-upstream//&unconfined"
+container processes by label:
+      8 cri-containerd.apparmor.d//&unconfined (enforce)
+nfsv4 directory_delegations=N modprobe: options nfsv4 directory_delegations=N
+k3s: k3s version v1.36.2+k3s1 (01b6f04a) containerd: Version: v2.3.2-k3s2
+Warning: Permanently added '<public-ip>' (ED25519) to the list of known hosts.
+== ip-10-10-0-253 7.0.0-1018-aws Ubuntu 26.04.1 LTS
+restrict_unprivileged_unconfined=1
+profile: cri-containerd.apparmor.d (enforce) from /etc/apparmor.d/stack-cri-containerd
+denials for cri-containerd.apparmor.d since boot: 0
+denials for the probe profile as shipped: 1
+[  151.249476] audit: type=1400 audit(1795763834.693:205): apparmor="DENIED" operation="signal" class="signal" profile="stack-probe-cri-upstream" pid=2989 comm="sh" requested_mask="send" denied_mask="send" signal=urg peer="stack-probe-cri-upstream//&unconfined"
+container processes by label:
+     13 cri-containerd.apparmor.d//&unconfined (enforce)
+nfsv4 directory_delegations=N modprobe: options nfsv4 directory_delegations=N
+k3s: k3s version v1.36.2+k3s1 (01b6f04a) containerd: Version: v2.3.2-k3s2
+Warning: Permanently added '<public-ip>' (ED25519) to the list of known hosts.
+== ip-10-10-0-231 7.0.0-1018-aws Ubuntu 26.04.1 LTS
+restrict_unprivileged_unconfined=1
+profile: cri-containerd.apparmor.d (enforce) from /etc/apparmor.d/stack-cri-containerd
+denials for cri-containerd.apparmor.d since boot: 0
+denials for the probe profile as shipped: 1
+[  156.103633] audit: type=1400 audit(1795763839.601:205): apparmor="DENIED" operation="signal" class="signal" profile="stack-probe-cri-upstream" pid=3024 comm="sh" requested_mask="send" denied_mask="send" signal=urg peer="stack-probe-cri-upstream//&unconfined"
+container processes by label:
+     17 cri-containerd.apparmor.d//&unconfined (enforce)
+nfsv4 directory_delegations=N modprobe: options nfsv4 directory_delegations=N
+k3s: k3s version v1.36.2+k3s1 (01b6f04a) containerd: Version: v2.3.2-k3s2
+Warning: Permanently added '<public-ip>' (ED25519) to the list of known hosts.
+== ip-10-10-0-148 7.0.0-1018-aws Ubuntu 26.04.1 LTS
+restrict_unprivileged_unconfined=1
+profile: cri-containerd.apparmor.d (enforce) from /etc/apparmor.d/stack-cri-containerd
+denials for cri-containerd.apparmor.d since boot: 0
+denials for the probe profile as shipped: 1
+[  161.179708] audit: type=1400 audit(1795763844.454:205): apparmor="DENIED" operation="signal" class="signal" profile="stack-probe-cri-upstream" pid=2995 comm="sh" requested_mask="send" denied_mask="send" signal=urg peer="stack-probe-cri-upstream//&unconfined"
+container processes by label:
+     12 cri-containerd.apparmor.d//&unconfined (enforce)
+nfsv4 directory_delegations=N modprobe: options nfsv4 directory_delegations=N
+k3s: k3s version v1.36.2+k3s1 (01b6f04a) containerd: Version: v2.3.2-k3s2
