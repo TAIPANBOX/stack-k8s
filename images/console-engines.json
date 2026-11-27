@@ -6,6 +6,6 @@
     "tokenfuse": "v1.25.0@sha256:3a81dbcd116557eff54aae29e7d68104af8fc788265d58e71adf3f96fea03317"
   },
   "lag": {
-    "tokenfuse": "The console's budget backtest runs tokenfuse v1.25.0 while the gateway runs v1.27.0. genaryx v0.1.0 carries the engine it was built with, as genaryx-console v1.14.0, pinned before it, did since stack-k8s 1.18.0 moved the gateway to v1.26.0. A genaryx release built with tokenfuse v1.27.0 closes it."
+    "tokenfuse": "The console's budget backtest runs tokenfuse v1.25.0 while the gateway runs v1.27.1. genaryx v0.1.0 carries the engine it was built with, as genaryx-console v1.14.0, pinned before it, did since stack-k8s 1.18.0 moved the gateway to v1.26.0. A genaryx release built with tokenfuse v1.27.1 closes it."
   }
 }
