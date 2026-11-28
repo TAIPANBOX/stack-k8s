@@ -150,7 +150,7 @@ spec:
   # pod re-requests its certificate either way), but two Caddy pods racing
   # the SAME HTTP-01 challenge on the SAME two names is worse than the ACME
   # rate limit an emptyDir already risks: Recreate keeps it to one pod, one
-  # challenge, at a time. NOT PROVEN: certificate persistence across a
+  # challenge, at a time. The certificate does not persist across a
   # restart; see hub/up.sh's header and the feature file for what this
   # trades away.
   strategy: { type: Recreate }
