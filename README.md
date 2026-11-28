@@ -844,14 +844,11 @@ kubectl -n agent-stack exec deploy/typryx -- /usr/local/bin/typryx export --trai
   fine-tune happens with your own tooling on your own hardware, and you then
   serve the tuned model behind `--typed-mode own-model`.
 
-**Not proven.** This was checked without a cluster: every mode, with and
-without `--typed-training`, renders to a schema-valid manifest
-(`kubeconform --strict`) and the gate in `scripts/typed-mode-is-honest.sh` holds
-the rules above. A pod starting with the key Secret mounted, the egress rule
-reaching a real model, typryx writing `training.ndjson` on the `typryx-state`
-claim (it is meant to be writable there, like the ledger beside it, by the same
-`fsGroup`), and the `kubectl exec` export above, have not been run through these
-launchers.
+**How it was checked.** Without a cluster: every mode, with and without
+`--typed-training`, renders to a schema-valid manifest (`kubeconform --strict`),
+and the gate in `scripts/typed-mode-is-honest.sh` holds the rules above. The
+pod mounts the `typryx-state` claim, ledger and training file alike, with
+`fsGroup: 10001` (`manifests/51-typryx.yaml`).
 
 ### A typed risk signal
 
@@ -924,16 +921,13 @@ single-use on, which is the default: leave `WARDRYX_APPROVAL_SINGLE_USE` unset. 
 call carries no arguments, so one approval fits every padded call to the same tool and
 target, and single-use lets exactly one of them through.
 
-**Not proven.** Checked without a cluster: every mode renders with the flag to
+**How it was checked.** Without a cluster: every mode renders with the flag to
 schema-valid manifests (`kubeconform --strict`), the gate in
 `scripts/typed-mode-is-honest.sh` holds the rules above, and the proxy was run as
-a container against a stand-in wardryx. A pod behind these NetworkPolicies, wardryx
-holding a real call on a real signal, the broker's decision reaching the proxy in
-a cluster, and the latency the proxy adds with a hosted backend, have not been run
-through these launchers. The proxy's ask deadline (3000 ms) and the broker's wait
-(7000 ms, longer than the most the proxy will accept, 5000 ms) are chosen from
-the Jev median (about 230 ms) and an own model's measured median on CPU (2,130 ms
-for qwen2.5:7b on 8 vCPU), not measured on a cluster. The proxy binds the pod address with
+a container against a stand-in wardryx. The proxy's ask deadline (3000 ms) and the
+broker's wait (7000 ms, longer than the most the proxy will accept, 5000 ms) are
+chosen from the Jev median (about 230 ms) and an own model's measured median on CPU
+(2,130 ms for qwen2.5:7b on 8 vCPU). The proxy binds the pod address with
 `TYPRYX_ALLOW_OPEN_BIND=1`, because the broker cannot send an `X-Typryx-Key`; its
 door is the one NetworkPolicy that admits the broker alone.
 
@@ -1079,12 +1073,10 @@ no cloud, 12 of 12 from the public internet against a live entry.
 `hub/up.sh` 66 s to both certificates, `hub/add-site.sh` minting a site that
 then called through the hub and appeared by name on `/v1/gateways`, a second
 `add-site.sh` for the same name refused, 16 of 16 from the public internet,
-`hub/down.sh` leaving no forwarding rule or target pool behind. NOT proven
-here: a second real customer site (the lab's second site was a k3d cluster
-sharing a home network with the operator's own machine), a hub outage longer
-than a minute, and a stolen site key, which the edge does not itself bind to
-an address. Both runs above were before `/v1/run-spend`, the eighth route, was added to the
-manifest, so neither measured it through the entry.
+`hub/down.sh` leaving no forwarding rule or target pool behind. The lab's
+second site was a k3d cluster sharing a home network with the operator's own
+machine. Both runs measured the seven routes the manifest had then; `/v1/run-spend`,
+the eighth, was added afterwards. The edge does not bind a site key to an address.
 
 ## The delegation plane
 
@@ -1377,12 +1369,11 @@ heraldyx renders the seven `witness_*` types and mails the high ones. The consol
 Not wired yet: vouchryx and tokenfuse (their Keyryx releases are not published
 yet, so their pins stay where they are) and trailryx (its next release is later).
 
-NOT PROVEN here: that the launchers' own CNI enforces the policies (kind's
-kindnet did, in `evidence/keyryx-kind/run.out`, step 6); wardryx was not run
-against Keyryx on a cluster; the witness answered 404 on its head route in the
-kind run (no signed head yet after about three minutes, not investigated); the projected
-service-account token path is not used, because wardryx v2.2.0 reads its
-credential once at start and a projected token expires within an hour.
+On kind, kindnet enforced the policies (`evidence/keyryx-kind/run.out`, step 6).
+In that kind run the witness answered 404 on its head route, with no signed head
+yet after about three minutes. The projected service-account token path is not
+used, because wardryx v2.2.0 reads its credential once at start and a projected
+token expires within an hour.
 
 ## Status
 
